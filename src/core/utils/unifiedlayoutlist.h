@@ -110,16 +110,24 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
  * is store-independent — it appears even when the store is empty or null —
  * see appendScrollingTemplatePreviews in the .cpp for the contract.
  *
+ * @p stripVerticalAxis is this screen's strip axis. Template cards are a
+ * picture of the columns the strip will hold, so on a screen whose strip runs
+ * vertically they have to draw their bands stacked rather than in a row. A
+ * caller with no axis source passes false and gets the horizontal depiction,
+ * which is what every non-scrolling screen shows anyway.
+ *
  * See the non-filtered overload for @p autotileSource / @p algorithmRegistry
  * semantics - same fallback rules apply.
  */
-PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview> buildUnifiedLayoutList(
-    PhosphorZones::IZoneLayoutRegistry* layoutManager, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-    const QString& screenId, int virtualDesktop, const QString& activity, bool includeManual = true,
-    bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
-    const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
-    QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
-    PhosphorZones::ScrollingTemplateStore* templateStore = nullptr, bool includeNoTemplateRow = false);
+PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
+buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
+                       PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, const QString& screenId,
+                       int virtualDesktop, const QString& activity, bool includeManual = true,
+                       bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
+                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
+                       QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
+                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr,
+                       bool includeNoTemplateRow = false, bool stripVerticalAxis = false);
 
 /**
  * @brief Build a combined custom order list from settings

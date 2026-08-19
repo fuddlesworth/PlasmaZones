@@ -851,6 +851,23 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                 }
             });
 
+    // The ACTIVITY twin of the desktop-switch drop above: scroll state is
+    // per-(screen, desktop, activity), so an activity switch orphans a
+    // residual offset exactly the same way, and without this the offset
+    // crossed activities and painted the incoming activity's columns shifted
+    // for one leg. Activities are never per-output, so every output drops.
+    connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this, [this](const QString&) {
+        const auto outputs = KWin::effects->screens();
+        for (KWin::LogicalOutput* out : outputs) {
+            if (!out) {
+                continue;
+            }
+            m_stripTransition.outputRemoved(out);
+            m_stripViewAnimator->forgetOutput(out);
+            KWin::effects->addRepaint(out->geometry());
+        }
+    });
+
     // Full-screen desktop-switch TRANSITION (separate from the daemon-reporting
     // connection above). Resolve the `desktop.switch` shader from the profile
     // tree; when one is assigned, run the two-desktop blend. An empty resolve

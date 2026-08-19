@@ -398,6 +398,17 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Per-screen config (override if engine supports per-screen overrides)
+    //
+    // SCOPE IS THE IMPLEMENTATION'S CHOICE, and the two in-tree engines differ.
+    // AutotileEngine stores one map per SCREEN. ScrollEngine stores one per
+    // (screen, desktop, activity) and answers for the screen's CURRENT context,
+    // because its templates are resolved per context and keying by screen let
+    // one desktop's template overwrite another's. A caller holding this
+    // interface must therefore not assume a map it pushed survives a desktop or
+    // activity switch, nor that the accessor replays what it last wrote.
+    // clearPerScreenConfig is the whole-SCREEN door in both: it drops every
+    // context's entry, so an engine keyed per context needs an empty
+    // applyPerScreenConfig push, not a clear, to say "this context has none".
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)

@@ -89,8 +89,8 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
         inserted = strip.insertWindowAt(slot.column, windowId, slot.width, slot.display, params);
     }
     if (!inserted) {
-        inserted = strip.insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
-                                      effectiveDefaultColumnDisplay(screenId), params, slot.minWidth, slot.minHeight);
+        inserted = strip.insertWindow(windowId, params.defaultColumnWidth, effectiveDefaultColumnDisplay(screenId),
+                                      params, slot.minWidth, slot.minHeight);
     }
     if (inserted) {
         if (slot.minWidth > 0 || slot.minHeight > 0) {
@@ -168,7 +168,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
                 // A floating window with no restore entry carries no intents
                 // of its own — seed the screen's configured defaults, not
                 // FloatRestore's default-constructed 50% proportion.
-                preview.carried.width = effectiveDefaultColumnWidth(screenId);
+                preview.carried.width = params.defaultColumnWidth;
                 preview.carried.display = effectiveDefaultColumnDisplay(screenId);
             }
         } else if (preview.priorSlot.column >= 0) {
@@ -184,7 +184,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             // the window into the strip.
             qCWarning(lcScrollEngine) << "beginDragInsertPreview:" << windowId
                                       << "tracked but absent from strip and floating set — adopting to heal";
-            preview.carried.width = effectiveDefaultColumnWidth(screenId);
+            preview.carried.width = params.defaultColumnWidth;
             preview.carried.display = effectiveDefaultColumnDisplay(screenId);
         }
         // Keep the window tracked against the TARGET context while detached
@@ -192,7 +192,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
         // answering). Fresh adoption stays untracked until commit.
         m_states.setKeyForWindow(windowId, targetKey);
     } else {
-        preview.carried.width = effectiveDefaultColumnWidth(screenId);
+        preview.carried.width = params.defaultColumnWidth;
         preview.carried.display = effectiveDefaultColumnDisplay(screenId);
     }
     // Defensive: a stale forward state left the window in the target strip
@@ -265,8 +265,20 @@ void ScrollEngine::commitDragInsertPreview()
                                   << "— a context-change handler failed to cancel first; the drop lands in the "
                                      "captured context";
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
     ScrollStrip& strip = targetState->strip();
+    // Params resolved against the POST-drop column count, mirroring
+    // dragInsertIndicatorRect's own resolve: while the preview holds the
+    // dragged window detached, a strip that will have two columns still
+    // reads as one, so live params would run the smart-gaps single-column
+    // regime and bake a Fixed default height — persisted intent with no
+    // relayout self-heal — against a work area the dropped window never
+    // occupies. The join arm keeps the count; every column-creating arm
+    // (new slot, empty strip, and the no-target append/restore fallbacks
+    // below) adds one, so absent a valid join target the +1 is the better
+    // prediction for the defensive arms too.
+    const int postDropColumns =
+        strip.columnCount() + ((!p.lastTarget.isValid() || p.lastTarget.newSlot || strip.isEmpty()) ? 1 : 0);
+    const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId, postDropColumns);
     bool inserted = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {
@@ -558,40 +570,47 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // single streaming pass cannot answer at the column being tested.
     const QVector<const ResolvedColumn*> visibleColumns = visibleColumnsOf(resolved, params.workArea);
     const ResolvedColumn* lastVisible = visibleColumns.isEmpty() ? nullptr : visibleColumns.constLast();
+    // The cursor in ROLE coordinates: the strip's own direction picks the
+    // column, and the within-column stack's direction picks the tile slot.
+    // Reading x and y directly would ask a vertical strip's columns to be
+    // ordered by x, which they are not.
+    const int cursorMain = params.axis.mainPos(cursorPos);
+    const int cursorCross = params.axis.crossPos(cursorPos);
     for (int vi = 0; vi < visibleColumns.size(); ++vi) {
         const ResolvedColumn& column = *visibleColumns.at(vi);
         const bool isFirstVisible = vi == 0;
         const bool isLastVisible = vi == visibleColumns.size() - 1;
-        // Cursor left of this visible column's span: the gap before it (or
-        // the strip's visible left edge) → a new column at its index. From
-        // the leading edge that is "insert left of everything I can see",
-        // rendered as a past-the-edge hint.
-        if (cursorPos.x() < column.rect.left()) {
+        // Cursor before this visible column's main-axis span: the gap ahead
+        // of it (or the strip's visible leading edge) → a new column at its
+        // index. From the leading edge that is "insert ahead of everything I
+        // can see", rendered as a past-the-edge hint.
+        if (cursorMain < params.axis.mainLow(column.rect)) {
             target.primary = column.columnIndex;
             target.newSlot = true;
             target.leadingEdge = isFirstVisible;
             return target;
         }
-        if (cursorPos.x() > column.rect.right()) {
+        if (cursorMain > params.axis.mainHigh(column.rect)) {
             continue;
         }
-        // Inside this column's x-span: the side bands open a new column at
-        // THIS column's spot (the column steps aside and the indicator
-        // covers it), the middle joins it as a tile at the y-resolved slot.
-        // Symmetric by construction: each boundary belongs to exactly one
-        // band — the right neighbour's left band — and only the view's two
-        // extremes differ, hinting past their screen edge instead (the
-        // first visible column's left band and the last one's right band).
+        // Inside this column's main-axis span: the two end bands open a new
+        // column at THIS column's spot (the column steps aside and the
+        // indicator covers it), the middle joins it as a tile at the
+        // cross-resolved slot. Symmetric by construction: each boundary
+        // belongs to exactly one band — the trailing neighbour's leading band
+        // — and only the view's two extremes differ, hinting past their
+        // screen edge instead (the first visible column's leading band and
+        // the last one's trailing band).
         // Floor of 1 so integer division on a degenerate sliver still
         // leaves bands.
-        const int band = std::clamp(column.rect.width() / kEdgeBandDivisor, 1, kEdgeBandMaxPx);
-        if (cursorPos.x() < column.rect.left() + band) {
+        const int band = std::clamp(params.axis.mainSize(column.rect) / kEdgeBandDivisor, 1, kEdgeBandMaxPx);
+        if (cursorMain < params.axis.mainLow(column.rect) + band) {
             target.primary = column.columnIndex;
             target.newSlot = true;
             target.leadingEdge = isFirstVisible;
             return target;
         }
-        if (cursorPos.x() > column.rect.right() - band) {
+        if (cursorMain > params.axis.mainHigh(column.rect) - band) {
             target.primary = isLastVisible ? column.columnIndex + 1 : column.columnIndex;
             target.newSlot = true;
             return target;
@@ -608,11 +627,12 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
             if (tile.hidden) {
                 continue;
             }
-            if (cursorPos.y() <= tile.rect.center().y()) {
+            const int tileCrossMid = params.axis.crossLow(tile.rect) + params.axis.crossSize(tile.rect) / 2;
+            if (cursorCross <= tileCrossMid) {
                 target.secondary = std::max(0, modelColumn.indexOfWindow(tile.windowId));
                 break;
             }
-            if (cursorPos.y() <= tile.rect.bottom()) {
+            if (cursorCross <= params.axis.crossHigh(tile.rect)) {
                 target.secondary = modelColumn.indexOfWindow(tile.windowId) + 1;
                 break;
             }
@@ -702,7 +722,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // shift below must isolate the insert's view side effect, and measuring
     // the two sides under different gap regimes would fold the smart-gaps
     // difference into it as well.
-    const int liveViewX = state->strip().relayout(params).viewX;
+    const int liveViewOffset = state->strip().relayout(params).viewOffset;
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
@@ -756,12 +776,13 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // position must be POST-insert, because that is the slot being previewed,
     // while the VIEW must be PRE-insert, because that is what is on screen
     // right now.
-    const int shiftToLiveView = resolved.viewX - liveViewX;
+    const int shiftToLiveView = resolved.viewOffset - liveViewOffset;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {
-                QRect rect = tile.rect.translated(shiftToLiveView, 0);
-                // A LEADING-EDGE aim ("insert left of everything I can see",
+                // Along the strip: the view only ever slides that way.
+                QRect rect = params.axis.translatedMain(tile.rect, shiftToLiveView);
+                // A LEADING-EDGE aim ("insert ahead of everything I can see",
                 // tagged by the hit-test) mirrors the after-the-last one:
                 // its raw promise is the current position of the first
                 // visible column, so it would cover that column at full
@@ -774,7 +795,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
                 // no tag and keeps the full rect over that column, exactly
                 // as the right neighbour's inner band covers it.
                 if (target.newSlot && target.leadingEdge && preInsertColumns > 0) {
-                    rect.translate(-(rect.width() + params.gap), 0);
+                    rect = params.axis.translatedMain(rect, -(params.axis.mainSize(rect) + params.gap));
                 }
                 // niri-parity visibility clamp, new-column slots only (niri
                 // gates its identical clamp on InsertPosition::NewColumn, and
@@ -793,9 +814,11 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
                 // about the direction, and slots already on screen are
                 // untouched (the bounds are no-ops for them).
                 if (target.newSlot) {
-                    const int minLeft = params.workArea.left() - rect.width() / 2;
-                    const int maxLeft = params.workArea.left() + params.workArea.width() - rect.width() / 2;
-                    rect.moveLeft(qBound(minLeft, rect.left(), maxLeft));
+                    const int mainSize = params.axis.mainSize(rect);
+                    const int areaLow = params.axis.mainLow(params.workArea);
+                    const int minLow = areaLow - mainSize / 2;
+                    const int maxLow = areaLow + params.axis.mainSize(params.workArea) - mainSize / 2;
+                    params.axis.moveMain(rect, qBound(minLow, params.axis.mainLow(rect), maxLow));
                 }
                 return rect;
             }

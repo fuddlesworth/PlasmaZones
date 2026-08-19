@@ -37,6 +37,15 @@ constexpr int kMinTabIndicatorGap = -64;
 constexpr int kMaxTabIndicatorGap = 64;
 constexpr int kMinTabIndicatorWidth = 1;
 constexpr int kMaxTabIndicatorWidth = 64;
+/// The length proportion's pair, named for the same reason its four siblings
+/// above are rather than living as bare literals at the read: the floor is a
+/// real decision (a proportion small enough to resolve to a sliver reads as a
+/// broken indicator while every setting still reports it on), and hiding it in
+/// a `> 0.0` test made it look like a null check. Mirrors the rules layer's
+/// Min/MaxTabIndicatorLengthRatio by value, hand-copied on the same terms as
+/// the bounds above.
+constexpr qreal kMinTabIndicatorLengthProportion = 0.05;
+constexpr qreal kMaxTabIndicatorLengthProportion = 1.0;
 
 /// Validated int read out of an override map, and the reason every int
 /// resolver in this file goes through it: QVariant::toInt() answers 0 for a
@@ -52,6 +61,12 @@ bool overrideInt(const QVariantMap& overrides, const QString& key, int& out)
 {
     const auto it = overrides.constFind(key);
     if (it == overrides.constEnd()) {
+        return false;
+    }
+    // Bools refused explicitly, the effectiveBoolOverride stance in the
+    // other direction: toInt(&ok) happily converts one (true -> 1), which
+    // would pin a real enumerator for a payload aimed at the wrong key.
+    if (it->typeId() == QMetaType::Bool) {
         return false;
     }
     bool ok = false;
@@ -71,6 +86,10 @@ bool overrideDouble(const QVariantMap& overrides, const QString& key, qreal& out
 {
     const auto it = overrides.constFind(key);
     if (it == overrides.constEnd()) {
+        return false;
+    }
+    // Same bool refusal as overrideInt: toDouble on a bool answers 1.0.
+    if (it->typeId() == QMetaType::Bool) {
         return false;
     }
     bool ok = false;
@@ -129,7 +148,7 @@ QList<qreal> presetListFromOverride(const QVariantMap& overrides, const QString&
 
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& screenId) const
 {
-    return effectiveCenterFocusedColumn(m_perScreenOverrides.value(screenId));
+    return effectiveCenterFocusedColumn(overridesForScreen(screenId));
 }
 
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap& overrides) const
@@ -139,6 +158,34 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap
         return static_cast<CenterFocusedColumn>(mode);
     }
     return m_centerFocusedColumn;
+}
+
+StripAxis ScrollEngine::effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const
+{
+    // Reads the TRI-STATE intent (0 auto, 1 horizontal, 2 vertical) and
+    // returns the RESOLVED two-valued axis. Returning the resolved type is
+    // what makes it structurally impossible for Auto to escape into layout
+    // math — there is no third value for a caller to mishandle.
+    //
+    // The two numberings deliberately disagree (config Horizontal is 1, the
+    // protocol's is 0), so this is a switch and never a cast.
+    int intent = 0;
+    if (!overrideInt(overrides, ScrollPerScreenKeys::stripAxis(), intent)) {
+        intent = m_stripAxis;
+    }
+    switch (intent) {
+    case 1:
+        return StripAxis::horizontal();
+    case 2:
+        return StripAxis::vertical();
+    default:
+        break;
+    }
+    // Auto, and anything unrecognised: derive from the work area. An
+    // out-of-range intent degrades to Auto rather than to a fixed axis,
+    // because Auto is the setting's own default and the one answer that is
+    // never wrong for the shape of the screen.
+    return resolveStripAxis(workArea);
 }
 
 // ── behaviour toggles ──
@@ -168,10 +215,9 @@ bool ScrollEngine::effectiveRespectMinimumSize(const QVariantMap& overrides) con
     return effectiveBoolOverride(overrides, ScrollPerScreenKeys::respectMinimumSize(), m_respectMinimumSize);
 }
 
-bool ScrollEngine::effectiveCropStraddlers(const QString& screenId) const
+bool ScrollEngine::effectiveCropStraddlers(const QVariantMap& overrides) const
 {
-    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::cropStraddlers(),
-                                 m_cropStraddlers);
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::cropStraddlers(), m_cropStraddlers);
 }
 
 bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const
@@ -180,8 +226,7 @@ bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const
     if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
         fallback = settings->scrollingFocusNewWindows();
     }
-    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::focusNewWindows(),
-                                 fallback);
+    return effectiveBoolOverride(overridesForScreen(screenId), ScrollPerScreenKeys::focusNewWindows(), fallback);
 }
 
 bool ScrollEngine::effectiveSmartGaps(const QVariantMap& overrides) const
@@ -191,7 +236,7 @@ bool ScrollEngine::effectiveSmartGaps(const QVariantMap& overrides) const
 
 PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling(const QString& screenId) const
 {
-    return effectiveStickyWindowHandling(m_perScreenOverrides.value(screenId));
+    return effectiveStickyWindowHandling(overridesForScreen(screenId));
 }
 
 PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling(const QVariantMap& overrides) const
@@ -209,7 +254,7 @@ PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling
 
 QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
 {
-    return effectivePresetColumnWidths(m_perScreenOverrides.value(screenId));
+    return effectivePresetColumnWidths(overridesForScreen(screenId));
 }
 
 QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QVariantMap& overrides) const
@@ -220,16 +265,28 @@ QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QVariantMap& overri
 
 QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
 {
-    return effectivePresetWindowHeights(m_perScreenOverrides.value(screenId));
+    return effectivePresetWindowHeights(overridesForScreen(screenId));
+}
+
+QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
+{
+    return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,
+                                  m_presetWindowHeights);
 }
 
 ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& screenId) const
 {
     ScrollBlueprintProgress progress;
-    if (screenId.isEmpty()) {
+    // Ownership gate, so the documented "a screen this engine does not own
+    // reports {0, 0}" holds for a direct caller too. The in-tree path is
+    // gated a layer up in ScrollingAdaptor, but this is exported library
+    // surface: an embedder asking about a screen the engine has since given
+    // up would otherwise get the progress its surviving overrides still
+    // resolve to.
+    if (screenId.isEmpty() || !m_scrollingScreens.contains(screenId)) {
         return progress;
     }
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const QVariantMap overrides = overridesForScreen(screenId);
     const auto blueprintIt = overrides.constFind(ScrollPerScreenKeys::templateColumns());
     if (blueprintIt == overrides.constEnd()) {
         return progress;
@@ -239,6 +296,14 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
     // supplied. A readout claiming twenty starting columns while the engine
     // will only ever consume sixteen would be a lie in the direction that
     // matters (the user waits for columns that never come).
+    //
+    // Entries are counted as POSITIONS, not as carriers of usable overrides,
+    // which is exactly how the consumption site spends them: an entry whose
+    // width and display are both absent or malformed still names a starting
+    // column, and that column opens on the resolved defaults. Counting only
+    // "contributing" entries here would make total and used disagree with the
+    // cursor the moment a blueprint carried one, which is the divergence this
+    // pair exists to avoid.
     progress.total = qMin(int(blueprintIt->toList().size()), kMaxTemplateEntries);
     if (progress.total == 0) {
         return progress;
@@ -259,15 +324,9 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
     return progress;
 }
 
-QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
-{
-    return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,
-                                  m_presetWindowHeights);
-}
-
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
 {
-    return effectiveDefaultColumnWidth(m_perScreenOverrides.value(screenId));
+    return effectiveDefaultColumnWidth(overridesForScreen(screenId));
 }
 
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrides) const
@@ -324,7 +383,11 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
                 ? slotValue
                 : (m_defaultColumnWidth.kind == ColumnWidth::Fixed ? qreal(m_defaultColumnWidth.fixedPx) : 0.0);
             if (value >= 1.0) {
-                return ColumnWidth::makeFixed(qRound(value));
+                // Bounded before the round, like every other numeric slot
+                // resolved out of this map: the value arrives unvalidated
+                // from applyPerScreenConfig, and qRound of a double past
+                // int's range is undefined.
+                return ColumnWidth::makeFixed(qRound(qBound(1.0, value, kMaxFixedExtentPx)));
             }
         }
         if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
@@ -367,7 +430,7 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
 
 bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
 {
-    return effectiveWidthClientDecides(m_perScreenOverrides.value(screenId));
+    return effectiveWidthClientDecides(overridesForScreen(screenId));
 }
 
 bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) const
@@ -385,25 +448,31 @@ bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) con
     return m_defaultWidthClientDecides;
 }
 
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea,
+                                                        StripAxis axis) const
 {
-    return effectiveDefaultWindowHeight(m_perScreenOverrides.value(screenId), workArea);
-}
-
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const
-{
-    return effectiveDefaultWindowHeight(overrides, workArea, effectivePresetWindowHeights(overrides));
+    return effectiveDefaultWindowHeight(overridesForScreen(screenId), workArea, axis);
 }
 
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
-                                                        const QList<qreal>& presetHeights) const
+                                                        StripAxis axis) const
 {
-    // Rule channel: a bare work-area fraction, committed as Fixed pixels
-    // against the CURRENT work area (same resolution the adjust verbs use).
+    return effectiveDefaultWindowHeight(overrides, workArea, axis, effectivePresetWindowHeights(overrides));
+}
+
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
+                                                        StripAxis axis, const QList<qreal>& presetHeights) const
+{
+    // Rule channel: a bare fraction of the work area's CROSS extent, committed
+    // as Fixed pixels against the CURRENT work area (same resolution the
+    // adjust verbs use). Cross, not physical height: a window height divides
+    // the within-column stack, which runs across the strip whichever way the
+    // strip itself runs.
+    const int crossExtent = axis.crossSize(workArea);
     qreal fraction = 0.0;
-    if (workArea.height() > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
+    if (crossExtent > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
         && fraction > 0.0 && fraction <= 1.0) {
-        return WindowHeight::makeFixed(qMax(1, qRound(fraction * workArea.height())));
+        return WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent)));
     }
     // Settings channel: the kind trio, resolved per SLOT against the cached
     // global — see effectiveDefaultColumnWidth for why a partial trio is the
@@ -421,7 +490,8 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
                 ? slotValue
                 : (m_defaultWindowHeight.kind == WindowHeight::Fixed ? qreal(m_defaultWindowHeight.fixedPx) : 0.0);
             if (value >= 1.0) {
-                return WindowHeight::makeFixed(qRound(value));
+                // Bounded before the round, for the width twin's reason.
+                return WindowHeight::makeFixed(qRound(qBound(1.0, value, kMaxFixedExtentPx)));
             }
         } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
             // Same spin-to-value resolution as the width twin above.
@@ -445,7 +515,7 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
 
 ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QString& screenId) const
 {
-    return effectiveInsertPosition(m_perScreenOverrides.value(screenId));
+    return effectiveInsertPosition(overridesForScreen(screenId));
 }
 
 ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QVariantMap& overrides) const
@@ -461,7 +531,7 @@ ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QVariantMap& ov
 
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenId) const
 {
-    return effectiveDefaultColumnDisplay(m_perScreenOverrides.value(screenId));
+    return effectiveDefaultColumnDisplay(overridesForScreen(screenId));
 }
 
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QVariantMap& overrides) const
@@ -485,7 +555,7 @@ TabIndicatorParams ScrollEngine::tabIndicatorParamsForScreen(const QString& scre
 
 TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) const
 {
-    return effectiveTabIndicator(m_perScreenOverrides.value(screenId));
+    return effectiveTabIndicator(overridesForScreen(screenId));
 }
 
 TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overrides) const
@@ -532,7 +602,7 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overri
     // indicator to a sliver while every setting reports it on.
     qreal length = 0.0;
     if (overrideDouble(overrides, K::tabIndicatorLengthProportion(), length) && length > 0.0) {
-        params.lengthProportion = qMin(length, qreal(1.0));
+        params.lengthProportion = qBound(kMinTabIndicatorLengthProportion, length, kMaxTabIndicatorLengthProportion);
     }
     // Validate-then-fall-back, the terms effectiveDefaultColumnDisplay uses:
     // a garbage override must leave the configured position alone rather than

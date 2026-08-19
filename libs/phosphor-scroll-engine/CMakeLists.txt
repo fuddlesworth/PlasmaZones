@@ -3,8 +3,8 @@
 #
 # PhosphorScrollEngine — niri-style scrolling placement engine.
 #
-# Provides the pure ScrollStrip model (columns on an unbounded horizontal
-# strip, unit-testable in isolation) and the ScrollEngine that drives it
+# Provides the pure ScrollStrip model (columns on an unbounded strip,
+# unit-testable in isolation) and the ScrollEngine that drives it
 # against the IPlacementEngine contract from phosphor-engine.
 
 cmake_minimum_required(VERSION 3.16)
@@ -22,6 +22,7 @@ include(GenerateExportHeader)
 set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorScrollEngine SHARED
+    include/PhosphorScrollEngine/StripAxis.h
     include/PhosphorScrollEngine/ScrollTypes.h
     include/PhosphorScrollEngine/ScrollStashTypes.h
     include/PhosphorScrollEngine/ScrollEngineTypes.h
@@ -38,6 +39,8 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_context.cpp
     src/scrollengine/enginelimits.h
     src/scrollengine/engine_apply.cpp
+    src/scrollengine/scrollpark_p.h
+    src/scrollengine/engine_park.cpp
     src/scrollengine/engine_snapshot.cpp
     src/scrollengine/drag_autoscroll.cpp
     src/scrollengine/drag_preview.cpp
@@ -74,6 +77,12 @@ target_link_libraries(PhosphorScrollEngine
     PUBLIC
         Qt6::Core
         PhosphorEngine::PhosphorEngine
+        # Already reaches us transitively (PhosphorEngine links it PUBLIC), but
+        # StripAxis.h includes a PhosphorProtocol header directly. Naming it
+        # here keeps that honest: without it, demoting PhosphorEngine's link to
+        # PRIVATE would break THIS library's compile for reasons pointing at
+        # another one. Types is the QtCore-only half — no QtDBus enters here.
+        PhosphorProtocol::Types
     PRIVATE
         PhosphorScreens::Runtime  # ScrollEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity

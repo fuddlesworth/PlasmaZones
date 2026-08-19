@@ -81,6 +81,19 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     return preview;
 }
 
+/// Stamp the scrolling-template section triple onto @p preview.
+///
+/// One home for the three fields, called from both row builders below. They
+/// were spelled out twice, twenty lines apart, and drift would have put the
+/// None row under a header of its own — separated from the very templates it
+/// is an escape from.
+void stampScrollingTemplateSection(LayoutPreview& preview)
+{
+    preview.sectionKey = QStringLiteral("scrolling-templates");
+    preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
+    preview.sectionOrder = 10;
+}
+
 /// The synthetic "no template" row, carrying the reserved
 /// PhosphorZones::NoScrollingTemplate id. Opt-in per call site: it belongs in
 /// the lists that PICK a context's template, and not in the management and
@@ -100,9 +113,7 @@ LayoutPreview noScrollingTemplatePreview()
     preview.description =
         PhosphorI18n::tr("Use no template on this screen, so columns keep the built-in widths and heights");
     preview.isScrollingTemplate = true;
-    preview.sectionKey = QStringLiteral("scrolling-templates");
-    preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
-    preview.sectionOrder = 10;
+    stampScrollingTemplateSection(preview);
     return preview;
 }
 
@@ -111,8 +122,12 @@ LayoutPreview noScrollingTemplatePreview()
 /// above. Templates have no hidden/allow-list/aspect axes today, so no context
 /// filtering applies — which also satisfies the active-selection exemption
 /// trivially (the context's assigned template is always in the list).
+///
+/// @p verticalAxis is the strip axis of the screen these rows are being built
+/// for, and it only reaches the per-screen overload. The flat management list
+/// is screen-agnostic by design, so it keeps the horizontal depiction.
 void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones::ScrollingTemplateStore* store,
-                                     bool includeNoTemplateRow)
+                                     bool includeNoTemplateRow, bool verticalAxis)
 {
     // The None row does NOT depend on the store: "use no template" is offered
     // even where there are no templates to choose between, because a screen
@@ -126,10 +141,8 @@ void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones
     const QList<PhosphorZones::ScrollingTemplate> templates = store->templates();
     list.reserve(list.size() + templates.size());
     for (const PhosphorZones::ScrollingTemplate& templ : templates) {
-        LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
-        preview.sectionKey = QStringLiteral("scrolling-templates");
-        preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
-        preview.sectionOrder = 10;
+        LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ, verticalAxis);
+        stampScrollingTemplateSection(preview);
         list.append(preview);
     }
 }
@@ -205,10 +218,12 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
 }
 
 // Manual before autotile, recommended first, then by name. There is
-// deliberately no template arm: grouping templates away from the other two
-// families is a QML concern driven by sectionKey/sectionLabel/sectionOrder,
-// which only the QML side reads, so adding a sort arm here would duplicate
-// that decision in a second place.
+// deliberately no arm that GROUPS templates away from the other two families:
+// that is a QML concern driven by sectionKey/sectionLabel/sectionOrder, which
+// only the QML side reads, so sorting on it here would duplicate the decision
+// in a second place. The one template-aware arm below is a different
+// question — where a single row sits WITHIN its own section — which no
+// section field can express.
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
     // The no-template row is an ESCAPE from the list rather than a member of
@@ -324,8 +339,10 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
 
     // No None row on this overload: it is the flat management list (the
     // settings app's catalogue over D-Bus), where a row standing for the
-    // absence of a template has nothing to manage.
-    appendScrollingTemplatePreviews(list, templateStore, false);
+    // absence of a template has nothing to manage. It is screen-agnostic for
+    // the same reason, so its template cards keep the horizontal depiction —
+    // there is no screen here whose axis they could mirror.
+    appendScrollingTemplatePreviews(list, templateStore, false, /*verticalAxis=*/false);
 
     sortPreviews(list, customOrder);
 
@@ -337,10 +354,20 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
     const QString& screenId, int virtualDesktop, const QString& activity, bool includeManual, bool includeAutotile,
     qreal screenAspectRatio, bool filterByAspectRatio, const QStringList& customOrder,
     PhosphorLayout::ILayoutSource* autotileSource, QSize autotilePreviewCanvas, bool includeScrollingTemplates,
-    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoTemplateRow)
+    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoTemplateRow, bool stripVerticalAxis)
 {
     QVector<LayoutPreview> list;
 
+    // HARD PRECONDITION, unlike the three include* flags: a null registry
+    // yields an empty list outright, template rows and the None row included,
+    // even though neither needs the registry. Both other families do — the
+    // manual walk enumerates its layouts and the autotile hidden-filter reads
+    // the context's algorithm and the per-algorithm overrides off it — so a
+    // registry-less build would answer with the template section alone, which
+    // is a silently partial picker rather than a useful degrade. Every call
+    // site is a picker or OSD that owns a registry; the flat management
+    // overload above is the one that legitimately has no context, and it takes
+    // no registry-dependent filter.
     if (!layoutManager) {
         return list;
     }
@@ -440,7 +467,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
     }
 
     if (includeScrollingTemplates) {
-        appendScrollingTemplatePreviews(list, templateStore, includeNoTemplateRow);
+        appendScrollingTemplatePreviews(list, templateStore, includeNoTemplateRow, stripVerticalAxis);
     }
 
     sortPreviews(list, customOrder);

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 // Edge auto-scroll for a live drag-insert preview — niri's
-// dnd-edge-view-scroll. Hold a dragged window near either edge of the work
-// area and the strip's VIEW scrolls, so a drop can reach a column that is
+// dnd-edge-view-scroll. Hold a dragged window near either END of the strip (left/right on a
+// horizontal strip, top/bottom on a vertical one) and the strip's VIEW scrolls, so a drop can reach a column that is
 // off screen. Without it the drag can only target what was already visible
 // when the hold began.
 //
@@ -30,6 +30,7 @@
 // leaves the band, against the columns the scroll revealed.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/StripAxis.h>
 
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -171,21 +172,27 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     }
 
     // Linear ramp, niri's: zero at the band's inner edge, full speed at the
-    // work area's edge. The trigger width is clamped to a third of the work
-    // area so a hand-edited config cannot make the bands meet in the middle
+    // work area's edge. Measured ALONG THE STRIP: the bands sit at the two
+    // ends of the main axis (left/right on a horizontal strip, top/bottom on
+    // a vertical one), and the cursor's main-axis coordinate is what enters
+    // them. The trigger width is clamped to a third of the work area's main
+    // extent so a hand-edited config cannot make the bands meet in the middle
     // and leave no neutral zone to aim from.
-    const int triggerWidth = std::clamp(m_dragScrollTriggerWidth, 1, qMax(1, params.workArea.width() / 3));
-    const int leftInner = params.workArea.left() + triggerWidth;
-    const int rightInner = params.workArea.right() - triggerWidth;
+    const StripAxis axis = params.axis;
+    const int mainExtent = axis.mainSize(params.workArea);
+    const int triggerWidth = std::clamp(m_dragScrollTriggerWidth, 1, qMax(1, mainExtent / 3));
+    const int leadInner = axis.mainLow(params.workArea) + triggerWidth;
+    const int trailInner = axis.mainHigh(params.workArea) - triggerWidth;
+    const int cursorMain = axis.mainPos(cursorPos);
 
     int direction = 0;
     qreal depth = 0.0;
-    if (cursorPos.x() < leftInner) {
+    if (cursorMain < leadInner) {
         direction = -1;
-        depth = qreal(leftInner - cursorPos.x()) / qreal(triggerWidth);
-    } else if (cursorPos.x() > rightInner) {
+        depth = qreal(leadInner - cursorMain) / qreal(triggerWidth);
+    } else if (cursorMain > trailInner) {
         direction = 1;
-        depth = qreal(cursorPos.x() - rightInner) / qreal(triggerWidth);
+        depth = qreal(cursorMain - trailInner) / qreal(triggerWidth);
     } else {
         // Out of both bands: ordinary per-column targeting resumes, aimed at
         // the columns the scroll brought into view.
@@ -227,17 +234,17 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     // to zero on every tick and the band's shallow end would be dead.
     const qreal dt = std::clamp(dtSeconds, 0.0, kMaxTickSeconds);
     preview.autoScrollResidue += qreal(direction) * depth * qreal(m_dragScrollMaxSpeed) * dt;
-    const int dx = int(preview.autoScrollResidue > 0.0 ? std::floor(preview.autoScrollResidue)
-                                                       : std::ceil(preview.autoScrollResidue));
-    preview.autoScrollResidue -= qreal(dx);
+    const int step = int(preview.autoScrollResidue > 0.0 ? std::floor(preview.autoScrollResidue)
+                                                         : std::ceil(preview.autoScrollResidue));
+    preview.autoScrollResidue -= qreal(step);
 
     bool moved = false;
-    if (dx != 0) {
-        moved = state->strip().scrollViewBy(dx, params);
+    if (step != 0) {
+        moved = state->strip().scrollViewBy(step, params);
         if (!moved) {
             // Pinned at an end. Drop the residue so a long hold there does
             // not bank up travel that releases as a lurch the moment the
-            // cursor crosses to the other band. A tick whose dx merely
+            // cursor crosses to the other band. A tick whose step merely
             // ROUNDED to zero must keep its remainder — that is the whole
             // point of carrying one.
             preview.autoScrollResidue = 0.0;

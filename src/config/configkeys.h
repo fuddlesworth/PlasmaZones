@@ -152,7 +152,7 @@ public:
     // Scrolling.ZoneSelector — the strip-mode drag popup on scrolling
     // screens. Mirrors Snapping.ZoneSelector minus the grid-arrangement
     // keys (LayoutMode / GridColumns / MaxRows): the strip popup is a
-    // single horizontal card row by construction.
+    // single card row along the strip by construction.
     P_CONFIG_GROUP(scrollingZoneSelectorGroup, "Scrolling.ZoneSelector")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
@@ -433,6 +433,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
+    P_CONFIG_KEY(stripAxisKey, "StripAxis")
     P_CONFIG_KEY(alwaysCenterSingleColumnKey, "AlwaysCenterSingleColumn")
     P_CONFIG_KEY(cropStraddlersKey, "CropStraddlers")
     P_CONFIG_KEY(defaultColumnWidthKindKey, "DefaultColumnWidthKind")

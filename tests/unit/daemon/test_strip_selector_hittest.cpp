@@ -32,6 +32,74 @@ class TestStripSelectorHitTest : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// The popup is a miniature of the strip, so a vertical strip's card row
+    /// runs top-to-bottom and its cards are split left/right rather than
+    /// top/bottom.
+    ///
+    /// THE FAILURE THIS GUARDS is silent: leave the classification horizontal
+    /// while the row is vertical and half 0/1 still means "top/bottom", which
+    /// REVERSES insert order under the cursor with no error and no visual
+    /// tell. So the assertions below are stated as the transpose of the
+    /// horizontal case rather than as fresh numbers.
+    void verticalAxisTransposesTheWholeClassification()
+    {
+        // Two cards stacked vertically: the transpose of a horizontal pair at
+        // (0,0 100x60) and (110,0 100x60).
+        const QVector<QRectF> vertical{QRectF(0, 0, 60, 100), QRectF(0, 110, 60, 100)};
+        const QVector<bool> tabbed{false, false};
+        const qreal inflate = 4.0;
+
+        // A point in the FIRST card's leading half, which transposed is its
+        // LEFT half, and must still mean "join at tile index 0".
+        //
+        // Deliberately in the card's bottom-left corner rather than on its
+        // centre line. The half split reads x under the transpose and y
+        // without it, so a probe at y = 50 (this card's exact midline, which
+        // the `<=` awards to the top half) answers half 0 under BOTH readings
+        // and discriminates nothing. At y = 70 the un-transposed reading calls
+        // it half 1, so leaving the classification horizontal fails here.
+        const StripSelectorHit lead =
+            classifyStripSelectorPoint(vertical, tabbed, QPointF(10, 70), inflate, /*verticalAxis=*/true);
+        QCOMPARE(lead.columnIndex, 0);
+        QCOMPARE(lead.half, 0);
+
+        // The trailing half of the same card appends.
+        const StripSelectorHit trail =
+            classifyStripSelectorPoint(vertical, tabbed, QPointF(50, 50), inflate, /*verticalAxis=*/true);
+        QCOMPARE(trail.columnIndex, 0);
+        QCOMPARE(trail.half, 1);
+
+        // The interior boundary between the two cards is now a HORIZONTAL
+        // band, and it opens a new column at strip position 1.
+        const StripSelectorHit gap =
+            classifyStripSelectorPoint(vertical, tabbed, QPointF(30, 105), inflate, /*verticalAxis=*/true);
+        QCOMPARE(gap.gapIndex, 1);
+        QCOMPARE(gap.columnIndex, -1);
+
+        // And the trailing outer boundary appends a column past the last.
+        const StripSelectorHit tailGap =
+            classifyStripSelectorPoint(vertical, tabbed, QPointF(30, 212), inflate, /*verticalAxis=*/true);
+        QCOMPARE(tailGap.gapIndex, 2);
+    }
+
+    /// The horizontal case must be BYTE-IDENTICAL with the flag defaulted or
+    /// explicitly false — the transpose is a boundary swap, not a second
+    /// implementation, and every other case in this file is the identity.
+    void horizontalIsUnaffectedByTheNewParameter()
+    {
+        const QVector<QRectF> horizontal{QRectF(0, 0, 100, 60), QRectF(110, 0, 100, 60)};
+        const QVector<bool> tabbed{false, false};
+
+        const StripSelectorHit defaulted = classifyStripSelectorPoint(horizontal, tabbed, QPointF(50, 10), 4.0);
+        const StripSelectorHit explicitFalse =
+            classifyStripSelectorPoint(horizontal, tabbed, QPointF(50, 10), 4.0, /*verticalAxis=*/false);
+        QCOMPARE(defaulted.columnIndex, explicitFalse.columnIndex);
+        QCOMPARE(defaulted.half, explicitFalse.half);
+        QCOMPARE(defaulted.gapIndex, explicitFalse.gapIndex);
+        QCOMPARE(defaulted.columnIndex, 0);
+        QCOMPARE(defaulted.half, 0);
+    }
+
     void interiorGapHits()
     {
         const QVector<bool> tabbed{false, false, false};

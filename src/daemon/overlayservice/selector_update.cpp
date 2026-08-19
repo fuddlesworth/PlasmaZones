@@ -24,9 +24,10 @@ namespace PlasmaZones {
 namespace {
 
 void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
-                                          const QString& virtualScreenId, const ZoneSelectorConfig& config,
-                                          ISettings* settings, const ZoneSelectorLayout& layout,
-                                          PhosphorZones::IZoneLayoutRegistry* layoutRegistry)
+                                          const QString& virtualScreenId, ISettings* settings,
+                                          const ZoneSelectorLayout& layout,
+                                          const PhosphorZones::ContextOverlayOverride& overlayOverride, int zonePadding,
+                                          bool stripVerticalAxis)
 {
     if (!window || !screen) {
         return;
@@ -34,17 +35,23 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
 
     // Use virtual screen geometry if available, falling back to physical
     const QRect screenGeom = resolveScreenGeometry(mgr, virtualScreenId);
-    const int screenWidth = screenGeom.width();
-    const int indicatorWidth = layout.indicatorWidth;
 
-    // Compute previewScale
-    const qreal previewScale = screenWidth > 0 ? static_cast<qreal>(indicatorWidth) / screenWidth : 0.09375;
+    // previewScale is "how many miniature pixels one screen pixel becomes",
+    // and it is read against the extent the card is sized along. A vertical
+    // strip's cards take their preview extent from indicatorHeight (see the
+    // vertical arm of computeZoneSelectorLayout and its QML twin), so scaling
+    // against the screen WIDTH there would size the padding, border width and
+    // corner radius against an extent the card never uses — badly wrong on a
+    // portrait monitor, where the two differ by more than the aspect ratio.
+    const int screenExtent = stripVerticalAxis ? screenGeom.height() : screenGeom.width();
+    const int indicatorExtent = stripVerticalAxis ? layout.indicatorHeight : layout.indicatorWidth;
+    const qreal previewScale = screenExtent > 0 ? static_cast<qreal>(indicatorExtent) / screenExtent : 0.09375;
     writeQmlProperty(window, QStringLiteral("previewScale"), previewScale);
 
-    // Compute positionIsVertical from per-screen config
-    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
-    writeQmlProperty(window, QStringLiteral("positionIsVertical"),
-                     (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
+    // No positionIsVertical write here: the caller sets it from the same
+    // config.position BEFORE the layout properties, because the QML anchors
+    // need it there. Repeating it after would be a second write of a value
+    // that cannot have changed in between.
 
     // Compute scaled zone appearance values. Zone padding honors per-monitor gap
     // RULES (cascade: context-rule override → global → default) via the layout
@@ -53,10 +60,10 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     // SetOverlayBorderRadius context rule over the global setting, matching the
     // zoneBorderWidth/Radius written for the same window in updateZoneSelectorWindow.
     if (settings) {
-        const PhosphorZones::ContextOverlayOverride overlayOverride =
-            overlayOverrideForScreen(layoutRegistry, virtualScreenId);
-        const int zonePadding = GeometryUtils::getEffectiveInnerGap(
-            nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, settings, virtualScreenId));
+        // overlayOverride and zonePadding arrive PRE-RESOLVED from the one
+        // resolve updateZoneSelectorWindow performs for its raw-property
+        // writes — the same inputs, resolved twice per popup update before
+        // this was threaded through.
         const int zoneBorderWidth = overlayOverride.borderWidth.value_or(settings->borderWidth());
         const int zoneBorderRadius = overlayOverride.borderRadius.value_or(settings->borderRadius());
 
@@ -109,8 +116,7 @@ void applyZoneSelectorLayout(QObject* window, const ZoneSelectorLayout& layout)
 // QQuickWindow). The QML root uses internal anchors (selectorPosition
 // state) to position the visible bar in the chosen corner of the
 // transparent slot.
-void applyZoneSelectorGeometry(QQuickItem* slot, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
-                               ZoneSelectorPosition /*pos*/)
+void applyZoneSelectorGeometry(QQuickItem* slot, const QRect& screenGeom)
 {
     if (!slot || !screenGeom.isValid()) {
         return;
@@ -144,35 +150,57 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     const QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+    // Clamped symmetrically about 1:1 — the lower bound is the inverse of the
+    // upper, so a rotated 21:9 (about 0.43) keeps its shape. NOTE: for the
+    // SELECTOR slot this write is currently declared-but-unforwarded
+    // (ZoneSelectorContent derives its own aspect; see the contract note in
+    // PassiveOverlayShell.qml), so the clamp's live consumers are the OSD
+    // and picker contents, whose own safeAspectRatio floors match this one.
+    aspectRatio = qBound(0.25, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
     // Build resolved per-screen config. Strip-selector screens resolve the
-    // scrolling variant, whose resolver stamps LayoutMode = Horizontal so
-    // computeZoneSelectorLayout lays a single card row with zero changes.
+    // scrolling variant, whose resolver stamps LayoutMode = Horizontal. That
+    // stamp stands for "the user picks no form here": the popup mirrors the
+    // strip, so its one row of cards runs whichever way the ENGINE resolved
+    // the axis, and computeZoneSelectorLayout takes that axis as its own
+    // argument rather than from the config.
     const bool stripMode = isStripSelectorScreen(screenId);
+    // Resolved once for the whole update: the axis reaches QML, the layout
+    // computation and the preview scale, and asking the provider three times
+    // per rebuild would let a rotation landing mid-update answer differently
+    // to each of them.
+    const bool stripVerticalAxis = stripMode && stripIsVertical(screenId);
     const ZoneSelectorConfig config = m_settings
         ? (stripMode ? m_settings->resolvedScrollingZoneSelectorConfig(screenId)
                      : m_settings->resolvedZoneSelectorConfig(screenId))
         : defaultZoneSelectorConfig();
 
+    // Resolved ONCE for the whole update: the raw-property writes below and
+    // the scaled-preview writes in updateZoneSelectorComputedProperties read
+    // the same per-screen context, and resolving it twice per popup rebuild
+    // both duplicated the rule walk and let a context switch landing between
+    // the two resolves hand each half a different answer.
+    PhosphorZones::ContextOverlayOverride overlayOverride;
+    int zonePadding = 0;
+    if (m_settings) {
+        overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+        zonePadding = GeometryUtils::getEffectiveInnerGap(
+            nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId));
+    }
+
     // Update settings-based properties
     if (m_settings) {
         // Context overlay-appearance overrides layer over config for this
         // screen's live context, matching the main zone overlay.
-        const PhosphorZones::ContextOverlayOverride overlayOverride =
-            overlayOverrideForScreen(m_layoutManager, screenId);
         writeColorSettings(window, m_settings, &overlayOverride);
         // PhosphorZones::Zone appearance for the scaled preview. Zone padding
         // honors per-monitor gap RULES (context-rule override → global → default)
         // via the layout registry's current context. This preview passes no
         // layout, so the per-layout tier does not apply here; border width/radius
         // layer the context overlay rule over the global config value.
-        writeQmlProperty(
-            window, QStringLiteral("zonePadding"),
-            GeometryUtils::getEffectiveInnerGap(
-                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
+        writeQmlProperty(window, QStringLiteral("zonePadding"), zonePadding);
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"),
                          overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"),
@@ -207,6 +235,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
     writeQmlProperty(window, QStringLiteral("stripMode"), stripMode);
     writeQmlProperty(window, QStringLiteral("stripColumns"), stripColumns);
+    // Pushed even when this screen is not in strip mode: the property is a
+    // plain bool and a stale true would transpose the next strip popup on a
+    // screen that had since gone horizontal.
+    writeQmlProperty(window, QStringLiteral("stripVerticalAxis"), stripVerticalAxis);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Global "Auto-assign for all layouts" master toggle (#370) - when on, every
@@ -239,7 +271,12 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // (empty fraction list) so the bar retains a hittable "open the first
     // column" body instead of collapsing.
     const int layoutCount = stripMode ? std::max(1, static_cast<int>(stripColumns.size())) : layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions);
+    // The axis has to reach the layout too, not just QML: the cards stack
+    // down the popup on a vertical strip, so sizing the container as one
+    // horizontal card row would clip the tail cards away, and the hit-test
+    // reads rendered rects back and would find them empty.
+    const ZoneSelectorLayout layout =
+        computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions, stripVerticalAxis);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
@@ -251,14 +288,14 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
-                                         m_layoutManager);
+    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, m_settings, layout, overlayOverride,
+                                         zonePadding, stripVerticalAxis);
 
     // Positioning is entirely QML-internal: ZoneSelectorContent.qml's
     // selectorPosition state anchors the inner container to the requested
     // corner of the full-screen transparent surface. Anchors/margins are
     // baked at attach time (AnchorAll) and never mutated afterwards.
-    applyZoneSelectorGeometry(window, screenGeom, layout, pos);
+    applyZoneSelectorGeometry(window, screenGeom);
 
     // Keep stored geometry in sync so hit-testing uses the current value
     m_screenStates[screenId].zoneSelectorGeometry = screenGeom;

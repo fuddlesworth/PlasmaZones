@@ -829,6 +829,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHeightStep"),
                PhosphorI18n::tr("Height adjustment step"),
                {PhosphorI18n::tr("step"), PhosphorI18n::tr("height"), PhosphorI18n::tr("shortcut")});
+    // The Strip direction card, shared with scrolling-simple like the Focus
+    // card below, so the pair registers against both hosting page ids.
+    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("stripDirection"),
+               PhosphorI18n::tr("Strip direction"));
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("stripAxis"), PhosphorI18n::tr("Direction"),
+               {PhosphorI18n::tr("strip"), PhosphorI18n::tr("axis"), PhosphorI18n::tr("vertical"),
+                PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("portrait")});
     // The Focus and view card, shared with scrolling-simple below: it absorbed
     // the former View page's viewport rows, so those anchors resolve against
     // both pages that host the card.

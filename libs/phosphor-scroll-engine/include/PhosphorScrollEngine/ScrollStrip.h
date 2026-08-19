@@ -16,7 +16,7 @@
 namespace PhosphorScrollEngine {
 
 /// The pure scrolling-strip model: an ordered list of columns on an
-/// unbounded horizontal strip, viewed through a fixed-width viewport.
+/// unbounded strip, viewed through a viewport of the work area's extent.
 ///
 /// This class is deliberately free of engine/compositor dependencies (Qt Core
 /// value types only) so the full behavioural matrix is unit-testable in
@@ -25,12 +25,23 @@ namespace PhosphorScrollEngine {
 ///
 /// ## Coordinates
 ///
-/// Strip coordinates run left-to-right from the first column's left edge at 0.
-/// The viewport is the work area; its left edge sits at `viewX` in strip
-/// coordinates. The view anchor is stored RELATIVE TO THE ACTIVE COLUMN
-/// (`viewAnchor` = active column's left edge position within the viewport),
-/// so structural changes left of the focus never make the focused window
-/// drift — `viewX` is derived, never stored.
+/// Strip coordinates run ALONG THE MAIN AXIS from the first column's leading
+/// edge at 0. The viewport is the work area; its leading edge sits at
+/// `viewOffset` in strip coordinates. The view anchor is stored RELATIVE TO
+/// THE ACTIVE COLUMN (`viewAnchor` = active column's leading edge position
+/// within the viewport), so structural changes before the focus along the
+/// strip never make the focused window drift — `viewOffset` is derived, never
+/// stored.
+///
+/// ## Naming exemption
+///
+/// The public verbs below keep their physical width/height spellings
+/// (setActiveColumnWidth, adjustActiveWindowHeight, WindowHeight, and their
+/// siblings) because they are shipped API carrying niri's own vocabulary.
+/// Throughout this header `width` reads as the column's MAIN extent (along
+/// the strip) and `height` as the tile's CROSS extent (across it), whichever
+/// way the strip actually runs. StripAxis's role-naming rule governs NEW
+/// internals; it does not ask for these names to be rewritten.
 ///
 /// Mutators that can change which column is focused (or shift pixel
 /// positions under the anchor) take the current ScrollLayoutParams so they
@@ -65,7 +76,10 @@ public:
     /// If that tile is MINIMIZED it falls back to the column's first
     /// non-minimized tile, so this can name a different window than
     /// `activeColumn()->activeTileIdx` points at. The mutating verbs
-    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight) all act
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight, and
+    /// cycleActiveWindowPresetHeight — adjustActiveWindowHeight is NOT on
+    /// this list; it self-guards by resolving the tile from the relayout)
+    /// all act
     /// on activeTileIdx, so a caller pairing this accessor with one of them
     /// could report a window the operation did not touch. Not reachable in
     /// production today, where the daemon models minimize as float and a
@@ -77,13 +91,14 @@ public:
     {
         return columnOfWindow(windowId) != -1;
     }
-    /// All windows in strip order (left-to-right, top-to-bottom), including
-    /// minimized tiles (their slot is part of the order contract).
+    /// All windows in strip order (column order along the strip, then each
+    /// column's stack order across it), including minimized tiles (their slot
+    /// is part of the order contract).
     QStringList windowsInOrder() const;
     int windowCount() const;
     // ── Structure: open / close / minimize ──────────────────────────────────
     /// Insert a new single-tile column for @p windowId at @p pos (default:
-    /// immediately to the right of the active column, or at index 0 on an
+    /// immediately AFTER the active column along the strip, or at index 0 on an
     /// empty strip), focus it, and leave every other column untouched. The
     /// view scrolls only as the centering policy requires. Returns false
     /// when already present. IntoActiveColumn is NOT handled here — the
@@ -93,8 +108,8 @@ public:
     bool insertWindow(const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
                       const ScrollLayoutParams& params, int minWidth = 0, int minHeight = 0,
                       ScrollInsertPosition pos = ScrollInsertPosition::RightOfActive);
-    /// Insert @p windowId as a new tile at the bottom of the active column
-    /// (rule-driven "open consumed into the focused column"). Falls back to
+    /// Insert @p windowId as a new tile at the END of the active column's
+    /// stack (rule-driven "open consumed into the focused column"). Falls back to
     /// insertWindow when the strip is empty.
     /// @p width is honoured ONLY on the empty-strip fallback (which routes
     /// through insertWindow); joining an existing column keeps the host
@@ -116,8 +131,8 @@ public:
     /// NOTE: carries no min-size parameters; callers that know the
     /// window's minimum must follow up with setWindowMinimumSize (the
     /// open/restore/crossing sites all do).
-    /// @p params re-clamps the view anchor after the positional insert (a
-    /// left-of-active insert grows the strip without moving the active
+    /// @p params re-clamps the view anchor after the positional insert (an
+    /// insert BEFORE the active column along the strip grows it without moving the active
     /// column, and an unclamped anchor can strand the view past the strip
     /// end — the mode-transition seed bug).
     bool insertWindowAt(int columnIndex, const QString& windowId, const ColumnWidth& width, ColumnDisplay display,
@@ -195,16 +210,16 @@ public:
     /// |delta| > 1 the intervening tiles shift by one rather than the two
     /// endpoints exchanging places. A delta of 0 is a no-op.
     bool moveActiveTile(int delta);
-    /// Pull the next column's active tile into the bottom of the active
-    /// column (niri consume-window-into-column).
+    /// Pull the next column's active tile onto the END of the active
+    /// column's stack (niri consume-window-into-column).
     bool consumeWindowIntoColumn(const ScrollLayoutParams& params);
-    /// Push the active tile out into its own new column immediately to the
-    /// right of the current one (niri expel-window-from-column).
+    /// Push the active tile out into its own new column immediately AFTER
+    /// the current one along the strip (niri expel-window-from-column).
     bool expelWindowFromColumn(const ScrollLayoutParams& params);
     /// niri consume-or-expel: when the active tile is alone in its column it
     /// is consumed into the neighbour column in @p delta's direction
     /// (appended); otherwise it is expelled into its own new column on that
-    /// side. @p delta is -1 (left) / +1 (right).
+    /// side. @p delta is -1 (towards the strip's start) / +1 (towards its end).
     bool consumeOrExpel(int delta, const ScrollLayoutParams& params);
     /// Remove @p windowId with no focus policy beyond index fixups — the
     /// cross-context transfer / float path (the caller re-homes the window).
@@ -214,42 +229,57 @@ public:
     /// Set the active column's width intent, verbatim. The direct write the
     /// cycle/adjust/maximize verbs below are built on, and the absolute
     /// set-column-width verb's (and the tests') way to reach an exact intent.
-    /// Callers own validation — nothing here clamps.
+    /// Callers own validation — nothing here clamps. The width is the
+    /// column's extent ALONG the strip.
     bool setActiveColumnWidth(const ColumnWidth& width);
     /// Cycle the active column through the preset width list. @p delta -1/+1.
     /// Enters the cycle at the nearest preset when the current width is not
     /// a preset.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
-    /// Adjust the active column's width by @p deltaPercent of the work-area
-    /// width (niri set-column-width "+10%"/"-10%").
+    /// Adjust the active column's width by @p deltaPercent of the work area's
+    /// MAIN extent (niri set-column-width "+10%"/"-10%").
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
-    /// Full work-area width, still tiled (niri maximize-column). Toggles back
-    /// to the pre-maximize intent when already maximized.
+    /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
+    /// back to the pre-maximize intent when already maximized.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
-    /// Grow the active column into the on-screen space not covered by any
-    /// column at the current view (niri expand-column-to-available-width).
+    /// Grow the active column into the on-screen MAIN-axis space not covered by
+    /// any column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
     /// Set the active tile's height intent, verbatim. The height twin of
     /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
     /// the restore paths' setWindowHeightIntent, and the absolute
-    /// set-window-height verb. Callers own validation.
+    /// set-window-height verb. Callers own validation. The height is the
+    /// tile's extent ACROSS the strip.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
-    /// Adjust the active tile's height by @p deltaPercent of the work-area
-    /// height.
+    /// Adjust the active tile's height by @p deltaPercent of the work area's
+    /// CROSS extent.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Back to the even auto-split for EVERY tile in the active column.
     bool resetActiveColumnHeights();
-    /// Record the size a client/user resize actually settled on. The width
-    /// becomes the column's Fixed intent only when @p widthChanged (the
-    /// engine compares against the last applied rect) — a vertical-only
-    /// resize must not pin a Proportion/Preset column to pixels. The height
-    /// becomes the tile's Fixed intent symmetrically, only when
-    /// @p heightChanged; a lone tile is included, because relayout honours a
-    /// solo tile's Fixed height (niri parity). Other columns are untouched.
-    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged = true,
-                             bool heightChanged = true);
+    /// Record the size a client/user resize actually settled on. The acked
+    /// MAIN extent becomes the column's Fixed width intent only when
+    /// @p mainChanged (the engine compares against the last applied rect) — a
+    /// resize purely ACROSS the strip must not pin a Proportion/Preset column
+    /// to pixels. The acked CROSS extent becomes the tile's Fixed height
+    /// intent symmetrically, only when @p crossChanged; a lone tile is
+    /// included, because relayout honours a solo tile's Fixed height (niri
+    /// parity). Other columns are untouched.
+    ///
+    /// These two bools were spelled @c widthChanged / @c heightChanged before
+    /// the strip gained a second axis, and they now mean main/cross. The
+    /// signature did not change shape, so an out-of-tree caller still passing
+    /// physical width/height flags compiles and is silently wrong on a
+    /// vertical strip: each guard then protects the intent it was not written
+    /// for.
+    /// @p mainChanged / @p crossChanged say which axis the interactive resize
+    /// actually moved, in ROLE terms. @p ackedSize is the compositor's
+    /// physical QSize and is decoded through @p params.axis, so the caller
+    /// must derive the two flags against that same axis or each guard ends up
+    /// protecting the intent it was not written for.
+    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged, bool crossChanged,
+                             const ScrollLayoutParams& params);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
@@ -281,13 +311,13 @@ public:
     QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
 
     /// Rotate the window contents of the VISIBLE columns through their
-    /// slots (clockwise = every stack shifts one slot right, the last
-    /// visible wraps to the first). Width and display INTENTS stay with the
-    /// SLOT, like autotile's rotate through fixed zones, so the strip's
-    /// geometry holds still for the ordinary case. It is not an absolute:
-    /// a column's resolved width also honours its tiles' min-width clamp,
-    /// so rotating a window with a large minimum into a narrow slot does
-    /// widen that slot. The anchor is re-clamped afterwards for exactly
+    /// slots (clockwise = every stack shifts one slot ALONG the strip,
+    /// towards its end, and the last visible wraps to the first). Width and
+    /// display INTENTS stay with the SLOT, like autotile's rotate through
+    /// fixed zones, so the strip's geometry holds still for the ordinary
+    /// case. It is not an absolute: a column's resolved width also honours
+    /// its tiles' min-MAIN clamp, so rotating a window with a large minimum
+    /// into a small slot does grow that slot. The anchor is re-clamped afterwards for exactly
     /// that reason. The active column index stays put (focus follows the
     /// slot; callers activate its new window). Returns the number of
     /// windows rotated, 0 when fewer than two columns are visible.
@@ -301,7 +331,7 @@ public:
         return m_viewAnchor;
     }
     /// Restore a previously captured view anchor, RAW: a centered anchor
-    /// implies an out-of-range derived viewX by design (the same shape
+    /// implies an out-of-range derived viewOffset by design (the same shape
     /// centerActiveColumn stores), so no clamp is applied here — later
     /// structural inserts re-clamp when the strip cannot honour the view.
     /// The stash-restore path re-applies the anchor AFTER re-focusing the
@@ -322,15 +352,16 @@ public:
     /// center-visible-columns). Falls back to centerActiveColumn when no
     /// column is fully visible. Returns true when the anchor actually moved.
     bool centerVisibleColumns(const ScrollLayoutParams& params);
-    /// Scroll the view @p dx pixels to the right (negative scrolls left)
-    /// WITHOUT changing focus, clamped to the strip's ends. The anchor is
-    /// stored relative to the active column, so a rightward view move
-    /// shrinks it by the same amount. Returns true when the anchor actually
-    /// moved — a caller sitting at either end gets false and can stop.
-    /// This is the only mutator that moves the view without a focus,
-    /// structure or policy change behind it; the drag-insert edge
+    /// Scroll the view @p delta pixels forward ALONG THE STRIP (negative
+    /// scrolls back towards its start) WITHOUT changing focus, clamped to the
+    /// strip's ends. Forward is rightward on a horizontal strip and downward
+    /// on a vertical one. The anchor is stored relative to the active column,
+    /// so a forward view move shrinks it by the same amount. Returns true when
+    /// the anchor actually moved — a caller sitting at either end gets false
+    /// and can stop. This is the only mutator that moves the view without a
+    /// focus, structure or policy change behind it; the drag-insert edge
     /// auto-scroll is its one caller.
-    bool scrollViewBy(int dx, const ScrollLayoutParams& params);
+    bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against
@@ -348,8 +379,8 @@ public:
     bool stripFitsViewport(const ScrollLayoutParams& params) const;
 
     // ── Pixel resolution helpers (shared with the engine/tests) ─────────────
-    /// The pixel width @p width resolves to under @p params (gap-aware
-    /// proportions, preset lookup; no min-width clamp).
+    /// The pixel MAIN extent @p width resolves to under @p params (gap-aware
+    /// proportions, preset lookup; no min-extent clamp).
     static int resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params);
 
 private:
@@ -360,26 +391,33 @@ private:
     /// @p refocus is true the niri close-focus policy picks the new focus.
     bool removeWindowInternal(const QString& windowId, const ScrollLayoutParams& params, bool refocus);
     // scrollstrip_relayout.cpp
-    /// Pixel width of column @p c under @p params including its tiles'
-    /// min-width clamp (a fully-minimized column resolves to 0).
-    int columnWidthPx(const Column& c, const ScrollLayoutParams& params) const;
-    /// Strip-coordinate left edge of @p columnIndex under @p params.
-    int columnStripX(int columnIndex, const ScrollLayoutParams& params) const;
-    /// Total strip width under @p params.
-    int stripWidthPx(const ScrollLayoutParams& params) const;
-    /// The derived viewport left edge in strip coordinates.
-    int viewXFor(const ScrollLayoutParams& params) const;
+    /// Pixel MAIN extent of column @p c under @p params including its tiles'
+    /// min-MAIN clamp (a fully-minimized column resolves to 0).
+    int columnExtentPx(const Column& c, const ScrollLayoutParams& params) const;
+    /// Strip-coordinate LEADING edge of @p columnIndex under @p params.
+    int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;
+    /// Total strip MAIN extent under @p params.
+    int stripExtentPx(const ScrollLayoutParams& params) const;
+    /// The derived viewport leading edge in strip coordinates.
+    int viewOffsetFor(const ScrollLayoutParams& params) const;
     /// Anchor value that centers column @p columnIndex in the viewport.
     int centeredAnchorFor(int columnIndex, const ScrollLayoutParams& params) const;
-    /// Clamp @p anchor so the derived viewX stays within [0, stripW - workW]
-    /// (left-pinned when the strip fits the viewport entirely).
+    /// Clamp @p anchor so the derived viewOffset stays within
+    /// [0, stripMain - workMain] (pinned at the strip's START when the strip
+    /// fits the viewport entirely).
     int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
-    int keepOrRecenterAnchor(int oldViewX, const ScrollLayoutParams& params) const;
+    /// The anchor a structural mutation ends on: KEEP the view where it was
+    /// (an anchor reproducing @p oldViewOffset, clamped at BOTH strip edges —
+    /// deliberately stricter than removeWindowInternal's leading-edge-only
+    /// clamp; see that function's comment for why a removal does not reclaim
+    /// trailing dead space) unless the centering policy says the focused
+    /// column re-centers, in which case RECENTER wins.
+    int keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const;
     /// Apply the center-focused-column policy after the active column moved
-    /// from @p prevIdx at @p oldViewX (strip coords) to the current active.
-    void reanchorAfterFocusChange(int prevIdx, int oldViewX, const ScrollLayoutParams& params);
+    /// from @p prevIdx at @p oldViewOffset (strip coords) to the current active.
+    void reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const ScrollLayoutParams& params);
     // scrollstrip_sizing.cpp
-    /// The tile's current height as a fraction of the column height, or -1
+    /// The tile's current height as a fraction of the column's CROSS extent, or -1
     /// when it has no determinate fraction (Auto weight). Preset anchors
     /// answer their SNAPPED value (nearestPresetValue), matching relayout.
     qreal currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const;
@@ -390,7 +428,7 @@ private:
 
     QVector<Column> m_columns;
     int m_activeColumnIdx = -1;
-    /// Active column's left edge position within the viewport (see class doc).
+    /// Active column's leading edge position within the viewport (see class doc).
     int m_viewAnchor = 0;
     /// Pre-maximize width intent for the maximize toggle (single slot:
     /// maximize is a focused-column toggle).

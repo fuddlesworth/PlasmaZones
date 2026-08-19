@@ -10,6 +10,8 @@
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/LayoutRegistry.h>
+// LayoutRegistry.h only forward-declares ScrollingTemplateStore; templateById()
+// below needs the complete type, and unity batching must not be what supplies it.
 #include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"

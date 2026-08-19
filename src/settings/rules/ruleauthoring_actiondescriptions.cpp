@@ -123,10 +123,10 @@ QString actionDescription(const QString& type)
     }
     // ── niri open rules (window, scrolling) ──
     if (type == ActionType::OpenColumnWidth) {
-        return PhosphorI18n::tr("Sets the width a matching window's column opens at on a scrolling screen.");
+        return PhosphorI18n::tr("Sets how much of the strip a matching window's column takes on a scrolling screen.");
     }
     if (type == ActionType::OpenWindowHeight) {
-        return PhosphorI18n::tr("Sets the height a matching window takes inside its column when it opens.");
+        return PhosphorI18n::tr("Sets how much of its column a matching window takes when it opens.");
     }
     if (type == ActionType::OpenTabbed) {
         return PhosphorI18n::tr(
@@ -138,8 +138,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::OpenMaximized) {
         return PhosphorI18n::tr(
-            "Opens matching windows maximized, so their column fills the full width of the work "
-            "area when they first appear.");
+            "Opens matching windows maximized, so their column fills the work area along the "
+            "strip when they first appear.");
     }
     if (type == ActionType::OpenFocused) {
         return PhosphorI18n::tr(
@@ -301,7 +301,8 @@ QString actionDescription(const QString& type)
     }
     // ── Scrolling parameters (context) ──
     if (type == ActionType::SetScrollDefaultColumnWidth) {
-        return PhosphorI18n::tr("Sets the width newly opened columns take on the matched scrolling context.");
+        return PhosphorI18n::tr(
+            "Sets how much of the strip newly opened columns take on the matched scrolling context.");
     }
     if (type == ActionType::SetCenterFocusedColumn) {
         return PhosphorI18n::tr(
@@ -309,15 +310,15 @@ QString actionDescription(const QString& type)
             "context.");
     }
     if (type == ActionType::SetScrollDefaultColumnDisplay) {
-        return PhosphorI18n::tr("Chooses whether new columns open side by side or tabbed on the matched context.");
+        return PhosphorI18n::tr(
+            "Chooses whether new columns show their windows divided across the strip or tabbed on "
+            "the matched context.");
     }
     if (type == ActionType::SetScrollInsertPosition) {
         return PhosphorI18n::tr("Chooses where a new window's column enters the strip for the matched context.");
     }
     if (type == ActionType::SetScrollDefaultWindowHeight) {
-        return PhosphorI18n::tr(
-            "Sets the height newly opened windows take inside their column for the matched "
-            "context.");
+        return PhosphorI18n::tr("Sets how much of their column newly opened windows take for the matched context.");
     }
     if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
         return PhosphorI18n::tr(
@@ -326,8 +327,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr(
-            "Keeps columns on the matched context at least as wide as each window asks to be. "
-            "Off lets a column go narrower, which the compositor then clamps on its own.");
+            "Keeps columns on the matched context at least as large as each window asks to be. "
+            "Off lets a column go smaller, which the compositor then clamps on its own.");
     }
     if (type == ActionType::SetScrollCropStraddlers) {
         return PhosphorI18n::tr(
@@ -354,6 +355,14 @@ QString actionDescription(const QString& type)
         return PhosphorI18n::tr(
             "Chooses how the matched context treats windows shown on all desktops. Anything other "
             "than treating them as normal keeps them floating instead of in a column.");
+    }
+    if (type == ActionType::SetScrollStripAxis) {
+        return PhosphorI18n::tr(
+            "Chooses which way the matched context's strip runs, overriding the Strip direction "
+            "setting and any per-monitor choice. Match the screen shape resolves from the usable "
+            "area, so the rule can hand a pinned monitor back to that option for one desktop "
+            "or activity.",
+            "'Match the screen shape' must stay identical to the option label shown in the picker");
     }
     // ── Tab indicator (context + window colours) ──
     if (type == ActionType::SetTabIndicatorEnabled) {

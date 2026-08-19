@@ -107,7 +107,12 @@ QString TileRequestEntry::validationError() const
     // reasoning as stacking: the effect re-anchors a window's animation origin
     // on any non-empty value, so an unrecognised string would silently move
     // the window's apparent entry side. Reject it at the unmarshal boundary.
-    if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
+    //
+    // Four values since v12: a strip can run vertically, and a departure is
+    // named by the screen edge the column left through, so the pair widens
+    // with the axis (left/right horizontally, top/bottom vertically).
+    if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")
+        && scrollEdge != QLatin1String("top") && scrollEdge != QLatin1String("bottom")) {
         return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
     }
     // tabFrom names the OTHER window of a tab swap, so it can never be this
@@ -141,7 +146,7 @@ QString TileRequestEntry::validationError() const
     if (windowedFullscreen && monocle) {
         return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // viewDeltaX, visualX, visualY and hasVisualPos are deliberately NOT
+    // viewDelta, visualX, visualY and hasVisualPos are deliberately NOT
     // validated here, unlike their neighbours. All four are PAINT hints rather
     // than placement inputs: the committed rect stands on its own whatever they
     // say, so an absurd value costs one wild slide or one column drawn in the

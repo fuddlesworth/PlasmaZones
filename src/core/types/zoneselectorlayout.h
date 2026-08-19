@@ -62,10 +62,15 @@ struct ZoneSelectorLayout
 /// returns the PREVIEW width (callers add cardSidePadding * 2 separately),
 /// while the QML twins return the full CELL width with the padding already
 /// folded in.
-inline int stripCardPreviewWidth(int indicatorWidth, qreal widthFraction)
+///
+/// @p indicatorExtent is the card extent ALONG THE STRIP, so the horizontal
+/// arm passes indicatorWidth and the vertical arm passes indicatorHeight. It
+/// is not named for either one, because a "width" that is a height on half
+/// the call sites is how the two arms drift.
+inline int stripCardPreviewWidth(int indicatorExtent, qreal widthFraction)
 {
     const qreal f = (widthFraction > 0.0 && widthFraction <= 1.0) ? widthFraction : 1.0;
-    return std::max(8, qRound(indicatorWidth * f));
+    return std::max(8, qRound(indicatorExtent * f));
 }
 
 /**
@@ -85,7 +90,8 @@ inline int stripCardPreviewWidth(int indicatorWidth, qreal widthFraction)
  * branch, selector_strip.cpp, not here).
  */
 inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, const QRect& screenGeom,
-                                                    int layoutCount, const QList<qreal>& stripFractions = {})
+                                                    int layoutCount, const QList<qreal>& stripFractions = {},
+                                                    bool stripVerticalAxis = false)
 {
     ZoneSelectorLayout layout;
     const qreal screenAspectRatio =
@@ -130,6 +136,14 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
 
     // Card chrome: showCardBackground adds top margin + internal padding around
     // the preview in LayoutCard.qml.  Account for this in per-card cell size.
+    //
+    // Both are AXIS-NEUTRAL and stand for either arm, which is why neither
+    // arm below recomputes them. On the vertical strip arm cellWidth is the
+    // cross extent it derives scrollContentWidth from, and cellHeight is the
+    // along-strip extent of a FULL-share card — the same value
+    // stripCardPreviewWidth(indicatorHeight, 1.0) plus that arm's per-card
+    // chrome yields. Only the per-card variable share differs there, and the
+    // arm accumulates that itself.
     layout.cellWidth = layout.indicatorWidth + layout.cardSidePadding * 2;
     layout.cellHeight = layout.indicatorHeight + layout.labelSpace + layout.cardPadding;
 
@@ -155,6 +169,49 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.rows = visibleRows;
     layout.needsScrolling = (layout.totalRows > visibleRows);
 
+    if (!stripFractions.isEmpty() && stripVerticalAxis) {
+        // Vertical strip: the same cards stacked DOWN the popup. The card
+        // count becomes the row count, the fractions accumulate into the
+        // content HEIGHT, and one card's cross extent is the whole width.
+        // Sizing this arm as a horizontal row (the pre-#923 behaviour, when
+        // the axis never reached this function) stuffs a tall stack into a
+        // one-cell-high container: the tail cards clip away with no vertical
+        // scrollbar, and because the hit-test reads rendered rects back they
+        // come back empty and unhittable.
+        const int cardCount = static_cast<int>(stripFractions.size());
+        layout.rows = cardCount;
+        layout.columns = 1;
+        layout.totalRows = cardCount;
+        int cardsExtent = 0;
+        for (const qreal f : stripFractions) {
+            cardsExtent += stripCardPreviewWidth(layout.indicatorHeight, f) + layout.labelSpace + layout.cardPadding;
+        }
+        layout.scrollContentHeight = cardsExtent + (cardCount - 1) * layout.indicatorSpacing;
+        layout.scrollContentWidth = layout.cellWidth;
+
+        layout.contentWidth = layout.scrollContentWidth;
+        layout.contentHeight = layout.scrollContentHeight;
+        // The flags come from the UNCLAMPED comparison so a degenerate work
+        // area (maxContent* == 0 on a screen a few pixels tall) still
+        // reports the overflow to QML instead of a false "fits". Only the
+        // clamp itself stays gated on a positive bound — clamping to 0
+        // would zero the popup outright.
+        layout.needsScrolling = layout.contentHeight > qMax(0, maxContentH);
+        if (maxContentH > 0 && layout.contentHeight > maxContentH) {
+            layout.contentHeight = maxContentH;
+        }
+        layout.needsHorizontalScrolling = layout.contentWidth > qMax(0, maxContentW);
+        if (maxContentW > 0 && layout.contentWidth > maxContentW) {
+            layout.contentWidth = maxContentW;
+        }
+
+        layout.containerWidth = layout.contentWidth + layout.containerPadding;
+        layout.containerHeight = layout.contentHeight + layout.containerPadding;
+        layout.barHeight = layout.containerTopMargin + layout.containerHeight;
+        layout.barWidth = layout.containerSideMargin + layout.containerWidth + layout.containerSideMargin;
+        return layout;
+    }
+
     if (!stripFractions.isEmpty()) {
         // Variable-width strip cards: each card is its column's real share
         // of the screen (chrome and spacing stay per-card constants). The
@@ -177,9 +234,11 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.contentWidth = layout.scrollContentWidth;
     layout.contentHeight = visibleRows * layout.cellHeight + (visibleRows - 1) * layout.indicatorSpacing;
 
-    if (layout.contentWidth > maxContentW && maxContentW > 0) {
+    // Unclamped comparison for the flag, positive-bound gate for the clamp
+    // — the vertical arm's rationale, applied to this arm's one clamp.
+    layout.needsHorizontalScrolling = layout.contentWidth > qMax(0, maxContentW);
+    if (maxContentW > 0 && layout.contentWidth > maxContentW) {
         layout.contentWidth = maxContentW;
-        layout.needsHorizontalScrolling = true;
     }
 
     layout.containerWidth = layout.contentWidth + layout.containerPadding;

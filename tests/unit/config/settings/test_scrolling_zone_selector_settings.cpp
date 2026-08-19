@@ -14,9 +14,9 @@
  *
  * layoutMode is STAMPED, never read. The resolver hands back the shared
  * ZoneSelectorConfig so both popups can be laid out by one
- * computeZoneSelectorLayout, and the strip popup is always a single horizontal
- * card row. A regression that let the field fall through as Grid would lay the
- * strip out as a grid on every scrolling screen.
+ * computeZoneSelectorLayout, and the strip popup is always a single card row
+ * along the strip. A regression that let the field fall through as Grid would
+ * lay the strip out as a grid on every scrolling screen.
  *
  * The per-screen store REUSES the ZoneSelectorConfigKey vocabulary but admits
  * only the six-key subset. The write path shares its validator with the

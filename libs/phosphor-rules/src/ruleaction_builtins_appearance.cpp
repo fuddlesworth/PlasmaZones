@@ -816,6 +816,36 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 35,
         .tags = {QString(Tag::LayoutEngine)},
     });
+    // The strip axis: a closed three-token vocabulary in the config INTENT
+    // space (auto resolves from the work-area shape at relayout, so a rule
+    // can put a pinned monitor back on shape-matching for one context).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollStripAxis),
+        .slotFor = constantSlot(ActionSlot::ScrollStripAxis),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == StripAxisToken::Auto || v == StripAxisToken::Horizontal || v == StripAxisToken::Vertical;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     // Vertical FIRST, deliberately out of config-intent
+                     // order: the editor seeds a fresh enum action with the
+                     // first wire value, and Auto is the global default, so
+                     // an Auto-seeded rule looked like it did nothing on any
+                     // setup without a per-screen pin to override. Forcing
+                     // an axis (portrait monitors are the feature's whole
+                     // point) is what a fresh axis rule is for; Auto stays
+                     // available as the put-it-back-on-shape-matching arm.
+                     .enumWireValues = {QString(StripAxisToken::Vertical), QString(StripAxisToken::Horizontal),
+                                        QString(StripAxisToken::Auto)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 37,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
 
     // ── per-window scrolling open overrides (domain Window) ──
     // Read on the open path for the matched window and layered over the context /

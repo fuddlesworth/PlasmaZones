@@ -8,6 +8,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <algorithm>
@@ -143,17 +144,24 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // pruneStatesForDesktop / pruneStatesForActivities /
         // pruneStatesForRemovedScreen when their context or output dies.
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        // Resolved BEFORE the prune walk: the stash's never-relaid fallback
+        // otherwise called layoutParamsForScreen — and through it the
+        // injected geometry/gap providers — from inside removeStatesIf's
+        // onRemove, mid-iteration over the state map. The in-tree providers
+        // are pure, but the provider seam makes no such promise to an
+        // embedder, so nothing injected may run inside the walk.
+        const PhosphorProtocol::ScrollAxis fallbackAxis = stripAxisForScreen(screenId).axis();
         m_states.removeStatesIf(
             [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
                 return key == currentKey;
             },
-            [this, &releasedWindows, &releasedScreens, &screenId](const PhosphorEngine::PlacementStateKey& key,
-                                                                  ScrollState* state) {
+            [this, &releasedWindows, &releasedScreens, &screenId,
+             fallbackAxis](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
                 // Mode reassignment: remember the strip's structure so a
                 // cycle back to Scrolling rebuilds it (stacks, widths,
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
-                stashStripStructure(key, state);
+                stashStripStructure(key, state, fallbackAxis);
                 releaseScreenState(state, releasedWindows);
                 // Inside the callback so the payload names only screens that
                 // had a MATCHING STATE — the daemon's release handler uses
@@ -236,13 +244,21 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // Only the unfloat-slot memory dies here. The float markers and the
     // last-applied rects are inputs to the daemon's windowsReleased handler,
     // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries go too, for windowClosed's reason:
-    // a released window's echo can never be answered while the screen sits in
-    // another mode, and the stale entry would eat the first genuine focus
-    // report when the window comes back to scrolling.
+    // The pending self-activation entries and the declined-open marks go
+    // too, for windowClosed's reason: a released window's echo can never be
+    // answered while the screen sits in another mode, and a stale entry (or
+    // mark) would eat the first genuine focus report when the window comes
+    // back to scrolling. The parked-edge and windowed-fullscreen memories go
+    // for the eviction symmetry every other exit path holds: neither is an
+    // input to windowsReleased, windowClosed cannot sweep them later
+    // (stateForWindow answers null after this), and pruneStaleWindows only
+    // runs once per session at bring-up.
     for (const QString& windowId : windows) {
         m_floatRestore.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
+        m_declinedOpenFocus.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not
@@ -280,10 +296,23 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
+StashedStrip
+ScrollEngine::buildStashFromState(const ScrollState* state,
+                                  std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis) const
 {
     StashedStrip out;
-    if (!state || state->strip().isEmpty()) {
+    if (!state) {
+        return out;
+    }
+    // Spent-ness and the blueprint it counts against are captured BEFORE the
+    // no-columns exit, not beside the focus and view below. A strip whose
+    // windows have all been floated or minimized away has no columns while its
+    // cursor is still live, and taking this after the exit handed such a state
+    // back a default-constructed entry — cursor 0, the exact under-count the
+    // carry exists to stop. See StashedStrip::blueprintCursor.
+    out.blueprintCursor = state->blueprintCursor();
+    out.blueprintIdentity = state->blueprintIdentity();
+    if (state->strip().isEmpty()) {
         return out;
     }
     for (const Column& col : state->strip().columns()) {
@@ -317,13 +346,42 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
     // trip re-anchored the strip on whichever window arrived first.
     out.focusedWindowId = state->strip().activeWindowId();
     out.viewAnchor = state->strip().viewAnchor();
+    // Stamped so the restore can tell whether that anchor still means
+    // anything. The state's RESOLVED axis is the right source: it advances on
+    // every relayout, where the applied basis only advances on an emitted
+    // batch and would be stale for a strip whose last pass the emit gate
+    // suppressed.
+    //
+    // A state that has never been through applyLayout has no resolved axis
+    // yet, and that is reachable — applyLayout is deferred to the end of an
+    // arrival burst, so a save landing mid-burst sees exactly this. Resolve
+    // the screen's LIVE axis rather than assuming Horizontal, which on a
+    // portrait screen would mis-stamp the stash and make the restore drop a
+    // view anchor that was in fact still meaningful. Degrades safely either
+    // way (a wrong stamp only costs the anchor), so the fallback stays a
+    // single resolve with no state of its own.
+    // The pre-resolved fallback exists for callers running inside a state-map
+    // walk, where resolving live would invoke the injected providers
+    // mid-iteration (see setActiveScreens).
+    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis()
+        : preResolvedFallbackAxis       ? *preResolvedFallbackAxis
+                                        : stripAxisForScreen(state->screenId()).axis();
     return out;
 }
 
-void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state)
+void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state,
+                                       std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis)
 {
-    StashedStrip stash = buildStashFromState(state);
-    if (stash.isEmpty()) {
+    StashedStrip stash = buildStashFromState(state, preResolvedFallbackAxis);
+    // A cursor-only entry is worth storing even with no columns to rebuild.
+    // The screen still stands for the blueprint entries it spent — its windows
+    // are floated or minimized, and every path that brings them back to the
+    // strip (unfloat, unminimize) consumes no entry — so dropping the entry
+    // here restarted the blueprint on the next fresh open. Structure-less
+    // entries carry nothing else: no tiles to claim, so restoreFromStripStash
+    // never matches one, and the cursor reaches the state through the
+    // arrival-time raise like any other.
+    if (stash.isEmpty() && stash.blueprintCursor <= 0) {
         return;
     }
     // Recency stamp: serializeStripState resolves a window listed under two
@@ -352,6 +410,44 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         return false;
     }
     StashedStrip& stashStrip = it.value();
+    // Spent-ness comes back BEFORE the tile claim below, not after it. Raised
+    // rather than assigned, for the same reason readers floor the cursor at
+    // the column count: this runs once per ARRIVAL, and a window that opened
+    // fresh alongside the restore has already advanced the cursor past what
+    // the stash recorded. Ahead of the claim because the claim can fail — an
+    // arrival this entry does not name, or an entry with no tiles at all —
+    // and the cursor is owed to the state either way.
+    state->setBlueprintCursor(qMax(state->blueprintCursor(), stashStrip.blueprintCursor));
+    // The blueprint the cursor counts against, handed over only when the stash
+    // actually carries one AND the state has none of its own.
+    //
+    // Both halves matter. A state that has already stamped an identity has
+    // consumed an entry or been restored earlier, and that value is the newer
+    // account. And a stash identity that is NULL must not be stamped at all:
+    // null is what an entry staged from the persisted blob holds (the identity
+    // is deliberately not serialized), and establishing it would make the
+    // consumption site compare null against the live blueprint, read a swap,
+    // and reset the very cursor this restore just carried — the original
+    // defect, moved to the restart path. Leaving it unestablished sends that
+    // site down its stamp-and-keep arm, which is the right answer for a
+    // persisted cursor and identical to what stamping would give for a context
+    // that genuinely has no template (its live blueprint is null too).
+    if (stashStrip.blueprintIdentity.isValid() && !state->hasBlueprintIdentity()) {
+        state->setBlueprintIdentity(stashStrip.blueprintIdentity);
+    }
+    if (stashStrip.isEmpty()) {
+        // Cursor-only entry (see stashStripStructure): no columns, so there is
+        // nothing to claim and no tile whose consumption could ever retire it.
+        // The cursor above was its entire payload and has now been handed
+        // over, so the entry retires HERE and nowhere else: pruneStaleWindows'
+        // zero-tile reap deliberately exempts a cursor-only carrier (it must
+        // outlive the bring-up to reach this arrival), so without this erase
+        // the entry would stand for the process lifetime, re-raising a cursor
+        // the state already holds at a hash lookup per arrival.
+        m_stripStash.erase(it);
+        m_stripStashConsumed.remove(key);
+        return false;
+    }
     QVector<StashedColumn>& stash = stashStrip.columns;
     int colIdx = -1;
     int tileIdx = -1;
@@ -531,7 +627,16 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // fix. focusWindow is a no-op once the state already matches.
     if (!stashStrip.focusedWindowId.isEmpty() && state->strip().containsWindow(stashStrip.focusedWindowId)) {
         state->strip().focusWindow(stashStrip.focusedWindowId, params);
-        state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+        // The anchor is main-axis pixels, so it only means anything if it was
+        // captured on THIS axis. Replaying one from the other axis scrolls the
+        // restored strip to a nonsense position, and an out-of-range anchor is
+        // legitimate under the current axis (restoreViewAnchor refuses to
+        // clamp for exactly that reason), so there is no way to tell a good
+        // one from a stale one after a flip. Drop it: the focus restore above
+        // still lands, and the centering policy re-derives a view around it.
+        if (stashStrip.axis == params.axis.axis()) {
+            state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+        }
     }
     const int total = stashStrip.tileCount();
     // The CLAIMED tile's per-tile lease resets too: it was just consumed, so
@@ -773,6 +878,11 @@ void ScrollEngine::refreshConfigFromSettings()
         (center >= 0 && center <= 2) ? static_cast<CenterFocusedColumn>(center) : CenterFocusedColumn::Never;
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
     m_cropStraddlers = settings->scrollingCropStraddlers();
+    // The TRI-STATE intent, kept as-is. Auto is deliberately NOT collapsed
+    // here: there is no work area at this point, and collapsing it would
+    // freeze one screen's verdict for every screen.
+    const int axisIntent = settings->scrollingStripAxis();
+    m_stripAxis = (axisIntent >= 0 && axisIntent <= 2) ? axisIntent : 0;
 
     // Edge auto-scroll. Bounded rather than raw: a zero or negative trigger
     // width would divide by zero in the ramp, and a non-positive speed would
@@ -801,7 +911,11 @@ void ScrollEngine::refreshConfigFromSettings()
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
     m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
     if (widthKind == DefaultWidthKind::Fixed) {
-        m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
+        // Bounded before the round, symmetric with the Proportion arm's qBound
+        // below: ISettings is an injected interface an embedder implements, so
+        // the value is untrusted, and qRound of a double past int's range is
+        // undefined.
+        m_defaultColumnWidth = ColumnWidth::makeFixed(qRound(qBound(1.0, widthValue, kMaxFixedExtentPx)));
     } else if (widthKind == DefaultWidthKind::Preset) {
         // Config stays index-based (the spin names a slot in the list the
         // user edits on the same page); the VALUE anchor is resolved here,
@@ -819,7 +933,9 @@ void ScrollEngine::refreshConfigFromSettings()
     // (Auto/Fixed/Preset, see DefaultHeightKind), so a guarded cast is fine.
     const int heightKind = settings->scrollingDefaultWindowHeightKind();
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
-        m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
+        // Bounded before the round, for the width twin's reason.
+        m_defaultWindowHeight = WindowHeight::makeFixed(
+            qRound(qBound(1.0, settings->scrollingDefaultWindowHeightValue(), kMaxFixedExtentPx)));
     } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
         // Same idx-to-value resolution as the width twin above.
         m_defaultWindowHeight = WindowHeight::makePreset(m_presetWindowHeights.at(
@@ -872,50 +988,54 @@ void ScrollEngine::refreshConfigFromSettings()
 
 void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
 {
-    const QVariantMap previous = m_perScreenOverrides.value(screenId);
+    // Keyed by the screen's CURRENT context: the producer resolved these
+    // overrides for (screen, desktop, activity), so storing them under the
+    // screen alone would let one desktop's template overwrite another's.
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    const QVariantMap previous = m_perScreenOverrides.value(key);
     if (previous == overrides) {
         return;
     }
-    // Compared BEFORE the insert, and on the blueprint key alone: every other
-    // override in this map answers per-open (widths, presets, insert
-    // position) and re-reads itself on the next open, while the blueprint is
-    // the one key a live cursor points INTO. A gap edit or a preset tweak
-    // must not restart the seed.
-    const bool blueprintChanged = previous.value(ScrollPerScreenKeys::templateColumns())
-        != overrides.value(ScrollPerScreenKeys::templateColumns());
-    m_perScreenOverrides.insert(screenId, overrides);
-    if (blueprintChanged) {
-        resetBlueprintCursorsForScreen(screenId);
-    }
+    m_perScreenOverrides.insert(key, overrides);
+    // Deliberately no cursor reset here. A blueprint SWAP is noticed at the
+    // consumption site by comparing ScrollState::blueprintIdentity against
+    // the blueprint actually in force, which is the only place that can tell
+    // a genuine template change from this map merely being rewritten. Every
+    // desktop switch drops and re-pushes these overrides with the template
+    // unchanged, and resetting on the write made that ordinary event refill
+    // entries the strip's columns already stood for.
     scheduleRetileForScreen(screenId);
 }
 
 void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 {
-    const bool hadBlueprint = m_perScreenOverrides.value(screenId).contains(ScrollPerScreenKeys::templateColumns());
-    if (m_perScreenOverrides.remove(screenId) > 0) {
-        // Dropping the blueprint is a blueprint change like any other: a
-        // template re-applied later has to seed from its own first entry
-        // rather than resume a cursor that counted the old one's.
-        if (hadBlueprint) {
-            resetBlueprintCursorsForScreen(screenId);
+    // Every context on the screen, not just the current one: this is the
+    // whole-SCREEN door, and the caller is telling us the screen has left
+    // scrolling entirely, so no context's overrides survive it. A caller that
+    // means "this CONTEXT resolved no overrides" must not come here — it
+    // pushes an empty map through applyPerScreenConfig instead, which reads
+    // identically at every effective* reader without touching the sibling
+    // contexts. The in-tree caller is updateScrollingScreens' departing-screen
+    // loop, which runs after setActiveScreens has already dropped the screen.
+    bool removed = false;
+    for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
+        if (it.key().screenId == screenId) {
+            it = m_perScreenOverrides.erase(it);
+            removed = true;
+        } else {
+            ++it;
         }
-        scheduleRetileForScreen(screenId);
     }
-}
-
-void ScrollEngine::resetBlueprintCursorsForScreen(const QString& screenId)
-{
-    // EVERY state on the screen, not just the visible one: the override map
-    // is keyed by screen while states are per (screen, desktop, activity), so
-    // a template swap lands on all of them at once. A background desktop
-    // whose cursor kept counting the old blueprint would seed its next open
-    // from the wrong entry the moment you switched to it.
-    const auto& states = m_states.states();
-    for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        if (it.key().screenId == screenId && it.value()) {
-            it.value()->resetBlueprintCursor();
-        }
+    if (removed) {
+        // Deliberately no cursor reset. The strips on this screen survive a
+        // trip out of scrolling — only the CURRENT context's state is torn
+        // down — so their columns still stand for the blueprint entries they
+        // took. Zeroing the cursor here meant a desktop switch away and back
+        // handed those entries out a second time, which is the exact refill
+        // the cursor exists to prevent. A template that genuinely changed
+        // while the screen was away is caught by the identity compare at the
+        // consumption site.
+        scheduleRetileForScreen(screenId);
     }
 }
 

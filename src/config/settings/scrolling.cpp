@@ -43,6 +43,11 @@ static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
 // same pin, different interface and direction.
 static_assert(!ConfigDefaults::scrollingCropStraddlers(),
               "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
+// The strip-axis tri-state gets the identical pin: IScrollSettings'
+// defaulted getter answers 0 (Auto), and an implementor that has not heard
+// of the option must resolve the axis from its work area, never force one.
+static_assert(ConfigDefaults::scrollingStripAxis() == ConfigDefaults::scrollingStripAxisAuto(),
+              "IScrollSettings::scrollingStripAxis defaults to 0 (Auto) — update it with this default");
 // The edge auto-scroll block, same class but BIDIRECTIONAL, unlike the
 // literal-compare asserts above and below: IScrollSettings names its four
 // defaults as constants, so these compare the two sides directly and an edit
@@ -101,6 +106,9 @@ P_STORE_SET_BOOL(setScrollingEnabled, scrollingGroup, enabledKey, scrollingEnabl
 P_STORE_GET(int, scrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey, int)
 P_STORE_SET_INT(setScrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey,
                 scrollingCenterFocusedColumnChanged)
+
+P_STORE_GET(int, scrollingStripAxis, scrollingGroup, stripAxisKey, int)
+P_STORE_SET_INT(setScrollingStripAxis, scrollingGroup, stripAxisKey, scrollingStripAxisChanged)
 
 P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey, bool)
 P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey,

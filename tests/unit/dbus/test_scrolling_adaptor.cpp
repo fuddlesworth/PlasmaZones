@@ -478,11 +478,18 @@ private Q_SLOTS:
         };
         // Foreign-screen refusal + the same bound pins as the width twin: a
         // `<` flipped to `<=` at either height bound was invisible before.
+        // Full-value compare, like the width arm and the proportion arm
+        // below: the starting kind happens to differ from the kind a clamp
+        // would write, so a kind-only check passes here today, but it stops
+        // discriminating the moment this block is reordered after one of the
+        // legs that leaves the height Fixed.
+        const WindowHeight beforePxRefusals = activeHeight();
         m_adaptor->setWindowHeightPixels(QStringLiteral("HDMI-2"), 300);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 50);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 99);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10001);
         m_adaptor->setWindowHeightPixels(QString(), 300);
+        QCOMPARE(activeHeight(), beforePxRefusals);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Auto);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 100);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
@@ -566,7 +573,12 @@ private Q_SLOTS:
 
         // An owned screen with NO blueprint answers zeroes rather than an
         // empty object: the gate above is about ownership, not content.
-        QCOMPARE(progress().value(QLatin1String("total")).toInt(), 0);
+        // Compared as the PAYLOAD, not through the parsed object: an empty
+        // object's "total" also reads 0, so a regression that answered "{}"
+        // here would have satisfied a value compare while destroying the very
+        // distinction the caller branches on (getScrollingBlueprintProgress
+        // returns an empty map for "nothing to describe").
+        QCOMPARE(m_adaptor->blueprintProgressJson(QStringLiteral("DP-1")), QStringLiteral("{\"total\":0,\"used\":0}"));
 
         QVariantList blueprint;
         for (const qreal width : {0.6, 0.4}) {
@@ -665,10 +677,18 @@ private Q_SLOTS:
     void testClearedEngine_slotsAnswerSafely()
     {
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        // Non-empty BEFORE the clear, so the emptiness asserted afterwards is
+        // this call's doing rather than a fixture that never populated it.
+        // The sibling cleared-engine test pins its surfaces the same way.
+        QVERIFY(!m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->clearEngine();
 
         QCOMPARE(m_adaptor->visibleStripJson(QStringLiteral("DP-1")), QStringLiteral("[]"));
         QCOMPARE(m_adaptor->presetVocabularyJson(QStringLiteral("DP-1")), QStringLiteral("{}"));
+        // The blueprint reader has the same `!m_engine` conjunct and belongs
+        // in the same sweep — without it, dropping that conjunct is a null
+        // dereference on the shutdown path with nothing failing.
+        QCOMPARE(m_adaptor->blueprintProgressJson(QStringLiteral("DP-1")), QStringLiteral("{}"));
         QVERIFY(m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->focusColumn(QStringLiteral("DP-1"), -1); // must not crash
         // The four setters open with the same `!m_engine` guard — this test

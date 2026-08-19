@@ -52,9 +52,6 @@ public Q_SLOTS:
     }
 };
 
-/// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
-/// silently get an empty map, so this object exists to pin the demarshalling
-/// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
 /// Echoes a SwapTargetResult — the highest-transposition-risk wire struct
 /// (18 fields with two interleaved int quadruples and five trailing
 /// strings): a swap introduced in operator>> alone keeps the signature
@@ -70,6 +67,9 @@ public Q_SLOTS:
     }
 };
 
+/// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
+/// silently get an empty map, so this object exists to pin the demarshalling
+/// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
 class VariantMapEcho : public QObject
 {
     Q_OBJECT
@@ -222,7 +222,7 @@ private Q_SLOTS:
         //
         // Verify D-Bus signature: (siiiissbbbssiiibsb) = string + 4 ints + 2
         // strings + 3 bools (monocle, floating, windowedFullscreen) +
-        // stacking + scrollEdge + viewDeltaX + the visual position pair and
+        // stacking + scrollEdge + viewDelta + the visual position pair and
         // its validity flag + tabFrom + viewImmediate
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibsb)"));
@@ -244,7 +244,7 @@ private Q_SLOTS:
         QCOMPARE(entry.windowedFullscreen, true);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
-        QCOMPARE(entry.viewDeltaX, -240);
+        QCOMPARE(entry.viewDelta, -240);
         QCOMPARE(entry.visualX, 4000);
         QCOMPARE(entry.visualY, 120);
         QCOMPARE(entry.hasVisualPos, true);
@@ -258,7 +258,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.windowedFullscreen, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
-        QCOMPARE(defaultEntry.viewDeltaX, 0);
+        QCOMPARE(defaultEntry.viewDelta, 0);
         QCOMPARE(defaultEntry.hasVisualPos, false);
         // Pinned alongside the flag that guards them: a reader is only allowed
         // to look at these when hasVisualPos is set, so their default is what
@@ -307,7 +307,7 @@ private Q_SLOTS:
             QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
             QCOMPARE(got.stacking, sent.stacking);
             QCOMPARE(got.scrollEdge, sent.scrollEdge);
-            QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
+            QCOMPARE(got.viewDelta, sent.viewDelta);
             QCOMPARE(got.visualX, sent.visualX);
             QCOMPARE(got.visualY, sent.visualY);
             QCOMPARE(got.hasVisualPos, sent.hasVisualPos);

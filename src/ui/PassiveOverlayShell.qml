@@ -494,11 +494,18 @@ Window {
         // Strip-mode selector state (scrolling screens). Same
         // declare-and-forward contract as decorationChain below: C++ writes
         // these with setProperty (selector_update.cpp pushes stripMode /
-        // stripColumns per update; selector_strip.cpp writes the selectedStrip*
-        // triple per hit-test), so an undeclared name would silently become a
-        // dead dynamic property and the content would never leave layout mode.
+        // stripColumns / stripVerticalAxis per update; selector_strip.cpp
+        // writes the selectedStrip* triple per hit-test), so an undeclared
+        // name would silently become a dead dynamic property and the content
+        // would never leave layout mode.
         property bool stripMode: false
         property var stripColumns: []
+        // Undeclared until #923's audit: the C++ push landed on a dynamic
+        // property no binding observed, so every axis branch in
+        // ZoneSelectorContent and ZoneSelectorStripCard was dead while the
+        // C++ hit-test transposed anyway. The picture and the drop target
+        // disagreed with nothing to show for it.
+        property bool stripVerticalAxis: false
         property int selectedStripColumn: -1
         property int selectedStripGap: -1
         property int selectedStripHalf: -1
@@ -632,6 +639,7 @@ Window {
                 selectedZoneIndex: zoneSelectorSlot.selectedZoneIndex
                 stripMode: zoneSelectorSlot.stripMode
                 stripColumns: zoneSelectorSlot.stripColumns
+                stripVerticalAxis: zoneSelectorSlot.stripVerticalAxis
                 selectedStripColumn: zoneSelectorSlot.selectedStripColumn
                 selectedStripGap: zoneSelectorSlot.selectedStripGap
                 selectedStripHalf: zoneSelectorSlot.selectedStripHalf

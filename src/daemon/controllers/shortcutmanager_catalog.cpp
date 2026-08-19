@@ -272,19 +272,19 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdScrollConsumeWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Pulls a window from the column to the right into the focused column, stacking them."));
+                              "Pulls a window from the next column into the focused column, stacking them."));
         add(kIdScrollExpelWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves the focused window out of a shared column into a new column on the right."));
+                              "Moves the focused window out of a shared column into a new column after it."));
         add(kIdScrollConsumeOrExpelLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Splits the focused window out of a shared column to the left. A window "
-                              "alone in its column merges into the column on the left instead."));
+                              "Splits the focused window out of a shared column toward the start of the strip. "
+                              "A window alone in its column merges into the previous column instead."));
         add(kIdScrollConsumeOrExpelRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Splits the focused window out of a shared column to the right. A window "
-                              "alone in its column merges into the column on the right instead."));
+                              "Splits the focused window out of a shared column toward the end of the strip. "
+                              "A window alone in its column merges into the next column instead."));
         add(kIdScrollCenterColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));
         add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
@@ -296,23 +296,25 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "it."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the screen's width presets."));
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Steps the focused column through the screen's size presets along the strip."));
         add(kIdScrollCycleColumnWidthBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width Back"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Steps the focused column through the screen's width presets in reverse."));
+                              "Steps the focused column through the screen's size presets along the strip, "
+                              "in reverse."));
         add(kIdScrollIncreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Widens the focused column by the configured step."));
+            QT_TRANSLATE_NOOP("plasmazones", "Grows the focused column along the strip by the configured step."));
         add(kIdScrollDecreaseColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Narrows the focused column by the configured step."));
-        // "A narrower width", not "its previous width": the engine keeps ONE
+            QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused column along the strip by the configured step."));
+        // "A smaller size", not "its previous width": the engine keeps ONE
         // pre-maximize slot for the whole strip, so a second column's
         // maximize discards the first's stored width and un-maximizing then
         // falls back to the default width. And the target is the work area
         // (panels excluded), not the screen.
         add(kIdScrollMaximizeColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Toggles the focused column between filling the work area and a narrower width."));
+                              "Toggles the focused column between filling the work area and a smaller size."));
         add(kIdScrollExpandColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Grow into Empty Space"),
             QT_TRANSLATE_NOOP("plasmazones",
@@ -320,44 +322,51 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "Other columns keep their size."));
         add(kIdScrollCycleWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height"),
-            QT_TRANSLATE_NOOP("plasmazones", "Steps the focused window through the screen's height presets."));
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Steps the focused window through the screen's size presets within its column."));
         add(kIdScrollCycleWindowHeightBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Window Height Back"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Steps the focused window through the screen's height presets in reverse."));
+                              "Steps the focused window through the screen's size presets within its column, "
+                              "in reverse."));
         add(kIdScrollIncreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Makes the focused window taller by the configured step."));
+            QT_TRANSLATE_NOOP("plasmazones", "Grows the focused window within its column by the configured step."));
         add(kIdScrollDecreaseWindowHeight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Makes the focused window shorter by the configured step."));
+            QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused window within its column by the configured step."));
         add(kIdScrollResetWindowHeights, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Clears manual window heights in the focused column so its windows share the "
-                              "height evenly."));
+                              "Clears manual window sizes in the focused column so its windows share the "
+                              "column's space evenly."));
         add(kIdScrollCenterVisibleColumns, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the fully visible columns sit centered as a group."));
-        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Top Window"),
+        // No shortLabel on this pair: the registration names ("Focus First /
+        // Last Window in Column") are already short enough for the column, so
+        // an override would have to repeat them verbatim and ship a second
+        // translatable string saying the same thing.
+        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first window of the focused column."));
-        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Bottom Window"),
+        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last window of the focused column."));
         add(kIdScrollFocusColumnLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left (Edge Stop)"),
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Edge Stop)"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves focus one column left and stops at the strip edge. The regular focus "
-                              "shortcut continues onto the next monitor instead."));
+                              "Moves focus one column toward the start of the strip and stops at the edge. The "
+                              "regular focus shortcut continues onto the next monitor instead."));
         add(kIdScrollFocusColumnRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Edge Stop)"),
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column (Edge Stop)"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves focus one column right and stops at the strip edge. The regular focus "
-                              "shortcut continues onto the next monitor instead."));
+                              "Moves focus one column toward the end of the strip and stops at the edge. The "
+                              "regular focus shortcut continues onto the next monitor instead."));
         add(kIdScrollFocusColumnLeftOrLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left (Wrap)"),
-            QT_TRANSLATE_NOOP("plasmazones", "Moves focus one column left, wrapping to the last column at the edge."));
-        add(kIdScrollFocusColumnRightOrFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Wrap)"),
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Wrap)"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves focus one column right, wrapping to the first column at the edge."));
+                              "Moves focus one column toward the start of the strip, wrapping to the last column "
+                              "at the edge."));
+        add(kIdScrollFocusColumnRightOrFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column (Wrap)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column toward the end of the strip, wrapping to the first column "
+                              "at the edge."));
         add(kIdScrollMoveToFloating, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
             QT_TRANSLATE_NOOP("plasmazones",
@@ -651,9 +660,9 @@ QVariantList ShortcutManager::cheatsheetModel() const
                   PhosphorI18n::tr("Moves the focused column to the first or last position."));
     addScrollPair(kIdScrollConsumeOrExpelLeft, ConfigDefaults::scrollingConsumeOrExpelLeftShortcut(),
                   kIdScrollConsumeOrExpelRight, ConfigDefaults::scrollingConsumeOrExpelRightShortcut(),
-                  PhosphorI18n::tr("Consume or Expel Left / Right"),
-                  PhosphorI18n::tr("Splits the focused window out of a shared column to that side. A window alone "
-                                   "in its column merges into the neighboring column instead."));
+                  PhosphorI18n::tr("Consume or Expel Toward Start / End"),
+                  PhosphorI18n::tr("Splits the focused window out of a shared column toward that end of the strip. A "
+                                   "window alone in its column merges into the neighboring column instead."));
     addScrollPair(kIdScrollIncreaseWindowHeight, ConfigDefaults::scrollingIncreaseWindowHeightShortcut(),
                   kIdScrollDecreaseWindowHeight, ConfigDefaults::scrollingDecreaseWindowHeightShortcut(),
                   PhosphorI18n::tr("Adjust Window Height"),

@@ -48,9 +48,14 @@ Item {
     property int masterCount: 1
     property bool producesOverlappingZones: false
     property string zoneNumberDisplay: "all"
-    // Screen info for aspect ratio (bounded to prevent layout issues)
+    // Screen info for aspect ratio (bounded to prevent layout issues).
+    // Clamped symmetrically about 1:1 — the lower bound is the inverse of
+    // the upper. A 0.5 floor reported a rotated 21:9 (about 0.43) as 1:2,
+    // and the preview box was then drawn in a shape no window on that
+    // screen has; rotated ultrawides are exactly the monitors the vertical
+    // strip serves.
     property real screenAspectRatio: 16 / 9
-    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
+    readonly property real safeAspectRatio: Math.max(0.25, Math.min(4, screenAspectRatio))
     // Layout's intended aspect ratio class (set from C++)
     property string aspectRatioClass: "any"
     // Resolved preview AR: use layout's class if set, fall back to screen's AR

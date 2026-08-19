@@ -29,8 +29,10 @@ namespace PlasmaZones {
 namespace {
 
 /// Emit a D-Bus setVirtualScreenConfig for @p physicalScreenId carrying @p screens.
-/// Empty list ≡ remove the config. Returns false when the daemon answered with
-/// an error, so the caller can retain the staged config for the next Save.
+/// An empty @p screens list ≡ remove the config. Returns false when the daemon
+/// answered with an error, or when the caller asked for screens and not one of
+/// them survived validation, so the caller can retain the staged config for the
+/// next Save.
 bool pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVariantList& screens)
 {
     QJsonObject root;
@@ -53,6 +55,17 @@ bool pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVar
                                                          {::PhosphorZones::ZoneJsonKeys::Width, def.region.width()},
                                                          {::PhosphorZones::ZoneJsonKeys::Height, def.region.height()}};
         screensArr.append(screenObj);
+    }
+    // An empty array is the daemon's REMOVAL sentinel, which is the right
+    // message only when the caller staged an empty list. Reaching empty
+    // because every def failed validation means the opposite — the user asked
+    // for a split and authored a bad one — and sending it anyway would delete
+    // the split they already had. Refuse instead, so the verdict is false, the
+    // staged config is retained and the badge stays lit.
+    if (!screens.isEmpty() && screensArr.isEmpty()) {
+        qCWarning(lcConfig) << "flushVirtualScreensToDaemon: every virtual screen def for" << physicalScreenId
+                            << "failed validation, refusing the push rather than sending a removal";
+        return false;
     }
     root[QLatin1String("screens")] = screensArr;
 
@@ -112,49 +125,11 @@ void StagingService::clearAll()
     m_scrollingQuickSlots.clear();
 }
 
-// Snapping and tiling slots are mutually exclusive in the unified Rule
-// model: a single context (screen × desktop × activity) carries either a
-// snapping layout OR a tiling algorithm, never both. Staging one therefore
-// clears the other so the flush emits a coherent `setAssignmentEntry` with
-// matching engine mode. The earlier per-page "Snapping > Assignments" and
-// "Tiling > Assignments" flows treated the two slots as independent fields,
-// but those pages were retired by the Rule refactor — callers now
-// stage via `stageAssignmentEntry` (Overview page composite write) or via
-// the Rule pipeline. The per-field `stageSnapping` / `stageTiling`
-// entry points are kept for any future single-slot mutator that wants the
-// mutually-exclusive contract.
-void StagingService::stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId)
-{
-    auto& e = assignmentEntry(screen, desktop, activity);
-    e.stagedMode = std::nullopt;
-    e.snappingLayoutId = layoutId;
-    e.tilingAlgorithmId = std::nullopt;
-}
-
-void StagingService::stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId)
-{
-    auto& e = assignmentEntry(screen, desktop, activity);
-    e.stagedMode = std::nullopt;
-    e.tilingAlgorithmId = layoutId;
-    e.snappingLayoutId = std::nullopt;
-}
-
 void StagingService::removeStagedAssignment(const QString& screen, int desktop, const QString& activity)
 {
     // Erase the map entry entirely (keyed the same way assignmentEntry
     // keys it) so the flush never sees this context at all.
     m_assignments.remove(assignmentCacheKey(screen, desktop, activity));
-}
-
-void StagingService::stageTilingClear(const QString& screen, int desktop, const QString& activity)
-{
-    auto& e = assignmentEntry(screen, desktop, activity);
-    // Clearing tiling reverts to snapping mode — drop any previously staged
-    // explicit mode so the flush takes the "tiling clear" branch
-    // (setAssignmentEntry with mode=0) rather than sending the stale
-    // Overview-page mode back to the daemon with an empty algorithm id.
-    e.stagedMode = std::nullopt;
-    e.tilingAlgorithmId = QString(); // empty = cleared
 }
 
 void StagingService::stageAssignmentEntry(const QString& screen, int desktop, const QString& activity, int mode,
@@ -169,54 +144,12 @@ void StagingService::stageAssignmentEntry(const QString& screen, int desktop, co
 void StagingService::stageScrollingTemplate(const QString& screen, int desktop, const QString& activity,
                                             const QString& templateId)
 {
-    // Deliberately touches ONLY its own slot: the template is orthogonal to
-    // the mutually-exclusive snapping/tiling pair (a scrolling context can
-    // carry a preserved snapping layout AND a template), so the clearing
-    // that stageSnapping / stageTiling do to each other has no analogue here.
+    // Deliberately touches ONLY its own slot, leaving any staged mode and
+    // layouts alone. The template is orthogonal to the snapping/tiling pair
+    // that stageAssignmentEntry writes together: a scrolling context can carry
+    // a preserved snapping layout AND a template, so there is nothing here to
+    // clear for consistency's sake.
     assignmentEntry(screen, desktop, activity).scrollingTemplateId = templateId;
-}
-
-bool StagingService::stagedScrollingTemplate(const QString& screen, int desktop, const QString& activity,
-                                             QString& out) const
-{
-    const auto* s = assignmentEntryConst(screen, desktop, activity);
-    if (!s || !s->scrollingTemplateId.has_value()) {
-        return false;
-    }
-    out = *s->scrollingTemplateId;
-    return true;
-}
-
-bool StagingService::stagedSnappingLayout(const QString& screen, int desktop, const QString& activity,
-                                          QString& out) const
-{
-    const auto* s = assignmentEntryConst(screen, desktop, activity);
-    if (!s) {
-        return false;
-    }
-    if (s->snappingLayoutId.has_value()) {
-        out = *s->snappingLayoutId;
-        return true;
-    }
-    return false;
-}
-
-bool StagingService::stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const
-{
-    const auto* s = assignmentEntryConst(screen, desktop, activity);
-    if (!s) {
-        return false;
-    }
-    if (s->tilingAlgorithmId.has_value()) {
-        const QString& val = *s->tilingAlgorithmId;
-        if (val.isEmpty()) {
-            out = QString();
-        } else {
-            out = PhosphorLayout::LayoutId::isAutotile(val) ? val : PhosphorLayout::LayoutId::makeAutotileId(val);
-        }
-        return true;
-    }
-    return false;
 }
 
 const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(const QString& screen, int desktop,
@@ -225,7 +158,8 @@ const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(cons
     return assignmentEntryConst(screen, desktop, activity);
 }
 
-bool StagingService::flushAssignmentsToDaemon()
+bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists,
+                                              QStringList* refusedTemplateIds)
 {
     qCDebug(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
     bool ok = true;
@@ -237,16 +171,23 @@ bool StagingService::flushAssignmentsToDaemon()
             ok = false;
         }
     };
-    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        const auto& s = it.value();
-        const bool isActivity = !s.activityId.isEmpty();
-        const bool isDesktop = s.virtualDesktop > 0;
+    // A MUTATING walk: a refused template id is erased from its entry below so
+    // the retained map cannot re-refuse it forever. Only entry VALUES are
+    // touched, never the key set, so the iterator stays valid throughout.
+    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
+        auto& s = it.value();
         qCDebug(lcCore) << "  flush: screen=" << s.screenId << "mode="
                         << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
                         << "snapping="
                         << (s.snappingLayoutId.has_value() ? *s.snappingLayoutId : QStringLiteral("(none)"))
                         << "tiling="
-                        << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"));
+                        << (s.tilingAlgorithmId.has_value() ? *s.tilingAlgorithmId : QStringLiteral("(none)"))
+                        // The template is the one slot whose write is
+                        // conditional (staged mode must be Scrolling) and the
+                        // one that can be refused, so it is the slot most
+                        // worth having in the trace.
+                        << "template="
+                        << (s.scrollingTemplateId.has_value() ? *s.scrollingTemplateId : QStringLiteral("(none)"));
 
         // Normalise the tiling id — callers may store either the raw algo id
         // or the `autotile:` prefixed form; the D-Bus surface wants the raw id.
@@ -260,6 +201,43 @@ bool StagingService::flushAssignmentsToDaemon()
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
             const QString tiling = s.tilingAlgorithmId.has_value() ? normTile(*s.tilingAlgorithmId) : QString();
+
+            // The template existence pre-check runs BEFORE the entry write, so
+            // a refusal leaves the daemon untouched for the slot it refuses
+            // rather than half-applying. It is needed at all because the
+            // daemon's refusal is invisible on the wire: setScrollingTemplateLayout
+            // is a void slot that warns and returns for an id naming no live
+            // template, which replies successfully. Only a UUID form is
+            // checked — the empty string and the reserved "explicitly none"
+            // word are both legal values the daemon always accepts.
+            //
+            // Gated on the staged mode being Scrolling for the same reason the
+            // write below is: setScrollingTemplateLayout stamps Scrolling on
+            // the entry it upserts (its own contract), so a template staged
+            // against a context the user then switched AWAY from scrolling is
+            // never sent, and must not be refused either.
+            if (s.scrollingTemplateId.has_value()
+                && mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+                const QString& templateId = *s.scrollingTemplateId;
+                const bool needsExistenceCheck =
+                    templateExists && !templateId.isEmpty() && templateId != PhosphorZones::NoScrollingTemplate;
+                if (needsExistenceCheck && !templateExists(templateId)) {
+                    qCWarning(lcCore) << "flushAssignmentsToDaemon: staged scrolling template" << templateId
+                                      << "for screen" << s.screenId << "no longer exists, dropping the template pick";
+                    if (refusedTemplateIds) {
+                        refusedTemplateIds->append(templateId);
+                    }
+                    // Erased, not retained. The verdict below still goes false
+                    // so the badge stays lit and the caller can tell the user,
+                    // but a deleted template never comes back: keeping the id
+                    // would make every future Save refuse the same entry
+                    // forever with no way out but Discard. The mode and layout
+                    // slots survive and re-flush normally.
+                    s.scrollingTemplateId.reset();
+                    ok = false;
+                }
+            }
+
             check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                          QStringLiteral("setAssignmentEntry"),
                                          {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling}),
@@ -267,13 +245,8 @@ bool StagingService::flushAssignmentsToDaemon()
             // The template rides its own setter AFTER the entry write, because
             // setAssignmentEntry carries no template argument. Order matters:
             // the entry write stamps the mode and both preserved siblings, and
-            // this second call touches only the template slot.
-            //
-            // Gated on the staged mode being Scrolling, not merely on the slot
-            // being staged: setScrollingTemplateLayout stamps Scrolling on the
-            // entry it upserts (its own contract), so issuing it for a context
-            // the user just switched AWAY from scrolling would silently undo
-            // that switch.
+            // this second call touches only the template slot. A slot the
+            // pre-check just erased reads as unstaged here and is skipped.
             if (s.scrollingTemplateId.has_value()
                 && mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
                 check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
@@ -284,66 +257,17 @@ bool StagingService::flushAssignmentsToDaemon()
             continue;
         }
 
-        const bool hasSnap = s.snappingLayoutId.has_value();
-        const bool hasTile = s.tilingAlgorithmId.has_value();
-        if (!hasSnap && !hasTile) {
-            continue;
-        }
-
-        // If BOTH fields are staged (e.g. snap assign followed by tiling clear
-        // on the same context), the two per-field D-Bus calls are not atomic:
-        // `assignLayoutToScreen(snap)` followed by `setAssignmentEntry(mode=0,
-        // "", "")` clobbers the snap we just assigned. Coalesce into a single
-        // `setAssignmentEntry` so the daemon writes the combined state in one
-        // shot. Mode is Autotile when a non-empty tiling algo is staged,
-        // Snapping otherwise.
-        if (hasSnap && hasTile) {
-            const QString snap = *s.snappingLayoutId;
-            const QString tile = normTile(*s.tilingAlgorithmId);
-            const int mode = static_cast<int>(tile.isEmpty() ? PhosphorZones::AssignmentEntry::Snapping
-                                                             : PhosphorZones::AssignmentEntry::Autotile);
-            check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                         QStringLiteral("setAssignmentEntry"),
-                                         {s.screenId, s.virtualDesktop, s.activityId, mode, snap, tile}),
-                  "setAssignmentEntry", s.screenId);
-            continue;
-        }
-
-        // Only snap staged — use the per-field path. An empty staged value
-        // here has no dedicated D-Bus surface (there is no `clearSnappingOnly`
-        // method), so it is skipped: the page routes a "Default" pick through
-        // stageAssignmentEntry, whose explicit-mode branch above carries the
-        // empty slot alongside the mode pin.
-        if (hasSnap) {
-            const QString& layoutId = *s.snappingLayoutId;
-            if (layoutId.isEmpty()) {
-                continue;
-            }
-            QDBusMessage reply;
-            if (isActivity) {
-                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                               QStringLiteral("assignLayoutToScreenActivity"),
-                                               {s.screenId, s.activityId, layoutId});
-            } else if (isDesktop) {
-                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                               QStringLiteral("assignLayoutToScreenDesktop"),
-                                               {s.screenId, s.virtualDesktop, layoutId});
-            } else {
-                reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                               QStringLiteral("assignLayoutToScreen"), {s.screenId, layoutId});
-            }
-            check(reply, "assignLayout", s.screenId);
-            continue;
-        }
-
-        // Only tile staged. Empty ≡ tiling-clear (reverts to Snapping).
-        const QString tile = normTile(*s.tilingAlgorithmId);
-        const int mode = static_cast<int>(tile.isEmpty() ? PhosphorZones::AssignmentEntry::Snapping
-                                                         : PhosphorZones::AssignmentEntry::Autotile);
-        check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                     QStringLiteral("setAssignmentEntry"),
-                                     {s.screenId, s.virtualDesktop, s.activityId, mode, QString(), tile}),
-              "setAssignmentEntry", s.screenId);
+        // Nothing to do for an entry with no staged mode. Only two writers
+        // reach this map: stageAssignmentEntry always sets the mode and so
+        // takes the branch above, and stageScrollingTemplate sets only the
+        // template slot, which the daemon writes through setAssignmentEntry's
+        // companion setter and never on its own. So a template staged against
+        // a context whose mode was never staged is deliberately not sent.
+        //
+        // Per-field snapping / tiling branches used to stand here for the
+        // retired stageSnapping / stageTiling / stageTilingClear mutators.
+        // They were deleted with those mutators rather than kept as
+        // scaffolding for a caller that does not exist.
     }
     // Retain the whole map on failure. Partial retention would need per-entry
     // bookkeeping for no gain: the daemon setters are idempotent, so re-sending
@@ -377,8 +301,9 @@ QVariantList StagingService::stagedVirtualScreenConfig(const QString& physicalSc
     return m_virtualScreenConfigs.value(physicalScreenId);
 }
 
-void StagingService::flushVirtualScreensToSettings(Settings& settings)
+bool StagingService::flushVirtualScreensToSettings(Settings& settings)
 {
+    bool ok = true;
     for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
         PhosphorScreens::VirtualScreenConfig vsConfig;
         vsConfig.physicalScreenId = it.key();
@@ -393,9 +318,21 @@ void StagingService::flushVirtualScreensToSettings(Settings& settings)
                 }
                 vsConfig.screens.append(def);
             }
+            // The persistence twin of the guard in pushVirtualScreenConfigToDaemon:
+            // an empty screen list means "no split" on disk too, so writing one
+            // built from a non-empty input whose defs all failed validation
+            // would persist the deletion of a split the user still has. Skip
+            // the write and report, leaving the previous config on disk.
+            if (vsConfig.screens.isEmpty()) {
+                qCWarning(lcConfig) << "flushVirtualScreensToSettings: every virtual screen def for" << it.key()
+                                    << "failed validation, leaving the saved config untouched";
+                ok = false;
+                continue;
+            }
         }
         settings.setVirtualScreenConfig(it.key(), vsConfig);
     }
+    return ok;
 }
 
 bool StagingService::flushVirtualScreensToDaemon()

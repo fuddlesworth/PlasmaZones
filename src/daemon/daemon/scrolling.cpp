@@ -50,6 +50,18 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
     const QString activity = currentActivity();
     const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
+        // The non-creating state gate the autotile capture carries, and for
+        // its exact documented corruption: a per-output desktop switch runs
+        // setCurrentDesktopForScreen BEFORE this capture, so the read below
+        // resolves through the NEW desktop's key — usually empty — and the
+        // store then filed that empty order under the new desktop, wiping
+        // whatever it had saved from an earlier toggle. No state for the
+        // screen's current context means there is nothing true to capture.
+        // (Both stateForScreen overloads are non-creating; this is the
+        // autotile twin's exact shape.)
+        if (!m_scrollEngine->stateForScreen(screenId)) {
+            continue;
+        }
         const int desktop = currentDesktopForScreen(screenId);
         // Stored UNCONDITIONALLY, empty included. An empty order must
         // overwrite a stale non-empty entry from an earlier toggle, or
@@ -133,10 +145,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // Four-tier precedence, collapsed daemon-side exactly like autotile's
     // updateEngineScreens: per-screen SETTINGS seed the map first,
     // per-context RULES overwrite where a slot is filled, the context's
-    // TEMPLATE vocabulary adds its two preset-list keys (disjoint from every
-    // rule slot, so its position in the merge cannot collide), and the
-    // engine's effective* readers keep the final two-way
-    // `override ?? global-config` fallback.
+    // TEMPLATE pushes its whole shape over the settings-channel slots (preset
+    // vocabularies, seed blueprint and the beyond-blueprint width trio, which
+    // are all keys the rule channel never writes, plus the one display key it
+    // shares with a rule slot and therefore only writes when no rule filled
+    // it), and the engine's effective* readers keep the final two-way
+    // `override ?? global-config` fallback. So: rule > template > settings >
+    // engine fallback, described in full at the template block below.
     // The settings map is engine-spelled (PerScreenScrollingKey ==
     // ScrollPerScreenKeys settings channel), so the seed is a plain copy;
     // rules write their own channel keys (bare-fraction width/height plus the
@@ -204,6 +219,15 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::stickyWindowHandling(),
                              *params.stickyWindowHandling);
         }
+        // The strip axis shares its key with the settings channel (the seed
+        // above may already carry it from the per-screen store), so this
+        // insert IS the precedence collapse: rule > per-screen setting >
+        // global. The axis membership the second walk below publishes to the
+        // effect resolves through the engine's merged map, so the rule's
+        // verdict reaches the compositor with no channel of its own.
+        if (params.stripAxis) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::stripAxis(), *params.stripAxis);
+        }
         // The effect-owned pair, resolved to a verdict here rather than
         // forwarded as an override: `rule ?? config`, so the compositor gets
         // membership it can answer with a set lookup. cropStraddlers ALSO
@@ -219,6 +243,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
             cropScreens.append(screenId);
         }
+        // Taken from the ENGINE, never re-derived here. The engine owns the
+        // work area that Auto resolves against, and a second aspect-ratio
+        // derivation in the daemon could disagree with it on a near-square
+        // monitor — a disagreement that is intermittent, geometry-dependent
+        // and invisible in tests, which is the worst shape a bug can have.
+        // The collection itself runs in a second walk below, once every
+        // screen's override map is installed.
         // TEMPLATE channel: the context's resolved native ScrollingTemplate
         // (cascade entry, else the default-template setting) pushes its
         // whole shape. Precedence is rule > template > settings > engine
@@ -325,11 +356,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                 overrides.insert(K::tabIndicatorPosition(), *params.tabIndicatorPosition);
             }
         }
-        if (overrides.isEmpty()) {
-            m_scrollEngine->clearPerScreenConfig(screenId);
-        } else {
-            m_scrollEngine->applyPerScreenConfig(screenId, overrides);
-        }
+        // Pushed even when EMPTY, rather than routed to clearPerScreenConfig.
+        // The engine keys these per context, and its clear is the
+        // whole-SCREEN door — it drops every context's entry, which is right
+        // for the departing-screen loop further down and wrong here: this arm
+        // fires when THIS context resolved no overrides, and taking the
+        // screen-wide door let a template-less desktop wipe the template its
+        // sibling desktop is holding. An empty map stored for this context
+        // reads identically to an absent one at every effective* reader, so
+        // the fallback behaviour is unchanged.
+        m_scrollEngine->applyPerScreenConfig(screenId, overrides);
         // The tab indicator's PAINT overrides, keyed by the QML property names
         // the overlay reads so the layering there is one value() per property.
         // Handed straight to the overlay: the engine has no use for them and
@@ -338,15 +374,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (m_overlayService) {
             QVariantMap paint;
             if (params.tabIndicatorStyle) {
-                // "tabStyle" — the overlay SLOT's property name, see the push
-                // block in overlayservice/scrolltabs.cpp.
-                paint.insert(QStringLiteral("tabStyle"), *params.tabIndicatorStyle);
+                paint.insert(WindowPaintKeys::tabStyle(), *params.tabIndicatorStyle);
             }
             if (params.tabIndicatorGapsBetweenTabs) {
-                paint.insert(QStringLiteral("gapsBetweenTabs"), *params.tabIndicatorGapsBetweenTabs);
+                paint.insert(WindowPaintKeys::gapsBetweenTabs(), *params.tabIndicatorGapsBetweenTabs);
             }
             if (params.tabIndicatorCornerRadius) {
-                paint.insert(QStringLiteral("cornerRadius"), *params.tabIndicatorCornerRadius);
+                paint.insert(WindowPaintKeys::cornerRadius(), *params.tabIndicatorCornerRadius);
             }
             // The three colour slots go through WindowColorKeys: the same
             // spellings are the map keys the tab-strip enrichment layers on and
@@ -369,7 +403,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             // rect is the engine's own layout answer and no rule can move it.
             QVariantMap drop;
             if (params.dropIndicatorEnabled) {
-                drop.insert(QStringLiteral("indicatorEnabled"), *params.dropIndicatorEnabled);
+                drop.insert(WindowPaintKeys::indicatorEnabled(), *params.dropIndicatorEnabled);
             }
             // Its two colour slots, same shared spellings — the remaining drop
             // keys (enabled, opacity, borderWidth, borderRadius) are not colour
@@ -381,30 +415,66 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                 drop.insert(WindowColorKeys::indicatorBorderColor(), *params.dropIndicatorBorderColor);
             }
             if (params.dropIndicatorOpacity) {
-                drop.insert(QStringLiteral("indicatorOpacity"), *params.dropIndicatorOpacity);
+                drop.insert(WindowPaintKeys::indicatorOpacity(), *params.dropIndicatorOpacity);
             }
             if (params.dropIndicatorBorderWidth) {
-                drop.insert(QStringLiteral("indicatorBorderWidth"), *params.dropIndicatorBorderWidth);
+                drop.insert(WindowPaintKeys::indicatorBorderWidth(), *params.dropIndicatorBorderWidth);
             }
             if (params.dropIndicatorBorderRadius) {
-                drop.insert(QStringLiteral("indicatorBorderRadius"), *params.dropIndicatorBorderRadius);
+                drop.insert(WindowPaintKeys::indicatorBorderRadius(), *params.dropIndicatorBorderRadius);
             }
             m_overlayService->setScrollDropIndicatorOverrides(screenId, drop);
         }
     }
-    // Publish the effect-owned pair in ONE push, after the walk. SORTED here,
-    // not by construction: the walk iterates a QSet, whose order is hash order
-    // and is not stable across insertions, so the same membership could be
-    // built in two different orders and the adaptor's emit-on-change compare —
-    // an order-sensitive list compare — would report a change that isn't one.
-    // The canonicalization itself lives in ScrollingAdaptor::setScrollEffectBehaviour,
-    // which sorts and de-duplicates on entry. That is the published-contract
+
+    // The axis is collected in a SECOND walk, after the loop above has
+    // installed every screen's override map. stripAxisForScreen resolves
+    // through the engine's CURRENT per-screen map, and the settings-channel
+    // StripAxis intent is read into `overrides` at the top of that loop but
+    // only handed to the engine at its bottom — so reading the axis inside
+    // the walk answers from the PREVIOUS pass's map. That staleness is
+    // sticky: applyPerScreenConfig early-returns on an unchanged map, so
+    // nothing republishes and the wire keeps the wrong membership until some
+    // unrelated event re-runs this function.
+    //
+    // Hoisting the apply above the read instead would install an INCOMPLETE
+    // map, because the template and tab-indicator channels write into
+    // `overrides` further down the same iteration.
+    //
+    // Only the settings channel was late. The GEOMETRY term never was:
+    // layoutParamsForScreen resolves the work area live from the
+    // ScreenManager and caches nothing, so a rotation is visible on the first
+    // read either way. Ordering is unchanged — this still runs before the
+    // single push, which still precedes setActiveScreens (which itself runs
+    // INLINE, sync signals included — the autotile latch exists for exactly
+    // that) and every scheduleRetileForScreen, whose queued retiles coalesce
+    // onto a later turn.
+    //
+    // Through stripIsVerticalForScreen, which owns the downcast the accessor
+    // needs (the axis is a scrolling concept and deliberately not on
+    // IPlacementEngine, so reaching it off the base pointer is a downcast
+    // rather than a widening of the shared contract).
+    QStringList verticalAxisScreens;
+    for (const QString& screenId : scrollingScreens) {
+        if (stripIsVerticalForScreen(screenId)) {
+            verticalAxisScreens.append(screenId);
+        }
+    }
+
+    // Publish the three effect-owned lists in ONE push, after the walk. They
+    // leave here UNSORTED and are canonicalized at the ADAPTOR boundary: the
+    // walk iterates a QSet, whose order is hash order and is not stable across
+    // insertions, so the same membership could be built in two different orders
+    // and the adaptor's emit-on-change compare — an order-sensitive list
+    // compare — would report a change that isn't one.
+    // ScrollingAdaptor::setScrollEffectBehaviour sorts and de-duplicates on
+    // entry. That is the published-contract
     // boundary and it covers every producer, not just this one, so sorting a
     // second time here would be dead work claiming the same ownership. Screens
     // that LEFT scrolling are absent by construction (the walk only visits the
     // current set), so the departing-screen cleanup below has nothing to undo.
     if (m_scrollingAdaptor) {
-        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens);
+        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens);
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
 
@@ -460,6 +530,12 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_scrollEngine->scheduleRetileForScreen(screenId);
         }
     }
+}
+
+bool Daemon::stripIsVerticalForScreen(const QString& screenId) const
+{
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    return scroll && scroll->stripAxisForScreen(screenId).isVertical();
 }
 
 } // namespace PlasmaZones

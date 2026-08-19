@@ -48,8 +48,9 @@ namespace {
 
 /// Mirrors TilingAdaptor::relayTileRequestsJson's JSON →
 /// PhosphorProtocol::TileRequestList parse. Kept in sync with
-/// src/dbus/tilingadaptor/tilingadaptor.cpp — same field set (including the
-/// v6-v10 additions), same duplicate-windowId and invalid-geometry drop
+/// src/dbus/tilingadaptor/tilingadaptor.cpp — the same field set this
+/// producer can emit (including the v6-v10 additions), the same
+/// duplicate-windowId and invalid-geometry drop
 /// gates — so the producer test exercises the same deserialization the
 /// D-Bus pipe performs and the validator assertions below actually see the
 /// fields the real relay would carry. Deliberately NOT mirrored: the
@@ -58,7 +59,9 @@ namespace {
 /// loudly), and this producer never emits visual positions. The duplicate
 /// gate here also records the id before validation, unlike the relay's
 /// first-VALID-entry-wins rule; no case emits duplicates, so the
-/// difference is unreachable.
+/// difference is unreachable. Nor is tabFrom, which the real relay does
+/// parse: this producer is the autotile engine, which never emits a tab
+/// target, so mirroring the field would add a branch no case can reach.
 PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
 {
     PhosphorProtocol::TileRequestList requests;
@@ -90,7 +93,7 @@ PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
         entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
-        entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
         const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
         const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
         if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {

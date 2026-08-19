@@ -39,6 +39,7 @@
 #include "phosphor_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include <functional>
 #include <utility>
 
 namespace PlasmaZones {
@@ -96,8 +97,13 @@ QVector<StripZones::VisibleTile> visibleStripTiles(const PhosphorEngine::Placeme
 /// strip has no visible tile, and the card falls back to the representative
 /// sketch — as does a screen whose geometry cannot be resolved, since the
 /// rects cannot be placed in the card's full-screen-shaped box without it.
+///
+/// @p verticalAxis is a callable, not a bool: only the sketch arm consumes it,
+/// and resolving it eagerly at the call site costs a second per-screen layout
+/// param resolve (rule cascade included) on every LIVE card, which is the
+/// common one.
 void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManager* screens, const QString& screenId,
-                           const QVector<StripZones::VisibleTile>& tiles)
+                           const QVector<StripZones::VisibleTile>& tiles, const std::function<bool()>& verticalAxis)
 {
     if (!overlay) {
         return;
@@ -119,7 +125,10 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
             qCWarning(lcDaemon) << "Strip preview OSD: no geometry for screen=" << screenId << "tiles=" << tiles.size()
                                 << "— falling back to the sketch";
         }
-        zones = StripZones::sketchZoneMaps(screenId);
+        // The LIVE arm needs no axis: those rects are the engine's own tiles,
+        // already laid the way the strip runs. Only the sketch is drawn from
+        // nothing and has to be told.
+        zones = StripZones::sketchZoneMaps(screenId, verticalAxis && verticalAxis());
     }
     // Autotile category: the renderer treats it as "generated, not
     // editable", which is exactly what a live strip snapshot is.
@@ -510,7 +519,9 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
             // would land a second, identical card a beat later.
             stopScrollingOsdSettleTimer(screenId);
             recordAnnouncedScrollingTemplate(screenId);
-            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles);
+            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles, [this, &screenId] {
+                return stripIsVerticalForScreen(screenId);
+            });
             return;
         }
         // A mode toggle announces BEFORE the effect's re-announce batch
@@ -583,8 +594,13 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
     // return without rendering, and the template in force at dispatch is the
     // one this card actually shows.
     recordAnnouncedScrollingTemplate(screenId);
+    // The engine's axis for this screen, for the empty-strip sketch inside.
+    // Passed lazily: only the sketch arm reads it, and an absent engine falls
+    // back to the horizontal sketch.
     pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId,
-                          visibleStripTiles(m_scrollEngine.get(), screenId));
+                          visibleStripTiles(m_scrollEngine.get(), screenId), [this, &screenId] {
+                              return stripIsVerticalForScreen(screenId);
+                          });
 }
 
 void Daemon::stopScrollingOsdSettleTimer(const QString& screenId)
@@ -623,11 +639,21 @@ void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& te
     // ONE projection for every surface that draws a template:
     // previewFromScrollingTemplate lays the blueprint columns (or, for a
     // vocabulary-only template, its preset widths, or, for a defaults-only
-    // template, a single column) left to right as full-height bands and
-    // truncates the last band at the right edge. Re-deriving the walk here
-    // is how the OSD and the picker card end up disagreeing about the same
-    // template, so this only reshapes the result into the QML payload.
-    const PhosphorLayout::LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
+    // template, a single column) as bands along the strip axis and truncates
+    // the last band at the far edge. Re-deriving the walk here is how the OSD
+    // and the picker card end up disagreeing about the same template, so this
+    // only reshapes the result into the QML payload.
+    //
+    // The axis comes from the ENGINE's resolution for THIS screen, never from
+    // a second aspect-ratio derivation here: the card is a picture of what the
+    // strip will look like, so on a vertical strip the bands have to stack the
+    // way the engine will actually lay the columns. stripIsVerticalForScreen
+    // owns the downcast that reaching a scrolling-only accessor off the base
+    // engine pointer needs; an absent engine answers horizontal, the historical
+    // depiction. Resolved eagerly here, unlike the strip card's lazy form: this
+    // card ALWAYS draws from the axis, there is no live-tiles arm to skip it.
+    const bool verticalAxis = stripIsVerticalForScreen(screenId);
+    const PhosphorLayout::LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ, verticalAxis);
     QVariantList zones;
     zones.reserve(preview.zones.size());
     for (int i = 0; i < preview.zones.size(); ++i) {

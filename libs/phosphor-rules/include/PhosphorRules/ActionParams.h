@@ -172,8 +172,9 @@ inline constexpr double MaxScrollFactor = 10.0;
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check
 /// from narrowing an out-of-range double to int (UB). The descriptor validator
-/// (ruleaction_builtins_engine.cpp) enforces the bound once, at load; downstream consumers only
-/// re-check the 1-based lower bound, trusting the load-time upper-bound clamp.
+/// (ruleaction_builtins_engine.cpp) enforces the bound once, at load; downstream
+/// consumers re-check the 1-based lower bound (and the label layer re-checks
+/// this ceiling defensively), trusting the load-time clamp for the rest.
 inline constexpr int MaxVirtualDesktopOrdinal = 1024;
 
 /// Wire tokens for OverrideOverlayStyle's `value` param — the closed vocabulary
@@ -277,6 +278,20 @@ inline constexpr QLatin1StringView TreatAsNormal{"treatAsNormal"};
 inline constexpr QLatin1StringView RestoreOnly{"restoreOnly"};
 inline constexpr QLatin1StringView IgnoreAll{"ignoreAll"};
 } // namespace StickyWindowHandlingToken
+
+/// Wire tokens for SetScrollStripAxis's `value` param — which way the matched
+/// context's strip runs. Ints match the Scrolling.StripAxis config space
+/// (auto 0 / horizontal 1 / vertical 2) and the spellings match the settings
+/// schema's intChoices (settingsschema_scrolling.cpp) so a rule and the
+/// setting it overrides name the same thing. This is the INTENT space, not
+/// PhosphorProtocol::ScrollAxis: auto has no engine enumerator (it resolves
+/// from the work-area shape at relayout), and the two spaces number
+/// horizontal differently, so never cast between them.
+namespace StripAxisToken {
+inline constexpr QLatin1StringView Auto{"auto"};
+inline constexpr QLatin1StringView Horizontal{"horizontal"};
+inline constexpr QLatin1StringView Vertical{"vertical"};
+} // namespace StripAxisToken
 
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the

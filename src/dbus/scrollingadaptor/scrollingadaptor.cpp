@@ -95,17 +95,18 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 QVariantMap ScrollingAdaptor::scrollEffectBehaviour() const
 {
     // No engine gate, unlike scrollingScreens above: this map is daemon-built
-    // (the engine never sees the two effect-owned behaviours), so a cleared
+    // (the engine never sees the three effect-owned facts), so a cleared
     // engine pointer during shutdown does not invalidate it. The last
     // published value stands until the daemon pushes another.
     return m_scrollEffectBehaviour;
 }
 
 void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens,
-                                                const QStringList& cropStraddlerScreens)
+                                                const QStringList& cropStraddlerScreens,
+                                                const QStringList& verticalAxisScreens)
 {
     // Canonicalized HERE, not assumed: the published contract (the XML
-    // DocString and the property doc) says both lists are sorted, and the
+    // DocString and the property doc) says all three lists are sorted, and the
     // change compare below is a LIST compare, so an unsorted producer would
     // both break the documented wire shape and make the emit-on-change gate
     // order-sensitive — the same membership arriving in a different order
@@ -122,6 +123,10 @@ void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsM
     QVariantMap next;
     next.insert(focusFollowsMouseKey(), canonical(focusFollowsMouseScreens));
     next.insert(cropStraddlersKey(), canonical(cropStraddlerScreens));
+    // Same canonicalization as its two siblings, for the same reason: this is
+    // the published-contract boundary, and the emit-on-change compare below is
+    // an order-sensitive list compare.
+    next.insert(verticalAxisKey(), canonical(verticalAxisScreens));
     if (next == m_scrollEffectBehaviour) {
         return;
     }
@@ -182,8 +187,14 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     if (!m_engine->isActiveOnScreen(screenId)) {
         return;
     }
-    m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
-                               PhosphorEngine::NavigationContext{QString(), screenId});
+    // The delta is STRIP-RELATIVE (previous/next column) — the effect collapses
+    // both physical wheel axes onto one +/-1 before it reaches here. Spelling
+    // it as "left"/"right" would be correct only while every strip runs
+    // horizontally: on a vertical one that token means the stack, so a wheel
+    // notch would walk WITHIN the column and then try to cross to the
+    // physically-left monitor at its end. The engine synthesizes the token
+    // against the screen's own axis instead.
+    m_engine->focusColumnByDelta(delta, screenId);
 }
 
 void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
@@ -378,7 +389,7 @@ void ScrollingAdaptor::clearEngine()
     // gate (scrollEffectBehaviour documents why), so the last published value
     // stays the honest answer for as long as this object exists — clearing it
     // would replace a true answer with an empty one that reads as "no screen
-    // has either behaviour".
+    // has any of the three".
     //
     // Terminal latch: the overlay-service connection that feeds
     // setScrollTabSurface has the ADAPTOR as its context object, so it

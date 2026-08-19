@@ -1,7 +1,7 @@
 {
     "id": "strip-jelly",
     "name": "Strip Jelly",
-    "description": "The strip wobbles like a soft body while it scrolls. Rows near the top and bottom edges lag behind the middle, so the columns bow in the direction of travel and relax straight as the strip settles.",
+    "description": "The strip wobbles like a soft body while it scrolls. The rows to either side of the strip's middle lag behind it, so the content bows in the direction of travel and relaxes straight as the strip settles.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Physics",

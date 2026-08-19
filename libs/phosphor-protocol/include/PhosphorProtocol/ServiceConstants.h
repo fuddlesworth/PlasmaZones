@@ -210,16 +210,32 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       different windows in one rect. The pair is not recoverable from the
 //       rects, which is why it has to ride the wire. Same signature-matched
 //       failure mode as v6 through v10.
-//   v12: TileRequestEntry gained a trailing viewImmediate bool, widening
+//   v12: the scrolling strip's axis became per-screen configurable, so
+//       TileRequestEntry::viewDeltaX became viewDelta (a signed scalar along
+//       that screen's own strip axis) and scrollEdge's closed set widened from
+//       {left,right} to {left,right,top,bottom}.
+//
+//       READ THIS BEFORE "SIMPLIFYING" THE BUMP AWAY. Unlike v6 through v11,
+//       THIS CHANGE WIDENS NO SIGNATURE — the field is still an int and the
+//       edge is still a string, so windowsTileRequested stays
+//       a(siiiissbbbssiiibs). Every earlier bump had Qt's signature matching
+//       as a second line of defence, and this one does not. A v11 effect
+//       against a v12 daemon would demarshal PERFECTLY and then misbehave
+//       twice over: it drops every vertical park at its own validationError
+//       (unknown scrollEdge), losing those placements entirely, and it reads a
+//       vertical viewDelta as a horizontal slide, flinging the strip sideways
+//       for the length of every leg. The version handshake is the ONLY thing
+//       rejecting that pairing.
+//   v13: TileRequestEntry gained a trailing viewImmediate bool, widening
 //       windowsTileRequested from a(siiiissbbbssiiibs) to a(siiiissbbbssiiibsb).
 //       It marks a batch whose view travel is user-driven continuous motion
 //       (the drag edge auto-scroll heartbeat): the effect applies the delta
 //       outright instead of animating it, because a view leg retargeted every
 //       16 ms never progresses on a stateless curve — the painted strip
 //       stalls behind the committed geometry and glides once when the ticks
-//       stop. Same signature-matched failure mode as v6 through v11.
-inline constexpr int ApiVersion = 12;
-inline constexpr int MinPeerApiVersion = 12;
+//       stop. Same signature-matched failure mode as v6 through v11 (v12 widened none).
+inline constexpr int ApiVersion = 13;
+inline constexpr int MinPeerApiVersion = 13;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

@@ -45,22 +45,30 @@ namespace PhosphorScrollEngine {
 
 void ScrollEngine::focusColumnFirst(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusFirstColumn(params), "focus", true, QStringLiteral("left"));
+    // The reason token feeds the OSD's ARROW, so it has to name the direction
+    // focus actually travelled — which on a vertical strip is up, not left.
+    // These verbs are end-relative and their BEHAVIOUR needs no axis; only the
+    // glyph does. params is in scope via P_SCROLL_RESOLVE inside the macro.
+    P_SCROLL_VERB(screenId, state->strip().focusFirstColumn(params), "focus", true,
+                  Detail::physicalTokenForMain(-1, params.axis));
 }
 
 void ScrollEngine::focusColumnLast(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusLastColumn(params), "focus", true, QStringLiteral("right"));
+    P_SCROLL_VERB(screenId, state->strip().focusLastColumn(params), "focus", true,
+                  Detail::physicalTokenForMain(1, params.axis));
 }
 
 void ScrollEngine::moveColumnToFirst(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToFirst(params), "move", true, QStringLiteral("left"));
+    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToFirst(params), "move", true,
+                  Detail::physicalTokenForMain(-1, params.axis));
 }
 
 void ScrollEngine::moveColumnToLast(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move", true, QStringLiteral("right"));
+    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move", true,
+                  Detail::physicalTokenForMain(1, params.axis));
 }
 
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
@@ -163,12 +171,17 @@ void ScrollEngine::centerVisibleColumns(const QString& screenId)
 
 void ScrollEngine::focusWindowTop(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus", true, QStringLiteral("up"));
+    // CROSS-axis ends: the stack runs top-to-bottom on a horizontal strip and
+    // left-to-right on a vertical one, so these two swap words with the axis
+    // just as the main-axis pair above does.
+    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus", true,
+                  Detail::physicalTokenForCross(-1, params.axis));
 }
 
 void ScrollEngine::focusWindowBottom(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus", true, QStringLiteral("down"));
+    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus", true,
+                  Detail::physicalTokenForCross(1, params.axis));
 }
 
 void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
@@ -182,7 +195,7 @@ void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
         return;
     }
     P_SCROLL_VERB(screenId, state->strip().focusAdjacentColumn(delta, params), "focus", true,
-                  delta < 0 ? QStringLiteral("left") : QStringLiteral("right"));
+                  Detail::physicalTokenForMain(delta, params.axis));
 }
 
 void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
@@ -199,7 +212,7 @@ void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
     P_SCROLL_VERB(screenId,
                   state->strip().focusAdjacentColumn(delta, params)
                       || (delta < 0 ? state->strip().focusLastColumn(params) : state->strip().focusFirstColumn(params)),
-                  "focus", true, delta < 0 ? QStringLiteral("left") : QStringLiteral("right"));
+                  "focus", true, Detail::physicalTokenForMain(delta, params.axis));
 }
 
 void ScrollEngine::setColumnWidth(const ColumnWidth& width, const QString& screenId)
@@ -365,5 +378,95 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 // P_SCROLL_RESOLVE deliberately NOT #undef'd — it comes from
 // scrollverbresolve_p.h, whose include guard would make an #undef here erase
 // it for the next file in a unity chunk.
+
+// ── The windowed-fullscreen trio ─────────────────────────────────────────────
+// Per-window state verbs, moved from engine_navigation.cpp when that file
+// crossed the size ceiling. None uses P_SCROLL_VERB (each hand-expands its
+// resolve for its own feedback/guard shape), so they sit after the #undef.
+
+void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
+{
+    // Hand-expanded (not P_SCROLL_VERB) for toggleColumnTabbed's reason —
+    // the op is layout-neutral and never reads layout params — but the two
+    // diverge downstream: this verb's feedback carries the resulting state
+    // as the reason token, and the OSD has dedicated arms for it.
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("fullscreen"), QStringLiteral("no_windows"), QString(),
+                                  QString(), screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().toggleActiveWindowedFullscreen();
+    if (changed) {
+        // The flag never moves a rect; applyLayout's emit-on-change gate has
+        // its own windowed-fullscreen leg (m_lastAppliedWindowedFs) so the
+        // flip reaches the compositor on an otherwise motionless strip.
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    // The success reason carries the RESULTING state, read back from the
+    // strip, so the OSD can say which way the toggle went (the float verb's
+    // state-token convention; an empty reason could only render a generic
+    // "toggled").
+    const QString resultingState = !changed                 ? QString()
+        : state->strip().isWindowedFullscreen(sourceWindow) ? QStringLiteral("on")
+                                                            : QStringLiteral("off");
+    Q_EMIT navigationFeedback(changed, QStringLiteral("fullscreen"),
+                              changed ? resultingState : QStringLiteral("no_target"), sourceWindow,
+                              changed ? state->strip().activeWindowId() : QString(), screen);
+}
+
+void ScrollEngine::clearWindowedFullscreen(const QString& windowId)
+{
+    const QString id = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    ScrollState* state = stateForWindow(id, &key);
+    if (!state || !state->strip().setWindowedFullscreen(id, false)) {
+        return;
+    }
+    // Background-context guard, the same discipline every sibling
+    // window-keyed mutation holds (unfloatWindowInternal is the shape): the
+    // flag was cleared on the window's OWN context state, but applyLayout
+    // resolves the screen's CURRENT context — on a background desktop that
+    // is a different strip, and relayouting it would emit a batch for
+    // windows this clear never touched. The cleared flag still reaches the
+    // compositor on the context's next activation via the emit-gate leg.
+    // (The emptiness guard is belt only: every resolved state's key carries
+    // a real screen id today, so the model write above cannot in practice
+    // land without its placementChanged.)
+    if (!key.screenId.isEmpty()) {
+        if (key == currentKeyForScreen(key.screenId)) {
+            applyLayout(key.screenId, false);
+        }
+        Q_EMIT placementChanged(key.screenId);
+    }
+}
+
+void ScrollEngine::reapplyWindowGeometry(const QString& windowId)
+{
+    const QString id = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    ScrollState* state = stateForWindow(id, &key);
+    if (!state) {
+        return;
+    }
+    // The emit-on-change gate compares against the last EMITTED rect, which
+    // stops being the truth the moment the compositor moves the window
+    // behind the engine's back. KWin's fullscreen-exit restore is the known
+    // producer: it re-applies the window's pre-fullscreen rect one client
+    // round-trip AFTER the batch that already placed the tile, and since
+    // the strip's own rects never moved, the gate keeps every later batch
+    // silent and the stray rect stands forever (seen live as a stranded
+    // full-area frame, and as a toggle-off restoring a window to its old
+    // PARK spot off-screen). Evicting the memory makes the next relayout
+    // treat the rect as new and re-emit. Background-context guard as in
+    // clearWindowedFullscreen: a background strip re-emits on activation.
+    m_lastAppliedRect.remove(id);
+    if (!key.screenId.isEmpty() && key == currentKeyForScreen(key.screenId)) {
+        applyLayout(key.screenId, false);
+    }
+}
 
 } // namespace PhosphorScrollEngine

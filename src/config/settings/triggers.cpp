@@ -6,10 +6,13 @@
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <iterator> // std::size, in setQuickLayoutShortcut's dispatch check
 
 namespace PlasmaZones {
 
@@ -465,7 +468,13 @@ P_QUICK_LAYOUT(9)
 
 QString Settings::quickLayoutShortcut(int index) const
 {
-    if (index < 0 || index >= 9) {
+    // Bounded by the PROTOCOL's slot count, not a literal. Callers validate
+    // against that same constant before converting to this 0-based index
+    // (SettingsController::getQuickLayoutShortcut is the one that matters), and
+    // when the two were separate 9s a raised protocol count would have let a
+    // slot through the caller's check and straight into this empty return, so
+    // the shortcut card rendered blank instead of its factory binding.
+    if (index < 0 || index >= PhosphorProtocol::Service::QuickLayoutSlotCount) {
         return {};
     }
     return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::quickLayoutKey(index + 1));
@@ -473,7 +482,8 @@ QString Settings::quickLayoutShortcut(int index) const
 
 void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 {
-    if (index < 0 || index >= 9) {
+    // Same protocol-derived bound as the getter above.
+    if (index < 0 || index >= PhosphorProtocol::Service::QuickLayoutSlotCount) {
         return;
     }
     const QString key = ConfigDefaults::quickLayoutKey(index + 1);
@@ -482,13 +492,20 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
     }
     m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
 
-    static constexpr ShortcutSignalFn signals[9] = {
+    // Sized from its initializers and pinned to the protocol constant the bound
+    // above uses. An explicit `[QuickLayoutSlotCount]` bound would NOT catch a
+    // raised count: missing trailing initializers value-initialize to null and
+    // the emit below would call through it. The static_assert is what fails
+    // the build.
+    static constexpr ShortcutSignalFn signals[] = {
         &Settings::quickLayout1ShortcutChanged, &Settings::quickLayout2ShortcutChanged,
         &Settings::quickLayout3ShortcutChanged, &Settings::quickLayout4ShortcutChanged,
         &Settings::quickLayout5ShortcutChanged, &Settings::quickLayout6ShortcutChanged,
         &Settings::quickLayout7ShortcutChanged, &Settings::quickLayout8ShortcutChanged,
         &Settings::quickLayout9ShortcutChanged,
     };
+    static_assert(std::size(signals) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "add a NOTIFY emitter for each new quick-layout slot");
     Q_EMIT(this->*signals[index])();
     Q_EMIT settingsChanged();
 }

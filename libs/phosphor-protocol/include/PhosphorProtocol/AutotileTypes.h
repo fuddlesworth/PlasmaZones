@@ -37,8 +37,11 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;
-    /// Scrolling mode: which screen edge this window's motion is anchored to,
-    /// "left" or "right". Empty for every other placement.
+    /// Scrolling mode: which screen edge this window's motion is anchored to.
+    /// One of "left", "right", "top" or "bottom"; empty for every other
+    /// placement. Which PAIR is in play follows the screen's strip axis — a
+    /// horizontal strip uses left/right, a vertical one top/bottom. The
+    /// validator in types.cpp is the authority on the accepted set.
     ///
     /// This exists because a scrolling strip's off-viewport columns have to be
     /// committed somewhere, and where they are committed must NOT decide which
@@ -55,6 +58,16 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// other placement, and zero within scrolling for a window the view does
     /// not carry.
     ///
+    /// SIGNED SCALAR ALONG THE SCREEN'S OWN STRIP AXIS, not along x. A strip
+    /// only ever slides one way at a time, so the type says so: an x/y pair
+    /// would make a both-non-zero state representable that no producer can
+    /// mean and every consumer would have to decide about, and it would fork
+    /// the single clamp budget the effect leans on into two components that
+    /// jointly admit sqrt(2) times it. Which axis this is measured along is a
+    /// property of the SCREEN, published separately, because the paint path
+    /// and the tab-indicator surface need it at moments when no batch is in
+    /// hand.
+    ///
     /// It is a property of the batch rather than of the window, carried
     /// per-entry so a batch spanning several screens stays unambiguous. The
     /// effect springs it ONCE per output and lets every carrying window ride
@@ -65,7 +78,7 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// its committed rect is off below the union of all outputs, so no
     /// translation puts it back on screen, and it keeps the edge-anchored
     /// slide-out built from `scrollEdge` instead.
-    int viewDeltaX = 0;
+    int viewDelta = 0;
     /// Scrolling strip: where this window really sits on the strip, when that
     /// differs from the rect committed above. Only a PARKED column sets it.
     ///
@@ -105,13 +118,13 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     QString tabFrom;
     /// Scrolling mode: this batch's view travel is USER-DRIVEN continuous
     /// motion (the drag edge auto-scroll heartbeat, ~60 Hz), not a discrete
-    /// scroll verb. The effect must apply `viewDeltaX` directly — no view
+    /// scroll verb. The effect must apply `viewDelta` directly — no view
     /// animation leg, no strip shader pass — because the per-tick commits ARE
     /// the motion. Animating on top retargets a leg every 16 ms, which on a
     /// stateless (duration) curve resets its clock and zeroes its velocity
     /// each tick, so the painted strip stalls behind the committed geometry
     /// and then glides once when the ticks stop. Meaningless without a
-    /// non-zero `viewDeltaX`; false for every discrete scroll. Trailing, like
+    /// non-zero `viewDelta`; false for every discrete scroll. Trailing, like
     /// every widening since v10, so aggregate-initialized fixtures stay
     /// aligned.
     bool viewImmediate = false;

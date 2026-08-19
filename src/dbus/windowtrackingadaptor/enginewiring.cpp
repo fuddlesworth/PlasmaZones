@@ -11,6 +11,9 @@
 #include "windowtrackingadaptor.h"
 
 #include "dbus/zonedetectionadaptor.h"
+// ScrollOpenKeys lives in internal.h; the open-params resolver below reads every
+// key through it, and unity batching must not be what supplies the declaration.
+#include "internal.h"
 #include "core/interfaces/isettings.h"
 #include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>

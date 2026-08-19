@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is over 1400 lines, past the 1150 hard
-// ceiling.
+// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling (about
+// 1700 lines and still growing with each overlay surface). No exact figure is
+// quoted: it went stale within a release of being written, and the case below
+// is what the exception rests on, not a number.
 // The exception was granted in the same pull request that carried the file
 // past the ceiling (the scroll tab strip), so it is a live decision rather
 // than settled precedent, and it is recorded here for that reason.
@@ -338,6 +340,7 @@ public:
     // Per-card work-area width shares for the variable-width strip row
     // (empty on non-strip screens); trigger-edge bar-width parity
     QList<qreal> selectorStripFractions(const QString& screenId) const override;
+    bool selectorStripVerticalAxis(const QString& screenId) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -385,6 +388,22 @@ public:
     void setStripCardsProvider(StripCardsProvider provider)
     {
         m_stripCardsProvider = std::move(provider);
+    }
+    /// Whether a screen's strip runs VERTICALLY. A bool rather than an axis
+    /// type for the same reason the cards arrive serialized: this header does
+    /// not know engine types.
+    ///
+    /// Absent provider answers false — horizontal, the historical layout.
+    ///
+    /// Same clear-before-destroy contract as the other injected closures.
+    using StripAxisProvider = std::function<bool(const QString& screenId)>;
+    void setStripAxisProvider(StripAxisProvider provider)
+    {
+        m_stripAxisProvider = std::move(provider);
+    }
+    bool stripIsVertical(const QString& screenId) const
+    {
+        return m_stripAxisProvider ? m_stripAxisProvider(screenId) : false;
     }
 
     // PhosphorZones::Layout OSD (visual preview when switching layouts)
@@ -639,6 +658,30 @@ public:
     /// picked up by the drag that follows, which is the only time anyone can
     /// see it.
     void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
+
+    /// Tear down every screen's scroll tab-strip model and both per-screen
+    /// override maps, for the daemon's stop(). The per-screen surfaces live on
+    /// this service, which OUTLIVES stop(), and the ordinary departing-screen
+    /// clear (Daemon::updateScrollingScreens' difference loop) can never run
+    /// again once the engine's active set is empty — so without this a
+    /// stop()/start() cycle or an init() re-run comes up with tab-indicator
+    /// surfaces mapped over strips that no longer exist. Order per screen is
+    /// the one the departing loop documents: the MODEL first, then the
+    /// overrides, because an override drop replays the cached model through
+    /// updateScrollTabStrips's full show choreography.
+    void clearAllScrollTabState();
+
+    /// The per-screen form of the teardown above, for the two hot-removal
+    /// boundaries (physical unplug, virtual-screen reconfigure): clears the
+    /// strip model and both override maps for every screen id
+    /// @p screenMatches accepts, in the same model-first order. The predicate
+    /// lives with the caller because the survivor set does (which virtual
+    /// sub-screens still exist is the daemon's knowledge, which ids this
+    /// service holds state for is ours). Without this the override maps were
+    /// only swept by the departing-screen loop, which a removed screen never
+    /// reaches — a bounded leak that also replayed stale paint overrides on a
+    /// same-id replug.
+    void clearScrollTabStateWhere(const std::function<bool(const QString&)>& screenMatches);
 
     /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
     /// window's rules at drag start. Outranks the per-context map above, which
@@ -1055,6 +1098,7 @@ private:
     LayoutSupportResolver m_layoutSupportResolver;
     DragInsertSelectorResolver m_dragInsertSelectorResolver;
     StripCardsProvider m_stripCardsProvider;
+    StripAxisProvider m_stripAxisProvider;
     /// Live drag window id (drag adaptor sets at drag start, clears at drag
     /// end) — buildStripList excludes it so a not-yet-detached drag window
     /// never appears as its own card.
@@ -1064,8 +1108,13 @@ private:
     /// a full engine strip snapshot plus QVariant serialization per tick.
     /// Invalidated wherever the card list can change shape or share: the
     /// exclusion id (setActiveDragWindowId), the preview boundaries and
-    /// structural strip changes (refreshStripSelector), and the
-    /// desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh).
+    /// structural strip changes (refreshStripSelector), the
+    /// desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh),
+    /// the whole-popup teardowns (hideZoneSelector clears every entry,
+    /// destroyZoneSelectorWindow drops the one screen's), and the screen
+    /// rekey (which drops BOTH keys rather than moving one). The remaining
+    /// writer is updateZoneSelectorWindow's write-through, which refreshes
+    /// the entry from the authoritative list it just built.
     mutable QHash<QString, QList<qreal>> m_stripCardFractionsCache;
     /// Strip-mode selection twin of the zone triple below. Exactly one of
     /// the two families is set (each hit-test arm clears the other on
@@ -1081,7 +1130,11 @@ private:
     }
     /// The folded per-screen selector-enable verdict: a SetDragSelectorEnabled
     /// rule outranks the global toggle in either direction, matching the drag
-    /// adaptor's checkZoneSelectorTrigger fold. Strip-selector screens read the
+    /// adaptor's checkZoneSelectorTrigger fold — including the snapping MASTER
+    /// switch, which is ANDed outside the rule fold on the classic arm (a pick
+    /// there commits inside dragStopped, unreachable with snapping off) and
+    /// which strip-selector screens are exempt from (their drop commits
+    /// through the scroll engine). Strip-selector screens read the
     /// scrolling toggle, everything else the snapping one. Resolved against
     /// this class's own desktop/activity mirrors (never the drag adaptor's
     /// context handle) so the verdict cannot transiently disagree with the

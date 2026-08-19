@@ -99,6 +99,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetScrollFocusNewWindows,
     ActionType::SetScrollSmartGaps,
     ActionType::SetScrollStickyWindowHandling,
+    // The strip axis — a geometry intent rather than a behaviour toggle, but
+    // context-domain like its neighbours, riding the same per-screen map.
+    ActionType::SetScrollStripAxis,
     // Effect-consumed rather than engine-consumed (the daemon pushes the
     // resolved set to the compositor), but structurally a context bool.
     ActionType::SetScrollFocusFollowsMouse,
@@ -879,14 +882,15 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
         rejectsStray(ActionType::SetScrollInsertPosition, QJsonValue(QStringLiteral("last")));
         rejectsStray(ActionType::SetScrollDefaultWindowHeight, QJsonValue(0.5));
-        // The six behaviour toggles and the sticky-handling enum beside them
-        // declare the same {Value} key set.
+        // The behaviour toggles and the two enums beside them declare the same
+        // {Value} key set.
         rejectsStray(ActionType::SetScrollAlwaysCenterSingleColumn, QJsonValue(true));
         rejectsStray(ActionType::SetScrollRespectMinimumSize, QJsonValue(true));
         rejectsStray(ActionType::SetScrollCropStraddlers, QJsonValue(true));
         rejectsStray(ActionType::SetScrollFocusNewWindows, QJsonValue(true));
         rejectsStray(ActionType::SetScrollSmartGaps, QJsonValue(true));
         rejectsStray(ActionType::SetScrollStickyWindowHandling, QJsonValue(QStringLiteral("ignoreAll")));
+        rejectsStray(ActionType::SetScrollStripAxis, QJsonValue(QStringLiteral("vertical")));
         rejectsStray(ActionType::SetScrollFocusFollowsMouse, QJsonValue(true));
         rejectsStray(ActionType::OpenColumnWidth, QJsonValue(0.5));
         rejectsStray(ActionType::OpenWindowHeight, QJsonValue(0.5));

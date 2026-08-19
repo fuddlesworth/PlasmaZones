@@ -275,6 +275,30 @@ void Daemon::initEnginesAndWiring()
             }
             return stripColumnsToVariantList(scroll->stripSnapshot(screenId, excludeWindowId));
         });
+    // The popup mirrors the strip, so it needs the same axis the engine
+    // resolved. Taken from stripAxisForScreen rather than re-derived from the
+    // screen's aspect: two derivations can disagree on a near-square monitor,
+    // and here that would draw a miniature the drop targets do not match.
+    // Liveness-gated like the cards provider directly above, and for the same
+    // reason: stripIsVertical is public on the overlay service, so a screen
+    // this engine does not own must answer "no vertical strip" rather than the
+    // axis the engine WOULD resolve from that screen's shape. Every screen the
+    // popup draws a strip for is in this set (the mode push that adds it is
+    // what turns the strip selector on), so the gate cannot suppress a real
+    // answer. Cleared alongside the other providers in stop().
+    m_overlayService->setStripAxisProvider([this](const QString& screenId) -> bool {
+        const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+        return scroll && scroll->isActiveOnScreen(screenId) && scroll->stripAxisForScreen(screenId).isVertical();
+    });
+    // The layout picker's per-screen row builds template cards too, and a
+    // card drawn the other way depicts a shape that screen will never show —
+    // same provider shape, same liveness gate, same stop() clear.
+    if (m_unifiedLayoutController) {
+        m_unifiedLayoutController->setStripAxisProvider([this](const QString& screenId) -> bool {
+            const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+            return scroll && scroll->isActiveOnScreen(screenId) && scroll->stripAxisForScreen(screenId).isVertical();
+        });
+    }
 
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base

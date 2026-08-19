@@ -55,7 +55,7 @@ StripTransitionManager::~StripTransitionManager()
 }
 
 void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params,
-                                       int viewDeltaX)
+                                       int viewDelta, PhosphorProtocol::ScrollAxis axis)
 {
     if (!output) {
         return;
@@ -91,8 +91,16 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     }
     // This runs BEFORE the batch's applyBatchDelta (the caller's ordering
     // contract, see the header), so "spring not live" here means a FRESH
-    // leg is about to start rather than a retarget of a running one.
+    // leg is about to start rather than a retarget of a running one — and
+    // axisFor() still reports the axis the spring was built on, which is the
+    // only moment the two can be compared.
     const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(output);
+    // An axis FLIP is a fresh leg, not a retarget: applyBatchDelta is about to
+    // cancel the spring and zero its accumulator rather than retarget it, so
+    // the sampler's baseline (measured along the old axis) has nothing left to
+    // be compensated against and the next sample would read the discontinuity
+    // as velocity.
+    const bool axisFlipped = axis != m_effect->m_stripViewAnimator->axisFor(output);
     if (it == m_active.end()) {
         OutputStripPass pass;
         pass.effectId = effectId;
@@ -101,21 +109,30 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
         return;
     }
     OutputStripPass& pass = it->second;
-    if (!springLive || pass.effectId != effectId) {
+    // holdsAfterSettle keeps an OPEN settle fade out of the reset arm: a
+    // wheel notch landing just after the spring settles reaches here with
+    // springLive false (this runs before the batch's applyBatchDelta starts
+    // the new spring), and resetting then swallowed the fade with a hard
+    // velocity cut — the exact mid-fade restart sampleLive documents as
+    // resuming seamlessly. The retarget arm's baseline compensation is right
+    // for this case too: the batch steps the committed value with no time
+    // passing either way.
+    const bool settleFadeOpen = pass.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+    if ((!springLive && !settleFadeOpen) || axisFlipped || pass.effectId != effectId) {
         // Fresh leg on a stale armed entry (spring cleared outside the
-        // paint bracket: animations toggled, teardown races), or a pack
-        // SWAP mid-flight — either way the new pass must not inherit the
-        // old one's clock, frame count or velocity. The capture texture
-        // stays (size/format revalidation owns its lifetime).
+        // paint bracket: animations toggled, teardown races), an AXIS FLIP,
+        // or a pack SWAP mid-flight — in every case the new pass must not
+        // inherit the old one's clock, frame count or velocity. The capture
+        // texture stays (size/format revalidation owns its lifetime).
         pass.motion.reset();
         pass.frameCount = 0;
     } else {
         // RETARGET: the batch is about to step the spring's committed value
-        // by viewDeltaX with no time passing. Shift the sampler's offset
+        // by viewDelta with no time passing. Shift the sampler's offset
         // baseline by the same amount so the finite difference sees only
         // spring motion — without this every wheel notch spiked the
         // velocity by the column width over one frame.
-        pass.motion.compensateBatchJump(qreal(viewDeltaX));
+        pass.motion.compensateBatchJump(qreal(viewDelta));
     }
     // Params re-translated either way so a settings change mid-scroll
     // applies on the next frame.
@@ -164,7 +181,15 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     if (it == m_active.end()) {
         return false;
     }
-    OutputStripPass& pass = it->second;
+    // POINTER, not a reference, and re-seated after the capture below: the
+    // capture re-enters the scene through KWin::effects->paintScreen, and
+    // nothing may hold an m_active reference across that. No mutator of
+    // m_active is reachable from inside the nested walk today (the walk only
+    // re-enters our paintWindow), so this is structural rather than a live
+    // fix — but every other `it`/`pass` lifetime in this function is spelled
+    // out for the same reason, and an invalidation here would be a
+    // use-after-free in the paint path.
+    OutputStripPass* pass = &it->second;
     // Pinned per-pass clock (one timestamp per output pass; re-sampling per
     // call is the multi-pass ghosting trap the pin exists for). -1 means a
     // caller outside any bracket, which cannot happen from paintScreen, but
@@ -174,7 +199,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         nowMs = ShaderInternal::shaderClockNowMs();
     }
     const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(screen);
-    if (!springLive && !pass.motion.holdsAfterSettle(nowMs)) {
+    if (!springLive && !pass->motion.holdsAfterSettle(nowMs)) {
         // Settled with the fade closed (or killed while idle) — fall
         // through to the normal scene THIS frame; reapSettled frees the
         // entry from postPaintScreen.
@@ -186,7 +211,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // pass only to throw it away when the shader turns out not to compile —
     // and the failure sentinel stops re-COMPILES, not re-captures, so that
     // waste would repeat every frame for the rest of the leg.
-    CompiledStripShader* cs = compiledShader(pass.effectId);
+    // Unlike `it`/`pass`, `cs` survives the nested paintScreen below: the
+    // shader cache is a std::unordered_map, whose references and pointers stay
+    // valid across inserts and rehashes, and nothing erases from it inside the
+    // walk.
+    CompiledStripShader* cs = compiledShader(pass->effectId);
     if (!cs || !cs->shader) {
         // Compile failed — abandon the pass rather than paint a black
         // output; the normal scene (the plain translation) paints instead,
@@ -202,21 +231,21 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // device size and on-screen format (output scale/mode change, HDR flip).
     const QSize deviceSize = viewport.deviceSize();
     const GLenum captureFormat = TransitionPass::captureFormatFor(renderTarget);
-    if (pass.captureTex
-        && (pass.captureTex->size() != deviceSize || pass.captureTex->internalFormat() != captureFormat)) {
-        pass.captureFbo.reset();
-        pass.captureTex.reset();
+    if (pass->captureTex
+        && (pass->captureTex->size() != deviceSize || pass->captureTex->internalFormat() != captureFormat)) {
+        pass->captureFbo.reset();
+        pass->captureTex.reset();
     }
-    if (!pass.captureTex) {
-        pass.captureTex = TransitionPass::allocateOutputTexture(deviceSize, captureFormat);
-        if (pass.captureTex) {
-            pass.captureFbo = std::make_unique<KWin::GLFramebuffer>(pass.captureTex.get());
-            if (!pass.captureFbo->valid()) {
-                pass.captureFbo.reset();
-                pass.captureTex.reset();
+    if (!pass->captureTex) {
+        pass->captureTex = TransitionPass::allocateOutputTexture(deviceSize, captureFormat);
+        if (pass->captureTex) {
+            pass->captureFbo = std::make_unique<KWin::GLFramebuffer>(pass->captureTex.get());
+            if (!pass->captureFbo->valid()) {
+                pass->captureFbo.reset();
+                pass->captureTex.reset();
             }
         }
-        if (!pass.captureTex) {
+        if (!pass->captureTex) {
             // Allocation failed — abandon this LEG rather than retry per
             // frame. A later wheel batch re-arms via notifyLeg and retries
             // the allocation once per batch, which is the wanted behaviour
@@ -237,18 +266,26 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // foreign-output cull behaves identically to the on-screen path.
     {
         const ShaderInternal::ScopedGlState glStateGuard;
-        KWin::RenderTarget captureTarget(pass.captureFbo.get(), renderTarget.colorDescription());
+        KWin::RenderTarget captureTarget(pass->captureFbo.get(), renderTarget.colorDescription());
         KWin::RenderViewport captureViewport(screen->geometryF(), screen->scale(), captureTarget, QPoint());
-        KWin::GLFramebuffer::pushFramebuffer(pass.captureFbo.get());
+        KWin::GLFramebuffer::pushFramebuffer(pass->captureFbo.get());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Exclude everything stacked ABOVE the strip from the capture (OSDs,
         // notifications, floating windows, panels, daemon overlays): the
         // pack must not smear surfaces that are not scrolling. "Above" is a
         // STACKING fact, not a role: the boundary is the topmost strip
-        // member (a column managed by this output, or its tab-indicator
-        // surface) in KWin's stacking order, and only windows above that
-        // boundary are excluded. A floating window stacked BELOW a raised
+        // COLUMN managed by this output in KWin's stacking order, and only
+        // windows above that boundary are excluded. The tab-indicator
+        // surface is deliberately NOT a boundary candidate: it rides
+        // layer-shell, which stacks above every ordinary toplevel, so a
+        // boundary elected on it sat above ALL toplevels and every non-strip
+        // window — OSDs, dialogs, floating windows — fell inside the capture
+        // and smeared with the strip. The indicator itself belongs INSIDE
+        // the capture (paintWindow's anchor injection draws it there, offset
+        // with the strip), which is why the insertion loop below skips it
+        // rather than compositing it sharp a second time on top.
+        // A floating window stacked BELOW a raised
         // column stays in the capture and is smeared with it, which is what
         // its stacking says should happen; a closing or dragged column that
         // is genuinely below the topmost live column likewise stays inside.
@@ -273,8 +310,22 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 if (!sw) {
                     continue;
                 }
-                if (m_effect->scrollManagedOutputFor(sw) != screen
-                    && !(m_effect->isScrollTabIndicatorSurface(sw) && sw->screen() == screen)) {
+                // The five-state paintability filter the tab-anchor election
+                // (paint_pipeline prePaintScreen) applies, for the same
+                // reason: KWin plainly will not draw these, so a boundary
+                // elected on one never paints in this capture, and everything
+                // stacked between it and the topmost PAINTING column would be
+                // captured and smeared instead of composited sharp. The
+                // reachable case is a desktop switch: off-desktop columns
+                // stay tiled-tracked (#808), unparked, and can sit above the
+                // current desktop's strip in the stacking order — the next
+                // scroll then smeared every above-strip window. isDeleted()
+                // first also keeps getWindowId off a corpse.
+                if (sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
+                    || !sw->isOnCurrentDesktop()) {
+                    continue;
+                }
+                if (m_effect->scrollManagedOutputFor(sw) != screen) {
                     continue;
                 }
                 // Parked columns do not win the election, the same way the
@@ -308,9 +359,18 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 const QRectF outputGeoF = screen->geometryF();
                 for (int i = topStrip + 1; i < stack.size(); ++i) {
                     KWin::EffectWindow* sw = stack.at(i);
-                    if (sw && QRectF(sw->expandedGeometry()).intersects(outputGeoF)) {
-                        m_effect->m_stripCaptureAboveStrip.insert(sw);
+                    if (!sw || !QRectF(sw->expandedGeometry()).intersects(outputGeoF)) {
+                        continue;
                     }
+                    // Never exclude a tab-indicator surface. It always sits
+                    // above the boundary (layer-shell), but the anchor
+                    // injection draws it INSIDE the capture, offset with the
+                    // strip — excluding it here would composite it sharp a
+                    // second time on top of the pack's copy.
+                    if (m_effect->isScrollTabIndicatorSurface(sw)) {
+                        continue;
+                    }
+                    m_effect->m_stripCaptureAboveStrip.insert(sw);
                 }
             }
             // topStrip < 0 (no strip member found — a mode teardown race)
@@ -353,15 +413,34 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         skippedUnwindGuard.dismiss(); // normal exit: the composite tail consumes the list
     }
 
+    // Re-seat across the nested scene walk. `pass` was obtained before
+    // paintScreen re-entered the scene, so re-find it by key rather than
+    // trusting the old address; the tail below reads the sampler, the frame
+    // counter and the capture texture through it.
+    it = m_active.find(screen);
+    if (it == m_active.end()) {
+        // Unreachable today (nothing inside the walk mutates m_active), but if
+        // it ever happens the recorded list must not outlive the frame — the
+        // unwind guard was dismissed on the assumption the tail consumes it,
+        // and that tail is now skipped. No framebuffer has been pushed yet at
+        // this point, so there is nothing else to unwind.
+        m_effect->m_stripCaptureSkippedWindows.clear();
+        return false;
+    }
+    pass = &it->second;
+
     // Motion sample, on the pinned per-pass clock captured at the top of
     // this function. Live legs run the finite-difference estimator; a leg
     // whose spring has settled runs the settle fade instead — the frozen
     // last live velocity decaying to zero so velocity-driven packs land
     // without a pop — and self-pumps its remaining frames (the spring's own
     // repaint pump died with it).
-    const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetFor(screen);
+    // The shader pass stays ONE-DIMENSIONAL on purpose, so it takes the signed
+    // scalar along the strip's own axis rather than the resolved point. Which
+    // way that axis points reaches the shader as a separate uniform.
+    const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetAlongAxis(screen);
     const qreal velocityLogical =
-        springLive ? pass.motion.sampleLive(offsetLogical, nowMs) : pass.motion.sampleSettleFade(nowMs);
+        springLive ? pass->motion.sampleLive(offsetLogical, nowMs) : pass->motion.sampleSettleFade(nowMs);
     if (!springLive) {
         KWin::effects->addRepaint(screen->geometry());
     }
@@ -369,7 +448,19 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     const qreal scale = screen->scale();
     const float offsetDevice = float(offsetLogical * scale);
     const float velocityDevice = float(velocityLogical * scale);
-    const float deviceW = float(deviceSize.width() > 0 ? deviceSize.width() : 1);
+    // Normalized by the output's extent ALONG THE STRIP AXIS, not always its
+    // width. iStripMotion .z/.w are documented as "offset/velocity as a
+    // fraction of the output", and on a vertical strip that fraction is of the
+    // height — dividing by width there would hand a pack a figure scaled by
+    // the aspect ratio, so a tuned displacement would be visibly wrong rather
+    // than merely rotated.
+    // Taken from the animator, which already holds the axis per OUTPUT and is
+    // the same source the paint translation uses. Going through a screen id
+    // would need a reverse lookup the effect's map does not provide, and would
+    // be a second source of one fact.
+    const bool vertical = m_effect->m_stripViewAnimator->axisFor(screen) == PhosphorProtocol::ScrollAxis::Vertical;
+    const float deviceAlong = vertical ? float(deviceSize.height() > 0 ? deviceSize.height() : 1)
+                                       : float(deviceSize.width() > 0 ? deviceSize.width() : 1);
 
     // The strip's work area (panels/docks excluded), output-local device px.
     // clientArea(MaximizeArea) is the same panel-excluded rect the daemon's
@@ -418,7 +509,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             // transition, DPMS) adds nothing, so a time-driven pack resumes
             // where it left off instead of leaping by the gap. NOT
             // progress; see strip_transition.glsl.
-            cs->shader->setUniform(cs->iTimeLoc, float(qreal(pass.motion.timeAccumMs) / 1000.0));
+            cs->shader->setUniform(cs->iTimeLoc, float(qreal(pass->motion.timeAccumMs) / 1000.0));
         }
         if (cs->iResolutionLoc >= 0) {
             // The CAPTURE's size (viewport.deviceSize()), deliberately not
@@ -431,31 +522,38 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                                    QVector2D(float(deviceSize.width()), float(deviceSize.height())));
         }
         if (cs->iFrameLoc >= 0) {
-            cs->shader->setUniform(cs->iFrameLoc, pass.frameCount);
+            cs->shader->setUniform(cs->iFrameLoc, pass->frameCount);
         }
-        ++pass.frameCount;
+        ++pass->frameCount;
         if (cs->iStripMotionLoc >= 0) {
             cs->shader->setUniform(
                 cs->iStripMotionLoc,
-                QVector4D(offsetDevice, velocityDevice, offsetDevice / deviceW, velocityDevice / deviceW));
+                QVector4D(offsetDevice, velocityDevice, offsetDevice / deviceAlong, velocityDevice / deviceAlong));
+        }
+        if (cs->iStripAxisLoc >= 0) {
+            // Unit vector along this output's travel axis. The motion lanes
+            // above are scalars ALONG it, so a pack needs both to displace
+            // correctly — and the normalization divisor below follows the
+            // same axis for the same reason.
+            cs->shader->setUniform(cs->iStripAxisLoc, vertical ? QVector2D(0.0F, 1.0F) : QVector2D(1.0F, 0.0F));
         }
         if (cs->iStripRectLoc >= 0) {
             cs->shader->setUniform(cs->iStripRectLoc, stripRect);
         }
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             if (cs->customParamsLoc[slot] >= 0) {
-                cs->shader->setUniform(cs->customParamsLoc[slot], pass.customParams[slot]);
+                cs->shader->setUniform(cs->customParamsLoc[slot], pass->customParams[slot]);
             }
         }
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
             if (cs->customColorsLoc[slot] >= 0) {
-                cs->shader->setUniform(cs->customColorsLoc[slot], pass.customColors[slot]);
+                cs->shader->setUniform(cs->customColorsLoc[slot], pass->customColors[slot]);
             }
         }
         if (cs->uStripLoc >= 0) {
             cs->shader->setUniform(cs->uStripLoc, 0);
             glActiveTexture(GL_TEXTURE0);
-            pass.captureTex->bind();
+            pass->captureTex->bind();
         }
 
         TransitionPass::drawOutputQuad(viewport);
@@ -518,6 +616,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             // per-window opacity or a notification mid-fade must keep it.
             aboveData.setOpacity(w->opacity());
             const int aboveMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+            // infinite() rather than the injected-paint deviceRegion clip: the
+            // shader quad already repainted the whole output, so this pass
+            // damages full-output anyway and every pixel of these windows has
+            // to be redrawn over it. A region clip would only risk dropping
+            // parts the scene's own damage never listed.
             m_effect->paintWindow(renderTarget, viewport, w, aboveMask, KWin::Region::infinite(), aboveData);
         }
     }
@@ -533,6 +636,12 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
 void StripTransitionManager::reapSettled()
 {
     bool contextEnsured = false;
+    // LIVE clock, while paintOutput samples the frame-pinned one — a known,
+    // accepted skew (isRunning / isRunningForOutput read live too). The gap
+    // is sub-millisecond, and the worst it can do is reap a fade whose final
+    // frame the pinned clock would still have painted: one truncated fade
+    // frame, cosmetic. Pinning a clock here would need this postPaintScreen
+    // hook threaded into the paint bracket for no visible gain.
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     for (auto it = m_active.begin(); it != m_active.end();) {
         if (!m_effect->m_stripViewAnimator->isAnimatingOn(it->first) && !it->second.motion.holdsAfterSettle(nowMs)) {

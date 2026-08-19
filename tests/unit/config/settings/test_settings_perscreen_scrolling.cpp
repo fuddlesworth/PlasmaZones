@@ -46,6 +46,7 @@
 #include "helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScrollEngine/ScrollTypes.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -97,6 +98,18 @@ private:
     }
 
 private Q_SLOTS:
+    /// The engine's ScrollPerScreenKeys::stripAxis() and the app's
+    /// PerScreenScrollingKey::StripAxis are the SAME wire key spelled in two
+    /// trees that cannot include each other (LGPL engine lib / GPL app
+    /// interfaces). The daemon's rule-over-seed merge and the settings
+    /// store's persistence both stand on the two agreeing byte for byte, so
+    /// this test — the one TU that legitimately sees both — is the pin.
+    void stripAxisKeySpellingsAgreeAcrossTheSeam()
+    {
+        QCOMPARE(PhosphorScrollEngine::ScrollPerScreenKeys::stripAxis(),
+                 QString(QLatin1String(PerScreenScrollingKey::StripAxis)));
+    }
+
     /// Every key's validator, both directions: a legal value is stored as
     /// given, an illegal one is rejected outright (no override materializes),
     /// and an out-of-range numeric value on a BOUNDED key is clamped rather
@@ -142,12 +155,21 @@ private Q_SLOTS:
              ConfigDefaults::scrollingColumnDisplayTabbed() + 1,
              false,
              {}},
+            {"strip axis horizontal", key(K::StripAxis), ConfigDefaults::scrollingStripAxisHorizontal(), true,
+             ConfigDefaults::scrollingStripAxisHorizontal()},
+            {"strip axis vertical", key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical(), true,
+             ConfigDefaults::scrollingStripAxisVertical()},
+            {"strip axis past the set", key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical() + 1, false, {}},
             // Non-numeric payloads on the closed-set keys. Every one of those
             // sets contains 0, so without the numeric check a string would be
             // accepted AS the first enumerator instead of refused.
             {"width kind non-numeric", key(K::DefaultColumnWidthKind), QStringLiteral("proportion"), false, {}},
             {"height kind non-numeric", key(K::DefaultWindowHeightKind), QStringLiteral("fixed"), false, {}},
             {"display non-numeric", key(K::DefaultColumnDisplay), QStringLiteral("tabbed"), false, {}},
+            // The axis set's zero is Auto, so a string payload would pin the
+            // monitor to "follow the screen shape" instead of being refused —
+            // the same silent-first-enumerator trap as the three above.
+            {"strip axis non-numeric", key(K::StripAxis), QStringLiteral("vertical"), false, {}},
             // Bounded numerics clamp instead of rejecting: a slider drag wants
             // the nearest legal value.
             {"width value in range", key(K::DefaultColumnWidthValue), 0.35, true, 0.35},
@@ -261,9 +283,14 @@ private Q_SLOTS:
     }
 
     /// Every accepted override survives a save and a reload unchanged. The
-    /// round trip covers all seven keys at once, because a key missing from
+    /// round trip covers all eight keys at once, because a key missing from
     /// either the save list or the load ladder is invisible until it is the one
-    /// the user set.
+    /// the user set. StripAxis is written as Vertical rather than the default
+    /// Auto on purpose — not because of sparse persistence (default-equal
+    /// dropping is the FLAT config store's property; the per-screen store
+    /// persists whatever keys its map holds), but because an assertion
+    /// reading the value back through toInt() cannot tell a surviving Auto
+    /// (0) from a key the load ladder silently lost (absent also reads 0).
     void overridesRoundTripThroughDisk()
     {
         IsolatedConfigGuard guard;
@@ -276,6 +303,7 @@ private Q_SLOTS:
             {key(K::DefaultWindowHeightKind), ConfigDefaults::scrollingHeightKindFixed()},
             {key(K::DefaultWindowHeightValue), 720.0},
             {key(K::DefaultWindowHeightPresetIndex), 2},
+            {key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical()},
         };
         {
             Settings settings;
@@ -303,7 +331,7 @@ private Q_SLOTS:
     }
 
     /// The load path repairs a jointly-impossible pair that never passed the
-    /// setter — a hand edit, a config import, or a staged profile blob. Per-key
+    /// setter — a hand edit or a config import. Per-key
     /// validation cannot catch it, because each half is in range on its own.
     void loadRepairsJointlyImpossiblePair()
     {
@@ -374,9 +402,10 @@ private Q_SLOTS:
                  1200.0);
     }
 
-    /// Clear removes the whole entry (the map holds one card's keys, so there
-    /// is no sub-domain split to preserve), and has() tracks it. A clear on a
-    /// screen with nothing stored is a no-op that announces nothing.
+    /// The whole-domain Clear removes the entry outright, across both
+    /// sub-domains, and has() tracks it. A clear on a screen with nothing
+    /// stored is a no-op that announces nothing. The sizing sub-domain's own
+    /// Clear is the narrower one, pinned by axisIsASubDomainOfItsOwn below.
     void clearRemovesTheEntryAndHasTracksIt()
     {
         IsolatedConfigGuard guard;
@@ -398,6 +427,71 @@ private Q_SLOTS:
         // Clearing again changes nothing and must not announce.
         settings.clearPerScreenScrollingSettings(screen);
         QCOMPARE(changedSpy.count(), 1);
+    }
+
+    /// The strip axis shares the screen's entry with the sizing defaults but is
+    /// its OWN sub-domain, because the two are surfaced by different cards on
+    /// different pages. The New-columns card reports and clears the sizing keys
+    /// only, so an axis override must be invisible to its scope chip and must
+    /// survive its Clear — otherwise resetting a monitor's column widths would
+    /// silently rotate its strip back to the app-wide direction.
+    void axisIsASubDomainOfItsOwn()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("DP-axisdomain");
+
+        // A screen with no entry at all answers false, so the positives below
+        // are the predicate reading the axis key rather than never answering
+        // false in the first place.
+        QVERIFY(!settings.hasPerScreenScrollingAxisSettings(QStringLiteral("DP-axisdomain-absent")));
+
+        settings.setPerScreenScrollingSetting(screen, key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical());
+        QVERIFY(settings.hasPerScreenScrollingSettings(screen));
+        QVERIFY2(!settings.hasPerScreenScrollingSizingSettings(screen),
+                 "an axis-only override must not light the New-columns card's chip");
+
+        // A sizing key added beside it does light that chip, so the negative
+        // above is the axis being excluded rather than the predicate never
+        // answering true.
+        settings.setPerScreenScrollingSetting(screen, key(K::DefaultColumnWidthPresetIndex), 3);
+        QVERIFY(settings.hasPerScreenScrollingSizingSettings(screen));
+
+        QSignalSpy changedSpy(&settings, &Settings::perScreenScrollingSettingsChanged);
+        settings.clearPerScreenScrollingSizingSettings(screen);
+        QCOMPARE(changedSpy.count(), 1);
+        QVERIFY(!settings.hasPerScreenScrollingSizingSettings(screen));
+        // The axis survives the sizing Clear, entry and value both.
+        QVERIFY(settings.hasPerScreenScrollingSettings(screen));
+        QCOMPARE(settings.getPerScreenScrollingSettings(screen).value(key(K::StripAxis)).toInt(),
+                 ConfigDefaults::scrollingStripAxisVertical());
+        QVERIFY(!settings.getPerScreenScrollingSettings(screen).contains(key(K::DefaultColumnWidthPresetIndex)));
+
+        // The mirror image, for the Strip direction card's own chip: the axis
+        // override lights it, a sizing key beside it does not, and its Clear
+        // takes the axis while the sizing key survives.
+        QVERIFY(settings.hasPerScreenScrollingAxisSettings(screen));
+        settings.setPerScreenScrollingSetting(screen, key(K::DefaultColumnWidthPresetIndex), 3);
+        const int beforeAxisClear = changedSpy.count();
+        settings.clearPerScreenScrollingAxisSettings(screen);
+        QCOMPARE(changedSpy.count(), beforeAxisClear + 1);
+        QVERIFY(!settings.hasPerScreenScrollingAxisSettings(screen));
+        QVERIFY2(settings.hasPerScreenScrollingSizingSettings(screen),
+                 "the axis Clear must leave the sizing sub-domain standing");
+        QVERIFY(!settings.getPerScreenScrollingSettings(screen).contains(key(K::StripAxis)));
+        // A sizing-only entry keeps the axis chip dark, and its Clear must not
+        // announce a change it did not make.
+        const int changesSoFar = changedSpy.count();
+        QVERIFY(!settings.hasPerScreenScrollingAxisSettings(screen));
+        settings.clearPerScreenScrollingAxisSettings(screen);
+        QCOMPARE(changedSpy.count(), changesSoFar);
+
+        // The whole-domain Clear still takes everything, axis included: it is
+        // the D-Bus category surface, not a card's chip.
+        settings.setPerScreenScrollingSetting(screen, key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical());
+        settings.clearPerScreenScrollingSettings(screen);
+        QVERIFY(!settings.hasPerScreenScrollingSettings(screen));
+        QVERIFY(settings.getPerScreenScrollingSettings(screen).isEmpty());
     }
 
     /// The virtual→physical fallback is the DAEMON's job on this channel, not

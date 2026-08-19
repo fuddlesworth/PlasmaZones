@@ -169,8 +169,11 @@ set(plasmazones_settings_SRCS
     # daemon's org.plasmazones.Rules adaptor.
     rules/rulemodel.h
     rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    # Label composition + summaries, split from rulemodel.cpp for file-size.
     rules/rulemodel_labels.cpp
+    # The static section / match-field name tables, split from
+    # rulemodel_labels.cpp when that file in turn reached the size ceiling.
+    rules/rulemodel_fieldtables.cpp
     rules/rulecontroller.h
     rules/rulecontroller.cpp
     # Read-only / projection methods of RuleController — sections,
@@ -345,6 +348,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/ScrollingEdgeScrollCard.qml
         qml/pages/scrolling/ScrollingDropIndicatorCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
+        qml/pages/scrolling/ScrollingStripDirectionCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml
@@ -399,6 +403,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
+        qml/pages/screens/MonitorModePreviews.qml
         qml/pages/screens/MonitorStatePage.qml
         qml/pages/screens/VirtualScreensPage.qml
         qml/pages/screens/VirtualScreenPreview.qml

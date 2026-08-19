@@ -5,6 +5,31 @@
 
 namespace PhosphorScrollEngine {
 
+namespace {
+
+/// Nearest non-minimized tile index to @p fromIdx (itself excluded), ties
+/// breaking DOWNWARD (at equal distance the below sibling wins); -1 when
+/// every other tile is minimized. setWindowMinimized's active-slot promotion
+/// and the trail consume's take share this ONE definition so the two
+/// "nearest visible tile" answers cannot drift apart — the must-agree
+/// contract both sites used to state over hand-duplicated loops.
+int nearestVisibleTileIdx(const QVector<Tile>& tiles, int fromIdx)
+{
+    for (int dist = 1; dist < tiles.size(); ++dist) {
+        const int below = fromIdx + dist;
+        if (below < tiles.size() && !tiles.at(below).minimized) {
+            return below;
+        }
+        const int above = fromIdx - dist;
+        if (above >= 0 && !tiles.at(above).minimized) {
+            return above;
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
 // ── Introspection ───────────────────────────────────────────────────────────
 
 const Column* ScrollStrip::activeColumn() const
@@ -104,7 +129,7 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
 
     Column col;
     col.width = width;
@@ -151,7 +176,7 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
         ++shiftedPrevIdx;
     }
     m_activeColumnIdx = insertAt;
-    reanchorAfterFocusChange(shiftedPrevIdx, oldViewX, params);
+    reanchorAfterFocusChange(shiftedPrevIdx, oldViewOffset, params);
     return true;
 }
 
@@ -191,7 +216,6 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     // minimum can widen the host column, and updateViewForFocus backstops
     // the view for that case. The anchor is active-relative, so it still
     // means exactly what it did before the append.
-    Q_UNUSED(width)
     return true;
 }
 
@@ -202,7 +226,7 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     Column& col = m_columns[columnIndex];
     Tile tile;
     tile.windowId = windowId;
@@ -220,7 +244,7 @@ bool ScrollStrip::insertWindowIntoColumnAt(int columnIndex, int tileIndex, const
     // different column's stripX (a viewport jump on unfloat of a stacked
     // tile — the caller's focusWindow no-ops because the state below is
     // already what it would install).
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    reanchorAfterFocusChange(prevIdx, oldViewOffset, params);
     return true;
 }
 
@@ -281,7 +305,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     if (colIdx < 0) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     int prevIdx = m_activeColumnIdx;
     // Captured in PRE-removal indexing, where colIdx and the active index
     // are still comparable — the side decides the anchor policy below.
@@ -334,11 +358,11 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // LEFT of active — keep the anchor. The anchor is the active column's
     // on-screen offset, so keeping it holds the column the user is looking
     // at pixel-stationary while the left-side survivors slide right to
-    // close the gap. Re-deriving from the old viewX here (the previous
+    // close the gap. Re-deriving from the old viewOffset here (the previous
     // behaviour) slid the WHOLE visible strip left instead, active column
     // included.
     //
-    // AT or RIGHT of active — re-derive from the pre-removal viewX. The
+    // AT or RIGHT of active — re-derive from the pre-removal viewOffset. The
     // active-and-left strip coordinates are unchanged there, so this keeps
     // every surviving on-screen column stationary and the gap closes from
     // the right. Without refocus (take/transfer path) the same math
@@ -358,28 +382,31 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // left-edge rule below collapses any positive anchor to 0 — and the
     // anchor is PERSISTED. The removal itself stands; only the anchor
     // bookkeeping is skipped, and the first relayout against a real area
-    // re-clamps whatever survived.
-    if (params.workArea.width() > 0) {
-        const int stripX = columnStripX(m_activeColumnIdx, params);
-        int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewX;
-        if (stripX - anchor < 0) {
-            anchor = stripX;
+    // re-clamps whatever survived. Deliberately narrower than the
+    // isValid() guards elsewhere in this file: the anchor arithmetic here
+    // consumes only main-axis extents, so a zero CROSS extent is not the
+    // degeneracy this guard exists for.
+    if (params.axis.mainSize(params.workArea) > 0) {
+        const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+        int anchor = removedLeftOfActive ? m_viewAnchor : activeMainPos - oldViewOffset;
+        if (activeMainPos - anchor < 0) {
+            anchor = activeMainPos;
         }
         m_viewAnchor = anchor;
     }
 
     if (refocus) {
-        const int workW = params.workArea.width();
-        const int colW = columnWidthPx(m_columns.at(m_activeColumnIdx), params);
+        const int viewMain = params.axis.mainSize(params.workArea);
+        const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
         if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
             m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
-        } else if (m_viewAnchor < 0 || m_viewAnchor + colW > workW) {
+        } else if (m_viewAnchor < 0 || m_viewAnchor + colMain > viewMain) {
             // The newly-focused column is (partly) out of view — scroll it
             // in per the centering policy. A fully visible column stays put
             // even if that leaves empty strip on the right; the next focus
             // change reclaims it.
-            reanchorAfterFocusChange(prevIdx, oldViewX, params);
+            reanchorAfterFocusChange(prevIdx, oldViewOffset, params);
         }
     }
     return true;
@@ -423,23 +450,15 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
     if (tile.minimized == minimized) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     tile.minimized = minimized;
     if (minimized && col.activeTileIdx == tileIdx) {
         // Prefer the NEAREST visible sibling as the column's active tile
-        // (ties break downward), so focus does not jump to the top of a
-        // tall stack when a middle tile minimizes.
-        for (int dist = 1; dist < col.tiles.size(); ++dist) {
-            const int below = tileIdx + dist;
-            const int above = tileIdx - dist;
-            if (below < col.tiles.size() && !col.tiles.at(below).minimized) {
-                col.activeTileIdx = below;
-                break;
-            }
-            if (above >= 0 && !col.tiles.at(above).minimized) {
-                col.activeTileIdx = above;
-                break;
-            }
+        // (ties break downward, via the shared walk), so focus does not jump
+        // to the top of a tall stack when a middle tile minimizes.
+        const int promoted = nearestVisibleTileIdx(col.tiles, tileIdx);
+        if (promoted >= 0) {
+            col.activeTileIdx = promoted;
         }
     }
     if (!minimized) {
@@ -462,7 +481,7 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
     // positions; keep the view where it was (clamped so the collapse can
     // never leave dead space beyond the strip's right end) unless the
     // centering policy re-centers the focused column.
-    m_viewAnchor = keepOrRecenterAnchor(oldViewX, params);
+    m_viewAnchor = keepOrRecenterAnchor(oldViewOffset, params);
     return true;
 }
 
@@ -512,11 +531,17 @@ bool ScrollStrip::setWindowMinimumSize(const QString& windowId, int minWidth, in
 
 bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
 {
+    // The header promises delta is -1/+1 and the sibling verbs reject any
+    // other value; without this a caller-side slip swapped the active column
+    // with a NON-neighbour, which is moveActiveColumnTo's job.
+    if (delta != -1 && delta != 1) {
+        return false;
+    }
     const int target = m_activeColumnIdx + delta;
     if (m_activeColumnIdx < 0 || target < 0 || target >= m_columns.size()) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     m_columns.swapItemsAt(m_activeColumnIdx, target);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
         m_preMaximizeColumnIdx = target;
@@ -528,7 +553,7 @@ bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
     // DIFFERENT column now (the OnOverflow prevW hazard removeWindowInternal
     // documents) — and a move does not change WHICH window is focused, so
     // no entering-edge/overflow test should fire; keep the view stationary.
-    reanchorAfterFocusChange(-1, oldViewX, params);
+    reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
 }
 
@@ -537,7 +562,7 @@ bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& param
     if (m_activeColumnIdx < 0 || target < 0 || target >= m_columns.size() || target == m_activeColumnIdx) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     m_columns.move(m_activeColumnIdx, target);
     // Pre-maximize slot follows the same element move.
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
@@ -551,7 +576,7 @@ bool ScrollStrip::moveActiveColumnTo(int target, const ScrollLayoutParams& param
     }
     m_activeColumnIdx = target;
     // prevIdx = -1: same rationale as moveActiveColumn.
-    reanchorAfterFocusChange(-1, oldViewX, params);
+    reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
 }
 
@@ -560,7 +585,7 @@ bool ScrollStrip::moveActiveColumnToFirst(const ScrollLayoutParams& params)
     if (m_activeColumnIdx <= 0) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     m_columns.move(m_activeColumnIdx, 0);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
         m_preMaximizeColumnIdx = 0;
@@ -569,7 +594,7 @@ bool ScrollStrip::moveActiveColumnToFirst(const ScrollLayoutParams& params)
     }
     m_activeColumnIdx = 0;
     // prevIdx = -1: same rationale as moveActiveColumn.
-    reanchorAfterFocusChange(-1, oldViewX, params);
+    reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
 }
 
@@ -579,7 +604,7 @@ bool ScrollStrip::moveActiveColumnToLast(const ScrollLayoutParams& params)
     if (m_activeColumnIdx < 0 || m_activeColumnIdx >= last) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     m_columns.move(m_activeColumnIdx, last);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
         m_preMaximizeColumnIdx = last;
@@ -588,7 +613,7 @@ bool ScrollStrip::moveActiveColumnToLast(const ScrollLayoutParams& params)
     }
     m_activeColumnIdx = last;
     // prevIdx = -1: same rationale as moveActiveColumn.
-    reanchorAfterFocusChange(-1, oldViewX, params);
+    reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
 }
 
@@ -630,7 +655,7 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     if (m_columns.at(m_activeColumnIdx + 1).isFullyMinimized()) {
         return false;
     }
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     Column& source = m_columns[m_activeColumnIdx + 1];
     int takeIdx = qBound(0, source.activeTileIdx, source.tiles.size() - 1);
     // The neighbour is not fully minimized (guarded above), but its ACTIVE
@@ -641,15 +666,7 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     // and must not answer it differently. (consumeOrExpel does NOT walk at
     // all in this situation — it refuses outright.)
     if (source.tiles.at(takeIdx).minimized) {
-        int visible = -1;
-        for (int off = 1; off < source.tiles.size() && visible < 0; ++off) {
-            for (const int cand : {takeIdx + off, takeIdx - off}) {
-                if (cand >= 0 && cand < source.tiles.size() && !source.tiles.at(cand).minimized) {
-                    visible = cand;
-                    break;
-                }
-            }
-        }
+        const int visible = nearestVisibleTileIdx(source.tiles, takeIdx);
         if (visible < 0) {
             return false;
         }
@@ -669,7 +686,7 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     // active-relative so the focused column stays put by construction —
     // except under the Always/lone-column centering policy, where the
     // narrower strip re-centers it.
-    m_viewAnchor = keepOrRecenterAnchor(oldViewX, params);
+    m_viewAnchor = keepOrRecenterAnchor(oldViewOffset, params);
     return true;
 }
 
@@ -680,7 +697,7 @@ bool ScrollStrip::expelWindowFromColumn(const ScrollLayoutParams& params)
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     const Tile expelled = col->tiles.takeAt(col->activeTileIdx);
     if (col->activeTileIdx >= col->tiles.size()) {
         col->activeTileIdx = col->tiles.size() - 1;
@@ -695,7 +712,7 @@ bool ScrollStrip::expelWindowFromColumn(const ScrollLayoutParams& params)
         ++m_preMaximizeColumnIdx;
     }
     m_activeColumnIdx = insertAt;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    reanchorAfterFocusChange(prevIdx, oldViewOffset, params);
     return true;
 }
 
@@ -706,7 +723,7 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
 
     if (col->tiles.size() > 1) {
         // Expel into a new column on the delta side.
@@ -735,7 +752,7 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
             ++shiftedPrevIdx;
         }
         m_activeColumnIdx = insertAt;
-        reanchorAfterFocusChange(shiftedPrevIdx, oldViewX, params);
+        reanchorAfterFocusChange(shiftedPrevIdx, oldViewOffset, params);
         return true;
     }
 
@@ -763,7 +780,7 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     // shifted, so prevIdx no longer names it — passing it through would
     // make the OnOverflow test read a DIFFERENT column's width as prevW
     // (same hazard removeWindowInternal documents).
-    reanchorAfterFocusChange(-1, oldViewX, params);
+    reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
 }
 
@@ -771,24 +788,24 @@ QVector<int> ScrollStrip::visibleColumnIndices(const ScrollLayoutParams& params)
 {
     // Visible = the column's strip span intersects the viewport. Fully
     // minimized columns resolve to zero width and never qualify.
-    const int viewX = viewXFor(params);
-    const int workW = params.workArea.width();
+    const int viewOffset = viewOffsetFor(params);
+    const int viewMain = params.axis.mainSize(params.workArea);
     QVector<int> visible;
-    // Strip x accumulated in the walk rather than re-derived per index: the
-    // accumulation is columnStripX's own body (skip zero-width columns, else
-    // advance by width + gap), and calling it per index re-resolved every
-    // earlier column's width on every step.
-    int stripX = 0;
+    // Strip position accumulated in the walk rather than re-derived per index:
+    // the accumulation is columnStripPos's own body (skip zero-extent columns,
+    // else advance by extent + gap), and calling it per index re-resolved every
+    // earlier column's extent on every step.
+    int stripMainPos = 0;
     for (int i = 0; i < m_columns.size(); ++i) {
-        const int w = columnWidthPx(m_columns.at(i), params);
-        if (w <= 0) {
+        const int colMain = columnExtentPx(m_columns.at(i), params);
+        if (colMain <= 0) {
             continue;
         }
-        const int x = stripX - viewX;
-        if (x < workW && x + w > 0) {
+        const int viewPos = stripMainPos - viewOffset;
+        if (viewPos < viewMain && viewPos + colMain > 0) {
             visible.append(i);
         }
-        stripX += w + params.gap;
+        stripMainPos += colMain + params.gap;
     }
     return visible;
 }
@@ -811,7 +828,7 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     }
     int rotated = 0;
     const int n = visible.size();
-    const int widthBefore = stripWidthPx(params);
+    const int extentBefore = stripExtentPx(params);
     for (int i = 0; i < n; ++i) {
         const int from = clockwise ? (i - 1 + n) % n : (i + 1) % n;
         Column& dest = m_columns[visible.at(i)];
@@ -838,7 +855,7 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     // (restoreViewAnchor / updateViewForFocus document not clamping them),
     // so an unconditional clamp here would silently undo an explicit
     // centerColumn on a first/last column on the next rotate.
-    if (params.workArea.isValid() && stripWidthPx(params) < widthBefore) {
+    if (params.workArea.isValid() && stripExtentPx(params) < extentBefore) {
         m_viewAnchor = clampedAnchor(m_viewAnchor, params);
     }
     return rotated;

@@ -25,6 +25,9 @@ ColumnLayout {
     /// The stops, as work-area fractions 0..1.
     property var values: []
     property int minPercent: 5
+    /// The ceiling, parameterized like @ref minPercent so a store whose
+    /// proportion maximum is below a full work area cannot be overshot here.
+    property int maxPercent: 100
     property int maxCount: 16
     property real dedupeEpsilon: 0.01
     /// Names the vocabulary for assistive tech ("Width presets").
@@ -35,6 +38,9 @@ ColumnLayout {
 
     readonly property int count: values ? values.length : 0
     readonly property bool full: count >= maxCount
+    // One sentence, two surfaces (the chip's edit field and the add button),
+    // hoisted so the pair cannot drift apart.
+    readonly property string duplicateText: i18nc("@info:tooltip", "This size is already a preset")
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -57,20 +63,58 @@ ColumnLayout {
                 // follows.
                 property bool editing: false
 
+                // Locale-aware, the twin of addSpin's valueFromText below:
+                // parseInt reads only ASCII digits, so a locale that writes
+                // its numbers any other way parsed the retyped chip as NaN
+                // and silently dropped the edit while the ADD path accepted
+                // the same text.
+                function parsedPercent(text) {
+                    const locale = Qt.locale();
+                    const trimmed = text.replace(locale.percent, "").trim();
+                    try {
+                        return Math.round(Number.fromLocaleString(locale, trimmed));
+                    } catch (e) {
+                        return NaN;
+                    }
+                }
+
+                /// Whether @p percent collides with ANOTHER stop within the
+                /// dedupe epsilon — the refusal commitEdit enforces, exposed
+                /// so the field can surface it while typing.
+                function duplicatePercent(percent) {
+                    if (!isFinite(percent))
+                        return false;
+                    const fraction = Math.max(chipEditor.minPercent, Math.min(chipEditor.maxPercent, percent)) / 100;
+                    for (let i = 0; i < chipEditor.values.length; i++) {
+                        if (i !== chip.index && Math.abs(chipEditor.values[i] - fraction) < chipEditor.dedupeEpsilon)
+                            return true;
+                    }
+                    return false;
+                }
+
                 function commitEdit() {
                     if (!chip.editing)
                         return;
 
                     chip.editing = false;
-                    const percent = parseInt(editField.text);
+                    const percent = chip.parsedPercent(editField.text);
                     if (!isFinite(percent))
                         return;
 
-                    const fraction = Math.max(chipEditor.minPercent, Math.min(100, percent)) / 100;
-                    for (let i = 0; i < chipEditor.values.length; i++) {
-                        if (i !== chip.index && Math.abs(chipEditor.values[i] - fraction) < chipEditor.dedupeEpsilon)
-                            return; // Another stop already holds this size.
-                    }
+                    // No-change bail, against the DISPLAYED percent rather
+                    // than the stored fraction: the field opens rounded, so
+                    // an untouched commit would rewrite a bundled 0.33333 as
+                    // 0.33 — exactly the exact-stored-fraction contract the
+                    // header promises to keep. It also keeps a plain
+                    // click-away from rebuilding the whole chip row (the
+                    // rebuild mid-click is what swallowed the next press).
+                    if (percent === Math.round(chip.modelData * 100))
+                        return;
+
+                    if (chip.duplicatePercent(percent))
+                        return; // Another stop already holds this size (warned live in the field).
+
+                    const fraction = Math.max(chipEditor.minPercent, Math.min(chipEditor.maxPercent, percent)) / 100;
                     const next = chipEditor.values.slice();
                     next[chip.index] = fraction;
                     next.sort((a, b) => a - b);
@@ -133,12 +177,22 @@ ColumnLayout {
                     TextField {
                         id: editField
 
+                        // Surfacing the dedupe refusal UP FRONT, matching the
+                        // Add button's grey-with-tooltip convention: a commit
+                        // of a size another stop already holds is dropped, and
+                        // before this the drop was silent — the field closed
+                        // and the typed value simply vanished.
+                        readonly property bool duplicateValue: chip.editing && chip.duplicatePercent(chip.parsedPercent(text))
+
                         visible: chip.editing
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                         horizontalAlignment: TextInput.AlignHCenter
+                        color: duplicateValue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                        ToolTip.visible: duplicateValue
+                        ToolTip.text: chipEditor.duplicateText
                         validator: IntValidator {
                             bottom: chipEditor.minPercent
-                            top: 100
+                            top: chipEditor.maxPercent
                         }
                         Accessible.name: i18nc("@label:textbox", "Edit preset percentage in %1", chipEditor.accessibleLabel)
                         // Escape cancels without committing; Enter and
@@ -153,33 +207,63 @@ ColumnLayout {
                         Keys.onEscapePressed: chip.editing = false
                         onAccepted: Qt.callLater(chip.commitEdit)
                         onActiveFocusChanged: {
-                            if (!activeFocus)
-                                Qt.callLater(chip.commitEdit);
+                            if (activeFocus)
+                                return;
+                            // Mid-gesture the overlay catcher owns the
+                            // commit and fires it on RELEASE. Committing
+                            // here too would land the Repeater rebuild
+                            // between the press that stole the focus and its
+                            // release, destroying the pressed delegate and
+                            // swallowing that click (QQC2 buttons take focus
+                            // on press, so this path fires exactly then).
+                            // With no gesture running (Tab-away,
+                            // programmatic focus) this is the sole commit.
+                            if (catcherPoint.active)
+                                return;
+                            Qt.callLater(chip.commitEdit);
                         }
                     }
 
                     // Focus-out alone cannot close the edit: QML only moves
                     // active focus when another item TAKES it, and most of
                     // the editor (canvas, panel dead space) takes none. So
-                    // while editing, park a catcher on the window overlay:
-                    // any press outside the field commits, and accepted =
-                    // false lets the same press continue to whatever it hit.
-                    // The commit is deferred a tick because it triggers the
-                    // delegate rebuild, and tearing this item down inside
-                    // its own press handler is the popup-UAF shape the
-                    // shared context menu comment warns about.
-                    MouseArea {
+                    // while editing, park a catcher on the window overlay.
+                    // A passive PointHandler rather than a MouseArea, for the
+                    // release timing: the commit rebuilds the chip row, and a
+                    // commit scheduled from the PRESS ran between that press
+                    // and its release, destroying whichever delegate the
+                    // click had landed on and swallowing its activation. The
+                    // handler observes without grabbing (the press continues
+                    // to whatever it hit) and commits only when the gesture
+                    // ENDS outside the field. The commit still defers a tick:
+                    // tearing this item down inside its own handler is the
+                    // popup-UAF shape the shared context menu comment warns
+                    // about.
+                    Item {
+                        id: outsideCatcher
+
+                        property bool pressedOutside: false
+
                         parent: chip.editing ? chipEditor.Overlay.overlay : null
                         anchors.fill: parent ? parent : undefined
-                        enabled: chip.editing
-                        z: 1000
-                        onPressed: mouse => {
-                            mouse.accepted = false;
-                            const p = mapToItem(editField, mouse.x, mouse.y);
-                            if (p.x >= 0 && p.y >= 0 && p.x <= editField.width && p.y <= editField.height)
-                                return; // A click INTO the field must not commit.
+                        visible: chip.editing
 
-                            Qt.callLater(chip.commitEdit);
+                        PointHandler {
+                            id: catcherPoint
+
+                            enabled: chip.editing
+                            onActiveChanged: {
+                                if (active) {
+                                    const p = outsideCatcher.mapToItem(editField, point.position.x, point.position.y);
+                                    // A click INTO the field must not commit.
+                                    outsideCatcher.pressedOutside = !(p.x >= 0 && p.y >= 0 && p.x <= editField.width && p.y <= editField.height);
+                                    return;
+                                }
+                                if (outsideCatcher.pressedOutside) {
+                                    outsideCatcher.pressedOutside = false;
+                                    Qt.callLater(chip.commitEdit);
+                                }
+                            }
                         }
                     }
 
@@ -211,12 +295,28 @@ ColumnLayout {
                 id: addSpin
 
                 from: chipEditor.minPercent
-                to: 100
+                to: chipEditor.maxPercent
                 value: 50
                 editable: true
-                enabled: !chipEditor.full
+                // Greyed rather than disabled when the list is full, matching
+                // the Add button's documented convention beside it (a
+                // disabled control receives no hover for the explanatory
+                // tooltip, and a half-greyed pair read as broken).
+                opacity: chipEditor.full ? 0.5 : 1
                 textFromValue: (value, locale) => i18nc("@info preset percentage", "%1%", value)
-                valueFromText: (text, locale) => parseInt(text)
+                // Locale-aware, the twin of TemplatePropertyPanel's width
+                // spin: parseInt reads only ASCII digits, so a locale that
+                // writes its numbers any other way parsed as NaN. The percent
+                // sign textFromValue adds is stripped first, and text the
+                // locale cannot parse keeps the current value.
+                valueFromText: (text, locale) => {
+                    const trimmed = text.replace(locale.percent, "").trim();
+                    try {
+                        return Math.round(Number.fromLocaleString(locale, trimmed));
+                    } catch (e) {
+                        return addSpin.value;
+                    }
+                }
                 Accessible.name: i18nc("@label:spinbox", "New preset percentage for %1", chipEditor.accessibleLabel)
             }
 
@@ -245,7 +345,7 @@ ColumnLayout {
                     if (chipEditor.full)
                         return i18np("This list can hold at most %n preset", "This list can hold at most %n presets", chipEditor.maxCount);
                     if (duplicate)
-                        return i18nc("@info:tooltip", "This size is already a preset");
+                        return chipEditor.duplicateText;
                     return i18nc("@info:tooltip", "Add this size as a preset");
                 }
                 onClicked: {

@@ -12,6 +12,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
@@ -47,8 +48,12 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     }
     // A released window's queued echo can never be answered — the stale
     // entry would eat the first genuine focus when the window comes back
-    // (releaseScreenState documents the same sweep).
+    // (releaseScreenState documents the same sweep). The declined-open mark
+    // goes for the identical reason: its consume site swallows exactly one
+    // report, and a mark surviving the release would eat the first genuine
+    // focus after re-adoption.
     m_pendingSelfActivations.removeAll(windowId);
+    m_declinedOpenFocus.remove(windowId);
     // m_lastAppliedRect deliberately retained (same rationale as
     // windowClosed: a close/capture racing the handoff still needs the
     // poison-guard memory; pruneStaleWindows reclaims it).
@@ -102,6 +107,14 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         migratedWindowedFs = staleState->strip().isWindowedFullscreen(windowId);
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
+        // Track BEFORE emitting, the doctrine windowOpened's migration states:
+        // the two emits below are synchronous, and a subscriber that queries
+        // back during them must already see the window as this handoff's —
+        // with the reverse map still naming staleKey, heldScreenForWindow
+        // answers empty and screenForTrackedWindow answers the OLD screen.
+        // Every subsequent path re-stamps the same key unconditionally, so
+        // stamping it here changes no end state.
+        m_states.setKeyForWindow(windowId, key);
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
@@ -186,10 +199,29 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         Q_EMIT placementChanged(ctx.toScreenId);
         return;
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId);
-    ColumnWidth width = effectiveDefaultColumnWidth(ctx.toScreenId);
+    // Resolved against the POST-insert column count: this path always creates
+    // a new column, and the live count still excludes it, so live params on a
+    // single-column strip would run the smart-gaps zero-gap regime and bake a
+    // Fixed default height — persisted intent, no relayout self-heal — against
+    // a work area the received window never occupies. Same discipline as
+    // insertOpenedWindow's re-resolve and commitDragInsertPreview's predicted
+    // count; unlike the cross-monitor move, nothing re-stamps the height after
+    // this insert, so the params have to be right the first time.
+    const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId, state->strip().columnCount() + 1);
+    // params already resolved this screen's default width one line up —
+    // re-fetching the override map for the same value is the duplicate
+    // resolve this params-first convention exists to avoid.
+    ColumnWidth width = params.defaultColumnWidth;
     if (ctx.sourceGeometry.isValid()) {
-        width = ColumnWidth::makeFixed(ctx.sourceGeometry.width());
+        // sourceGeometry is the window's PHYSICAL frame at handoff time, so
+        // decode it by the TARGET strip's role: the value being minted is an
+        // intent for the strip receiving the window. Reading .width() feeds a
+        // cross extent into a main-axis intent on a vertical target.
+        // Bounded like every other Fixed intent this engine mints: the source
+        // geometry is a compositor-reported frame, so a degenerate or absurd
+        // extent would otherwise become the column's standing width intent.
+        const int sourceMain = params.axis.mainSize(ctx.sourceGeometry.size());
+        width = ColumnWidth::makeFixed(qBound(1, sourceMain, static_cast<int>(kMaxFixedExtentPx)));
     }
     // Entry position comes from the CALLER: the cross-mode dispatcher
     // derives insertIndex from the crossing direction (0 when entering from

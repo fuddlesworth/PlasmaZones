@@ -11,8 +11,9 @@ import org.kde.kirigami as Kirigami
  * minimum sizes, restore, sticky handling, adjust steps) plus focus and the
  * viewport rows that follow it. The peer of the Tiling and Snapping → Window
  * pages; one of the three advanced scrolling leaves (Columns / Tabs /
- * Window). The Window Handling and Focus cards are the shared components
- * the simple page also hosts. The Triggers card appears only on this
+ * Window). The Window Handling, Focus and Strip direction cards are the
+ * shared components the simple page also hosts (the Strip direction card
+ * carries the per-monitor scope chip on both tiers). The Triggers card appears only on this
  * advanced leaf (the page's tier, not a card flag), matching the tiling
  * twin. The Edge auto-scroll and Drop indicator cards follow it in that
  * order, because both only act during the drag those triggers arm: the first
@@ -72,6 +73,10 @@ SettingsFlickable {
         }
 
         ScrollingWindowHandlingCard {
+            Layout.fillWidth: true
+        }
+
+        ScrollingStripDirectionCard {
             Layout.fillWidth: true
         }
 

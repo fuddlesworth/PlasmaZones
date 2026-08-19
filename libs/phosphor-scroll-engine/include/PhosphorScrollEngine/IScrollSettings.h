@@ -52,6 +52,19 @@ public:
     {
         return false;
     }
+    /// Which way the strip runs: 0 auto (from the work area), 1 horizontal,
+    /// 2 vertical. DEFAULTED for the same reason cropStraddlers is — auto is
+    /// the answer for every implementor that has not heard of the option,
+    /// including the test stubs, and it reproduces the behaviour that existed
+    /// before the setting.
+    ///
+    /// NOTE the numbering is the INTENT vocabulary, not the resolved
+    /// PhosphorProtocol::ScrollAxis (whose Horizontal is 0). Never cast
+    /// between them.
+    virtual int scrollingStripAxis() const
+    {
+        return 0;
+    }
     /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
     /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
     /// or pixels) + the preset index the Preset kind resolves.

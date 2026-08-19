@@ -182,7 +182,7 @@ Rectangle {
                     valueRole: "value"
                     model: [
                         {
-                            "text": i18nc("@item:inlistbox default width kind", "Fraction of the screen"),
+                            "text": i18nc("@item:inlistbox default width kind", "Proportion of the strip"),
                             "value": templatePanel.constants.kindProportion
                         },
                         {
@@ -212,10 +212,27 @@ Rectangle {
                     Kirigami.FormData.label: defaultWidthValueSpin.isFixed ? i18nc("@label:spinbox", "Width in pixels:") : i18nc("@label:spinbox", "Width:")
                     Accessible.name: defaultWidthValueSpin.isFixed ? i18nc("@label:spinbox", "Default column width in pixels") : i18nc("@label:spinbox", "Default column width")
                     visible: templatePanel.templateModel !== null && (defaultWidthKindCombo.currentValue === templatePanel.constants.kindProportion || defaultWidthValueSpin.isFixed)
-                    from: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMin) : templatePanel.proportionMinPercent
-                    to: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMax) : templatePanel.proportionMaxPercent
+                    // The || fallbacks mirror ConfigDefaults' fixed range, per
+                    // the file's convention note at the top: a constants map
+                    // missing a key must degrade to the shipped bound, not to
+                    // a 0..0 spin.
+                    from: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMin || 100) : templatePanel.proportionMinPercent
+                    to: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMax || 10000) : templatePanel.proportionMaxPercent
                     textFromValue: (value, locale) => defaultWidthValueSpin.isFixed ? String(value) : i18nc("@info:spinbox width percentage", "%1%", value)
-                    valueFromText: (text, locale) => parseInt(text)
+                    // Locale-aware on purpose: parseInt reads only ASCII
+                    // digits and a locale that writes its numbers any other
+                    // way would parse as NaN and poison the value. The percent
+                    // sign textFromValue adds is stripped first, and text the
+                    // locale cannot parse keeps the current value rather than
+                    // committing NaN.
+                    valueFromText: (text, locale) => {
+                        const trimmed = text.replace(locale.percent, "").trim();
+                        try {
+                            return Math.round(Number.fromLocaleString(locale, trimmed));
+                        } catch (e) {
+                            return defaultWidthValueSpin.value;
+                        }
+                    }
                     onActiveFocusChanged: {
                         // A fresh focus session is a fresh undo gesture: the
                         // model merges consecutive value commits under one
@@ -286,6 +303,7 @@ Rectangle {
                     accessibleLabel: i18nc("@label", "Width presets")
                     values: templatePanel.templateModel ? templatePanel.templateModel.presetWidths : []
                     minPercent: templatePanel.proportionMinPercent
+                    maxPercent: templatePanel.proportionMaxPercent
                     maxCount: templatePanel.constants.maxTemplateColumns || 16
                     dedupeEpsilon: templatePanel.constants.fractionDedupeEpsilon || 0.01
                     onEdited: newValues => {
@@ -301,6 +319,7 @@ Rectangle {
                     accessibleLabel: i18nc("@label", "Height presets")
                     values: templatePanel.templateModel ? templatePanel.templateModel.presetHeights : []
                     minPercent: templatePanel.proportionMinPercent
+                    maxPercent: templatePanel.proportionMaxPercent
                     maxCount: templatePanel.constants.maxTemplateColumns || 16
                     dedupeEpsilon: templatePanel.constants.fractionDedupeEpsilon || 0.01
                     onEdited: newValues => {
@@ -316,7 +335,7 @@ Rectangle {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 visible: templatePanel.presetDefaultNeedsWidths
                 type: Kirigami.MessageType.Warning
-                text: i18nc("@info", "The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the screen instead.")
+                text: i18nc("@info", "The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.")
             }
 
             Label {

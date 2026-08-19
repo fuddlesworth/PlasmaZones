@@ -25,8 +25,11 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
+#include "scrollstubsettings.h"
 
 using PhosphorScrollEngine::ScrollEngine;
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 
@@ -37,151 +40,32 @@ const QString kS1 = QStringLiteral("S1");
 /// override map, so the only difference between the two is the rule slot.
 const QString kS2 = QStringLiteral("S2");
 
-/// Minimal IScrollSettings whose centering and crop answers are test-set.
-/// Everything else answers the engine's own defaults.
-class BoundaryStubSettings : public QObject, public PhosphorEngine::IScrollSettings
+/// The SHARED stub, re-seeded for this suite instead of a local subclass: a
+/// second IScrollSettings copy here drifted from the shared one on the very
+/// values the two suites' cases compare against (column width 0.5 vs 0.25,
+/// the tab-indicator enable inverted), which is exactly the hazard the
+/// shared header's comment warns about. Everything a case here mutates
+/// (cropStraddlers, centerFocused, respectMinimumSize, insertPosition,
+/// tabIndicatorEnabled) is a public field on the shared stub already.
+ScrollTestUtils::StubScrollSettings* makeBoundarySettings(QObject* owner)
 {
-    Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IScrollSettings)
-
-public:
-    using QObject::QObject;
-
-    bool cropStraddlers = false;
-    int centerFocused = 1; // always — the straddler generator
-    bool respectMinimumSize = false;
-    int insertPosition = static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::RightOfActive);
-
-    int scrollingInnerGap() const override
-    {
-        return 0;
-    }
-    bool scrollingUsePerSideOuterGap() const override
-    {
-        return false;
-    }
-    int scrollingOuterGap() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapTop() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapBottom() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapLeft() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapRight() const override
-    {
-        return 0;
-    }
-    bool scrollingFocusNewWindows() const override
-    {
-        return true;
-    }
-    int scrollingStickyWindowHandling() const override
-    {
-        return 0;
-    }
-    bool scrollingRespectMinimumSize() const override
-    {
-        return respectMinimumSize;
-    }
-    bool scrollingSmartGaps() const override
-    {
-        return false;
-    }
-    int scrollingCenterFocusedColumn() const override
-    {
-        return centerFocused;
-    }
-    bool scrollingAlwaysCenterSingleColumn() const override
-    {
-        return false;
-    }
-    bool scrollingCropStraddlers() const override
-    {
-        return cropStraddlers;
-    }
-    int scrollingDefaultColumnWidthKind() const override
-    {
-        return 0; // proportion
-    }
-    qreal scrollingDefaultColumnWidthValue() const override
-    {
-        return 0.5;
-    }
-    int scrollingDefaultColumnWidthPresetIndex() const override
-    {
-        return 0;
-    }
-    int scrollingDefaultWindowHeightKind() const override
-    {
-        return 0; // auto
-    }
-    qreal scrollingDefaultWindowHeightValue() const override
-    {
-        return 0.0;
-    }
-    int scrollingDefaultWindowHeightPresetIndex() const override
-    {
-        return 0;
-    }
-    QStringList scrollingPresetColumnWidths() const override
-    {
-        return {QStringLiteral("0.25"), QStringLiteral("0.5"), QStringLiteral("0.75")};
-    }
-    QStringList scrollingPresetWindowHeights() const override
-    {
-        return {QStringLiteral("0.25"), QStringLiteral("0.5"), QStringLiteral("0.75")};
-    }
-    int scrollingDefaultColumnDisplay() const override
-    {
-        return 0;
-    }
-    int scrollingInsertPosition() const override
-    {
-        return insertPosition;
-    }
+    auto* settings = new ScrollTestUtils::StubScrollSettings(owner);
+    // Half-work-area columns: the straddler fixtures below reason in 500px
+    // columns on the 1000px inset work area.
+    settings->widthValue = 0.5;
+    // Always-center is the straddler generator — it is what makes BOTH
+    // neighbours of the focused column cross a screen edge.
+    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
     // Off by default so the geometry tests stay indicator-free; the orphan
     // tab-bar test flips it on, since a null tabIndicatorRect would gate the
-    // strip emitter shut before the skip under test could ever matter.
-    bool tabIndicatorEnabled = false;
-
-    bool scrollingTabIndicatorEnabled() const override
-    {
-        return tabIndicatorEnabled;
-    }
-    bool scrollingTabIndicatorHideWhenSingleTab() const override
-    {
-        return true;
-    }
-    bool scrollingTabIndicatorPlaceWithinColumn() const override
-    {
-        return false;
-    }
-    int scrollingTabIndicatorGap() const override
-    {
-        return 0;
-    }
-    int scrollingTabIndicatorWidth() const override
-    {
-        return 2;
-    }
-    qreal scrollingTabIndicatorLengthProportion() const override
-    {
-        return 0.5;
-    }
-    int scrollingTabIndicatorPosition() const override
-    {
-        return 0;
-    }
-};
+    // strip emitter shut before the skip under test could ever matter. The
+    // remaining indicator values keep this suite's historical seeds.
+    settings->tabIndicatorEnabled = false;
+    settings->tabIndicatorHideWhenSingleTab = true;
+    settings->tabIndicatorGap = 0;
+    settings->tabIndicatorWidth = 2;
+    return settings;
+}
 
 /// The latest windowsTiled batch entry for @p windowId, or an empty object.
 QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
@@ -197,11 +81,6 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
-int entryRight(const QJsonObject& o)
-{
-    return o.value(QLatin1String("x")).toInt() + o.value(QLatin1String("width")).toInt() - 1;
-}
-
 } // namespace
 
 class TestScrollEngineBoundary : public QObject
@@ -209,6 +88,65 @@ class TestScrollEngineBoundary : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
+    /// A monitor that ROTATES while the strip is populated. The geometry
+    /// provider hands back a portrait rect on the second pass, so Auto
+    /// resolves the other axis. What is ASSERTED is exactly the re-resolve
+    /// (the committed aspect inverts); the axis-flip sweep's state drop
+    /// (anchor re-derivation, pinned-intent conversion) has no clean
+    /// observable at this level and is NOT claimed here — the name used to
+    /// say "AndDropsOldAxisState", which nothing below ever checked.
+    ///
+    /// Both geometries are hardcoded PHYSICAL rects and neither is transposed
+    /// with the fixture, so the two arms run this identically: it always
+    /// starts landscape and always rotates to portrait. That is on purpose —
+    /// what is under test is the ENGINE re-resolving Auto from the new
+    /// geometry, which has nothing to do with the harness's axis.
+    void aRotationFlipsTheResolvedAxis()
+    {
+        QObject owner;
+        // Mutable geometry: the provider answers landscape until the test
+        // rotates it, which is what a real output change looks like to the
+        // engine (it subscribes to no screen signal and re-reads at relayout).
+        auto geometry = std::make_shared<QRect>(QRect(0, 0, 1200, 800));
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, [geometry](const QString&) {
+            return *geometry;
+        });
+
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+        QVERIFY(tiled.count() > 0);
+
+        const auto rectOfEntry = [](const QJsonObject& o) {
+            return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+        };
+        const QRect landscapeA = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+        QVERIFY2(!landscapeA.isEmpty(), "precondition: a is committed before the rotation");
+        QVERIFY2(landscapeA.height() >= landscapeA.width(),
+                 "precondition: a full-height column on a landscape strip is taller than it is wide");
+
+        // Rotate. Same screen, transposed geometry.
+        *geometry = QRect(0, 0, 800, 1200);
+        engine->retile(kS1);
+
+        const QRect portraitA = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+        QVERIFY2(!portraitA.isEmpty(), "a must still be committed after the rotation");
+        // A column on a VERTICAL strip spans the full width and takes a share
+        // of the height, so the aspect relationship inverts.
+        QVERIFY2(portraitA.width() >= portraitA.height(),
+                 qPrintable(QStringLiteral("expected a full-width row after the flip, got %1x%2")
+                                .arg(portraitA.width())
+                                .arg(portraitA.height())));
+    }
 
     // Default mode: BOTH neighbours of a centered column straddle, and both
     // are committed clamped at the SCREEN edge — deleting either clamp
@@ -216,12 +154,12 @@ private Q_SLOTS:
     void clampModeClampsBothEdgesAtTheScreenRect()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         // Panel inset: the work area is 100px narrower on each side than the
         // screen. The clamp bound is the SCREEN edge; a work-area clamp
         // would stop 100px short and this fixture is what tells them apart.
-        const QRect screen = defaultScreenRect(); // 0,0 1200x800
-        const QRect inset(100, 0, 1000, 800);
+        const QRect screen = defaultScreenRect(); // 1200 along the strip, 800 across it (transposed with the arm)
+        const QRect inset = Ax::t(QRect(100, 0, 1000, 800));
         ScrollEngine* engine = makeProviderEngine(
             &owner, {kS1},
             [screen](const QString&) {
@@ -237,7 +175,7 @@ private Q_SLOTS:
         engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
         engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
         engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
-        // Center b: a straddles the left screen edge, c the right one
+        // Center b: a straddles the LEAD screen edge, c the TRAIL one
         // (columns are 500px on the 1000px work area).
         engine->windowFocused(QStringLiteral("app|b"), kS1);
         engine->retile(kS1);
@@ -248,11 +186,11 @@ private Q_SLOTS:
         QVERIFY(!a.isEmpty());
         QVERIFY(!c.isEmpty());
         // Clamped exactly at the screen edges — not the work area's.
-        QCOMPARE(a.value(QLatin1String("x")).toInt(), screen.left());
-        QCOMPARE(entryRight(c), screen.right());
+        QCOMPARE(Ax::entryMainPos(a), Ax::mainPos(screen));
+        QCOMPARE(Ax::entryMainEnd(c), Ax::mainEnd(screen));
         // And genuinely clamped, i.e. narrower than a full column.
-        QVERIFY(a.value(QLatin1String("width")).toInt() < 500);
-        QVERIFY(c.value(QLatin1String("width")).toInt() < 500);
+        QVERIFY(Ax::entryMainLen(a) < 500);
+        QVERIFY(Ax::entryMainLen(c) < 500);
     }
 
     // Crop mode: the same fixture commits the TRUE rects — the straddlers
@@ -260,7 +198,7 @@ private Q_SLOTS:
     void cropModeCommitsTrueRectsForStraddlers()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = true;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
@@ -280,10 +218,10 @@ private Q_SLOTS:
         QVERIFY(!a.isEmpty());
         QVERIFY(!c.isEmpty());
         // True 600px columns, overhanging both edges.
-        QCOMPARE(a.value(QLatin1String("width")).toInt(), 600);
-        QCOMPARE(c.value(QLatin1String("width")).toInt(), 600);
-        QVERIFY(a.value(QLatin1String("x")).toInt() < screen.left());
-        QVERIFY(entryRight(c) > screen.right());
+        QCOMPARE(Ax::entryMainLen(a), 600);
+        QCOMPARE(Ax::entryMainLen(c), 600);
+        QVERIFY(Ax::entryMainPos(a) < Ax::mainPos(screen));
+        QVERIFY(Ax::entryMainEnd(c) > Ax::mainEnd(screen));
     }
 
     // A remainder below the peek floor parks (with its departure edge)
@@ -291,14 +229,14 @@ private Q_SLOTS:
     void peekFloorParksAThinRemainder()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
         engine->refreshConfigFromSettings();
 
         // Every new column opens at 0.98 of the work area (the per-screen
-        // rule channel): centering a leaves b a 12px sliver at the right
-        // edge, under the 48px floor.
+        // rule channel): centering a leaves b a 12px sliver at the TRAIL
+        // strip edge, under the 48px floor.
         QVariantMap wide;
         wide.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnWidth(), 0.98);
         engine->applyPerScreenConfig(kS1, wide);
@@ -318,7 +256,7 @@ private Q_SLOTS:
             b.value(QLatin1String("y")).toInt() > screen.bottom(),
             qPrintable(
                 QStringLiteral("expected a park below the screen, got y=%1").arg(b.value(QLatin1String("y")).toInt())));
-        QCOMPARE(b.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+        QCOMPARE(b.value(QLatin1String("scrollEdge")).toString(), Ax::edgeTrail());
     }
 
     // Crop mode is a per-SCREEN rule slot, and the emit loop must read the
@@ -330,7 +268,7 @@ private Q_SLOTS:
     void cropStraddlersOverrideIsPerScreen()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = false;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1, kS2});
         engine->setEngineSettings(settings);
@@ -360,12 +298,12 @@ private Q_SLOTS:
         const QJsonObject clamped = lastEntryFor(tiled, QStringLiteral("app|b1"));
         QVERIFY(!cropped.isEmpty());
         QVERIFY(!clamped.isEmpty());
-        // S1 keeps the true 600px rect, overhanging the left screen edge.
-        QCOMPARE(cropped.value(QLatin1String("width")).toInt(), 600);
-        QVERIFY(cropped.value(QLatin1String("x")).toInt() < screen.left());
+        // S1 keeps the true 600px rect, overhanging the LEAD screen edge.
+        QCOMPARE(Ax::entryMainLen(cropped), 600);
+        QVERIFY(Ax::entryMainPos(cropped) < Ax::mainPos(screen));
         // S2 is clamped at the edge and narrower for it.
-        QCOMPARE(clamped.value(QLatin1String("x")).toInt(), screen.left());
-        QVERIFY(clamped.value(QLatin1String("width")).toInt() < 600);
+        QCOMPARE(Ax::entryMainPos(clamped), Ax::mainPos(screen));
+        QVERIFY(Ax::entryMainLen(clamped) < 600);
     }
 
     // The park lands below the union of ALL outputs — the headline rule of
@@ -374,10 +312,16 @@ private Q_SLOTS:
     void parkLandsBelowTheUnionOfAllOutputs()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->centerFocused = 0; // plain edge-aligned view
-        const QRect top = defaultScreenRect(); // 0,0 1200x800
-        const QRect bottom(0, 800, 1200, 800); // stacked beneath, bottom = 1599
+        const QRect top = defaultScreenRect();
+        // Stacked directly BENEATH the primary, keyed off it rather than
+        // hardcoded. Ax::t() would be wrong here: transposing puts the second
+        // output to the SIDE instead, the union's lower edge collapses back
+        // onto the primary's, and the test stops discriminating a
+        // below-the-union park from a below-this-screen one. The claim under
+        // test is physical ("below every output"), so the fixture is too.
+        const QRect bottom(top.left(), top.bottom() + 1, top.width(), top.height());
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, [top](const QString&) {
             return top;
         });
@@ -403,15 +347,15 @@ private Q_SLOTS:
                      QStringLiteral("park y=%1 must clear the lower output (bottom=%2)").arg(y).arg(bottom.bottom())));
     }
 
-    // Vertical enforcement runs in BOTH modes: crop mode opts out of the
-    // horizontal straddler clamp only, and a stacked column whose minimum
-    // heights overflow the work area still has its below-floor tail parked
-    // (not committed onto whatever sits beneath the screen). The park is
-    // edge-less — vertical overflow is stack layout, not strip motion.
-    void verticalOverflowParksEvenInCropMode()
+    // Cross-axis enforcement runs in BOTH modes: crop mode opts out of the
+    // MAIN-axis straddler clamp only, and a stacked column whose minimum
+    // cross extents overflow the work area still has its below-floor tail
+    // parked (not committed onto whatever sits beneath the screen). The park
+    // is edge-less — a stack overflow is stack layout, not strip motion.
+    void crossOverflowParksEvenInCropMode()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = true;
         settings->respectMinimumSize = true;
         settings->centerFocused = 0;
@@ -421,11 +365,14 @@ private Q_SLOTS:
         engine->refreshConfigFromSettings();
 
         QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-        // Two tiles stacked into one column, each with a 600px minimum on an
-        // 800px screen: the min-height clamp lays the second tile out below
-        // the work area (relayout documents the overflow as standing).
-        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 600);
-        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 600);
+        // Two tiles stacked into one column, each with a 600px minimum
+        // ACROSS the strip on an 800px cross extent: the min-size clamp lays
+        // the second tile out past the work area (relayout documents the
+        // overflow as standing). The minimum is transposed with the fixture,
+        // because what overflows a stack is the extent the stack divides.
+        const QSize minSize = Ax::t(QSize(0, 600));
+        engine->windowOpened(QStringLiteral("app|a"), kS1, minSize.width(), minSize.height());
+        engine->windowOpened(QStringLiteral("app|b"), kS1, minSize.width(), minSize.height());
         engine->retile(kS1);
         QCoreApplication::processEvents();
 
@@ -433,10 +380,10 @@ private Q_SLOTS:
         const QJsonObject b = lastEntryFor(tiled, QStringLiteral("app|b"));
         QVERIFY(!b.isEmpty());
         QVERIFY2(b.value(QLatin1String("y")).toInt() > screen.bottom(),
-                 qPrintable(QStringLiteral("expected a vertical park below the screen even in crop mode, got y=%1")
+                 qPrintable(QStringLiteral("expected a cross-axis park below the screen even in crop mode, got y=%1")
                                 .arg(b.value(QLatin1String("y")).toInt())));
         QVERIFY2(!b.contains(QLatin1String("scrollEdge")),
-                 "a vertical park carries no scrollEdge (there is no side to animate from)");
+                 "a cross-axis park carries no scrollEdge (there is no side to animate from)");
     }
 
     // A tabbed column's hidden tiles are parked so they cannot take input from
@@ -447,7 +394,7 @@ private Q_SLOTS:
     void hiddenTabOfAnOnScreenColumnCarriesNoScrollEdge()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->centerFocused = 0;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
@@ -471,7 +418,7 @@ private Q_SLOTS:
 
         // The discriminating leg: with a fallback edge recorded above, this
         // switch consumed it and slid the newly shown tab in from off the
-        // right, a move the column never made.
+        // TRAIL strip edge, a move the column never made.
         tiled.clear();
         engine->windowFocused(QStringLiteral("app|b"), kS1);
         QCoreApplication::processEvents();
@@ -491,7 +438,7 @@ private Q_SLOTS:
     void fullyParkedTabbedColumnEmitsNoTabStrip()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->tabIndicatorEnabled = true;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
@@ -499,7 +446,7 @@ private Q_SLOTS:
 
         // Same generator as peekFloorParksAThinRemainder: every column opens
         // at 0.98 of the work area, so centering the first leaves the second a
-        // 12px sliver at the right edge, under the 48px floor.
+        // 12px sliver at the TRAIL strip edge, under the 48px floor.
         QVariantMap wide;
         wide.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnWidth(), 0.98);
         engine->applyPerScreenConfig(kS1, wide);
@@ -536,10 +483,19 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         const QRect screen = defaultScreenRect();
-        const QJsonObject b = lastEntryFor(tiled, QStringLiteral("app|b"));
-        QVERIFY2(!b.isEmpty(), "expected the tabbed column's active tile in the tile batch");
-        QVERIFY2(b.value(QLatin1String("y")).toInt() > screen.bottom(),
-                 "the fixture must actually park the tabbed column's every tile");
+        // BOTH of the column's tiles, so the message's "every tile" claim is
+        // what the assertions actually check — reading only the shown tab
+        // left a hidden tab that failed to park invisible to the case.
+        for (const char* id : {"app|b", "app|c"}) {
+            const QJsonObject entry = lastEntryFor(tiled, QString::fromLatin1(id));
+            QVERIFY2(
+                !entry.isEmpty(),
+                qPrintable(
+                    QStringLiteral("expected %1 of the tabbed column in the tile batch").arg(QString::fromLatin1(id))));
+            QVERIFY2(entry.value(QLatin1String("y")).toInt() > screen.bottom(),
+                     qPrintable(QStringLiteral("the fixture must park the tabbed column's every tile, including %1")
+                                    .arg(QString::fromLatin1(id))));
+        }
 
         QVERIFY2(!namesB(QJsonDocument::fromJson(strips.last().at(1).toString().toUtf8()).array()),
                  "a fully parked tabbed column must not leave an orphan tab bar at the edge");

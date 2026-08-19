@@ -106,6 +106,7 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
 
     std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);
+    bool abandonedForMissingUStrip = false;
     if (shader && shader->uniformLocation("uStrip") < 0) {
         // A pack that never samples uStrip has it optimised out at link
         // time. The quad REPLACES the output (blend off), so running such a
@@ -115,6 +116,7 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         qCWarning(lcEffect) << "Strip effect" << effectId
                             << "never samples uStrip (getStripColor); abandoning strip pass";
         shader.reset();
+        abandonedForMissingUStrip = true;
     }
     if (shader) {
         compiled.uStripLoc = shader->uniformLocation("uStrip");
@@ -122,6 +124,7 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
         compiled.iFrameLoc = shader->uniformLocation("iFrame");
         compiled.iStripMotionLoc = shader->uniformLocation("iStripMotion");
+        compiled.iStripAxisLoc = shader->uniformLocation("iStripAxis");
         compiled.iStripRectLoc = shader->uniformLocation("iStripRect");
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             compiled.customParamsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomParamsElementNames[slot]);
@@ -130,7 +133,9 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
             compiled.customColorsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomColorsElementNames[slot]);
         }
         compiled.shader = std::move(shader);
-    } else {
+    } else if (!abandonedForMissingUStrip) {
+        // Only a genuine compile/link failure reaches here — the uStrip
+        // abandonment above already reported its own reason.
         qCWarning(lcEffect) << "Failed to compile strip transition shader for" << effectId;
     }
     return &compiled;

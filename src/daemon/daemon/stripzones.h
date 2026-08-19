@@ -38,8 +38,17 @@ using VisibleTile = PhosphorScrollEngine::ScrollEngine::VisibleTile;
 /// reads as a window onto a longer strip. Kept in step with
 /// MonitorStatePage's scrollingFallbackZones, so the Monitors page and the
 /// OSD card draw the same shape for the same empty strip.
-inline QVector<QRectF> sketchRects()
+///
+/// @p verticalAxis transposes the sketch for a screen whose strip runs
+/// vertically: the same three bands, stacked instead of in a row. Drawing the
+/// horizontal sketch there depicts a strip direction that screen never adopts,
+/// which is worse than no sketch at all — the whole point of the shape is to
+/// say which way the columns will run.
+inline QVector<QRectF> sketchRects(bool verticalAxis)
 {
+    if (verticalAxis) {
+        return {QRectF(0.0, 0.0, 1.0, 0.1), QRectF(0.0, 0.115, 1.0, 0.5), QRectF(0.0, 0.63, 1.0, 0.37)};
+    }
     return {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
 }
 
@@ -50,9 +59,13 @@ inline QVector<QRectF> sketchRects()
 /// A labelled 1/2/3 would offer digit targets that do not exist. Callers pass
 /// zoneNumberDisplay "none" alongside, and omitting the key keeps the data
 /// honest rather than relying on that display flag to hide it.
-inline QVariantList sketchZoneMaps(const QString& screenId)
+///
+/// The ids run 1-based, matching the live path below (which takes them off
+/// VisibleTile::zoneNumber), so "strip:<screen>:1" names the first band in
+/// both namespaces instead of two different rects.
+inline QVariantList sketchZoneMaps(const QString& screenId, bool verticalAxis)
 {
-    const QVector<QRectF> rects = sketchRects();
+    const QVector<QRectF> rects = sketchRects(verticalAxis);
     QVariantList zones;
     zones.reserve(rects.size());
     for (int i = 0; i < rects.size(); ++i) {
@@ -64,7 +77,7 @@ inline QVariantList sketchZoneMaps(const QString& screenId)
         relGeo[QLatin1String("height")] = r.height();
         QVariantMap zoneMap;
         zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-        zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i);
+        zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i + 1);
         zoneMap[QLatin1String("name")] = QString();
         zoneMap[QLatin1String("useCustomColors")] = false;
         zones.append(zoneMap);

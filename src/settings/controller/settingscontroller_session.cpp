@@ -126,6 +126,14 @@ void SettingsController::stageScrollingTemplate(const QString& screenName, int v
     setNeedsSave(true);
 }
 
+// Removes any staged entry for the (screen × desktop × activity) assignment
+// context — a true unstage, so on Apply the context's daemon-side assignment is
+// left untouched.
+//
+// No QML page calls this today. It is kept as the staging surface's inverse:
+// stageAssignmentEntry is the only way in, and a page that stages a pick and
+// then wants to take it back (rather than stage the opposite) has no other
+// route. Deleting it would leave the surface one-way.
 void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
                                                 const QString& activityId)
 {
@@ -156,6 +164,35 @@ QString SettingsController::urlToLocalFile(const QUrl& url) const
 // Quick layout slots (D-Bus to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+namespace {
+
+/// Shared tail for the three quick-slot getters: read the slot id out of @p
+/// reply, warning when the reply carried nothing usable.
+///
+/// Warned rather than silent because an unreachable daemon and an unassigned
+/// slot are indistinguishable in the return value — both are an empty string.
+/// Left silent, a daemon-down launch rendered every slot as unassigned and a
+/// later Save could write those clears over real assignments. Note the normal
+/// unassigned case does NOT warn: a successful reply for an empty slot still
+/// carries one (empty) argument, so it returns through the first branch.
+///
+/// Anonymous namespace keeps this TU-local, the same convention
+/// parseRunningWindowsJson below follows so unity-build batching cannot
+/// produce a duplicate-symbol surprise.
+QString quickSlotFromReply(const QDBusMessage& reply, const char* what, int slotNumber)
+{
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toString();
+    }
+    qCWarning(lcCore) << what << "slot" << slotNumber
+                      << (reply.type() == QDBusMessage::ErrorMessage
+                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
+                              : QStringLiteral("reply carried no arguments"));
+    return {};
+}
+
+} // namespace
+
 QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
@@ -163,12 +200,10 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
         return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeSnapping, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeSnapping, slotNumber}),
+                              "getQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -208,12 +243,10 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
         return staged;
     // Tiling quick slots are daemon-backed (mode-keyed LayoutRegistry), same as
     // snapping slots.
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeTiling, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeTiling, slotNumber}),
+                              "getTilingQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -236,12 +269,10 @@ QString SettingsController::getScrollingQuickLayoutSlot(int slotNumber) const
     if (m_staging.stagedScrollingQuickSlot(slotNumber, staged))
         return staged;
     // Scrolling quick slots hold native template ids.
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeScrolling, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeScrolling, slotNumber}),
+                              "getScrollingQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setScrollingQuickLayoutSlot(int slotNumber, const QString& templateId)
@@ -319,8 +350,16 @@ void SettingsController::refreshActivities()
                                                      QStringLiteral("isActivitiesAvailable"));
     if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
         m_activitiesAvailable = availReply.arguments().first().toBool();
-    } else if (availReply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable D-Bus call failed:" << availReply.errorMessage();
+    } else {
+        // A plain `else`, not an ErrorMessage test: an argument-less
+        // ReplyMessage is a successful call that answered nothing, and it
+        // matched NEITHER branch — leaving the stale availability in place,
+        // which is the very outcome the warning below describes. Same fix
+        // refreshVirtualDesktops already carries for the same shape.
+        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable"
+                          << (availReply.type() == QDBusMessage::ErrorMessage
+                                  ? QStringLiteral("D-Bus call failed: %1").arg(availReply.errorMessage())
+                                  : QStringLiteral("reply carried no arguments"));
         // Treat a D-Bus error the same as an explicit "false" reply —
         // without this, m_activitiesAvailable kept its previous (likely
         // true) value, the function then entered the `if (true)` branch
@@ -361,9 +400,12 @@ void SettingsController::refreshActivities()
             QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getCurrentActivity"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             m_currentActivity = currentReply.arguments().first().toString();
-        } else if (currentReply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(lcCore) << "refreshActivities: getCurrentActivity D-Bus call failed:"
-                              << currentReply.errorMessage();
+        } else {
+            // Plain `else` for the argument-less-reply reason given above.
+            qCWarning(lcCore) << "refreshActivities: getCurrentActivity"
+                              << (currentReply.type() == QDBusMessage::ErrorMessage
+                                      ? QStringLiteral("D-Bus call failed: %1").arg(currentReply.errorMessage())
+                                      : QStringLiteral("reply carried no arguments"));
             // Same clear-on-error posture as the two branches above and as the
             // activities-unavailable arm below. Keeping the previous id would
             // also defeat the restart change-detection that compares the
@@ -428,6 +470,11 @@ void SettingsController::onVirtualDesktopsChanged()
         }
     }
 
+    // Unconditional on purpose, against the usual emit-on-change discipline.
+    // This is an externally driven session event: the compositor is the change
+    // authority, so it only tells us when something actually moved, and a
+    // spurious re-emit costs a model refresh and nothing else. No snapshot
+    // compare.
     Q_EMIT virtualDesktopsChanged();
 }
 
@@ -475,6 +522,8 @@ void SettingsController::onActivitiesChanged()
         }
     }
 
+    // Unconditional for the same reason as virtualDesktopsChanged above: KDE
+    // is the change authority for this event, so no snapshot compare.
     Q_EMIT activitiesChanged();
 }
 
@@ -719,18 +768,20 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
     // the next page visit.
     if (s->scrollingTemplateId.has_value())
         map[QStringLiteral("scrollingTemplateId")] = *s->scrollingTemplateId;
-    // Explicit mode takes priority (stageAssignmentEntry path)
+    // Only two writers reach the staging map and they decide this between
+    // them: stageAssignmentEntry always sets the mode, and stageScrollingTemplate
+    // touches nothing but the template slot. So an entry with no staged mode
+    // is a template-only stage, and the map it produces deliberately carries
+    // no "mode" key — there is nothing to report, and inventing one would
+    // claim an engine switch the user never made.
+    //
+    // A mode-inference fallback used to stand here for the per-field stagers
+    // (stageSnapping / stageTiling / stageTilingClear). Those were retired
+    // with the per-family assignment pages, which left the branch unreachable:
+    // with no staged mode, both the snapping and tiling slots are necessarily
+    // unset, so every arm of the inference tested false anyway.
     if (s->stagedMode.has_value()) {
         map[QStringLiteral("mode")] = *s->stagedMode;
-    } else {
-        // Infer mode from which fields are staged (per-field path). This only
-        // ever answers Snapping or Autotile: the per-field stagers exist for a
-        // layout id and an algorithm id, and Scrolling has neither, so a
-        // Scrolling pick arrives only through the explicit mode above.
-        if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
-            map[QStringLiteral("mode")] = static_cast<int>(PhosphorZones::AssignmentEntry::Autotile);
-        else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
-            map[QStringLiteral("mode")] = static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
     }
     return map;
 }
@@ -765,13 +816,22 @@ QVariantMap SettingsController::loadWindowGeometry() const
     for (auto* screen : QGuiApplication::screens())
         virtualGeo = virtualGeo.united(screen->availableGeometry());
 
-    if (w > 0 && h > 0 && !virtualGeo.isEmpty()) {
-        w = qMin(w, virtualGeo.width());
-        h = qMin(h, virtualGeo.height());
+    if (w > 0 && h > 0) {
+        // The clamp needs a screen to clamp against, so it is skipped when the
+        // query came back empty. The floor is not: with no screens to ask, a
+        // hand-edited 12x8 would otherwise be handed to QML verbatim.
+        if (!virtualGeo.isEmpty()) {
+            w = qMin(w, virtualGeo.width());
+            h = qMin(h, virtualGeo.height());
+        }
         // Floor after the screen clamp, and never above what the screen can
         // actually hold.
-        w = qMax(qMin(kMinRestoredWindowWidth, virtualGeo.width()), w);
-        h = qMax(qMin(kMinRestoredWindowHeight, virtualGeo.height()), h);
+        const int minWidth =
+            virtualGeo.isEmpty() ? kMinRestoredWindowWidth : qMin(kMinRestoredWindowWidth, virtualGeo.width());
+        const int minHeight =
+            virtualGeo.isEmpty() ? kMinRestoredWindowHeight : qMin(kMinRestoredWindowHeight, virtualGeo.height());
+        w = qMax(minWidth, w);
+        h = qMax(minHeight, h);
     }
 
     // Check if the centre of the saved window is on any screen. Hoisted OUT of

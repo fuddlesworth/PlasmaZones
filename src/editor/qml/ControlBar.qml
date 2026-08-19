@@ -219,6 +219,9 @@ ToolBar {
 
             Button {
                 readonly property bool atLimit: templateColumnSection.columnCount >= templateColumnSection.columnLimit
+                // One sentence, two surfaces (assistive description and
+                // tooltip), hoisted so the pair cannot drift apart.
+                readonly property string atLimitText: i18ncp("@info", "A template can start at most %n column", "A template can start at most %n columns", templateColumnSection.columnLimit)
 
                 text: i18nc("@action:button", "Add Column")
                 icon.name: "list-add"
@@ -232,9 +235,9 @@ ToolBar {
                 // The at-limit refusal reaches assistive tech through the
                 // description, since the button stays enabled (see above)
                 // and grey is visual-only.
-                Accessible.description: atLimit ? i18ncp("@info", "A template can start at most %n column", "A template can start at most %n columns", templateColumnSection.columnLimit) : i18nc("@info", "Add a starting column to the template")
+                Accessible.description: atLimit ? atLimitText : i18nc("@info", "Add a starting column to the template")
                 ToolTip.visible: hovered
-                ToolTip.text: atLimit ? i18ncp("@tooltip", "A template can start at most %n column", "A template can start at most %n columns", templateColumnSection.columnLimit) : i18nc("@tooltip", "Add a starting column at the end of the strip")
+                ToolTip.text: atLimit ? atLimitText : i18nc("@tooltip", "Add a starting column at the end of the strip")
                 onClicked: {
                     if (!atLimit)
                         templateColumnSection.templateModel.addColumn();
@@ -252,7 +255,10 @@ ToolBar {
             }
 
             Label {
-                text: i18nc("@info", "Drag a column's right edge to resize it. Click a column to reorder it, switch it to tabs, or remove it.")
+                // Axis-neutral on purpose: the drag handle sits after the
+                // column ALONG the strip, which is its right edge on a
+                // horizontal strip and its bottom edge on a vertical one.
+                text: i18nc("@info", "Drag the divider after a column to resize it. Click a column to reorder it, switch it to tabs, or remove it.")
                 color: Kirigami.Theme.disabledTextColor
                 elide: Text.ElideRight
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 24

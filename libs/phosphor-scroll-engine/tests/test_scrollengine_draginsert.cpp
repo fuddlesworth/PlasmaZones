@@ -24,6 +24,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::engineParams;
 using ScrollTestUtils::makeGappedProviderEngine;
 using ScrollTestUtils::makeProviderEngine;
@@ -35,12 +37,19 @@ class TestScrollEngineDragInsert : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void beginRejectsInvalidInputs();
     void beginDetachesFromStrip();
     void updateStoresTargetWithoutRestructuring();
     void commitNewColumnAtTarget();
     void commitJoinColumnStacks();
-    void joinRightColumnIsStableAcrossTicks();
+    void joinTrailColumnIsStableAcrossTicks();
     void commitWithoutTargetRestoresSlot();
     void cancelRestoresSoloColumnSlot();
     void cancelRestoresStackedTileSlot();
@@ -97,7 +106,7 @@ private:
     /// Where the view sits, in strip pixels. The auto-scroll's whole job.
     static int viewX(ScrollEngine* engine, const QString& screenId)
     {
-        return stateFor(engine, screenId)->strip().relayout(engineParams()).viewX;
+        return stateFor(engine, screenId)->strip().relayout(engineParams()).viewOffset;
     }
 
     /// The engine's own edge auto-scroll defaults, named rather than spelled
@@ -109,39 +118,42 @@ private:
     /// Comfortably past kDelayMs, for the waits that must see it expire.
     static constexpr int kDelayWaitMs = kDelayMs + 20;
 
-    /// One drag-scroll heartbeat at @p cursorX, carrying @p dtSeconds of
-    /// elapsed time — the daemon's timer in miniature. @p screenId is
-    /// parameterised so a test can drive a tick at a screen the preview does
-    /// not belong to and watch the guard refuse it.
-    static bool tick(ScrollEngine* engine, int cursorX, qreal dtSeconds = 0.016,
+    /// One drag-scroll heartbeat with the cursor at @p cursorMain ALONG THE
+    /// STRIP (x on a horizontal strip, y on a vertical one — the bands sit
+    /// at the strip's two ends, so the axis harness transposes the point),
+    /// carrying @p dtSeconds of elapsed time — the daemon's timer in
+    /// miniature. @p screenId is parameterised so a test can drive a tick at
+    /// a screen the preview does not belong to and watch the guard refuse it.
+    static bool tick(ScrollEngine* engine, int cursorMain, qreal dtSeconds = 0.016,
                      const QString& screenId = QStringLiteral("S1"))
     {
-        return engine->dragAutoScrollTick(screenId, QPoint(cursorX, 300), dtSeconds);
+        return engine->dragAutoScrollTick(screenId, ScrollTestUtils::Ax::point(cursorMain, 300), dtSeconds);
     }
 
-    /// Arm the band at @p cursorX and wait out the configured start delay,
+    /// Arm the band at @p cursorMain and wait out the configured start delay,
     /// leaving the scroll owning the target. Works for EITHER band — the
-    /// direction is whichever one @p cursorX falls in. Returns the view
+    /// direction is whichever one @p cursorMain falls in. Returns the view
     /// position at that point.
-    static int armBand(ScrollEngine* engine, int cursorX)
+    static int armBand(ScrollEngine* engine, int cursorMain)
     {
         // First tick only arms (it is the transition into the band), and
         // every tick inside the delay window declines to move.
-        tick(engine, cursorX);
+        tick(engine, cursorMain);
         QTest::qWait(kDelayWaitMs);
-        tick(engine, cursorX);
+        tick(engine, cursorMain);
         return viewX(engine, QStringLiteral("S1"));
     }
     /// A cursor at the leading band's outer edge, i.e. full ramp speed.
     static int leftBandX()
     {
-        return ScrollTestUtils::defaultScreenRect().left();
+        return ScrollTestUtils::Ax::mainPos(ScrollTestUtils::defaultScreenRect());
     }
-    /// A cursor at the trailing band's outermost contained pixel (QRect::right()
-    /// is one inside the exclusive edge), i.e. also full ramp speed.
+    /// A cursor at the trailing band's outermost contained pixel (the
+    /// inclusive far main edge, one inside the exclusive end), i.e. also full
+    /// ramp speed.
     static int rightBandX()
     {
-        return ScrollTestUtils::defaultScreenRect().right();
+        return ScrollTestUtils::Ax::mainEnd(ScrollTestUtils::defaultScreenRect());
     }
 
     /// The rect of @p windowId among visibleTiles, or a null rect.
@@ -288,7 +300,7 @@ void TestScrollEngineDragInsert::commitJoinColumnStacks()
     QCOMPARE(state->strip().columnCount(), 2);
 }
 
-void TestScrollEngineDragInsert::joinRightColumnIsStableAcrossTicks()
+void TestScrollEngineDragInsert::joinTrailColumnIsStableAcrossTicks()
 {
     // The scenario that killed the live-restructure design twice: two
     // columns, drag the LEFT window onto the RIGHT column to stack. With
@@ -494,7 +506,10 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
 
-    // S2 has no state at all yet — invalid target.
+    // S2 has no state at all yet — invalid target. The point is a bare
+    // physical one and deliberately NOT transposed: S2 holds nothing for a
+    // cursor to land in, so no coordinate here can resolve differently from
+    // any other and there is nothing for the role vocabulary to say.
     const DragTarget empty = engine->computeDragInsertTargetAtPoint(QStringLiteral("S2"), QPoint(100, 100));
     QVERIFY(!empty.isValid());
 
@@ -507,28 +522,28 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
     const DragTarget join = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), rectB.center());
     QCOMPARE(join.primary, 0);
     QVERIFY(!join.newSlot);
-    // Cursor at b's centre resolves the above-midpoint arm: insert BEFORE b.
+    // Cursor at b's centre resolves the before-the-cross-midpoint arm: insert BEFORE b.
     QCOMPARE(join.secondary, 0);
 
-    // b's left edge band: a new column before it — b is the first visible
+    // b's LEAD edge band: a new column before it — b is the first visible
     // column, so the aim is tagged as a leading-edge hint.
-    const DragTarget before =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.left() + 4, rectB.center().y()));
+    const DragTarget before = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainPos(rectB) + 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(before.primary, 0);
     QVERIFY(before.newSlot);
     QVERIFY(before.leadingEdge);
 
-    // b's right edge band: b is also the LAST visible column, so this is
+    // b's TRAIL edge band: b is also the LAST visible column, so this is
     // the trailing append, not a before-b slot.
-    const DragTarget after =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() - 4, rectB.center().y()));
+    const DragTarget after = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectB) - 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(after.primary, 1);
     QVERIFY(after.newSlot);
     QVERIFY(!after.leadingEdge);
 
-    // Right of the whole (short) strip: append.
-    const DragTarget append =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() + 200, rectB.center().y()));
+    // Past the TRAIL end of the whole (short) strip: append.
+    const DragTarget append = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectB) + 200, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(append.primary, 1);
     QVERIFY(append.newSlot);
     QVERIFY(!append.leadingEdge);
@@ -538,10 +553,10 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
 
 void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
 {
-    // The y-resolution loop with a REAL stack: secondary must be the MODEL
-    // tile index of the hovered slot (above-midpoint inserts before the
-    // tile, below-midpoint after), which the single-tile sibling above
-    // cannot exercise.
+    // The CROSS-axis resolution loop with a REAL stack: secondary must be the
+    // MODEL tile index of the hovered slot (a hit cross-LEAD of the tile's
+    // midpoint inserts before it, cross-TRAIL after), which the single-tile
+    // sibling above cannot exercise.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
@@ -556,16 +571,14 @@ void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
     const QRect rectC = tileRect(engine, QStringLiteral("S1"), QStringLiteral("c"));
     QVERIFY(!rectB.isNull());
     QVERIFY(!rectC.isNull());
-    const int columnMidX = rectB.center().x();
-
-    // Upper half of the TOP tile: insert before b (model index 0).
-    const DragTarget top = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"),
-                                                                  QPoint(columnMidX, rectB.top() + rectB.height() / 4));
+    // Cross-LEAD half of the first tile: insert before b (model index 0). The
+    // fraction is a CROSS one, the direction the stack divides.
+    const DragTarget top = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectB, 0.5, 0.25));
     QVERIFY(!top.newSlot);
     QCOMPARE(top.secondary, 0);
-    // Lower half of the BOTTOM tile: insert after c (model index 2).
-    const DragTarget bottom = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(columnMidX, rectC.bottom() - rectC.height() / 4));
+    // Cross-TRAIL half of the last tile: insert after c (model index 2).
+    const DragTarget bottom =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectC, 0.5, 0.75));
     QVERIFY(!bottom.newSlot);
     QCOMPARE(bottom.secondary, 2);
     engine->cancelDragInsertPreview();
@@ -573,11 +586,12 @@ void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
 
 void TestScrollEngineDragInsert::hitTestMapsThroughAMinimizedTile()
 {
-    // The reason the y-loop maps through the hovered tile's windowId instead
-    // of reusing its position among the RESOLVED tiles. Resolved tiles omit
+    // The reason the cross-axis walk (the engine resolves on cursorCross, not
+    // a physical y) maps through the hovered tile's windowId instead of
+    // reusing its position among the RESOLVED tiles. Resolved tiles omit
     // minimized ones, so the two indices diverge by one per preceding
     // minimized tile, and a resolved-position shortcut would hand commit a
-    // slot one place too high. Nothing else in the suite puts a hidden tile
+    // slot one cross-lead too far. Nothing else in the suite puts a hidden tile
     // in a column, so both the `continue` and the model mapping were free to
     // be replaced by the resolved position with every test still green.
     QObject owner;
@@ -595,21 +609,21 @@ void TestScrollEngineDragInsert::hitTestMapsThroughAMinimizedTile()
     QVERIFY(state->strip().setWindowMinimized(QStringLiteral("c"), true, engineParams()));
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
 
-    // c is hidden, so it has no rect at all — the `continue` in the y-loop.
+    // c is hidden, so it has no rect — the `continue` in the cross-axis walk.
     QVERIFY(tileRect(engine, QStringLiteral("S1"), QStringLiteral("c")).isNull());
     const QRect rectD = tileRect(engine, QStringLiteral("S1"), QStringLiteral("d"));
     QVERIFY(!rectD.isNull());
 
-    // Upper half of d: insert BEFORE d, which is model index 2. Reusing d's
-    // resolved position would answer 1 and drop the window above the
-    // minimized tile instead of below it.
-    const DragTarget aboveD = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(rectD.center().x(), rectD.top() + rectD.height() / 4));
+    // Cross-LEAD half of d: insert BEFORE d, model index 2. Reusing d's
+    // resolved position would answer 1 and drop the window cross-lead of the
+    // minimized tile instead of past it.
+    const DragTarget aboveD =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectD, 0.5, 0.25));
     QVERIFY(!aboveD.newSlot);
     QCOMPARE(aboveD.secondary, 2);
-    // Lower half of d: after it, model index 3.
-    const DragTarget belowD = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(rectD.center().x(), rectD.bottom() - rectD.height() / 4));
+    // Cross-TRAIL half of d: after it, model index 3.
+    const DragTarget belowD =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectD, 0.5, 0.75));
     QVERIFY(!belowD.newSlot);
     QCOMPARE(belowD.secondary, 3);
     engine->cancelDragInsertPreview();
@@ -640,10 +654,9 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     // New column BEFORE b, aimed from the leading edge: the promise sits
     // just OUTSIDE b (niri's leading hint placement) — covering b would
     // read as "replace this" while the drop actually shifts b aside. b sits
-    // flush at the view's left edge here (the detach's dead space is on the
-    // right), so the outside-left position crosses the screen edge and the
-    // visibility clamp pins it half-in there. Full column height either
-    // way.
+    // flush at the view's LEAD edge here (the detach's dead space is at the
+    // trail end), so the outside-lead position crosses the screen edge and the
+    // visibility clamp pins it half-in. Full column cross extent either way.
     DragTarget newCol;
     newCol.primary = 0;
     newCol.newSlot = true;
@@ -651,44 +664,52 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     engine->updateDragInsertPreview(newCol);
     const QRect openSlot = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(openSlot.isValid());
-    // Outside-left placement, then the visibility clamp — deleting either
-    // fails this: without the shift the promise sits at b's own x, without
-    // the clamp it sits a full column past the edge.
-    const QRect wa = ScrollTestUtils::defaultScreenRect();
-    QCOMPARE(openSlot.x(), qMax(rectB.x() - openSlot.width(), wa.left() - openSlot.width() / 2));
-    QCOMPARE(openSlot.height(), rectB.height());
+    // Outside-LEAD placement, then the visibility clamp — deleting either fails
+    // this: without the shift the promise sits at b's own main position,
+    // without the clamp a full column past the edge.
+    //
+    // Pinned as a LITERAL rather than re-derived from the same shift-and-clamp
+    // the engine runs: b is the only column, at the default half-work-area
+    // width (600px of the 1200px main extent) and flush at the view's lead
+    // edge, so the outside-lead placement lands at -600 and the half-in clamp
+    // pulls it back to -300. Both fixture facts are asserted first, so a
+    // fixture drift reads as a fixture failure and not as a clamp one.
+    QCOMPARE(Ax::mainPos(rectB), 0);
+    QCOMPARE(Ax::mainLen(openSlot), 600);
+    QCOMPARE(Ax::mainPos(openSlot), -300);
+    QCOMPARE(Ax::crossLen(openSlot), Ax::crossLen(rectB));
     // Width pinned CONCRETELY, not just non-zero: both windows open at the
     // default column width, so the opening slot is exactly b's width. A
     // regression handing back the whole work area would satisfy `> 0`.
-    QCOMPARE(openSlot.width(), rectB.width());
+    QCOMPARE(Ax::mainLen(openSlot), Ax::mainLen(rectB));
 
     // Another screen never borrows this screen's indicator. Asserted AFTER a
     // target exists: before one, the no-target early return fires first and
     // this would pass even with the screen guard deleted.
     QVERIFY(engine->dragInsertIndicatorRect(QStringLiteral("S2")).isNull());
 
-    // Join b's column as a second tile: same width, half the height, and
-    // the lower half for the below-b slot.
+    // Join b's column as a second tile: same main extent, half the cross one,
+    // and the cross-TRAIL half for the after-b slot.
     DragTarget join;
     join.primary = 0;
     join.secondary = 1;
     engine->updateDragInsertPreview(join);
     const QRect joinSlot = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(joinSlot.isValid());
-    QCOMPARE(joinSlot.width(), rectB.width());
-    QCOMPARE(joinSlot.height(), rectB.height() / 2);
-    QCOMPARE(joinSlot.y(), rectB.y() + rectB.height() / 2);
-    // ...and the above-b slot is the upper half of the same column.
+    QCOMPARE(Ax::mainLen(joinSlot), Ax::mainLen(rectB));
+    QCOMPARE(Ax::crossLen(joinSlot), Ax::crossLen(rectB) / 2);
+    QCOMPARE(Ax::crossPos(joinSlot), Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2);
+    // ...and the before-b slot is the cross-LEAD half of the same column.
     join.secondary = 0;
     engine->updateDragInsertPreview(join);
     const QRect upper = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
-    QCOMPARE(upper.y(), rectB.y());
-    QCOMPARE(upper.height(), rectB.height() / 2);
+    QCOMPARE(Ax::crossPos(upper), Ax::crossPos(rectB));
+    QCOMPARE(Ax::crossLen(upper), Ax::crossLen(rectB) / 2);
 
     // A join with NO secondary takes the append-at-the-end default rather
     // than clamping to tile 0. With b alone in the column, appending puts the
-    // window BELOW it, so this must land on the lower half — the same rect as
-    // secondary=1 and the opposite of the secondary=0 upper half above.
+    // window PAST it across the column, so this lands on the cross-TRAIL half
+    // — the same rect as secondary=1, the opposite of secondary=0's above.
     join.secondary = -1;
     engine->updateDragInsertPreview(join);
     const QRect appended = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
@@ -696,16 +717,17 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
 
     // A new column PAST the last one: the primary index is beyond the strip,
     // and the insert clamps to the end rather than refusing. The rect lands
-    // to the right of b's column, which is the arm a cursor dragged off the
-    // right edge of the strip reaches.
+    // TRAILWARD of b's column, which is the arm a cursor dragged off the
+    // trail end of the strip reaches.
     DragTarget pastEnd;
     pastEnd.primary = 99;
     pastEnd.newSlot = true;
     engine->updateDragInsertPreview(pastEnd);
     const QRect tail = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(tail.isValid());
-    QVERIFY2(tail.x() > rectB.x(), "a past-the-end new column must open to the RIGHT of the last one");
-    QCOMPARE(tail.height(), rectB.height());
+    QVERIFY2(Ax::mainPos(tail) > Ax::mainPos(rectB),
+             "a past-the-end new column must open PAST the last one along the strip");
+    QCOMPARE(Ax::crossLen(tail), Ax::crossLen(rectB));
 
     // The indicator dies with the preview.
     engine->cancelDragInsertPreview();
@@ -729,9 +751,8 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropUnderAGap()
 
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("a"), QStringLiteral("S1")));
 
-    // Join the column holding b, below it — the arm where the gap term and the
-    // per-tile height distribution both bite.
-    //
+    // Join b's column on its TRAIL side ACROSS the column, the arm where the
+    // gap term and the per-tile cross distribution both bite.
     // Driven by HIT TEST, not a hand-built target, because that is the only
     // way production sets one and it is what makes the equivalence below
     // meaningful. The indicator resolves the slot in the LIVE view, so a
@@ -741,8 +762,9 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropUnderAGap()
     const auto visible = engine->visibleTiles(QStringLiteral("S1"));
     QVERIFY(!visible.isEmpty());
     const QRect host = visible.first().rect;
-    const DragTarget join = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(host.center().x(), host.bottom() - host.height() / 4));
+    // Ax::pointIn, like every other hit-test probe here: an untransposed
+    // physical point lands on the tile's cross MIDPOINT on the vertical arm.
+    const DragTarget join = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(host, 0.5, 0.75));
     QVERIFY(!join.newSlot);
     engine->updateDragInsertPreview(join);
 
@@ -765,10 +787,10 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropUnderAGap()
 void TestScrollEngineDragInsert::indicatorRectMatchesTheDropForANewColumn()
 {
     // The new-column arm of the same equivalence, under a gap. Catches the
-    // column-width resolution (including the min-width floor) and the vertical
+    // main-axis width resolution (including the min-width floor) and the CROSS
     // extent, which used to come from the FULL column rect rather than the
-    // tile's — taller than the tiles beside it whenever the tab indicator
-    // reserves a band inside the column.
+    // tile's — longer across the strip than the tiles beside it whenever the
+    // tab indicator reserves a band inside the column.
     QObject owner;
     ScrollEngine* engine = makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
@@ -787,12 +809,8 @@ void TestScrollEngineDragInsert::indicatorRectMatchesTheDropForANewColumn()
     const QRect delivered = tileRect(engine, QStringLiteral("S1"), QStringLiteral("a"));
     QVERIFY(!delivered.isNull());
 
-    // SIZE, not position. The indicator resolves the slot in the LIVE view
-    // while the commit re-anchors, so the two disagree on x by whatever the
-    // drop scrolls — a view-policy difference, not a layout one. The size is
-    // what the gap term and the per-tile height distribution govern, and it is
-    // what this test was written to pin: a dropped gap term or a mis-shared
-    // column height changes it immediately.
+    // SIZE, not position, for the reason spelled out in
+    // indicatorRectMatchesTheDropUnderAGap above.
     QCOMPARE(promised.size(), delivered.size());
 }
 
@@ -802,32 +820,31 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     // face a full viewport (detach-once frees its column's width), so the
     // fixture drags a FRESH window — the cross-screen / floating shape —
     // onto a strip whose two 600px columns exactly fill the 1200px view.
-    // The after-the-last slot then resolves at x=1200, entirely off screen,
+    // The after-the-last slot then resolves at main 1200, entirely off screen,
     // where the per-screen overlay would clip the indicator away; the clamp
-    // pins it half-in at the right edge instead. Deleting the clamp fails
-    // the first QCOMPARE with left()==1200.
+    // pins it half-in at the TRAIL edge instead. Deleting the clamp fails the
+    // first QCOMPARE with a main position of 1200.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
 
-    const QRect wa = ScrollTestUtils::defaultScreenRect();
+    const QRect screen = ScrollTestUtils::defaultScreenRect();
 
-    // Right-outer slot (after the last column): clamped to exactly half-in
-    // at the right edge instead of resolving at x=1200.
+    // TRAIL-outer slot (after the last column): clamped to exactly half-in
+    // at the trail edge instead of resolving at main 1200.
     DragTarget rightOuter;
     rightOuter.primary = 2;
     rightOuter.newSlot = true;
     engine->updateDragInsertPreview(rightOuter);
     const QRect right = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(right.isValid());
-    QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
-    QCOMPARE(right.intersected(wa).width(), right.width() / 2);
+    QCOMPARE(Ax::mainPos(right), Ax::mainPos(screen) + Ax::mainLen(screen) - Ax::mainLen(right) / 2);
+    QCOMPARE(Ax::mainLen(right.intersected(screen)), Ax::mainLen(right) / 2);
 
-    // Before-the-first slot aimed from the leading edge: placed just
-    // outside the first column, which on a full strip is past the LEFT
-    // screen edge — clamped to half-in there, mirroring the right side
-    // exactly.
+    // Before-the-first slot aimed from the leading edge: placed just outside
+    // the first column, which on a full strip is past the LEAD screen edge —
+    // clamped to half-in there, mirroring the trail side exactly.
     DragTarget leftOuter;
     leftOuter.primary = 0;
     leftOuter.newSlot = true;
@@ -835,8 +852,8 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     engine->updateDragInsertPreview(leftOuter);
     const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(left.isValid());
-    QCOMPARE(left.left(), wa.left() - left.width() / 2);
-    QCOMPARE(left.intersected(wa).width(), left.width() - left.width() / 2);
+    QCOMPARE(Ax::mainPos(left), Ax::mainPos(screen) - Ax::mainLen(left) / 2);
+    QCOMPARE(Ax::mainLen(left.intersected(screen)), Ax::mainLen(left) - Ax::mainLen(left) / 2);
 
     // Control: a slot between the two visible columns is on screen and
     // untouched.
@@ -846,50 +863,50 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     engine->updateDragInsertPreview(between);
     const QRect mid = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(mid.isValid());
-    QCOMPARE(mid.intersected(wa), mid);
+    QCOMPARE(mid.intersected(screen), mid);
 
     engine->cancelDragInsertPreview();
 }
 
 void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
 {
-    // The common scrolled shape: three 600px columns, view on the last two
-    // (b left, c right), column a off screen to the LEFT. Walking the view
-    // must be mirror-symmetric: b's left band is the leading past-the-edge
-    // hint, b's right band covers B at full size (new column at b's spot),
-    // c's left band covers C at full size, and c's right band is the
+    // The common scrolled shape: three 600px columns, view on the last two (b
+    // leadward, c trailward), column a off screen past the LEAD end. Walking
+    // the view must be mirror-symmetric: b's lead band is the leading
+    // past-the-edge hint, b's trail band covers B at full size (new column at
+    // b's spot), c's lead band covers C at full size, and c's trail band is the
     // trailing past-the-edge hint. Before the leadingEdge tag and the
-    // right-band remap, b's left band painted a full rect over b while the
-    // right edge showed the band, and b's right band lit the rect over c
-    // from inside b — the imbalances this test exists to pin.
+    // trail-band remap, b's lead band painted a full rect over b while the trail
+    // edge showed the band, and b's trail band lit the rect over c from inside
+    // b — the imbalances this test exists to pin.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
     // Focus-new-windows left c focused: the view shows b and c, a is parked.
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
 
-    const QRect wa = ScrollTestUtils::defaultScreenRect();
+    const QRect screen = ScrollTestUtils::defaultScreenRect();
     const QRect rectB = tileRect(engine, QStringLiteral("S1"), QStringLiteral("b"));
     const QRect rectC = tileRect(engine, QStringLiteral("S1"), QStringLiteral("c"));
     QVERIFY(!rectB.isNull());
     QVERIFY(!rectC.isNull());
 
-    // b's LEFT band: the leading slot, tagged — half-in at the left edge.
-    const DragTarget beforeVisible =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.left() + 4, rectB.center().y()));
+    // b's LEAD band: the leading slot, tagged — half-in at the lead edge.
+    const DragTarget beforeVisible = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainPos(rectB) + 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(beforeVisible.primary, 1);
     QVERIFY(beforeVisible.newSlot);
     QVERIFY(beforeVisible.leadingEdge);
     engine->updateDragInsertPreview(beforeVisible);
     const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(left.isValid());
-    QCOMPARE(left.left(), wa.left() - left.width() / 2);
-    QCOMPARE(left.intersected(wa).width(), left.width() - left.width() / 2);
+    QCOMPARE(Ax::mainPos(left), Ax::mainPos(screen) - Ax::mainLen(left) / 2);
+    QCOMPARE(Ax::mainLen(left.intersected(screen)), Ax::mainLen(left) - Ax::mainLen(left) / 2);
 
-    // b's RIGHT band: the SAME leading slot aimed from inside — full rect
-    // over b itself (the mirror of c's left band covering c).
-    const DragTarget bInner =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() - 4, rectB.center().y()));
+    // b's TRAIL band: the SAME leading slot aimed from inside — full rect over
+    // b itself (the mirror of c's lead band covering c).
+    const DragTarget bInner = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectB) - 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(bInner.primary, 1);
     QVERIFY(bInner.newSlot);
     QVERIFY(!bInner.leadingEdge);
@@ -897,9 +914,9 @@ void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
     const QRect overB = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QCOMPARE(overB, rectB);
 
-    // c's LEFT band: the between slot — full rect over c.
-    const DragTarget cInner =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectC.left() + 4, rectC.center().y()));
+    // c's LEAD band: the between slot — full rect over c.
+    const DragTarget cInner = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainPos(rectC) + 4, Ax::crossPos(rectC) + Ax::crossLen(rectC) / 2));
     QCOMPARE(cInner.primary, 2);
     QVERIFY(cInner.newSlot);
     QVERIFY(!cInner.leadingEdge);
@@ -907,16 +924,16 @@ void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
     const QRect overC = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QCOMPARE(overC, rectC);
 
-    // c's RIGHT band: the trailing append — half-in at the right edge.
-    const DragTarget afterLast =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectC.right() - 4, rectC.center().y()));
+    // c's TRAIL band: the trailing append — half-in at the trail edge.
+    const DragTarget afterLast = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectC) - 4, Ax::crossPos(rectC) + Ax::crossLen(rectC) / 2));
     QCOMPARE(afterLast.primary, 3);
     QVERIFY(afterLast.newSlot);
     engine->updateDragInsertPreview(afterLast);
     const QRect right = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(right.isValid());
-    QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
-    QCOMPARE(right.intersected(wa).width(), right.width() / 2);
+    QCOMPARE(Ax::mainPos(right), Ax::mainPos(screen) + Ax::mainLen(screen) - Ax::mainLen(right) / 2);
+    QCOMPARE(Ax::mainLen(right.intersected(screen)), Ax::mainLen(right) / 2);
 
     engine->cancelDragInsertPreview();
 }
@@ -988,7 +1005,9 @@ void TestScrollEngineDragInsert::interactiveDragMarkSuppressesEmitAndReconcile()
     // rect (Fixed pixels) and scheduled another fighting retile.
     const ColumnWidth widthBefore =
         state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("a"))).width;
-    engine->onWindowResized(QStringLiteral("a"), QRect(0, 0, 595, 800), QRect(400, 300, 300, 200),
+    // Both rects transposed: a landscape slot rect against a portrait strip is
+    // a shape the compositor never sends.
+    engine->onWindowResized(QStringLiteral("a"), Ax::t(QRect(0, 0, 595, 800)), Ax::t(QRect(400, 300, 300, 200)),
                             QStringLiteral("S1"));
     const ColumnWidth widthAfter =
         state->strip().columns().at(state->strip().columnOfWindow(QStringLiteral("a"))).width;
@@ -1275,7 +1294,8 @@ void TestScrollEngineDragInsert::edgeAutoScrollKeepsTheTargetAtTheEdge()
     // each boundary crossed the cursor.
     const QRect first = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(first.isValid());
-    QCOMPARE(first.left(), wa.left() - first.width() / 2);
+    QCOMPARE(ScrollTestUtils::Ax::mainPos(first),
+             ScrollTestUtils::Ax::mainPos(wa) - ScrollTestUtils::Ax::mainLen(first) / 2);
     bool sawMotion = false;
     for (int i = 0; i < 20; ++i) {
         tick(engine, 2);
@@ -1283,8 +1303,9 @@ void TestScrollEngineDragInsert::edgeAutoScrollKeepsTheTargetAtTheEdge()
         sawMotion = sawMotion || now != last;
         last = now;
         const QRect rect = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
-        QCOMPARE(rect.height(), first.height());
-        QCOMPARE(rect.left(), wa.left() - rect.width() / 2);
+        QCOMPARE(ScrollTestUtils::Ax::crossLen(rect), ScrollTestUtils::Ax::crossLen(first));
+        QCOMPARE(ScrollTestUtils::Ax::mainPos(rect),
+                 ScrollTestUtils::Ax::mainPos(wa) - ScrollTestUtils::Ax::mainLen(rect) / 2);
     }
     QVERIFY(sawMotion);
 
@@ -1296,7 +1317,7 @@ void TestScrollEngineDragInsert::edgeAutoScrollStampsItsBatchesImmediate()
     // A batch the auto-scroll heartbeat produces is user-driven continuous
     // motion: the effect must apply its view delta outright rather than
     // animate it (a leg retargeted every 16 ms never progresses on a
-    // stateless curve). The engine says so per entry, beside viewDeltaX, and
+    // stateless curve). The engine says so per entry, beside viewDelta, and
     // ONLY while the scroll owns the target — an ordinary verb's batch after
     // the drag must not carry the flag, or every discrete scroll loses its
     // animation.
@@ -1316,7 +1337,7 @@ void TestScrollEngineDragInsert::edgeAutoScrollStampsItsBatchesImmediate()
     const QJsonArray scrolled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     for (const QJsonValue& v : scrolled) {
         const QJsonObject o = v.toObject();
-        if (!o.contains(QLatin1String("viewDeltaX"))) {
+        if (!o.contains(QLatin1String("viewDelta"))) {
             QVERIFY2(!o.contains(QLatin1String("viewImmediate")),
                      "viewImmediate is meaningless without a view delta to apply");
             continue;
@@ -1387,7 +1408,7 @@ void TestScrollEngineDragInsert::edgeAutoScrollAccumulatesSubPixelSpeed()
     // asks for well under a pixel. The view anchor is integer pixels, so
     // without the carried remainder the shallow end of the band would be
     // dead however long the user held there.
-    const int shallow = ScrollTestUtils::defaultScreenRect().left() + kTriggerWidth - 1;
+    const int shallow = ScrollTestUtils::Ax::mainPos(ScrollTestUtils::defaultScreenRect()) + kTriggerWidth - 1;
     const int start = armBand(engine, shallow);
     int moved = 0;
     for (int i = 0; i < 12 && moved == 0; ++i) {
@@ -1437,7 +1458,9 @@ void TestScrollEngineDragInsert::edgeAutoScrollDisarmsOutsideTheBand()
     // back to the cursor, and that needs redrawing — so what is pinned here
     // is the ownership release and the view standing still, not the boolean.
     const int settled = viewX(engine, QStringLiteral("S1"));
-    tick(engine, ScrollTestUtils::defaultScreenRect().center().x());
+    tick(engine,
+         ScrollTestUtils::Ax::mainPos(ScrollTestUtils::defaultScreenRect())
+             + ScrollTestUtils::Ax::mainLen(ScrollTestUtils::defaultScreenRect()) / 2);
     QVERIFY(!engine->dragAutoScrollActive());
     QCOMPARE(viewX(engine, QStringLiteral("S1")), settled);
 
@@ -1475,7 +1498,8 @@ void TestScrollEngineDragInsert::edgeAutoScrollRepairsTheTargetOnLeavingTheBand(
     // as both the painted indicator and the thing a release commits — a drop
     // at the far end of the strip instead of under the cursor. The tick
     // returns true precisely because the indicator has to be repainted.
-    const int middle = ScrollTestUtils::defaultScreenRect().center().x();
+    const int middle = ScrollTestUtils::Ax::mainPos(ScrollTestUtils::defaultScreenRect())
+        + ScrollTestUtils::Ax::mainLen(ScrollTestUtils::defaultScreenRect()) / 2;
     QVERIFY(tick(engine, middle));
     QVERIFY(!engine->dragAutoScrollActive());
     const QRect repaired = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
@@ -1484,7 +1508,8 @@ void TestScrollEngineDragInsert::edgeAutoScrollRepairsTheTargetOnLeavingTheBand(
     // And the stored target is the one an ordinary hit-test answers at that
     // point, not merely some other valid target. dragInsertIndicatorRect
     // reads the STORED target, so this needs the hit-test run separately.
-    const auto expected = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(middle, 300));
+    const auto expected =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), ScrollTestUtils::Ax::point(middle, 300));
     QVERIFY(expected.isValid());
     engine->updateDragInsertPreview(expected);
     QCOMPARE(engine->dragInsertIndicatorRect(QStringLiteral("S1")), repaired);
@@ -1523,8 +1548,8 @@ void TestScrollEngineDragInsert::edgeAutoScrollRightBandMirrorsTheLeft()
     // Mirror of the leading band's half-in clamp, at the other edge. Against
     // the EXCLUSIVE right edge (left + width), not QRect::right(), which is
     // the last contained pixel and would be one short.
-    const int waRightEdge = wa.left() + wa.width();
-    QCOMPARE(first.left(), waRightEdge - first.width() / 2);
+    const int waTrailEdge = ScrollTestUtils::Ax::mainPos(wa) + ScrollTestUtils::Ax::mainLen(wa);
+    QCOMPARE(ScrollTestUtils::Ax::mainPos(first), waTrailEdge - ScrollTestUtils::Ax::mainLen(first) / 2);
     bool sawMotion = false;
     for (int i = 0; i < 20; ++i) {
         tick(engine, rightBandX());
@@ -1534,8 +1559,8 @@ void TestScrollEngineDragInsert::edgeAutoScrollRightBandMirrorsTheLeft()
         QVERIFY(now >= last);
         last = now;
         const QRect rect = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
-        QCOMPARE(rect.height(), first.height());
-        QCOMPARE(rect.left(), waRightEdge - rect.width() / 2);
+        QCOMPARE(ScrollTestUtils::Ax::crossLen(rect), ScrollTestUtils::Ax::crossLen(first));
+        QCOMPARE(ScrollTestUtils::Ax::mainPos(rect), waTrailEdge - ScrollTestUtils::Ax::mainLen(rect) / 2);
     }
     QVERIFY(sawMotion);
 

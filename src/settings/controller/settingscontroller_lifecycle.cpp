@@ -20,9 +20,6 @@
 //   * defaults()  — restore factory defaults, stage the daemon-backed
 //                   clears the config reset cannot cover, and recompute
 //                   the dirty set.
-//   * launchEditor() — fork the zone editor process.
-//   * onSettingsPropertyChanged / onExternalSettingsChanged — the
-//     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
 // Same class as settingscontroller.cpp, separate TU, no API change.
 
@@ -32,14 +29,17 @@
 #include "settingscontroller_pagekeys.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
+// Directly, not through the chain: the save() path below calls contains() on
+// the store, which needs the complete type. LayoutRegistry.h (reached via
+// settingscontroller.h) only forward-declares it, and no header in the tree
+// includes this one, so without this line the TU compiles only when a unity
+// batch happens to pair it with a sibling that does.
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include "core/platform/logging.h"
-#include "core/types/constants.h"
 
-#include <QCoreApplication>
-#include <QFileInfo>
-#include <QProcess>
-#include <QProcessEnvironment>
+#include <QScopeGuard>
+#include <QStringList>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -131,48 +131,87 @@ void SettingsController::load()
 void SettingsController::save()
 {
     m_saving = true;
+    // Released on EVERY exit — normal or exceptional — and still deferred by
+    // one event-loop turn (see the comment on the deferral below; the guard
+    // posts the reset rather than performing it). save() raises a suppression
+    // flag and then runs code that can throw (the config write, five D-Bus
+    // round trips, allocations); a stranded m_saving = true makes
+    // onExternalSettingsChanged drop every later daemon broadcast for the
+    // rest of the session and savingFinished never fire, which is the exact
+    // hazard defaults() guards its m_loading against with ScopedFlag. A plain
+    // ScopedFlag will not do here because the reset must stay deferred.
+    const auto savingRelease = qScopeGuard([this]() {
+        QTimer::singleShot(0, this, [this]() {
+            m_saving = false;
+            // Now that m_saving has drained, downstream consumers
+            // (SettingsStagingDomain in particular) can release any
+            // in-flight guards and emit their applyResult signals
+            // without racing this controller's deferred state reset.
+            Q_EMIT savingFinished();
+        });
+    });
 
-    // Flush staged ordering to settings before persisting; emit the
-    // transitioned-to-empty NOTIFY signals after the writes so QML
-    // bindings tracking the staged state see the persisted-clean
-    // transition (load()/defaults() emit symmetrically — save() was
-    // the asymmetric outlier).
+    // Flush staged ordering INTO Settings, but do not consume the staging yet.
+    // The write has to happen before Settings::save(), because save() is what
+    // persists m_settings, so there is no way to defer it past the outcome.
+    // Consuming the optionals here as well is what made a failed write
+    // invisible: the ordering pages' dirty check is
+    // `staged.has_value() && *staged != m_settings.xxxOrder()`, and this write
+    // makes the two sides EQUAL, so clearing the optional too left the page
+    // reading clean with the reorder unpersisted. The reset, the NOTIFY emits
+    // and the rollback all live at the end of save() now, keyed on whether the
+    // disk write actually landed.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
     const bool hadStagedScroll = m_stagedScrollingOrder.has_value();
+    // Captured for the rollback: the values Settings held BEFORE this save
+    // overwrote them. Only meaningful for the slots that were actually staged.
+    const QStringList prevSnappingOrder = hadStagedSnap ? m_settings.snappingLayoutOrder() : QStringList();
+    const QStringList prevTilingOrder = hadStagedTile ? m_settings.tilingAlgorithmOrder() : QStringList();
+    const QStringList prevScrollingOrder = hadStagedScroll ? m_settings.scrollingTemplateOrder() : QStringList();
     if (hadStagedSnap) {
         m_settings.setSnappingLayoutOrder(*m_stagedSnappingOrder);
-        m_stagedSnappingOrder.reset();
     }
     if (hadStagedTile) {
         m_settings.setTilingAlgorithmOrder(*m_stagedTilingOrder);
-        m_stagedTilingOrder.reset();
     }
     if (hadStagedScroll) {
         m_settings.setScrollingTemplateOrder(*m_stagedScrollingOrder);
-        m_stagedScrollingOrder.reset();
     }
-    if (hadStagedSnap)
-        Q_EMIT stagedSnappingOrderChanged();
-    if (hadStagedTile)
-        Q_EMIT stagedTilingOrderChanged();
-    if (hadStagedScroll)
-        Q_EMIT stagedScrollingOrderChanged();
 
     // Persistence phase (pre-save): staged VS configs need to be in Settings
     // before the save flushes to disk. Quick-layout slots (all three modes) are
     // daemon-backed now and flush via D-Bus after notifyReload, below.
-    m_staging.flushVirtualScreensToSettings(m_settings);
+    // Verdict gated like the D-Bus flushes below: a staged split whose defs
+    // all failed validation is skipped rather than written, and the badge has
+    // to stay lit so the user knows the edit did not persist.
+    const bool virtualScreensPersisted = m_staging.flushVirtualScreensToSettings(m_settings);
 
-    // Save main settings (includes editor settings + VS configs persisted above)
-    m_settings.save();
+    // Save main settings (includes editor settings + VS configs persisted
+    // above). The verdict feeds the same commitOk gate as the D-Bus flushes:
+    // Settings::save() deliberately leaves the committed baseline UNMOVED on
+    // a failed disk write so the values stay discardable and the next save
+    // retries — taking the clean transition anyway made the footer report a
+    // save that never landed while the manifest pages' value-based dirty
+    // still read staged against the unmoved baseline.
+    bool commitOk = virtualScreensPersisted;
+    // Kept as its own verdict, separate from the aggregate: the ordering
+    // staging below depends on whether the FILE was written, and nothing else.
+    // A later D-Bus flush failing does not un-persist an order that reached
+    // disk, so rolling the order back on the aggregate would strand memory
+    // disagreeing with a file that is already correct.
+    const bool configWritten = m_settings.save();
+    if (!configWritten) {
+        qCWarning(lcConfig) << "save: writing the config file failed — baseline unmoved, values stay staged";
+        commitOk = false;
+    }
 
     // save() re-captured the committed baseline, so the animation controller's
     // value-based shader-tree dirty check must re-evaluate: apply() (commitPending)
     // may have run earlier in the domain walk, while the tree still read
     // "divergent" against the not-yet-recaptured baseline. This is a no-op flip
     // guard away from free when nothing changed.
-    if (m_animationsPage != nullptr)
+    if (m_animationsPage)
         m_animationsPage->refreshDirtyState();
 
     // RuleController and AnimationsPageController are registered
@@ -201,7 +240,6 @@ void SettingsController::save()
     // the edits. Transport-level only: a daemon-side rejection inside a void
     // adaptor slot (e.g. setQuickLayoutSlot ignoring an out-of-range slot)
     // still replies successfully and is not caught here.
-    bool commitOk = true;
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
@@ -231,8 +269,41 @@ void SettingsController::save()
                 << "— skipping flush+apply to avoid per-assignment writes the batch was meant to coalesce";
             commitOk = false;
         } else {
-            if (!m_staging.flushAssignmentsToDaemon()) {
+            // The local store is the settings app's own view of the template
+            // set, kept in step with the Layouts page, so it answers this
+            // without a round trip. See the parameter's doc for why a
+            // pre-check is needed at all: the daemon's setter refuses an
+            // unknown template with a successful-looking reply.
+            const auto templateStillExists = [this](const QString& templateId) {
+                if (!m_localTemplateStore) {
+                    return true;
+                }
+                return m_localTemplateStore->contains(QUuid::fromString(templateId));
+            };
+            // StagingService is not a QObject, so a refusal cannot raise its
+            // own signal — it hands the ids back and this owns telling the
+            // user. Without a message the only trace would be the re-lit badge
+            // below, and the pick is gone from the staging map by design (the
+            // template was deleted, so retrying it could never succeed).
+            QStringList refusedTemplates;
+            if (!m_staging.flushAssignmentsToDaemon(templateStillExists, &refusedTemplates)) {
                 commitOk = false;
+            }
+            if (!refusedTemplates.isEmpty()) {
+                // The id is a UUID of a template that no longer exists, so
+                // there is no name left to resolve and printing the raw id
+                // would tell the user nothing. Say what happened and what to
+                // do instead. Split at one because with no translator loaded
+                // tr() returns the one source string verbatim, so its
+                // grammatical number is fixed whatever n is; a single source
+                // would read "1 scrolling templates ... have" at n == 1.
+                Q_EMIT layoutOperationFailed(
+                    refusedTemplates.size() == 1
+                        ? PhosphorI18n::tr("A scrolling template you picked has been deleted, so that monitor kept "
+                                           "its previous template. Pick one again on the Monitors page.")
+                        : PhosphorI18n::tr("%n scrolling templates you picked have been deleted, so those monitors "
+                                           "kept their previous templates. Pick them again on the Monitors page.",
+                                           nullptr, static_cast<int>(refusedTemplates.size())));
             }
             QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                         QStringLiteral("applyAssignmentChanges"));
@@ -252,6 +323,50 @@ void SettingsController::save()
                 qCWarning(lcCore) << "save: setSaveBatchMode(false) failed:" << batchOff.errorMessage();
                 commitOk = false;
             }
+        }
+    }
+
+    // Settle the ordering staging now that the disk verdict is known.
+    //
+    // Written: consume the optionals and announce the transition, which is the
+    // clean state the pages read as "nothing staged, Settings holds it".
+    //
+    // Not written: roll Settings back to what it held before and KEEP the
+    // optionals. That combination is what makes the pages honest — the dirty
+    // check compares the staged list against the Settings list, so the two
+    // have to differ again for the reorder to still register as unsaved. No
+    // NOTIFY fires on this path because nothing transitioned; the staged value
+    // the QML reads through effectiveSnappingOrder() is the same one it read
+    // before the save, so the user's order stays on screen.
+    //
+    // The rollback's own NOTIFY is swallowed by onSettingsPropertyChanged's
+    // m_saving guard, which is still raised here, so it cannot re-dirty a page
+    // behind the recompute below.
+    if (configWritten) {
+        if (hadStagedSnap) {
+            m_stagedSnappingOrder.reset();
+        }
+        if (hadStagedTile) {
+            m_stagedTilingOrder.reset();
+        }
+        if (hadStagedScroll) {
+            m_stagedScrollingOrder.reset();
+        }
+        if (hadStagedSnap)
+            Q_EMIT stagedSnappingOrderChanged();
+        if (hadStagedTile)
+            Q_EMIT stagedTilingOrderChanged();
+        if (hadStagedScroll)
+            Q_EMIT stagedScrollingOrderChanged();
+    } else {
+        if (hadStagedSnap) {
+            m_settings.setSnappingLayoutOrder(prevSnappingOrder);
+        }
+        if (hadStagedTile) {
+            m_settings.setTilingAlgorithmOrder(prevTilingOrder);
+        }
+        if (hadStagedScroll) {
+            m_settings.setScrollingTemplateOrder(prevScrollingOrder);
         }
     }
 
@@ -299,14 +414,9 @@ void SettingsController::save()
         ExternalEditScope scope(*this, QStringLiteral("overview"));
         setNeedsSave(true);
     }
-    QTimer::singleShot(0, this, [this]() {
-        m_saving = false;
-        // Now that m_saving has drained, downstream consumers
-        // (SettingsStagingDomain in particular) can release any
-        // in-flight guards and emit their applyResult signals
-        // without racing this controller's deferred state reset.
-        Q_EMIT savingFinished();
-    });
+    // The deferred m_saving release and savingFinished emit ride the scope
+    // guard declared at the top of this function, so an exception anywhere
+    // above releases them the same way this return does.
 }
 
 void SettingsController::defaults()
@@ -433,6 +543,20 @@ void SettingsController::defaults()
         m_rulesPage->revert();
     }
 
+    // Drop a staged profile activation the same way the rules staging is
+    // dropped. The pointer half of an activation lives in
+    // ProfilePageController (staged vs committed active id), OUTSIDE the
+    // config store this reset just rewrote — its config half died with the
+    // baseline re-capture, but the pointer would survive as a dirty staging
+    // domain and the next Save would commit "profile X is active" over a
+    // factory configuration that no longer matches it. discard() reverts the
+    // staged pointer to the committed one; whether a factory reset should
+    // also clear the COMMITTED pointer is a different question this
+    // deliberately does not answer.
+    if (m_profilesPage) {
+        m_profilesPage->discard();
+    }
+
     // A factory reset is APPLIED, not staged: m_settings.reset() wrote the
     // cleared configuration to disk and reloaded from it, and the daemon has
     // been notified. So the config pages are clean, and the blanket "mark every
@@ -471,40 +595,6 @@ void SettingsController::defaults()
         // Through the wrapper (not a bare emit) so this path honours the
         // DirtyEmitScope coalescing like every other membership change.
         emitDirtyPagesChanged();
-    }
-}
-
-void SettingsController::launchEditor()
-{
-    // Prefer the editor next to our own executable (handles
-    // build-tree runs + non-PATH installs); fall back to a PATH
-    // lookup if not present. Logs the failure so a missing/broken
-    // editor doesn't silently produce a no-op click in the UI.
-    const QString colocated = QCoreApplication::applicationDirPath() + QLatin1String("/plasmazones-editor");
-    QString program = QFileInfo::exists(colocated) ? colocated : QStringLiteral("plasmazones-editor");
-    // Same GPU-var scrub contract as every spawn site in a GPU-exporting
-    // binary (see PGpuExportedVarsProperty in core/types/constants.h; the
-    // systemsettings-hosted KCM launcher exports nothing and stays on the
-    // plain static call). The settings
-    // app exports no GPU variables itself, so both properties are unset here
-    // and this is a no-op today — applied anyway so the spawn contract stays
-    // uniform rather than depending on the unstated who-exports-what chain.
-    QProcess process;
-    process.setProgram(program);
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    if (QCoreApplication::instance()) {
-        const QStringList gpuVars = QCoreApplication::instance()->property(PGpuExportedVarsProperty).toStringList();
-        for (const QString& var : gpuVars) {
-            env.remove(var);
-        }
-        const QVariantMap cleared = QCoreApplication::instance()->property(PGpuClearedVarsProperty).toMap();
-        for (auto it = cleared.constBegin(); it != cleared.constEnd(); ++it) {
-            env.insert(it.key(), it.value().toString());
-        }
-    }
-    process.setProcessEnvironment(env);
-    if (!process.startDetached()) {
-        qCWarning(lcCore) << "launchEditor: failed to start" << program << "— editor binary missing or not executable?";
     }
 }
 

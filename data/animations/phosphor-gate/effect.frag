@@ -6,7 +6,9 @@
 // at the arrival edge (content materializes through the family's navy
 // silhouette behind a cyan gradient rim, fed by ember sparks) and a
 // de-energize gate at the departure edge (peek's multiplicative drain into
-// the silhouette, leaving a rose afterglow). The gates never move;
+// the silhouette, leaving a rose afterglow). The two edges are the ones the
+// strip travels BETWEEN, which is iStripAxis and not x: left and right on a
+// horizontal strip, top and bottom on a vertical one. The gates never move;
 // the CONTENT moves through them, which is the family's causality without a
 // progress variable: a column crossing the edge is what gets energized. The
 // middle of the screen is bit-exact identity, so the region the user is
@@ -63,7 +65,7 @@ vec3 fluxGradient(float t) {
 // q = 1.2 — that factor is the bit-exact-identity guarantee for the middle
 // of the screen.
 vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P, float glow, float dimK,
-               float sparkle, float timeSec, float uvY) {
+               float sparkle, float timeSec, float uvAcross) {
     float kill = 1.0 - smoothstep(1.0, 1.2, q);
     if (kill <= 0.0) {
         return col;
@@ -87,7 +89,8 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     // ── Departure: de-energize with a rose afterglow ──
     // Peek's multiplicative drain, strongest where content is about to
     // leave, sinking the last sliver into the silhouette; scan's trailing
-    // glow rotated to X carries rose at the edge grading into purple inward.
+    // glow rotated onto the travel axis carries rose at the edge grading into
+    // purple inward.
     // The trail length is measured in FIELD units (the same q the kill
     // uses), not in absolute screen distance: the gate is hard-killed at
     // q = 1.2, so an absolute length longer than the field could never be
@@ -104,38 +107,39 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     // The MEANDERED coordinate, like every neighbouring term — the drain
     // width, the silhouette sink and this trail's own colour one line below
     // all read qm, and an intensity profile on raw q sat as a straight
-    // vertical band inside a boundary everything else wavered around. The
+    // band inside a boundary everything else wavered around. The
     // max() floors the slightly-negative excursions the meander can produce.
     float ag = exp(-max(qm, 0.0) / tail) * kill;
     vec3 tailCol = fluxGradient(clamp(1.0 - qm * 0.35, 0.65, 1.0));
     col += tailCol * ag * P * glow * lumW * 0.35;
 
     // ── Ember sparks feeding the arrival gate ──
-    // Condense's comet embers rotated horizontal: one comet per screen row,
-    // drifting inward from the edge on a constant per-row clock (speed
-    // shapes only the AMPLITUDE, never the phase), thickest where the rim
-    // is consuming them (the locality gate).
+    // Condense's comet embers laid ACROSS the travel axis: one comet per band
+    // across the strip, drifting inward from the edge on a constant per-band
+    // clock (speed shapes only the AMPLITUDE, never the phase), thickest where
+    // the rim is consuming them (the locality gate).
     float embers = clamp(p_embers, 0.0, 1.0);
     if (embers > 0.001 && A > 0.01) {
-        float rows = max(p_density, 8.0);
+        float rows = clamp(p_density, 8.0, 60.0);
         // Work-area-relative, the SAME space the gate field itself lives in
-        // (the callers pass stripUv(uv).y): under a top or bottom panel the
-        // p_density rows now span the strip the gates decorate rather than
-        // the whole output, and the grid keeps its phase against the gate.
-        float yRow = uvY * rows;
-        float row = floor(yRow);
-        float within = yRow - row;
-        float seed = niriHash(vec2(row * 7.13 + 0.37, 1.7));
+        // (the callers pass the across-axis component of stripUv(uv)): under a
+        // panel on either across-axis side the p_density bands now span the
+        // strip the gates decorate rather than the whole output, and the grid
+        // keeps its phase against the gate.
+        float bandPos = uvAcross * rows;
+        float band = floor(bandPos);
+        float within = bandPos - band;
+        float seed = niriHash(vec2(band * 7.13 + 0.37, 1.7));
         float ph = fract(seed * 7.0 + timeSec * (0.5 + 0.7 * seed));
         float eq = ph * 1.1; // the comet's own field position, edge → inward
         float dq = qm - eq;
-        // Each comet lives entirely inside its own row: the jittered centre is
-        // held away from the row boundaries and the lateral falloff is
+        // Each comet lives entirely inside its own band: the jittered centre is
+        // held away from the band boundaries and the lateral falloff is
         // windowed to zero AT those boundaries. Without the window a comet
         // whose centre sat near an edge stayed bright right up to it and then
-        // dropped to the neighbouring row's unrelated value, drawing a visible
-        // horizontal seam every row.
-        float cy = 0.35 + 0.30 * niriHash(vec2(row, 9.1));
+        // dropped to the neighbouring band's unrelated value, drawing a visible
+        // seam along every band boundary.
+        float cy = 0.35 + 0.30 * niriHash(vec2(band, 9.1));
         float dy = within - cy;
         float lat = exp(-dy * dy * 10.0) * (1.0 - smoothstep(0.30, 0.5, abs(within - 0.5)));
         float head = exp(-dq * dq * 90.0) * lat;
@@ -154,7 +158,7 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // Smooth monotone amplitude: 0 at settle, saturating toward 1 with
     // speed. No thresholds anywhere, so user-steered scrolling can never
     // flicker the gates.
-    float amp = spd / (spd + max(p_speedRef, 0.05));
+    float amp = spd / (spd + max(p_speedRef, 0.1));
     float D = clamp(p_depth, 0.05, 0.22) * amp;
     if (spd < 1.0e-4 || D < 1.0e-4) {
         return getStripColor(uv); // identity contract: the settle frame is untouched
@@ -163,42 +167,66 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // Smooth signed direction, |dSign| < 1, 0 at the reversal crossing: the
     // roles crossfade instead of flipping on sign().
     float dSign = w / (spd + 0.08);
-    float arrL = clamp(dSign, 0.0, 1.0);  // content travels right → it ARRIVES at the left edge
-    float arrR = clamp(-dSign, 0.0, 1.0); // content travels left → it arrives at the right edge
-    float depL = arrR;
-    float depR = arrL;
+    float arrLo = clamp(dSign, 0.0, 1.0);  // content travels along +axis → it ARRIVES at the low edge
+    float arrHi = clamp(-dSign, 0.0, 1.0); // content travels along -axis → it arrives at the high edge
+    float depLo = arrHi;
+    float depHi = arrLo;
 
     vec4 base = getStripColor(uv); // the ONLY content tap, never displaced
 
-    // The gates sit at the WORK AREA's left and right edges, not the output's.
-    // Under a side panel those differ, and anchoring the field to the output
-    // would light the band where the panel is and truncate it away from where
-    // columns actually enter and leave. The amplitude mask below is work-area
-    // relative for the same reason, so the two now agree.
-    float sxu = stripUv(uv).x;
-    float qL = sxu / D;
-    float qR = (1.0 - sxu) / D;
+    // The gates sit at the WORK AREA's two edges along the travel axis, not
+    // the output's. Under a panel on either of those sides they differ, and
+    // anchoring the field to the output would light the band where the panel
+    // is and truncate it away from where columns actually enter and leave. The
+    // amplitude mask below is work-area relative for the same reason, so the
+    // two now agree.
+    vec2 su = stripUv(uv);
+    vec2 perp = stripAxisPerp();
+    // dot() with the unit axis picks the work-area x horizontally and the
+    // work-area y vertically without a branch.
+    float sAlong = dot(su, iStripAxis);
+    float qLo = sAlong / D;
+    float qHi = (1.0 - sAlong) / D;
     // Outside BOTH gates every term below is multiplied by applyGate's kill,
     // which is exactly zero past q = 1.2 — the middle of the screen is
     // bit-exact identity by construction. Returning here makes that explicit
     // and skips the fbm meander, the sparkle hash and the silhouette for the
     // majority of the screen, which at a typical depth is most fragments.
-    if (qL > 1.2 && qR > 1.2) {
+    if (qLo > 1.2 && qHi > 1.2) {
         return base;
     }
 
     // KNOWN CROSS-AXIS LIMIT, accepted: stripMask measures its feather on the
     // SHORTER output axis (strip_transition.glsl documents the hazard), while
-    // these gates sit on the left/right edges — the long axis on a landscape
-    // output. Near the metadata maximum the feather therefore eats visibly
-    // into a gate's depth instead of only softening its edge. The clamp is
-    // matched to the metadata bound (0.2) rather than the old 0.5, so the
-    // unreachable range no longer suggests headroom that is not there.
+    // these gates follow iStripAxis and so sit on the two edges the strip
+    // travels between — the LONG axis on both orientations, since a portrait
+    // output scrolls along its long side. That keeps the landscape
+    // relationship intact rather than inverting it on rotation. Near the
+    // metadata maximum the feather therefore eats visibly into a gate's depth
+    // instead of only softening its edge, equally on either orientation. The
+    // clamp is matched to the metadata bound (0.2) rather than the old 0.5, so
+    // the unreachable range no longer suggests headroom that is not there.
     float mask = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
+    // Zero-mask fragments are the strut/margin band outside the work area,
+    // where every additive term below carries a factor of A or P (both mask
+    // a) and the embers gate on A — the output is exactly `base` there. Bail
+    // before resolveStops(), the fbm meander and the two applyGate bodies pay
+    // their full per-fragment cost for it; on a full-canvas pass of a
+    // GPU-bound effect that band runs every frame. The three sibling strip
+    // packs already bail on the mask the same way.
+    if (mask < 1.0e-3) {
+        return base;
+    }
     vec3 col = base.rgb;
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
 
     resolveStops();
+    // The unset-probe corollary (see the gradient stops above) bites hardest
+    // HERE: colorTint's declared purpose is the unlit navy silhouette, so a
+    // deliberately near-black pick (under roughly #030303) reads as unset and
+    // snaps back to the default navy. Accepted family-wide limitation — the
+    // uniform cannot distinguish unset from black, and a slot-local threshold
+    // would desync this probe from the four stops sharing the idiom.
     vec3 tint = length(p_colorTint.rgb) > 0.01 ? p_colorTint.rgb : vec3(0.043, 0.090, 0.188);
     // The family silhouette: navy shaped by the content. Deliberately NOT
     // scaled by base.a the way phosphor-iris scales its copy: the strip
@@ -218,16 +246,21 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // One fbm meander shared by both gates: the boundary wavers like a live
     // field, drifting slowly and monotonically (never rewinds). fbm's three
     // octaves sum to 0.875, not 1, so normalise before centring or the
-    // meander sits biased toward one side.
-    float m = (fbm(vec2(uv.y * 3.0 * max(p_grain, 0.2), 0.7 + t * 0.15), 3, 2.0) / 0.875 - 0.5) * 0.35
+    // meander sits biased toward one side. The seed runs ACROSS the gate, so
+    // it follows perp rather than y. RAW uv here, deliberately, not the
+    // work-area su: the horizontal case then keeps the exact noise seed the
+    // meander was tuned with.
+    float across = dot(uv, perp);
+    float m = (fbm(vec2(across * 3.0 * max(p_grain, 0.2), 0.7 + t * 0.15), 3, 2.0) / 0.875 - 0.5) * 0.35
         * clamp(p_meander, 0.0, 1.0);
 
-    // Left edge, then right edge, unrolled.
-    // stripUv(uv).y, not raw uv.y: the ember rows must live in the same
-    // work-area space as the gate field they feed (see the yRow comment).
-    float suvY = stripUv(uv).y;
-    col = applyGate(col, lum, sil, qL, m, arrL * amp * mask, depL * amp * mask, glow, dimK, sparkle, t, suvY);
-    col = applyGate(col, lum, sil, qR, m, arrR * amp * mask, depR * amp * mask, glow, dimK, sparkle, t, suvY);
+    // Low edge, then high edge, unrolled.
+    // The across component of stripUv(uv), not of raw uv: the ember bands must
+    // live in the same work-area space as the gate field they feed (see the
+    // bandPos comment).
+    float suAcross = dot(su, perp);
+    col = applyGate(col, lum, sil, qLo, m, arrLo * amp * mask, depLo * amp * mask, glow, dimK, sparkle, t, suAcross);
+    col = applyGate(col, lum, sil, qHi, m, arrHi * amp * mask, depHi * amp * mask, glow, dimK, sparkle, t, suAcross);
 
     // Replace pass; NO upper clamp on rgb (HDR captures, per the desktop
     // packs' rationale). Alpha is the capture's own, matching the identity

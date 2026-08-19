@@ -260,7 +260,7 @@ private Q_SLOTS:
     }
 
     // Composite (list-of-map) settings like dragActivationTriggers advertise
-    // schema "stringlist" but actually store QVariantList of QVariantMap.
+    // schema "maplist" and store QVariantList of QVariantMap.
     // The guard is gated on the actual variant type (not the schema string),
     // so list-type writes always fall through to the setter — which must
     // still return true via the registered setter lambda.

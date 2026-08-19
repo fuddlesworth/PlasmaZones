@@ -549,7 +549,7 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
-    // ─── Context scrolling-parameter resolution (width / centering / display) ──
+    // ── Context scrolling-parameter resolution (width / centering / display / axis) ──
     // resolveContextScrollingParams is a per-slot read like its tiling sibling:
     // independent SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay rules compose, and an unpinned screen resolves
@@ -586,7 +586,12 @@ private Q_SLOTS:
         const PWR::Rule cd = scrollRule(
             QStringLiteral("cd"), 200, QStringLiteral("DP-1"),
             {valueAction(PWR::ActionType::SetScrollDefaultColumnDisplay, QString(PWR::ColumnDisplayToken::Tabbed))});
-        QVERIFY(f.store->setAllRules({cw, cf, cd}));
+        // The strip axis carries a wire token → the Scrolling.StripAxis
+        // config int (the INTENT space, not the engine's ScrollAxis).
+        const PWR::Rule ax =
+            scrollRule(QStringLiteral("ax"), 100, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetScrollStripAxis, QString(PWR::StripAxisToken::Vertical))});
+        QVERIFY(f.store->setAllRules({cw, cf, cd, ax}));
 
         const PhosphorZones::ContextScrollingParams p =
             f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
@@ -596,6 +601,8 @@ private Q_SLOTS:
         QCOMPARE(*p.centerFocusedColumn, 2); // "onOverflow" → 2
         QVERIFY(p.defaultColumnDisplay.has_value());
         QCOMPARE(*p.defaultColumnDisplay, 1); // "tabbed" → 1
+        QVERIFY(p.stripAxis.has_value());
+        QCOMPARE(*p.stripAxis, 2); // "vertical" → 2
 
         // A screen the rules do not pin → all-unset (the engine then keeps its
         // config-derived parameters for that screen).

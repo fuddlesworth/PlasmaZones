@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorRules/MatchTypes.h>
+
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -17,6 +19,12 @@ namespace PlasmaZones::RuleAuthoring {
 ///    an `options` array. QML keys off `wire` so it never has to reconstruct
 ///    the enum↔wire-string table.
 QVariantList matchFields();
+
+/// Translated label for one match operator ("is", "contains", "greater than").
+/// The single source shared by the operator pickers below and the collapsed
+/// rule-list summary, so an operator is worded the same wherever it appears.
+/// Falls back to the raw wire token for an operator with no label entry.
+QString operatorLabel(PhosphorRules::Operator op);
 
 /// Operators valid for @p fieldValue (a `PhosphorRules::Field` enum int).
 /// Each entry: `{ value: int (Operator enum), wire: QString, label }`.

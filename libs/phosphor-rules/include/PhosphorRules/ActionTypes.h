@@ -378,6 +378,14 @@ inline constexpr QLatin1StringView SetScrollFocusFollowsMouse{"setScrollFocusFol
 /// collapses both non-normal values to "float it", matching its single
 /// consumption site.
 inline constexpr QLatin1StringView SetScrollStickyWindowHandling{"setScrollStickyWindowHandling"};
+/// Which way the matched context's strip runs. Closed enum token
+/// (`ActionParam::Value`, StripAxisToken — auto / horizontal / vertical, the
+/// same intent space as the Scrolling.StripAxis config key, where auto
+/// resolves from the work-area shape). Layered onto the engine's per-screen
+/// override map like its siblings; the daemon's axis membership publish to
+/// the KWin effect happens downstream of that map, so the effect follows
+/// without a channel of its own.
+inline constexpr QLatin1StringView SetScrollStripAxis{"setScrollStripAxis"};
 
 // ── Per-context tab-indicator overrides (domain Context) ──
 // niri's `tab-indicator` layout block, one action per property so independent

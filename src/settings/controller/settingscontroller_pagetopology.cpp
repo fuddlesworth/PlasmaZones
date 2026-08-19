@@ -406,8 +406,12 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // flat config keys, so — like the Tiling Algorithm page's per-monitor
         // split/master/max overrides and the Gaps card's — they are NOT part of
         // this page's per-page dirty/Reset/Discard. They are cleared through the
-        // card's scope chip (clearPerScreenScrollingSettings), and the global
-        // footer Save/Discard handles them via the per-screen save path.
+        // card's scope chip, and the global footer Save/Discard handles them via
+        // the per-screen save path. Each card owns its own sub-domain of that
+        // store: the New columns card's chip clears the sizing keys
+        // (clearPerScreenScrollingSizingSettings), and the Strip direction card
+        // on the Window page clears the axis key alone
+        // (clearPerScreenScrollingAxisSettings).
         {QStringLiteral("scrolling-columns"),
          {
              {CD::scrollingGroup(), CD::enabledKey()},
@@ -460,10 +464,21 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingTabIndicatorGroup(), CD::inactiveColorKey()},
              {CD::scrollingTabIndicatorGroup(), CD::urgentColorKey()},
          }},
+        // As on scrolling-columns, only the GLOBAL Scrolling.* keys are listed.
+        // The Strip direction card's per-monitor override lives in the
+        // per-screen scrolling store rather than in a flat config key, so it is
+        // NOT part of this page's per-page dirty/Reset/Discard. It is cleared
+        // through that card's own scope chip
+        // (clearPerScreenScrollingAxisSettings), and the global footer
+        // Save/Discard handles it via the per-screen save path.
         {QStringLiteral("scrolling-window"),
          {
              // Scrolling — the viewport rows the Focus and view card carries
              // (they followed the card over when the View leaf was folded in).
+             // Which way the strip runs — its own card above the Focus and
+             // view card, still on this page. Sits with the viewport rows
+             // because it changes what every "width"/"height" row means.
+             {CD::scrollingGroup(), CD::stripAxisKey()},
              {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
              {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
              // The crop-at-edge switch on the Focus and view card.
@@ -597,8 +612,8 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // card (placement, drag and overflow behaviour, sticky handling, smart
     // gaps, restore-on-login) and focus from Window. scrolling-simple surfaces
     // the default column width from Columns, the tab indicator's enable /
-    // style / position from Tabs, plus view centering and the whole
-    // window-handling and focus cards from Window.
+    // style / position from Tabs, plus the Strip direction card, view
+    // centering and the whole window-handling and focus cards from Window.
     // They deliberately have NO pageOwnedConfigKeys
     // entry — the one-owner invariant there forbids listing a key twice —
     // so dirtiness, Reset, and Discard delegate through this map instead.

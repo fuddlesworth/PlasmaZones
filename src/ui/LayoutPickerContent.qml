@@ -70,9 +70,11 @@ Item {
     // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
     // Forwarded into LayoutCard so the category badge shows effective state.
     property bool globalAutoAssign: false
-    // Screen info for aspect ratio
+    // Screen info for aspect ratio. Symmetric clamp about 1:1, matching
+    // LayoutOsdContent: a 0.5 floor drew a rotated 21:9 (about 0.43) as a
+    // 1:2 box no window on that screen has.
     property real screenAspectRatio: 16 / 9
-    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
+    readonly property real safeAspectRatio: Math.max(0.25, Math.min(4, screenAspectRatio))
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -129,7 +131,9 @@ Item {
     readonly property var gridLayouts: hasNoneRow ? layouts.slice(0, layoutCount - 1) : layouts
     // Sized off the GRID's own count, not the full list: counting the
     // separate card here would widen the grid for a card that is not in it.
-    readonly property int gridColumns: Math.min(gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5)))))
+    // Floored at one column because a Templates screen with an empty store
+    // has no grid cards at all, and Grid expects a positive column count.
+    readonly property int gridColumns: Math.max(1, Math.min(gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5))))))
     readonly property int gridRows: gridColumns > 0 ? Math.ceil(gridCount / gridColumns) : 0
     // Card dimensions
     readonly property int previewWidth: metrics.previewWidth
@@ -137,6 +141,15 @@ Item {
     readonly property int cardWidth: previewWidth + metrics.paddingSide * 2
     readonly property int cardHeight: previewHeight + metrics.containerPadding + metrics.paddingSide
     readonly property int cardSpacing: metrics.indicatorSpacing
+    /// How tall the scrolling card area may grow before it starts scrolling.
+    ///
+    /// The frame is centred on this item, which fills the layer surface, so
+    /// the budget is the surface minus the frame's own chrome (title, the gap
+    /// under it, and the three paddings the height sum carries) minus a
+    /// margin either side so the popup never sits flush against the screen
+    /// edge. Floored at one card so a very short screen still shows something
+    /// scrollable rather than collapsing to nothing.
+    readonly property int maxCardsHeight: Math.max(root.cardHeight, root.height - titleLabel.height - metrics.paddingSide * 3 - metrics.containerPadding * 2)
 
     // Internal signals — host Window re-emits to its public signals.
     signal layoutSelected(string layoutId)
@@ -188,8 +201,13 @@ Item {
         col = (col + dx + root.gridColumns) % root.gridColumns;
         row = (row + dy + totalRows) % totalRows;
         if (row === root.gridRows) {
-            // The extra row: only the None card lives there.
+            // The extra row: only the None card lives there. Scrolled from
+            // HERE as well as at the tail below, not once after the branch:
+            // this arm returns, and it is the arm that most needs the scroll,
+            // because the None card is last in the model and so is the first
+            // thing to fall below the fold.
             selectedIndex = noneIndex;
+            root._ensureSelectionVisible();
             return;
         }
         let newIndex = row * root.gridColumns + col;
@@ -199,7 +217,60 @@ Item {
             newIndex = row * root.gridColumns + Math.min(col, lastColInRow);
         }
         selectedIndex = Math.max(0, Math.min(root.gridCount - 1, newIndex));
+        root._ensureSelectionVisible();
     }
+
+    /// Scroll the keyboard selection into view.
+    ///
+    /// Arrow navigation is index arithmetic, not focus, so nothing moves the
+    /// viewport on its own: past the fold the selection would travel to a
+    /// card the user cannot see and Return would confirm it blind. Derived
+    /// from the row rather than read off a delegate, because the delegates
+    /// live in two containers and a Repeater index is not a model index here.
+    ///
+    /// A no-op while everything fits, which is the ordinary case.
+    function _ensureSelectionVisible() {
+        if (cardScroll.contentHeight <= cardScroll.height)
+            return;
+
+        // indexOfLayoutId answers -1 for an id the model does not carry, and
+        // the card delegates write it straight into selectedIndex, so the
+        // value this reads can legitimately be -1 even though the delegates
+        // themselves no longer route here (only the keyboard path and the
+        // open-time deferred call do). Without this the grid arm below floors
+        // to a negative row and parks contentY above the top, which a
+        // programmatic write is not bounds-corrected out of.
+        if (root.selectedIndex < 0)
+            return;
+
+        let itemY = 0;
+        let itemHeight = root.cardHeight;
+        if (root.hasNoneRow && root.selectedIndex === root.layoutCount - 1) {
+            itemHeight = noneRow.height;
+            itemY = cards.height - itemHeight;
+        } else if (root.gridColumns > 0) {
+            itemY = Math.floor(root.selectedIndex / root.gridColumns) * (root.cardHeight + root.cardSpacing);
+        }
+        if (itemY < cardScroll.contentY)
+            cardScroll.contentY = itemY;
+        else if (itemY + itemHeight > cardScroll.contentY + cardScroll.height)
+            cardScroll.contentY = itemY + itemHeight - cardScroll.height;
+    }
+
+    // Scrolling is driven from moveSelection's two assignment sites, NOT from
+    // a blanket onSelectedIndexChanged. The card delegates write selectedIndex
+    // on plain hover too, and scrolling there moved the cards out from under a
+    // stationary pointer; hover also already implies the card is on screen, so
+    // it has nothing to reveal.
+    //
+    // This deferral is a separate mechanism and has to stay. The initial
+    // selection comes from the binding above, which never passes through
+    // moveSelection, and it resolves before the cards are laid out, so an
+    // immediate call would run against a contentHeight of zero and do
+    // nothing. On the next tick it is what opens the picker already scrolled
+    // to the active card when that card is past the fold — the whole point of
+    // highlighting it.
+    Component.onCompleted: Qt.callLater(root._ensureSelectionVisible)
 
     /// A layout's position in the FULL model, by id. The cards are drawn from
     /// two containers now (the grid, and the None card's own row), so a
@@ -257,15 +328,17 @@ Item {
         // any decoration halo and the show / hide transition are captured
         // instead of being clipped. See PopupFrame.qml.
         anchors.centerIn: parent
-        // The frame follows the GRID's width even when the none row is
-        // present: that row holds one card, which is narrower than any grid
-        // row, so letting it participate would only ever shrink the frame
-        // under the grid it has to contain.
-        width: gridView.width + metrics.containerPadding
-        // top padding + title + gap below title + grid + the none row when
-        // it exists (its own top margin is folded into noneRow.height by the
-        // anchor, so a screen without one adds nothing) + bottom padding
-        height: titleLabel.height + gridView.height + noneRow.height + (root.hasNoneRow ? root.cardSpacing : 0) + metrics.paddingSide * 3
+        // The card area decides the width, and it is itself the wider of the
+        // grid and the none row. The none row holds a single card, so it
+        // normally loses to any grid row — but a Templates screen with an
+        // empty store has NO grid rows at all, and following the grid alone
+        // collapsed the frame to its padding while the none row still drew a
+        // full-width card, leaving it hanging outside the frame on both
+        // sides.
+        width: cardScroll.width + metrics.containerPadding
+        // top padding + title + gap below title + the (possibly clamped) card
+        // area + bottom padding.
+        height: titleLabel.height + cardScroll.height + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
 
         // Absorb clicks inside container so they do not reach the
@@ -302,39 +375,80 @@ Item {
             color: root.textColor
         }
 
-        // Layout grid
-        Grid {
-            id: gridView
+        // The cards scroll; the title does not. A long list used to size the
+        // frame past the screen and centre it, so it clipped symmetrically
+        // off the top and bottom with no way to reach what was cut — and the
+        // None row, being last, was the first thing lost. Bounding the card
+        // area and letting it scroll keeps every card reachable however many
+        // there are.
+        Flickable {
+            id: cardScroll
 
             anchors.top: titleLabel.bottom
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
-            columns: root.gridColumns
-            spacing: root.cardSpacing
-
-            Repeater {
-                model: root.gridLayouts
-                delegate: layoutCardDelegate
+            width: cards.width
+            height: Math.min(cards.height, root.maxCardsHeight)
+            contentWidth: cards.width
+            contentHeight: cards.height
+            // Both gated on actually overflowing: an unclipped Flickable that
+            // fits lets the cards' selection halo paint outside its bounds as
+            // before, and a non-interactive one cannot swallow a press meant
+            // for a card.
+            clip: contentHeight > height
+            interactive: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
+            // The only affordance saying there is more below. AsNeeded keeps
+            // it off the ordinary case where everything fits, matching the
+            // clip and interactive gates above.
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
             }
-        }
 
-        // The no-template card, on its own row under the grid and centered
-        // against it. Outside the Grid on purpose: a Grid flows its children
-        // in order, so this card would otherwise take the next free cell in
-        // the last row and read as one more choice rather than as the way out
-        // of the list. The Row is over a one-or-zero element slice, so on a
-        // screen with no template family nothing is instantiated and the row
-        // collapses to zero height.
-        Row {
-            id: noneRow
+            // One content item rather than a positioner, so the grid and the
+            // None row keep the exact relationship they had when they were
+            // anchored directly in the frame.
+            Item {
+                id: cards
 
-            anchors.top: gridView.bottom
-            anchors.topMargin: root.hasNoneRow ? root.cardSpacing : 0
-            anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.max(gridView.width, noneRow.width)
+                height: gridView.height + noneRow.height + (root.hasNoneRow ? root.cardSpacing : 0)
 
-            Repeater {
-                model: root.hasNoneRow ? [root.layouts[root.layoutCount - 1]] : []
-                delegate: layoutCardDelegate
+                // Layout grid
+                Grid {
+                    id: gridView
+
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    columns: root.gridColumns
+                    spacing: root.cardSpacing
+
+                    Repeater {
+                        model: root.gridLayouts
+                        delegate: layoutCardDelegate
+                    }
+                }
+
+                // The no-template card, on its own row under the grid and
+                // centered against it. Outside the Grid on purpose: a Grid
+                // flows its children in order, so this card would otherwise
+                // take the next free cell in the last row and read as one
+                // more choice rather than as the way out of the list. The Row
+                // is over a one-or-zero element slice, so on a screen with no
+                // template family nothing is instantiated and the row
+                // collapses to zero height.
+                Row {
+                    id: noneRow
+
+                    anchors.top: gridView.bottom
+                    anchors.topMargin: root.hasNoneRow ? root.cardSpacing : 0
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    Repeater {
+                        model: root.hasNoneRow ? [root.layouts[root.layoutCount - 1]] : []
+                        delegate: layoutCardDelegate
+                    }
+                }
             }
         }
     }
@@ -354,13 +468,37 @@ Item {
             readonly property int modelIndex: root.indexOfLayoutId(layoutData.id)
             property bool isSelected: modelIndex === root.selectedIndex
             property bool isActive: layoutData.id === root.activeLayoutId
-            property bool isHovered: cardMouse.containsMouse
+            // Suppressed while locked: every input path bails on `locked`
+            // (moveSelection, confirmSelection, the click below), so a card
+            // that lights up under the pointer would be advertising an
+            // interaction the picker will not perform. Pairs with the cursor
+            // on cardMouse.
+            property bool isHovered: cardMouse.containsMouse && !root.locked
 
             width: root.cardWidth
             height: root.cardHeight
             Accessible.role: Accessible.Button
             Accessible.name: layoutData.displayName || ""
+            // Why this card is inert, carried on the card itself rather than
+            // on the lock overlay below. The overlay used to claim a Button
+            // role of its own, so a locked card announced as two nested
+            // buttons whose inner one had no action behind it. Gated on the
+            // lock alone, like the press action and cursor: the ACTIVE card
+            // has no overlay but is just as inert while locked.
+            Accessible.description: root.locked ? i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.") : ""
             Accessible.focusable: true
+            Accessible.selected: layoutCard.isSelected
+            // The cards are this surface's primary control and assistive tech
+            // had no way to activate one: the pointer goes through cardMouse
+            // and the keyboard arrives from C++, neither of which an AT client
+            // can drive. Mirrors cardMouse's click body, lock guard included.
+            Accessible.onPressAction: {
+                if (root.locked)
+                    return;
+
+                root.selectedIndex = layoutCard.modelIndex;
+                root.confirmSelection();
+            }
 
             QFZCommon.LayoutCard {
                 anchors.fill: parent
@@ -424,8 +562,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.ForbiddenCursor
-                    Accessible.role: Accessible.Button
-                    Accessible.name: i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.")
+                    // A pure absorber, kept out of the a11y tree like the
+                    // container absorber near the top of this file. The lock
+                    // explanation lives on the card's Accessible.description
+                    // instead, so a locked card is one announced node rather
+                    // than a button nested inside a button.
+                    Accessible.ignored: true
                     onClicked: function (mouse) {
                         mouse.accepted = true;
                     }
@@ -441,7 +583,11 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 enabled: !(root.locked && !layoutCard.isActive)
-                cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
+                // Forbidden for every card while locked, the ACTIVE one
+                // included. Its click and Return both bail on `locked`, so a
+                // pointing hand over it promised an action that never ran,
+                // and it is the one card the lock overlay does not cover.
+                cursorShape: root.locked ? Qt.ForbiddenCursor : Qt.PointingHandCursor
                 onClicked: {
                     if (root.locked)
                         return;

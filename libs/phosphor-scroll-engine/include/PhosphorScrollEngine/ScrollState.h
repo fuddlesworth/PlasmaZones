@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
+#include <PhosphorScrollEngine/StripAxis.h>
 #include <phosphorscrollengine_export.h>
 
 #include <QObject>
@@ -12,6 +13,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 namespace PhosphorScrollEngine {
 
@@ -47,6 +49,14 @@ public:
     void addFloating(const QString& windowId)
     {
         m_floating.insert(windowId);
+    }
+    /// Whether anything floats out of this strip, without building the sorted
+    /// list floatingWindows() returns — the emptiness question has a caller on
+    /// the relayout path (applyLayout's empty-strip arm), where allocating and
+    /// sorting a QStringList to ask it is pure waste.
+    bool hasFloating() const
+    {
+        return !m_floating.isEmpty();
     }
     bool removeFloating(const QString& windowId)
     {
@@ -96,14 +106,14 @@ public:
         m_floatingHasFocus = hasFocus;
     }
 
-    /// The strip `viewX` carried by the last geometry batch this state
+    /// The strip `viewOffset` carried by the last geometry batch this state
     /// actually emitted, and whether it has emitted one at all.
     ///
-    /// The difference between this and the next batch's `viewX` is the view
+    /// The difference between this and the next batch's `viewOffset` is the view
     /// DELTA: how far the whole strip slid, as opposed to how far any one
     /// window moved. The effect springs that delta once per output and lets
     /// every carried window ride it, instead of starting an independent
-    /// per-window spring each (see the `viewDeltaX` field on the tile-request
+    /// per-window spring each (see the `viewDelta` field on the tile-request
     /// wire).
     ///
     /// TRANSIENT — deliberately not serialized. A restored or freshly created
@@ -128,23 +138,54 @@ public:
     /// Stamped with the baseline so the next batch can tell whether the two
     /// share a basis. Note it does NOT catch a change to column widths or
     /// presets, which move strip positions without touching the work area.
-    bool hasLastAppliedViewX() const
+    bool hasLastAppliedViewOffset() const
     {
-        return m_hasLastAppliedViewX;
+        return m_hasLastAppliedViewOffset;
     }
-    int lastAppliedViewX() const
+    int lastAppliedViewOffset() const
     {
-        return m_lastAppliedViewX;
+        return m_lastAppliedViewOffset;
     }
     QRect lastAppliedWorkArea() const
     {
         return m_lastAppliedWorkArea;
     }
-    void setLastAppliedViewX(int viewX, const QRect& workArea)
+    /// The AXIS the baseline was measured along. Part of the basis, not a
+    /// decoration: the view offset is a coordinate ALONG the strip, so two
+    /// offsets taken on different axes are not comparable at all.
+    StripAxis lastAppliedAxis() const
     {
-        m_lastAppliedViewX = viewX;
+        return m_lastAppliedAxis;
+    }
+
+    /// The axis this state was last RESOLVED against, which is a different
+    /// question from lastAppliedAxis above.
+    ///
+    /// The applied basis is stamped only on an EMITTED batch, deliberately,
+    /// so it keeps describing what the compositor is actually showing. A flip
+    /// sweep cannot key on that: a relayout suppressed by the emit-on-change
+    /// gate would leave the old axis standing and the sweep would fire again
+    /// later against a basis it already converted. This one advances on every
+    /// resolve.
+    bool hasResolvedAxis() const
+    {
+        return m_hasResolvedAxis;
+    }
+    StripAxis resolvedAxis() const
+    {
+        return m_resolvedAxis;
+    }
+    void setResolvedAxis(StripAxis axis)
+    {
+        m_resolvedAxis = axis;
+        m_hasResolvedAxis = true;
+    }
+    void setLastAppliedViewOffset(int viewOffset, const QRect& workArea, StripAxis axis)
+    {
+        m_lastAppliedViewOffset = viewOffset;
         m_lastAppliedWorkArea = workArea;
-        m_hasLastAppliedViewX = true;
+        m_lastAppliedAxis = axis;
+        m_hasLastAppliedViewOffset = true;
     }
     /// Invalidate the baseline entirely: the next emitted batch takes the
     /// first-batch path (zero delta, outright placement). Called when the
@@ -152,11 +193,12 @@ public:
     /// baseline captured before it would describe a slide from a coordinate
     /// nothing on screen occupies, flying the repopulating window in from
     /// wherever the old view sat.
-    void clearLastAppliedViewX()
+    void clearLastAppliedViewOffset()
     {
-        m_lastAppliedViewX = 0;
+        m_lastAppliedViewOffset = 0;
         m_lastAppliedWorkArea = QRect();
-        m_hasLastAppliedViewX = false;
+        m_lastAppliedAxis = StripAxis::horizontal();
+        m_hasLastAppliedViewOffset = false;
     }
 
     /// How many entries this strip has taken from the context template's seed
@@ -177,17 +219,30 @@ public:
     /// when `i` columns already exist. While a strip only grows the two agree
     /// exactly, which is why growing a strip behaves as it always did.
     ///
-    /// TRANSIENT — deliberately not serialized, like the view-delta baseline
-    /// above. The floor makes a restored strip resolve correctly without any
-    /// stored cursor, so persisting one would add a migration and a staleness
-    /// class to buy nothing.
+    /// The floor is a lower bound on spent-ness, not a substitute for it: it
+    /// recovers only as many entries as there are live columns, so a strip
+    /// that LOST a column before travelling through a non-consuming path
+    /// comes back under-counted. That is why the cursor rides the strip stash
+    /// (StashedStrip::blueprintCursor) across a mode round trip rather than
+    /// being rebuilt from the column count on the far side.
     ///
-    /// Reset on exactly two events: the strip EMPTIES (applyLayout's empty
-    /// branch, beside clearLastAppliedViewX — a screen you cleared out starts
-    /// its next session from the top of the blueprint), and the screen's
-    /// blueprint CHANGES (applyPerScreenConfig — picking a new template is an
-    /// explicit act, and a cursor describing the old template's entries would
-    /// silently swallow the new one's opening columns).
+    /// Reset on exactly two events:
+    ///   - the strip genuinely EMPTIES — no columns, nothing floating, no
+    ///     detached drag window (applyLayout's empty branch, beside
+    ///     clearLastAppliedViewOffset). A screen you cleared out starts its
+    ///     next session from the top of the blueprint. The condition is the
+    ///     STRIP, not the resolve: an all-minimized or mid-drag strip
+    ///     resolves to no columns while still standing for its entries, and
+    ///     resetting there handed them straight back out again.
+    ///   - the blueprint itself CHANGES, noticed at the consumption site by
+    ///     comparing blueprintIdentity when one has been ESTABLISHED (see
+    ///     hasBlueprintIdentity). Picking a new template is an explicit act,
+    ///     and a cursor describing the old template's entries would swallow
+    ///     the new one's opening columns. Comparing the VALUE rather than
+    ///     reacting to override-map writes is deliberate: the map is dropped
+    ///     and rebuilt on ordinary context changes that leave the template
+    ///     untouched. A state that has no identity yet is NOT a change — it
+    ///     stamps and keeps whatever cursor it was restored with.
     int blueprintCursor() const
     {
         return m_blueprintCursor;
@@ -199,6 +254,43 @@ public:
     void resetBlueprintCursor()
     {
         m_blueprintCursor = 0;
+    }
+
+    /// The blueprint value the cursor is counting against.
+    ///
+    /// The cursor indexes into one particular blueprint, so it is only
+    /// meaningful beside the blueprint that produced it. Holding the value
+    /// here lets the consumption site notice a swap by comparing, which is
+    /// what makes invalidation independent of the override map's lifecycle:
+    /// dropping and re-pushing the SAME template (every desktop switch away
+    /// from scrolling and back does exactly that) leaves the cursor standing,
+    /// while picking a different template restarts it. Keying the reset off
+    /// the map's writes instead meant a screen that merely left scrolling for
+    /// a moment came back with a cursor of 0 and refilled entries its columns
+    /// already stood for.
+    QVariant blueprintIdentity() const
+    {
+        return m_blueprintIdentity;
+    }
+    /// Stamps the value AND marks it established — there is deliberately no
+    /// way to store one without establishing it.
+    void setBlueprintIdentity(const QVariant& blueprint)
+    {
+        m_blueprintIdentity = blueprint;
+        m_hasBlueprintIdentity = true;
+    }
+    /// Whether an identity has been ESTABLISHED, which is a different question
+    /// from whether the stored value is null. A null identity is the perfectly
+    /// ordinary "this context has no template", so it cannot double as the
+    /// unset marker: a state rebuilt by a mode round trip or a login restore
+    /// starts with a null value AND a real cursor carried in beside it, and
+    /// reading that null as "the blueprint changed" reset the very cursor the
+    /// carry exists to preserve. Not established means the consumption site
+    /// STAMPS and leaves the cursor alone; established-and-different is the
+    /// only genuine swap.
+    bool hasBlueprintIdentity() const
+    {
+        return m_hasBlueprintIdentity;
     }
 
     // ── IPlacementState ─────────────────────────────────────────────────────
@@ -263,10 +355,15 @@ private:
     QSet<QString> m_floating;
     QString m_lastFloatingFocus;
     bool m_floatingHasFocus = false;
-    int m_lastAppliedViewX = 0;
+    int m_lastAppliedViewOffset = 0;
     QRect m_lastAppliedWorkArea;
-    bool m_hasLastAppliedViewX = false;
+    StripAxis m_lastAppliedAxis;
+    StripAxis m_resolvedAxis;
+    bool m_hasResolvedAxis = false;
+    bool m_hasLastAppliedViewOffset = false;
     int m_blueprintCursor = 0;
+    QVariant m_blueprintIdentity;
+    bool m_hasBlueprintIdentity = false;
 };
 
 } // namespace PhosphorScrollEngine

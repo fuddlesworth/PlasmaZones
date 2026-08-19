@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/StripAxis.h>
+
 #include <QList>
 #include <QRect>
 #include <QString>
@@ -18,6 +20,22 @@ namespace ScrollPerScreenKeys {
 inline QString centerFocusedColumn()
 {
     return QStringLiteral("CenterFocusedColumn");
+}
+/// SHARED key: which way this screen's strip runs, as the TRI-STATE
+/// intent (0 auto, 1 horizontal, 2 vertical) — not the resolved two-valued
+/// PhosphorProtocol::ScrollAxis, whose Horizontal is 0. The two numberings
+/// deliberately disagree and must never be cast into each other.
+///
+/// Written by BOTH channels: the per-screen settings store seeds it and the
+/// SetScrollStripAxis context rule overwrites the seed where a rule matched
+/// (rule > per-screen setting > global, the same collapse every shared int
+/// key gets in the daemon's merge). A rule that matches on desktop or
+/// activity can therefore flip the axis on a live populated strip when the
+/// context switches; the flip rides the ordinary retile the override-map
+/// change schedules.
+inline QString stripAxis()
+{
+    return QStringLiteral("StripAxis");
 }
 /// RULE channel: a bare work-area fraction (SetScrollDefaultColumnWidth).
 /// Outranks the settings-channel kind trio below — rule > per-screen
@@ -151,7 +169,7 @@ inline QString presetWindowHeights()
 }
 /// TEMPLATE channel: the template's seed BLUEPRINT as a QVariantList of
 /// {width (double fraction), display (int ColumnDisplay)} maps, ordered
-/// left to right. Consumed at column CREATION on the fresh-open path: a
+/// along the strip. Consumed at column CREATION on the fresh-open path: a
 /// column materializing while the strip holds fewer columns than the
 /// blueprint takes the next entry's width and display (per-window open
 /// rules still outrank it). Never resizes existing columns. Only the
@@ -198,7 +216,7 @@ inline constexpr qreal MinColumnWidthFraction = 0.05;
 /// name: the two bounds happen to share a value today, and a caller that
 /// clamps a HEIGHT against the width constant would silently follow a later
 /// width-only change. KEEP IN SYNC with PhosphorRules::MinColumnWidthRatio
-/// (RuleAction.h), which the rules-side height validation currently uses for
+/// (ActionParams.h), which the rules-side height validation currently uses for
 /// BOTH fractions; like the width constant above, the bound is hand-mirrored
 /// because the dependency runs the other way.
 inline constexpr qreal MinWindowHeightFraction = 0.05;
@@ -218,9 +236,9 @@ enum class CenterFocusedColumn : int {
 
 /// How a column presents its tiles (niri's column display).
 enum class ColumnDisplay : int {
-    /// Tiles split the column height vertically; all are visible.
+    /// Tiles split the column's CROSS extent between them; all are visible.
     Normal = 0,
-    /// Only the active tile is laid out, at full column height; the other
+    /// Only the active tile is laid out, at the column's full CROSS extent; the other
     /// tiles are hidden and represented by a tab-indicator strip.
     Tabbed = 1,
 };
@@ -310,6 +328,14 @@ struct TabIndicatorParams
     /// negative gap large enough to cancel the thickness cannot GROW the
     /// column. @p tileCount lets the single-tab skip suppress the
     /// reservation, keeping the reservation and the drawn rect in agreement.
+    ///
+    /// Which strip ROLE that thickness comes out of depends on the axis: a
+    /// left/right indicator eats the column's MAIN extent on a horizontal
+    /// strip and its CROSS extent on a vertical one, and the top/bottom pair
+    /// inverts the same way. The screen-edge vocabulary above is deliberate
+    /// and stays; the role is resolved by the caller that knows the axis (see
+    /// the min-extent floor in scrollstrip_relayout.cpp, which states the same
+    /// inversion).
     int reservedThickness(int tileCount) const
     {
         if (!placeWithinColumn || !resolvesFor(tileCount)) {
@@ -375,6 +401,13 @@ struct TabIndicatorParams
         const int thickness = qMax(1, width);
         const bool vertical = isVerticalTabIndicator(position);
         const int axisExtent = vertical ? columnRect.height() : columnRect.width();
+        // Empty-first, the same guard contentRectFor and the preset resolvers
+        // take: qBound asserts on an inverted range, and a zero-extent column
+        // gives min 1 against max 0. There is nothing to draw an indicator on
+        // in that case anyway.
+        if (axisExtent <= 0) {
+            return QRect();
+        }
         // Floor at 1: a proportion small enough to round to nothing would make
         // the indicator vanish while every setting still says it is on.
         const int length = qBound(1, qRound(axisExtent * lengthProportion), axisExtent);
@@ -406,6 +439,9 @@ struct TabIndicatorParams
         case TabIndicatorPosition::Top:
             return QRect(columnRect.x() + longOffset, columnRect.y() - outward, length, thickness);
         case TabIndicatorPosition::Bottom:
+            // Falls out to the shared return below. No default label, so a
+            // new enumerator is a compiler warning here rather than silently
+            // inheriting Bottom's geometry.
             break;
         }
         return QRect(columnRect.x() + longOffset, columnRect.y() + columnRect.height() - thickness + outward, length,
@@ -433,7 +469,7 @@ enum class DefaultWidthKind : int {
 /// Wire vocabulary of the DEFAULT-window-height KIND setting. Unlike the
 /// width pair above, this one IS the model enum's vocabulary
 /// (WindowHeight::Kind values match 1:1 — Auto/Fixed/Preset, no
-/// "client decides" wrinkle on the height axis), so the engine may cast the
+/// "client decides" wrinkle on the height side), so the engine may cast the
 /// config value directly after a range guard.
 enum class DefaultHeightKind : int {
     Auto = 0,
@@ -448,9 +484,9 @@ enum class DefaultHeightKind : int {
 enum class ScrollInsertPosition : int {
     RightOfActive = 0,
     LeftOfActive = 1,
-    /// Leftmost column of the strip.
+    /// The strip's FIRST column.
     First = 2,
-    /// Rightmost column of the strip (niri's append).
+    /// The strip's LAST column (niri's append).
     Last = 3,
     /// Stack into the focused column instead of opening a new one.
     IntoActiveColumn = 4,
@@ -462,10 +498,11 @@ enum class ScrollInsertPosition : int {
 struct ColumnWidth
 {
     enum Kind : int {
-        /// Fraction of the work-area width. Proportions account for the
-        /// inter-column gap: 0.5 + 0.5 tile edge-to-edge with one gap between.
+        /// Fraction of the work area's MAIN extent. Proportions account for
+        /// the inter-column gap: 0.5 + 0.5 tile edge-to-edge with one gap
+        /// between.
         Proportion = 0,
-        /// Absolute pixel width.
+        /// Absolute pixel MAIN extent.
         Fixed = 1,
         /// Fraction ANCHOR snapped to the nearest entry of the screen's
         /// effective preset list at relayout. Value-anchored (not an index)
@@ -524,15 +561,15 @@ struct ColumnWidth
     }
 };
 
-/// Tile height INTENT within a column. Same pixels-are-derived contract as
-/// ColumnWidth.
+/// Tile height INTENT within a column (its extent ACROSS the strip). Same
+/// pixels-are-derived contract as ColumnWidth.
 struct WindowHeight
 {
     enum Kind : int {
-        /// Share the column height left over after Fixed/Preset tiles,
+        /// Share the column's CROSS extent left over after Fixed/Preset tiles,
         /// proportionally to weight (the default even split at weight 1).
         Auto = 0,
-        /// Absolute pixel height.
+        /// Absolute pixel CROSS extent.
         Fixed = 1,
         /// Fraction anchor snapped to the nearest entry of the effective
         /// preset list at relayout — same value-anchored contract as
@@ -627,14 +664,33 @@ struct Tile
     /// Layout ignores this flag entirely — it only rides the apply payload so
     /// the compositor side can flip the client's fullscreen state.
     bool windowedFullscreen = false;
-    /// Client-reported minimum size (0 = unconstrained). Relayout clamps the
-    /// resolved rect to it; a window that cannot honour its slot at all is the
-    /// engine's cue to float it instead.
+    /// Client-reported minimum size (0 = unconstrained), stored PHYSICALLY as
+    /// the compositor reports it. Relayout clamps the resolved rect to it; a
+    /// window that cannot honour its slot at all is the engine's cue to float
+    /// it instead.
+    ///
+    /// Layout wants this by ROLE, so read it through minMain/minCross rather
+    /// than naming a field: on a vertical strip a client's minimum WIDTH is
+    /// what constrains the tile ACROSS the strip, and its minimum HEIGHT is
+    /// what constrains the column ALONG it. Picking by name silently applies
+    /// each constraint to the wrong axis.
     int minWidth = 0;
     int minHeight = 0;
+
+    /// The client minimum along the strip (a column-width floor).
+    int minMain(StripAxis axis) const
+    {
+        return axis.isHorizontal() ? minWidth : minHeight;
+    }
+    /// The client minimum across the strip (a stacked-tile floor).
+    int minCross(StripAxis axis) const
+    {
+        return axis.isHorizontal() ? minHeight : minWidth;
+    }
 };
 
-/// One column: a vertical stack of tiles.
+/// One column: a stack of tiles ACROSS the strip (vertical on a horizontal
+/// strip, horizontal on a vertical one).
 struct Column
 {
     QVector<Tile> tiles;
@@ -646,7 +702,8 @@ struct Column
     {
         return tiles.isEmpty();
     }
-    /// True when every tile is minimized — the column occupies no strip width.
+    /// True when every tile is minimized — the column occupies no strip MAIN
+    /// extent.
     bool isFullyMinimized() const
     {
         for (const Tile& t : tiles) {
@@ -689,6 +746,23 @@ struct ScrollLayoutParams
 {
     QRect workArea;
     int gap = 0;
+    /// Which way this screen's strip runs. Resolved per screen in
+    /// layoutParamsForScreen, so a portrait and a landscape monitor in one
+    /// session hold different axes at the same time. A resolved axis is never
+    /// an INPUT to a new layout: resolve it per screen, per pass, from the
+    /// tri-state setting and the live work area, so a rotation or a monitor
+    /// swap cannot hand one screen the other's verdict.
+    ///
+    /// RECORDING the axis a past pass resolved is a different thing, and
+    /// deliberate. ScrollState stamps both `lastAppliedAxis` (part of the
+    /// view-delta baseline, which is meaningless without knowing which axis
+    /// the offset was measured along) and `resolvedAxis` (what the flip sweep
+    /// compares against). Those are history, not inputs, and must not be
+    /// deleted in the name of the rule above.
+    ///
+    /// Defaulted to Horizontal so every existing construction, the test
+    /// fixtures included, keeps the historical layout with no edit.
+    StripAxis axis = StripAxis::horizontal();
     /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
     /// resolvers snap a Preset fraction anchor to the nearest entry.
     /// KEEP IN SYNC with THREE other copies, not one:
@@ -708,19 +782,25 @@ struct ScrollLayoutParams
     CenterFocusedColumn centerFocusedColumn = CenterFocusedColumn::Never;
     bool alwaysCenterSingleColumn = false;
     /// Whether the strip's layout math honours client minimum sizes (the
-    /// column-width floor, the tile-height floor and its rebalance, and the
+    /// column MAIN floor, the tile CROSS floor and its rebalance, and the
     /// interactive-resize floor). Off, the resolved rects obey the user's
     /// intents and the compositor's own min-size enforcement decides what
     /// overhangs. The open-time work-area-oversized float escape ignores
     /// this flag.
     bool respectMinimumSize = true;
+    /// Whether main-axis straddlers keep their TRUE rect for the effect to
+    /// crop (`true`) instead of being clamped at the screen edge. Resolved
+    /// once in layoutParamsForScreen like every other per-screen bool, so
+    /// the apply path does not fetch the override map a second time per
+    /// batch for this one value.
+    bool cropStraddlers = false;
     /// The context's default window height intent, seeded onto every
     /// fresh-created tile (restore paths overwrite it via
     /// setWindowHeightIntent). Default-constructed = Auto weight 1, the
     /// historical even split.
     WindowHeight defaultWindowHeight{};
     /// The context's default column width — the un-maximize fallback for a
-    /// full-width column with no stored pre-maximize intent.
+    /// full-MAIN-extent column with no stored pre-maximize intent.
     ColumnWidth defaultColumnWidth = ColumnWidth::makeProportion(0.5);
     /// Geometry inputs for the tab indicator drawn beside a tabbed column.
     /// Default-constructed = the family's own defaults, so a caller that never
@@ -764,7 +844,7 @@ struct ResolvedColumn
     /// Which edge @c tabIndicatorRect runs along, so a consumer can tell the
     /// indicator's long axis without re-deriving it from the rect's aspect (a
     /// one-tab indicator can be square).
-    TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Top;
+    TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Left;
     QVector<ResolvedTile> tiles;
 };
 
@@ -772,11 +852,11 @@ struct ResolvedColumn
 struct ResolvedStrip
 {
     QVector<ResolvedColumn> columns;
-    /// The viewport's left edge in strip coordinates — what the engine uses
+    /// The viewport's LEADING edge in strip coordinates — what the engine uses
     /// to decide which columns are visible vs parked off-screen.
-    int viewX = 0;
-    /// Total strip width in pixels (all non-minimized columns + gaps).
-    int stripWidth = 0;
+    int viewOffset = 0;
+    /// Total strip MAIN extent in pixels (all non-minimized columns + gaps).
+    int stripExtent = 0;
 };
 
 /// The columns of @p resolved that intersect @p workArea, in strip order.
