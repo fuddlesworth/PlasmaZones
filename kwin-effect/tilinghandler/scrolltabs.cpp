@@ -29,6 +29,8 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <KColorScheme>
+
 #include <core/rect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -42,14 +44,11 @@
 #include <QDBusPendingReply>
 #include <QFontDatabase>
 #include <QFontMetrics>
-#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPalette>
-#include <QSettings>
-#include <QStandardPaths>
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
@@ -91,68 +90,28 @@ QColor colorFromMap(const QVariantMap& map, QLatin1String key)
     return text.isEmpty() ? QColor() : QColor(text);
 }
 
-/// Kirigami.Theme.negativeTextColor, resolved the way Kirigami's desktop
-/// platform plugin resolves it — from the active KDE colour scheme — without
-/// linking KColorScheme (the effect is Qt-only so the portable build keeps
-/// working). KColorScheme reads the scheme from kdeglobals, [Colors:View]
-/// ForegroundNegative; kdeglobals is a KConfig INI file that QSettings reads
-/// in IniFormat from the same generic-config location KConfig uses. A user
-/// scheme always writes that key, so a miss means the stock Breeze scheme,
-/// whose negative red is the fallback. Re-read on every rebuild rather than
-/// cached: it is one small file parse on a path that runs a handful of times
-/// a session, and caching it would need its own invalidation on scheme
-/// change, which is exactly the edge the palette hook exists to catch.
-QColor kirigamiNegativeTextColor()
-{
-    const QString path = QStandardPaths::locate(QStandardPaths::GenericConfigLocation, QStringLiteral("kdeglobals"));
-    if (!path.isEmpty()) {
-        QSettings globals(path, QSettings::IniFormat);
-        const QString text = globals.value(QStringLiteral("Colors:View/ForegroundNegative")).toString();
-        // KConfig writes colours as "r,g,b" (or "r,g,b,a"), QColor wants a
-        // name: split and rebuild. A "#rrggbb" spelling is accepted as-is.
-        if (!text.isEmpty()) {
-            if (text.startsWith(QLatin1Char('#'))) {
-                const QColor c(text);
-                if (c.isValid()) {
-                    return c;
-                }
-            } else {
-                const QStringList parts = text.split(QLatin1Char(','));
-                if (parts.size() >= 3) {
-                    bool okR = false;
-                    bool okG = false;
-                    bool okB = false;
-                    const int r = parts.at(0).trimmed().toInt(&okR);
-                    const int g = parts.at(1).trimmed().toInt(&okG);
-                    const int b = parts.at(2).trimmed().toInt(&okB);
-                    if (okR && okG && okB) {
-                        return QColor(qBound(0, r, 255), qBound(0, g, 255), qBound(0, b, 255));
-                    }
-                }
-            }
-        }
-    }
-    // Breeze's ForegroundNegative.
-    return QColor(0xda, 0x44, 0x53);
-}
-
 /// Theme palette and units for the pills, resolved to match what the QML
-/// rendering saw through Kirigami — without Kirigami, which the effect
-/// cannot link. The four palette colours are QPalette roles (Kirigami's
-/// desktop plugin fills Theme.highlight / highlightedText / text / background
-/// from the same KColorScheme-backed application palette KWin carries); the
-/// negative colour comes from the scheme file directly (above); and the
-/// spacing units are derived exactly as Kirigami::Platform::Units does for
-/// the desktop style: gridUnit is the general font's line height,
+/// rendering saw through Kirigami. The effect has no QML engine, so
+/// Kirigami.Theme itself is out of reach; instead the values come from the
+/// same sources Kirigami's desktop platform plugin reads them from. The five
+/// colours are KColorScheme's View set (Kirigami's Theme.View is the
+/// default colour set for an overlay, and highlight / highlightedText /
+/// text / background / negativeText are its Selection and View roles); the
+/// spacing units derive exactly as Kirigami::Platform::Units does for the
+/// desktop style: gridUnit is the general font's line height,
 /// smallSpacing = max(2, gridUnit / 4), largeSpacing = smallSpacing * 3.
+/// KColorScheme reads the active scheme through KSharedConfig, which tracks
+/// kdeglobals, so a scheme change re-resolves here on the next rebuild —
+/// which the palette hook (eventFilter) triggers at once.
 void fillThemePalette(ScrollTabIndicatorStyle& style)
 {
-    const QPalette pal = QGuiApplication::palette();
-    style.themeHighlight = pal.color(QPalette::Active, QPalette::Highlight);
-    style.themeHighlightedText = pal.color(QPalette::Active, QPalette::HighlightedText);
-    style.themeText = pal.color(QPalette::Active, QPalette::WindowText);
-    style.themeBackground = pal.color(QPalette::Active, QPalette::Window);
-    style.themeNegativeText = kirigamiNegativeTextColor();
+    const KColorScheme view(QPalette::Active, KColorScheme::View);
+    const KColorScheme selection(QPalette::Active, KColorScheme::Selection);
+    style.themeHighlight = selection.background(KColorScheme::NormalBackground).color();
+    style.themeHighlightedText = selection.foreground(KColorScheme::NormalText).color();
+    style.themeText = view.foreground(KColorScheme::NormalText).color();
+    style.themeBackground = view.background(KColorScheme::NormalBackground).color();
+    style.themeNegativeText = view.foreground(KColorScheme::NegativeText).color();
     const int gridUnit = qMax(1, QFontMetrics(QFontDatabase::systemFont(QFontDatabase::GeneralFont)).height());
     style.smallSpacing = qMax(2, gridUnit / 4);
     style.largeSpacing = style.smallSpacing * 3;

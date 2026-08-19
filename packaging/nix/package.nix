@@ -143,6 +143,7 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.kcoreaddons       # KCoreAddons: KPluginFactory, KAboutData, etc.
     kdePackages.kcmutils          # KCMUtils: KDE System Settings module support
     kdePackages.kglobalaccel      # KGlobalAccel: system-wide keyboard shortcuts
+    kdePackages.kcolorscheme      # KColorScheme: the KWin effect resolves the tab pills' theme colours
 
     # Kirigami: a pure *runtime* QML dependency. Nothing in the CMake build
     # looks for it (there is no find_package(KF6 ... Kirigami)) and QML imports

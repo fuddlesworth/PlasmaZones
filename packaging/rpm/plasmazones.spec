@@ -93,10 +93,12 @@ BuildRequires:  qt6-qtsvg-devel
 %if 0%{?suse_version}
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6GlobalAccel)
+BuildRequires:  cmake(KF6ColorScheme)
 BuildRequires:  cmake(KF6Kirigami)
 %else
 BuildRequires:  kf6-kcmutils-devel >= 6.26.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.26.0
+BuildRequires:  kf6-kcolorscheme-devel >= 6.26.0
 BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 

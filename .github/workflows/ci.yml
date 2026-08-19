@@ -62,7 +62,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
             kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
             plasma-activities \
             vulkan-headers vulkan-icd-loader glslang \
             xorg-server-xvfb mesa cava ffmpeg
@@ -164,7 +164,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
             kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
             plasma-activities \
             vulkan-headers vulkan-icd-loader glslang \
             xorg-server-xvfb mesa cava ffmpeg \
@@ -550,7 +550,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             qt6-wayland wayland \
             kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
             plasma-activities \
             vulkan-headers vulkan-icd-loader
 
@@ -664,7 +664,7 @@ jobs:
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
-              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              'kcmutils' 'kglobalaccel' 'kcolorscheme' 'qt6-wayland'
               'kwin>=6.7.0'
           )
           makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
@@ -759,7 +759,7 @@ jobs:
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
-              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              'kcmutils' 'kglobalaccel' 'kcolorscheme' 'qt6-wayland'
               'kwin>=6.7.0'
           )
           makedepends=('git' 'cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland')

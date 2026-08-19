@@ -34,6 +34,7 @@ depends=(
     'kconfigwidgets'
     'kcmutils'
     'kglobalaccel'
+    'kcolorscheme'
     'kirigami'
     'qt6-wayland'
     'kwin>=6.7.0'

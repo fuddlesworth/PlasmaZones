@@ -21,6 +21,14 @@ set(QT_DEFAULT_MAJOR_VERSION 6)
 # Find KWin for effect development
 find_package(KWin 6.7 REQUIRED)
 
+# KColorScheme: the compositor-drawn scrolling tab pills resolve their
+# theme colours (the negative/urgent red in particular) from the active KDE
+# colour scheme, the way Kirigami's desktop platform plugin does — and that
+# plugin reads them through this very library. The effect has no QML engine
+# so Kirigami itself is unusable here; KColorScheme is the C++ source of
+# truth beneath it. The first KF6 dependency the effect carries.
+find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS ColorScheme)
+
 # libepoxy: snap-assist thumbnail dma-buf export (Phase-0 spike) uses
 # EGL_MESA_image_dma_buf_export to hand the rendered OffscreenQuickScene
 # texture to the daemon zero-copy. epoxy provides the EGL/GL entry points
@@ -199,6 +207,7 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Gui
     Qt6::DBus
     Qt6::Svg
+    KF6::ColorScheme
     PhosphorCompositor::PhosphorCompositor
     # `plasmazoneseffect.h` directly includes `<PhosphorEngine/EngineTypes.h>`
     # for the WindowKind enum used by classifyWindowKind. Direct include →

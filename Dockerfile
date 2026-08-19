@@ -31,6 +31,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         qt6-qtsvg-devel \
         kf6-kcmutils-devel \
         kf6-kglobalaccel-devel \
+        kf6-kcolorscheme-devel \
         kf6-kirigami-devel \
         kwin-devel \
         qt6-qtwayland-devel \
