@@ -325,8 +325,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 // Activity is the other half of "on the current workspace":
                 // scrollManagedOutputFor applies neither term, so an
                 // off-activity column stays scroll-managed exactly like an
-                // off-desktop one. Byte-identical to the pill anchor election
-                // in paint_pipeline.cpp, which shares this boundary.
+                // off-desktop one. Same boundary as the pill anchor election
+                // in paint_pipeline.cpp, which drops only the isDeleted term
+                // (its above-anchor set must admit grab-held corpses; the
+                // anchor outcome is identical either way because
+                // scrollManagedOutputFor rejects deleted windows).
                 if (sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
                     || !sw->isOnCurrentDesktop() || !sw->isOnCurrentActivity()) {
                     continue;

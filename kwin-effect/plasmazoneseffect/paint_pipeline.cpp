@@ -98,20 +98,36 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // fade, which outlives the spring. Both costs are bounded by the leg
     // (plus the fade tail) rather than by mode.
     //
-    // NOTE this predicate is not output-scoped (KWin asks once, not per
-    // output), so a scroll leg on one monitor forces composition on every
-    // monitor for its duration. That breadth is the API's, not a choice
-    // here; the crop clause above pays the same session-wide price.
+    // NOTE the RETURN VALUE is global (the API takes no output), but KWin
+    // asks once per output, inside that output's paint bracket: composite()
+    // runs prePaint, then layerCandidates -> blocksDirectScanout, then the
+    // scene and postPaint, per RenderLoop. So m_currentPassOutput names
+    // exactly the output whose scanout candidacy is being decided, and a
+    // clause can be scoped to it. The spring and pass clauses above keep
+    // their session-wide breadth (their state is not per-output here); a
+    // scroll leg on one monitor still forces composition on every monitor
+    // for its bounded duration.
     //
-    // The compositor-drawn tab pills add NO clause here, on purpose. A
-    // scanout candidate is a window covering its whole output opaquely, and
-    // a pill band cannot share an output with such a column: the band is
-    // reserved out of the column (place-within-column) or beside it, either
-    // of which leaves the column short of the output. The one exception, a
-    // negative gap pulling the band over a single output-filling column,
-    // would lose the pills for that column on a scanout-eligible frame, and
-    // that is accepted over blocking direct scanout on every monitor for as
-    // long as any tabbed column exists anywhere.
+    // The pills take the per-output form. A pill band CAN share an output
+    // with a scanout-eligible column: place-within-column is off by default
+    // (nothing is reserved out of the column), and the gap floor is -64 by
+    // design (niri parity pulls the indicator onto the window), so a
+    // full-extent tabbed column with a negative gap presents an opaque
+    // output-filling surface with the band painted over it. A frame that
+    // went to a hardware plane would drop that band, so composition is
+    // forced — but only on outputs that actually carry indicators.
+    if (m_scrollTabPainter) {
+        if (m_currentPassOutput) {
+            if (m_scrollTabPainter->hasIndicators(m_currentPassOutput)) {
+                return true;
+            }
+        } else if (m_scrollTabPainter->hasAnyIndicators()) {
+            // Asked outside any bracket (a path this effect has not seen):
+            // fall back to the conservative global answer rather than a
+            // wrong per-output one.
+            return true;
+        }
+    }
     return m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 
@@ -191,14 +207,22 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     if (data.screen && m_scrollTabPainter->hasIndicators(data.screen)) {
         const QRectF passOutputGeo = QRect(data.screen->geometry());
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
-            // The same five-state paintability filter StripTransitionManager's
-            // above-strip election uses, plus the activity half of "on the
-            // current workspace": scrollManagedOutputFor applies neither a
-            // desktop nor an activity term, so an off-activity column stays
+            // The paintability terms StripTransitionManager's above-strip
+            // election uses, plus the activity half of "on the current
+            // workspace": scrollManagedOutputFor applies neither a desktop
+            // nor an activity term, so an off-activity column stays
             // scroll-managed exactly like an off-desktop one does (#808), and
             // a window KWin will not draw must not be elected as anchor.
-            if (!sw || sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
-                || !sw->isOnCurrentDesktop() || !sw->isOnCurrentActivity()) {
+            //
+            // isDeleted is deliberately NOT among them: a closing window is
+            // painted for its whole close animation (grab-held), and one over
+            // the strip must be able to fire the above-anchor trigger so the
+            // pills land under it rather than over it via the fallback. It
+            // can still never anchor — scrollManagedOutputFor rejects deleted
+            // windows — and a dead member that is never painted never reaches
+            // paintWindow, so it sits in the set inert.
+            if (!sw || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop() || !sw->isOnCurrentDesktop()
+                || !sw->isOnCurrentActivity()) {
                 continue;
             }
             if (scrollManagedOutputFor(sw) == data.screen) {
@@ -522,12 +546,10 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     // nor anything stacked above the strip, so no paintWindow trigger fired
     // and the pass would otherwise have repainted the band from underneath
     // and erased them. Nothing above the anchor painted in this region
-    // (that would have been the second trigger), so blitting last is the
-    // same stacking as blitting at the anchor's slot. The one window the
-    // above-anchor collection leaves out is a closing one (isDeleted() for
-    // its whole close animation, yet still painted by its grab): for at most
-    // that animation a corpse over the strip can end up under the pills on a
-    // pass that reaches this fallback. Still requires an
+    // (that would have been the second trigger — the collection admits
+    // closing windows too, so a grab-held corpse over the strip triggers
+    // like any live occluder), so blitting last is the same stacking as
+    // blitting at the anchor's slot. Still requires an
     // anchor: with no strip column on the output there is nothing the pills
     // belong to this pass.
     if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot

@@ -251,8 +251,9 @@ public:
 
     bool hasIndicators(KWin::LogicalOutput* output) const;
     /// True when ANY output currently has indicators. Used by the effect's
-    /// isActive() predicate: the pills only exist while the effect is in the
-    /// paint chain.
+    /// isActive() predicate (the pills only exist while the effect is in the
+    /// paint chain) and as blocksDirectScanout()'s conservative fallback when
+    /// no per-output bracket is open (the per-output form is hasIndicators).
     bool hasAnyIndicators() const;
 
     /// Whether the last completed paint pass for @p output ISSUED the pill

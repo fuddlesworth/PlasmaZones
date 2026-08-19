@@ -662,14 +662,29 @@ QString TilingHandler::scrollTabPillAt(const QPointF& pos) const
 
 bool TilingHandler::scrollTabPillOccludedAt(const QPointF& pos, KWin::LogicalOutput* out) const
 {
+    // A DEPTH probe, not a hit test. The pill blit runs right after the
+    // anchor paints, and the anchor is the TOPMOST non-parked strip member
+    // of this output, so the question is only "is the topmost thing painted
+    // at pos above or below strip depth". Two consequences shape this walk:
+    //
+    //  - The strip-depth test must NOT be gated on containing the pointer.
+    //    The first non-parked managed column of this output marks strip
+    //    depth wherever the pointer is; everything below it (a dialog over a
+    //    LOWER column, say) painted before the pills and covers nothing, so
+    //    the walk ends there. Testing contains() first read such a dialog as
+    //    an occluder and killed input on a pill that is visibly drawn.
+    //
+    //  - Committed rects are deliberate, view offset and all. The only
+    //    verdict a managed column produces is "strip depth reached", and any
+    //    non-parked managed column is at or below the anchor by the anchor's
+    //    own election rule, so WHICH column the committed lookup lands on
+    //    cannot change the answer. Non-managed windows (the only rects the
+    //    walk actually hit-tests) paint at their committed rect.
     const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
     for (auto it = stack.crbegin(); it != stack.crend(); ++it) {
         KWin::EffectWindow* w = *it;
         if (!w || w->isDeleted() || w->isMinimized() || w->isHidden() || w->isHiddenByShowDesktop()
             || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
-            continue;
-        }
-        if (!w->frameGeometry().contains(pos)) {
             continue;
         }
         // The desktop (wallpaper) window is below every strip column, and
@@ -688,17 +703,19 @@ bool TilingHandler::scrollTabPillOccludedAt(const QPointF& pos, KWin::LogicalOut
         }
         KWin::LogicalOutput* const managed = m_effect->scrollManagedOutputFor(w);
         if (managed == out) {
-            // A strip column of this output, unless it is parked off-screen:
-            // paintWindow culls a parked column on its raw geometry, so it
-            // is not what is drawn under the pointer.
+            // Strip depth, unless the column is parked off-screen (paintWindow
+            // culls a parked column, so it marks no depth here).
             if (m_effect->scrollParkedOffscreen(w, m_effect->getWindowId(w))) {
                 continue;
             }
-            return false; // the pills are blitted above it
+            return false; // at or below the anchor: the pills paint above
         }
         if (managed) {
             // A foreign-managed strip column (crop-mode straddler): culled
             // on this output's pass, so it overdraws nothing here.
+            continue;
+        }
+        if (!w->frameGeometry().contains(pos)) {
             continue;
         }
         return true; // an ordinary window, dialog, float or panel over the band
@@ -711,9 +728,13 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
     if (!KWin::effects) {
         return;
     }
-    if (m_scrollTabPayloadByScreen.isEmpty()) {
-        // No pills anywhere. The override can still be held from a strip
-        // that just vanished under a parked cursor; give it back.
+    if (m_scrollTabPayloadByScreen.isEmpty() || PlasmaZonesEffect::isShowingDesktop()) {
+        // No pills anywhere, or Peek at Desktop has flung the columns to the
+        // edges while the model stays put: either way the hand cursor and
+        // the interception must not be held (activateScrollTabAt already
+        // refuses during the peek, so a held interception would only eat the
+        // click). The override can also still be held from a strip that just
+        // vanished under a parked cursor; give it back.
         m_scrollTabHoverScreen.clear();
         setScrollTabHoverCursor(false);
         return;
