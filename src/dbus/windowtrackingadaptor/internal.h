@@ -19,6 +19,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/logging.h"
@@ -325,26 +326,33 @@ inline QString focused()
 } // namespace ScrollOpenKeys
 
 /// Keys of the per-window colour-override maps: tabColorRuleParams (consumed by
-/// the daemon's scroll tab-strip enrichment) and dropIndicatorRuleParams
-/// (consumed by the overlay service's drop-indicator slot). Same rationale as
+/// the KWin effect, which draws the scroll tab pills, through
+/// TilingAdaptor::scrollTabColors) and dropIndicatorRuleParams (consumed by
+/// the overlay service's drop-indicator slot). Same rationale as
 /// ScrollOpenKeys above — the seam was five hand-repeated literals across four
 /// files, where a typo silently drops an override instead of failing to build.
 ///
-/// These are also the QML property names the overlay items expose, so the
-/// producer, the layering step and the property write all have to agree on the
-/// same spelling; that is exactly what makes one home worth having.
+/// The three tab colours cross a process boundary, so their spellings live in
+/// PhosphorProtocol::Service::ScrollTabKey and these accessors only forward;
+/// the KWin effect reads the very same constants. indicatorColor and
+/// indicatorBorderColor stay local: they are also the QML property names the
+/// overlay's drop-indicator item exposes, so the producer, the layering step
+/// and the property write all have to agree on that spelling.
 namespace WindowColorKeys {
 inline QString activeColor()
 {
-    return QStringLiteral("activeColor");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::ActiveColor);
+    return s;
 }
 inline QString inactiveColor()
 {
-    return QStringLiteral("inactiveColor");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::InactiveColor);
+    return s;
 }
 inline QString urgentColor()
 {
-    return QStringLiteral("urgentColor");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::UrgentColor);
+    return s;
 }
 inline QString indicatorColor()
 {
@@ -356,26 +364,32 @@ inline QString indicatorBorderColor()
 }
 } // namespace WindowColorKeys
 
-/// The NON-colour overlay paint keys, WindowColorKeys' sibling for the same
-/// reason: each spelling is at once the rule-override map key the daemon
-/// produces, the key the overlay's layering step reads, and the QML property
-/// name the slot exposes — seven literals that were hand-repeated across
+/// The NON-colour paint keys, WindowColorKeys' sibling for the same reason:
+/// each spelling is at once the rule-override map key the daemon produces and
+/// the key its consumer reads back — literals that were hand-repeated across
 /// producer and consumer, where a rename silently drops the rule override
-/// instead of failing to build.
+/// instead of failing to build. The indicator* keys are additionally the QML
+/// property names the overlay's drop-indicator slot exposes.
 namespace WindowPaintKeys {
+/// The three tab-indicator paint keys the KWin effect reads off the per-screen
+/// context override map (TilingAdaptor::setScrollTabPaintOverrides). The
+/// effect draws the pills, so the spellings live in
+/// PhosphorProtocol::Service::ScrollTabKey, which both sides of the D-Bus
+/// boundary read; these accessors only forward to it.
 inline QString tabStyle()
 {
-    // "tabStyle", not "style": the name addresses the SLOT's declared
-    // property (see the push block in overlayservice/scrolltabs.cpp).
-    return QStringLiteral("tabStyle");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::TabStyle);
+    return s;
 }
 inline QString gapsBetweenTabs()
 {
-    return QStringLiteral("gapsBetweenTabs");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::GapsBetweenTabs);
+    return s;
 }
 inline QString cornerRadius()
 {
-    return QStringLiteral("cornerRadius");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::CornerRadius);
+    return s;
 }
 inline QString indicatorEnabled()
 {

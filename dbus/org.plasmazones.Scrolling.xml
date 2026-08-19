@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.Scrolling">
-        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface (plus the preset vocabulary beside it), the wheel-driven focusColumn verb, the four absolute width/height setters for external scripting, the clearWindowedFullscreen reconciliation call the KWin effect sends when a client leaves fullscreen on its own, the reapplyWindowGeometry repair call it sends on a fullscreen exit whose strip rects never moved, the blueprintProgressJson template-seed report, the scrollTabSurfaces replay query with its scrollTabSurfaceChanged signal, and the scrollingScreensChanged / scrollEffectBehaviourChanged change announcements for the two properties."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface (plus the preset vocabulary beside it), the wheel-driven focusColumn verb, the four absolute width/height setters for external scripting, the clearWindowedFullscreen reconciliation call the KWin effect sends when a client leaves fullscreen on its own, the reapplyWindowGeometry repair call it sends on a fullscreen exit whose strip rects never moved, the blueprintProgressJson template-seed report, and the scrollingScreensChanged / scrollEffectBehaviourChanged change announcements for the two properties."/>
 
         <property name="scrollingScreens" type="as" access="read">
             <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine, sorted, matching the ordering of the scrollingScreensChanged payload so a consumer can compare the two for the same set. The KWin effect uses it as the discriminator that stamps Mode 'scrolling' rather than 'tiling' in window rule queries, but it does not answer from this raw set: it intersects it at read time with the engine-managed union published on org.plasmazones.Tiling, because the two sets arrive as independent signals with no ordering guarantee and this one can transiently name a screen the union has already dropped. Changes are announced on the scrollingScreensChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
@@ -109,23 +109,6 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object string."/>
             </arg>
         </method>
-
-        <method name="scrollTabSurfaces">
-            <annotation name="org.gtk.GDBus.DocString" value="Every live tab-indicator surface, as a map of effective screen id to wl_surface protocol object id. The replay half of scrollTabSurfaceChanged, for a compositor-side consumer that starts (or restarts) after the surfaces already exist and would otherwise wait for an announcement that only fires on change."/>
-            <arg name="surfaces" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of effective screen id to wl_surface object id."/>
-            </arg>
-        </method>
-
-        <signal name="scrollTabSurfaceChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="The wl_surface drawing a screen's scrolling tab indicators changed. The compositor slides that surface with the scrolling strip so the indicators travel with the columns they label, and the object id is the only handle it can match on: every one of the daemon's overlays reports the same window class, and a layer surface's scope is not exposed per window. A surfaceId of 0 retracts the registration, and one always precedes the surface's destruction, because Wayland reuses object ids and a stale registration would come to name an unrelated surface."/>
-            <arg name="screenId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Effective screen id."/>
-            </arg>
-            <arg name="surfaceId" type="u">
-                <annotation name="org.gtk.GDBus.DocString" value="wl_surface protocol object id, or 0 when the surface is gone."/>
-            </arg>
-        </signal>
 
         <signal name="scrollingScreensChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using the scrolling engine changes."/>

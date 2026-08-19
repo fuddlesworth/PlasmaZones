@@ -33,27 +33,24 @@
  *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
- * 10. clearEngine leaves every slot answering safely AND stops relaying,
- *     and it drops the recorded tab-indicator surfaces.
- * 11. setScrollTabSurface publishes, retracts and replays per screen, and
- *     rejects an empty screen id.
- * 12. The scrollingScreens property never emits PropertiesChanged (change
+ * 10. clearEngine leaves every slot answering safely AND stops relaying.
+ * 11. The scrollingScreens property never emits PropertiesChanged (change
  *     traffic rides the dedicated signal only).
- * 13. clearWindowedFullscreen refuses an empty id, an unknown window and an
+ * 12. clearWindowedFullscreen refuses an empty id, an unknown window and an
  *     unflagged tile as silent no-ops, and clears a genuinely flagged tile
  *     exactly once (placementChanged discriminates: every refusal returns
  *     before emitting). The null-engine arm rides item 10's clearEngine
  *     sweep like every other slot.
- * 14. reapplyWindowGeometry refuses an empty and an unknown id silently,
+ * 13. reapplyWindowGeometry refuses an empty and an unknown id silently,
  *     and its evict makes a rect-stable relayout re-emit — with a control
  *     first proving that same relayout is silent WITHOUT the evict. Its
  *     null-engine arm rides the item 10 sweep too.
- * 15. The four absolute setters share focusColumn's ownership gate, refuse
+ * 14. The four absolute setters share focusColumn's ownership gate, refuse
  *     out-of-range and non-finite values silently (inclusive at both bounds),
  *     and write the intent kind each form documents — width proportion
  *     exact, width/height px Fixed, height proportion a Preset anchor that
  *     relayout snaps to the height vocabulary.
- * 16. blueprintProgressJson carries the same ownership gates, answers zeroes
+ * 15. blueprintProgressJson carries the same ownership gates, answers zeroes
  *     (not an empty object) for an owned screen with no blueprint, and its
  *     `used` counter SPENDS: it does not fall back when a column closes.
  */
@@ -679,7 +676,6 @@ private Q_SLOTS:
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         // Non-empty BEFORE the clear, so the emptiness asserted afterwards is
         // this call's doing rather than a fixture that never populated it.
-        // The sibling cleared-engine test pins its surfaces the same way.
         QVERIFY(!m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->clearEngine();
 
@@ -711,64 +707,6 @@ private Q_SLOTS:
 
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
         QCOMPARE(spy.count(), 0);
-    }
-
-    // The tab-surface registry. This is the handle the compositor uses to tell
-    // the daemon's indicator surface apart from its other overlays — nothing
-    // KWin exposes per window distinguishes them — so publishing a wrong or
-    // stale id makes the effect slide the wrong surface. Wayland reuses object
-    // ids, which is why the retraction below is not merely tidy.
-    void testScrollTabSurface_publishRetractAndReplay()
-    {
-        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollTabSurfaceChanged);
-
-        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 42);
-        m_adaptor->setScrollTabSurface(QStringLiteral("DP-2"), 43);
-
-        QCOMPARE(spy.count(), 2);
-        const QVariantMap after = m_adaptor->scrollTabSurfaces();
-        QCOMPARE(after.size(), 2);
-        QCOMPARE(after.value(QStringLiteral("DP-1")).toUInt(), 42u);
-        QCOMPARE(after.value(QStringLiteral("DP-2")).toUInt(), 43u);
-
-        // Replacing a screen's surface must leave the OTHER screen alone: the
-        // effect keys its live set by id, so a replace that dropped a sibling
-        // would silently stop sliding that monitor's indicators.
-        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 44);
-        QCOMPARE(m_adaptor->scrollTabSurfaces().value(QStringLiteral("DP-1")).toUInt(), 44u);
-        QCOMPARE(m_adaptor->scrollTabSurfaces().value(QStringLiteral("DP-2")).toUInt(), 43u);
-
-        // Zero is the retraction, and it must REMOVE rather than store 0 —
-        // a getter answering 0 for a screen would have the effect register
-        // object id 0 as an indicator surface.
-        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 0);
-        const QVariantMap retracted = m_adaptor->scrollTabSurfaces();
-        QVERIFY(!retracted.contains(QStringLiteral("DP-1")));
-        QCOMPARE(retracted.size(), 1);
-    }
-
-    void testScrollTabSurface_rejectsEmptyScreenId()
-    {
-        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollTabSurfaceChanged);
-
-        m_adaptor->setScrollTabSurface(QString(), 42);
-
-        QVERIFY2(m_adaptor->scrollTabSurfaces().isEmpty(), "an unkeyed surface must not enter the registry");
-        QCOMPARE(spy.count(), 0);
-    }
-
-    // clearEngine is terminal — the next cycle deletes and re-news the whole
-    // adaptor set — but the object stays reachable on the bus until then, and
-    // answering with a torn-down session's surfaces is what the sibling
-    // caches are cleared to avoid.
-    void testClearedEngine_dropsScrollTabSurfaces()
-    {
-        m_adaptor->setScrollTabSurface(QStringLiteral("DP-1"), 42);
-        QVERIFY(!m_adaptor->scrollTabSurfaces().isEmpty());
-
-        m_adaptor->clearEngine();
-
-        QVERIFY(m_adaptor->scrollTabSurfaces().isEmpty());
     }
 
     // The scrollingScreens property's DocString promises that changes are

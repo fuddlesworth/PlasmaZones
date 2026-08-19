@@ -114,6 +114,26 @@ inline constexpr QLatin1String CaptionNormal("captionNormal");
 inline constexpr QLatin1String VirtualDesktops("virtualDesktops");
 }
 
+/// Keys of the two scrolling tab-indicator maps that cross the daemon → KWin
+/// effect boundary on org.plasmazones.Tiling: the per-screen context-rule
+/// PAINT override map (scrollTabPaintOverridesChanged / scrollTabPaintOverrides,
+/// all six keys) and the per-window rule COLOUR map (scrollTabColors /
+/// scrollTabColorsChanged, the three colour keys). The daemon produces them
+/// (src/dbus/windowtrackingadaptor/internal.h's WindowPaintKeys / WindowColorKeys
+/// forward to these) and the effect's TilingHandler reads them; this is the
+/// ONE home for the spellings, so a rename is a compile error on both sides
+/// rather than a silently dropped override. The XML DocStrings in
+/// dbus/org.plasmazones.Tiling.xml (and a few C++ doc comments) repeat the
+/// spellings as prose only.
+namespace ScrollTabKey {
+inline constexpr QLatin1String TabStyle("tabStyle");
+inline constexpr QLatin1String GapsBetweenTabs("gapsBetweenTabs");
+inline constexpr QLatin1String CornerRadius("cornerRadius");
+inline constexpr QLatin1String ActiveColor("activeColor");
+inline constexpr QLatin1String InactiveColor("inactiveColor");
+inline constexpr QLatin1String UrgentColor("urgentColor");
+}
+
 /// Single-instance app identities. Each Phosphor sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.
@@ -226,8 +246,20 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       vertical viewDelta as a horizontal slide, flinging the strip sideways
 //       for the length of every leg. The version handshake is the ONLY thing
 //       rejecting that pairing.
-inline constexpr int ApiVersion = 12;
-inline constexpr int MinPeerApiVersion = 12;
+//   v13: the scrolling tab indicators moved from a daemon-rendered layer
+//       surface into the KWin effect's own paint pass. org.plasmazones.Scrolling
+//       LOST scrollTabSurfaces and scrollTabSurfaceChanged, and
+//       org.plasmazones.Tiling GAINED the required transport
+//       (scrollTabStrips / scrollTabStripsChanged, scrollTabPaintOverrides /
+//       scrollTabPaintOverridesChanged, scrollTabColors /
+//       scrollTabColorsChanged). No existing signature widens, so as with v12
+//       the handshake is the only thing refusing a mismatched pair: a v12
+//       effect against a v13 daemon registers a surface the daemon no longer
+//       knows and never hears a strip, and a v13 effect against a v12 daemon
+//       queries three methods that do not exist — either way the pills are
+//       silently absent rather than wrong.
+inline constexpr int ApiVersion = 13;
+inline constexpr int MinPeerApiVersion = 13;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

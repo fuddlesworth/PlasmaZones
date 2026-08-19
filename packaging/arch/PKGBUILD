@@ -34,6 +34,7 @@ depends=(
     'kirigami'
     'kcmutils'
     'kglobalaccel'
+    'kcolorscheme'
     'qt6-wayland'
     'kwin>=6.7.0'
 )

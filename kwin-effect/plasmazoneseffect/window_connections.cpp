@@ -126,10 +126,11 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // A cross-screen move changes the Mode/screenId inputs of the
             // window's cached rule verdict (tiling vs scrolling screens
             // especially); nothing else invalidates it when the window stays
-            // tiled through the move.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId) {
-                invalidateRuleCacheForStateChange(getWindowId(safeW));
-            }
+            // tiled through the move. The invalidation itself is issued
+            // below, once the involuntary-move and mid-drag gates have been
+            // applied — an unconditional one here bypassed both (and ran the
+            // per-window decoration rebuild mid-drag, which the drag deferral
+            // exists to avoid).
 
             // Detect involuntary moves up front: when a monitor drops out
             // (DPMS standby on Wayland, hotplug-unplug) KWin reassigns the
@@ -236,12 +237,6 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 return;
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
-            // A VS crossing changes the same rule-match inputs the physical
-            // outputChanged handler invalidates for (screenId, and the Mode
-            // stamp when the two VSes run different engines) — without this
-            // a Mode/screen-pinned appearance rule keeps its stale cached
-            // verdict after a cross-VS transfer.
-            invalidateRuleCacheForStateChange(getWindowId(safeW));
 
             // A virtual-screen crossing stales this window's cached rule verdict
             // exactly like the physical cross-screen move above: ScreenId,
@@ -337,6 +332,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
             last = caption;
             pushWindowMetadata(safeW, /*includeExtended=*/false);
+            // A compositor-drawn tab pill shows this caption in the CHIPS
+            // style; rebuild the strips that name the window, skipping screens
+            // whose bar style never draws it (a chatty terminal title must not
+            // re-raster a bar that cannot change). One hash probe when it is
+            // not a tab anywhere, which is the common case.
+            m_tilingHandler->noteScrollTabTitleChanged(getWindowId(safeW.data()));
         };
         // Class / desktop-file mutations invalidate the animation rule
         // evaluator's per-window match cache. The cache is keyed on the
@@ -1003,6 +1004,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         return;
                     }
                     pushWindowMetadata(safeW.data());
+                    // Urgency lights a compositor-drawn tab pill; same rebuild
+                    // as the caption hook above.
+                    m_tilingHandler->noteScrollTabWindowChanged(getWindowId(safeW.data()));
                 });
     }
 }

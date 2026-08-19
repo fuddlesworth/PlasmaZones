@@ -6,7 +6,6 @@
 #include "plasmazones_export.h"
 
 #include <QDBusAbstractAdaptor>
-#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -82,10 +81,9 @@ public:
 
     /// Replace the published behaviour map and broadcast on a real change.
     /// Driven by the daemon's per-screen scrolling pass, which resolves all
-    /// three while it is already walking the scrolling screens. Emit-on-change
-    /// (unlike setScrollTabSurface's non-zero path): the compositor's copy is
-    /// a plain cache it can re-query, so a redundant broadcast would only cost
-    /// a rule-cache invalidation on the other side.
+    /// three while it is already walking the scrolling screens. Emit-on-change:
+    /// the compositor's copy is a plain cache it can re-query, so a redundant
+    /// broadcast would only cost a rule-cache invalidation on the other side.
     ///
     /// All three lists are SORTED and de-duplicated here rather than taken on
     /// trust. The published contract says sorted, and the change gate is a
@@ -127,12 +125,6 @@ public:
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
     /// contract as the sibling adaptors' clearEngine).
     void clearEngine();
-
-    /// Record (or drop, for @p surfaceId 0) the tab-indicator surface for
-    /// @p screenId and broadcast the change. Driven by the overlay service; no
-    /// engine involvement, since the strip's model knows nothing about which
-    /// wl_surface happens to be drawing its indicators.
-    void setScrollTabSurface(const QString& screenId, quint32 surfaceId);
 
 public Q_SLOTS:
     /**
@@ -291,17 +283,6 @@ public Q_SLOTS:
      */
     QString blueprintProgressJson(const QString& screenId) const;
 
-    /**
-     * @brief Every live tab-indicator surface, as screenId → wl_surface id.
-     *
-     * The replay half of @c scrollTabSurfaceChanged, for a compositor-side
-     * consumer that starts (or restarts) after the surfaces already exist and
-     * would otherwise wait for a scroll that never re-announces them.
-     *
-     * @return Map of effective screen id to wl_surface protocol object id
-     */
-    QVariantMap scrollTabSurfaces() const;
-
 Q_SIGNALS:
     /**
      * @brief Emitted when the set of screens using the scrolling engine changes
@@ -314,40 +295,15 @@ Q_SIGNALS:
     /// merge a delta against a copy it might have missed an update to.
     void scrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
-    /**
-     * @brief The wl_surface drawing @p screenId's tab indicators changed.
-     *
-     * The compositor slides that surface with the scrolling strip so the
-     * indicators travel with the columns they label, and it has no other way
-     * to tell it apart from the daemon's other overlays: they share a window
-     * class, and a layer surface's scope is not exposed per window.
-     *
-     * @param screenId  Effective screen id
-     * @param surfaceId wl_surface protocol object id, or 0 when the surface is
-     *                  gone. A zero always precedes the surface's destruction,
-     *                  because Wayland reuses object ids and a stale
-     *                  registration would come to name an unrelated surface.
-     */
-    void scrollTabSurfaceChanged(const QString& screenId, quint32 surfaceId);
-
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
     /// Last set broadcast on the bus (the change gate's memory; the engine
     /// re-emits identical sets on desktop switches for the tiling channel).
     QStringList m_lastBroadcastScreens;
-    /// Live tab-indicator surfaces, screenId → wl_surface id. Held here rather
-    /// than read back from the overlay service so the replay getter answers
-    /// from the same values the signal published.
-    QHash<QString, quint32> m_scrollTabSurfaces;
-
     /// Published copy of @ref scrollEffectBehaviour. Held as the built map so
     /// the property read is a plain copy and the change compare is one
     /// QVariantMap compare rather than two list compares.
     QVariantMap m_scrollEffectBehaviour;
-    /// Terminal latch set by clearEngine(): the overlay-service connection
-    /// feeding setScrollTabSurface survives the clear (its context object is
-    /// this adaptor), and a late push must not repopulate the registry.
-    bool m_engineCleared = false;
 };
 
 } // namespace PlasmaZones

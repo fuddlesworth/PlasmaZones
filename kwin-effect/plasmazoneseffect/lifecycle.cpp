@@ -24,9 +24,12 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
 #include <QEvent>
+#include <QLocale>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QStandardPaths>
 #include <QTimer>
+#include <QTranslator>
 #include <QVarLengthArray>
 
 #include "input_filter.h"
@@ -39,6 +42,7 @@
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/stripviewanimator.h"
+#include "compositor/scrolltabindicatorpainter.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -66,6 +70,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_stripViewAnimator(std::make_unique<StripViewAnimator>())
+    , m_scrollTabPainter(std::make_unique<ScrollTabIndicatorPainter>())
     , m_shaderManager(this)
     , m_desktopTransition(this)
     , m_stripTransition(this)
@@ -74,6 +79,26 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {
     PhosphorProtocol::registerWireTypes();
+
+    // The compositor-drawn tab pills carry one translated string (the
+    // untitled-tab placeholder) and this process is kwin_wayland, which
+    // installs no PlasmaZones catalog of its own. Load the daemon's catalog
+    // for the current locale from the shared data location; the translator
+    // is parented to the effect so an unload removes it again. Same contexts
+    // and lookup as the daemon's translation loader, minus the build-tree
+    // search dirs that only make sense next to our own binaries.
+    {
+        auto* translator = new QTranslator(this);
+        const QLocale locale;
+        const QStringList dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        for (const QString& dir : dataDirs) {
+            if (translator->load(locale, QStringLiteral("plasmazones"), QStringLiteral("_"),
+                                 dir + QStringLiteral("/plasmazones/translations"))) {
+                QCoreApplication::installTranslator(translator);
+                break;
+            }
+        }
+    }
 
     // Latch compositor shutdown so the destructor can tell a runtime unload
     // (KCM toggle — restore the suppressed stock effects) from session
@@ -119,6 +144,17 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // Same for the strip pass (no claim to release, but its capture textures
     // and compiled shaders free under the same context discipline).
     m_stripTransition.reset();
+    // And the tab indicators: the override cursor must be handed back before
+    // the effect goes (KWin would keep a pointing hand nothing owns). The
+    // handler's clear is GL-free — it RETIRES the per-output textures rather
+    // than deleting them — and releaseGl() right after is the GL-current
+    // point that actually frees them (plus anything retired earlier), so
+    // nothing leaks past the effect and nothing is deleted off-context.
+    // Made current HERE rather than inherited from the transition resets
+    // above, so reordering those cannot turn this into an off-context free.
+    m_tilingHandler->clearScrollTabState();
+    ensureGlContextCurrent();
+    m_scrollTabPainter->releaseGl();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));

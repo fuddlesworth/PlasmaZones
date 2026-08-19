@@ -911,13 +911,6 @@ void Daemon::stop()
     // first placementChanged of the next init/start cycle read as "unchanged"
     // and silently skip its save trigger.
     m_lastTiledCountByScreen.clear();
-    // Same shape: the raw tab-strip payloads and the pending-refresh latch are
-    // per-session. A refresh scheduled just before stop() would otherwise fire
-    // afterwards and re-push the pre-stop strips (harmless, since
-    // applyScrollTabStrips bails on a null overlay service, but it is dead work
-    // over dead state).
-    m_lastScrollTabStripsJson.clear();
-    m_scrollTabEnrichmentPending = false;
     // Sibling latch, same per-session shape (its queued single-shot also
     // gates on m_shuttingDown, so this is symmetry rather than a live fix).
     m_reconcileAssignmentsPending = false;
@@ -1039,11 +1032,11 @@ void Daemon::stop()
         // drag-end snap path; no drag-end follows a stop(), so clear both
         // selection families explicitly.
         m_overlayService->clearSelectedZone();
-        // The scroll tab-strip surfaces have the same no-way-out problem as
-        // the modals above: the departing-screen loop that ordinarily clears
-        // them keys on the engine's active set, which is empty from here on,
-        // so a stale strip would sit mapped across a stop()/start() cycle.
-        m_overlayService->clearAllScrollTabState();
+        // The scroll drop-indicator overrides have the same no-way-out problem
+        // as the modals above: the departing-screen loop that ordinarily
+        // clears them keys on the engine's active set, which is empty from
+        // here on, so stale paint would survive a stop()/start() cycle.
+        m_overlayService->clearAllScrollDropIndicatorOverrides();
     }
 
     // Save state

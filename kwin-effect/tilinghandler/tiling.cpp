@@ -1122,23 +1122,29 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             m_pendingReactivateWindow = nullptr;
         }
 
-        // Put the tab-indicator surfaces back at the bottom of their layer.
-        // For non-scroll batches this repairs the saved-stack replay above
-        // (an unfiltered snapshot replayed after the lower would restore the
-        // pre-lower order and leave the indicators painting across the
-        // layout picker and the cheatsheet). Scroll-only batches skip that
-        // replay now, but keep this call: the daemon announces indicator
-        // surfaces for the same strip change this batch applies, and the
-        // re-lower is what puts a freshly announced surface under its
-        // stack. Free when no indicator exists: the function returns on an
-        // empty id set.
-        m_effect->restackScrollTabSurfaces();
-
         // Wayland centering is handled reactively by slotWindowFrameGeometryChanged
         // as soon as the client commits its constrained size — no deferred timer needed.
 
         // Refresh the active border for the focused window (tiledWindows may have changed)
         m_effect->updateAllDecorations();
+
+        // The compositor-drawn tab pills need a strip member to anchor on,
+        // and this batch is what makes the screen's windows scroll-managed
+        // again after a daemon handover (the per-session drain cleared the
+        // membership; the strips were re-fetched before any column was
+        // re-tiled, so their rebuild damaged a band nothing could yet paint).
+        // Damage the pill bounds now that an anchor exists; a no-op on the
+        // ordinary relayout path, where the strips' own push damaged them.
+        if (KWin::effects) {
+            for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+                if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenIt.key())) {
+                    const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(out);
+                    if (bounds.isValid()) {
+                        KWin::effects->addRepaint(KWin::Rect(bounds));
+                    }
+                }
+            }
+        }
     };
 
     m_effect->applyStaggeredOrImmediate(

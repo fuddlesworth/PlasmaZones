@@ -98,10 +98,36 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // fade, which outlives the spring. Both costs are bounded by the leg
     // (plus the fade tail) rather than by mode.
     //
-    // NOTE this predicate is not output-scoped (KWin asks once, not per
-    // output), so a scroll leg on one monitor forces composition on every
-    // monitor for its duration. That breadth is the API's, not a choice
-    // here; the crop clause above pays the same session-wide price.
+    // NOTE the RETURN VALUE is global (the API takes no output), but KWin
+    // asks once per output, inside that output's paint bracket: composite()
+    // runs prePaint, then layerCandidates -> blocksDirectScanout, then the
+    // scene and postPaint, per RenderLoop. So m_currentPassOutput names
+    // exactly the output whose scanout candidacy is being decided, and a
+    // clause can be scoped to it. The spring and pass clauses above keep
+    // their session-wide breadth (their state is not per-output here); a
+    // scroll leg on one monitor still forces composition on every monitor
+    // for its bounded duration.
+    //
+    // The pills take the per-output form. A pill band CAN share an output
+    // with a scanout-eligible column: place-within-column is off by default
+    // (nothing is reserved out of the column), and the gap floor is -64 by
+    // design (niri parity pulls the indicator onto the window), so a
+    // full-extent tabbed column with a negative gap presents an opaque
+    // output-filling surface with the band painted over it. A frame that
+    // went to a hardware plane would drop that band, so composition is
+    // forced — but only on outputs that actually carry indicators.
+    if (m_scrollTabPainter) {
+        if (m_currentPassOutput) {
+            if (m_scrollTabPainter->hasIndicators(m_currentPassOutput)) {
+                return true;
+            }
+        } else if (m_scrollTabPainter->hasAnyIndicators()) {
+            // Asked outside any bracket (a path this effect has not seen):
+            // fall back to the conservative global answer rather than a
+            // wrong per-output one.
+            return true;
+        }
+    }
     return m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 
@@ -135,32 +161,36 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // strip state cannot change under it, which one output pass guarantees.
     m_scrollManagedCache.clear();
 
-    // Tab-indicator paint re-slotting, computed once per OUTPUT PASS — which
+    // Tab-indicator paint slotting, computed once per OUTPUT PASS — which
     // is N times per vsync on an N-monitor desktop, each pass walking the full
     // stacking order for its own output. It has to be per pass rather than per
     // frame: the anchor is the topmost strip member ON THIS OUTPUT, so the
-    // answer differs per output by construction. The empty-set gate below is
-    // what keeps that walk off every desktop with no indicators. The indicator
-    // rides a layer-shell surface, which the protocol stacks above every
-    // ordinary toplevel — so a floating window raised over the strip had the
-    // indicator painted straight across it. paintWindow fixes that by drawing
-    // the indicator right after the ANCHOR (the topmost strip window this
-    // pass will draw) and skipping its natural layer slot; here the anchor
-    // and the pass output's indicator surfaces are picked out of the stacking
-    // order. The filter drops the windows KWin plainly will not draw
-    // (minimized, hidden, off-desktop); it CANNOT rule out an anchor the scene
-    // culls later as fully occluded, and it does not try. That case is covered
-    // by the SECOND trigger instead: the walk also collects the windows above
-    // the final anchor (m_scrollTabAboveAnchor), and paintWindow injects just
-    // before the first of those that paints — an occluded anchor implies a
-    // visible occluder above it, so the injection runs either way instead of
-    // falling through to the natural-slot paint on top of the occluder (which
-    // flickered against the correct stacking as the anchor's culling came and
-    // went). The natural slot remains the last-resort fallback for a pass
-    // where neither trigger fired.
+    // answer differs per output by construction. The has-indicators gate
+    // below is what keeps that walk off every desktop with no tabbed column.
     //
-    // The empty-set gate keeps this off the common path: no indicators
-    // anywhere, no stacking walk.
+    // The pills are painted by this effect (ScrollTabIndicatorPainter), so
+    // "where in the z-order" is entirely this file's decision: paintWindow
+    // blits them right after the ANCHOR (the topmost strip window this pass
+    // will draw), which puts them above every column and below whatever the
+    // stacking puts over the strip. The filter drops the windows KWin plainly
+    // will not draw (minimized, hidden, off-desktop); it CANNOT rule out an
+    // anchor the scene culls later as fully occluded, and it does not try.
+    // That case is covered by the SECOND trigger instead: the walk also
+    // collects the windows above the final anchor (m_scrollTabAboveAnchor),
+    // and paintWindow blits just before the first of those that paints — an
+    // occluded anchor implies a visible occluder above it, so the blit runs
+    // either way. A pass where NEITHER fires is still possible: a damage
+    // region that touches the pill band but no strip window and no occluder
+    // (a hover-only repaint of a pill reserved OUTSIDE its column, a client
+    // repaint under the band). paintScreen's post-walk fallback blits then,
+    // on top of what the pass painted — correct, because nothing stacked
+    // above the strip painted in that region (it would have been an
+    // above-anchor trigger), so the pills land where the anchor slot would
+    // have put them. Inside a STRIP PASS capture only the anchor trigger is
+    // reachable (the capture's above-strip exclusion returns before the
+    // second trigger), which is fine: the capture runs under
+    // PAINT_SCREEN_TRANSFORMED, the generic no-culling path, so the anchor
+    // always paints there.
     //
     // KWin::effects IS NOT GUARDED ANYWHERE IN THIS FUNCTION, and that is the
     // file's rule rather than an omission here. prePaintScreen ends in an
@@ -171,20 +201,34 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // tree sit on paths that genuinely CAN dispatch after teardown (a late
     // D-Bus reply, the park-reap timer's fire), not on the paint bracket.
     m_scrollTabPaintAnchor = nullptr;
-    m_scrollTabDeferred.clear();
-    m_scrollTabDrawn.clear();
+    m_scrollTabPainted = false;
+    m_scrollTabBlitIssued = false;
     m_scrollTabAboveAnchor.clear();
-    if (!m_scrollTabSurfaceIds.isEmpty() && data.screen) {
+    if (data.screen && m_scrollTabPainter->hasIndicators(data.screen)) {
         const QRectF passOutputGeo = QRect(data.screen->geometry());
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
-            if (!sw || sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
-                || !sw->isOnCurrentDesktop()) {
+            // The paintability terms StripTransitionManager's above-strip
+            // election uses, plus the activity half of "on the current
+            // workspace": scrollManagedOutputFor applies neither a desktop
+            // nor an activity term, so an off-activity column stays
+            // scroll-managed exactly like an off-desktop one does (#808), and
+            // a window KWin will not draw must not be elected as anchor.
+            //
+            // isDeleted is deliberately NOT among them: a closing window is
+            // painted for its whole close animation (grab-held), and one over
+            // the strip must be able to fire the above-anchor trigger so the
+            // pills land under it rather than over it via the fallback. It
+            // can still never anchor — scrollManagedOutputFor rejects deleted
+            // windows — and a dead member that is never painted never reaches
+            // paintWindow, so it sits in the set inert.
+            if (!sw || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop() || !sw->isOnCurrentDesktop()
+                || !sw->isOnCurrentActivity()) {
                 continue;
             }
             if (scrollManagedOutputFor(sw) == data.screen) {
                 // A parked-offscreen column cannot anchor: paintWindow culls it
                 // (scrollParkedOffscreen), so an anchor picked here would never
-                // paint and the injection would never run — the same
+                // paint and the blit would never run — the same
                 // anchor-never-painted case the filter note above calls out.
                 // Skip it and let a visible strip member win.
                 //
@@ -195,33 +239,28 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // both ways: a column that unparks this tick is skipped here
                 // though the draw will paint it, and a column that parks this
                 // tick is elected here though the draw will cull it. Neither
-                // costs more than the fallback the filter note already
-                // describes — no injection runs, and the indicators paint at
-                // their natural layer slot, visible but mis-stacked, for that
-                // one frame. Moving the election after advanceAnimations would
-                // tighten it, but the anchor must also survive the scene's own
-                // occlusion culling, which nothing here can predict, so the
-                // fallback has to stay correct regardless.
+                // costs more than one frame with the pills under the second
+                // trigger instead of the first. Moving the election after
+                // advanceAnimations would tighten it, but the anchor must also
+                // survive the scene's own occlusion culling, which nothing here
+                // can predict, so the fallback has to stay correct regardless.
                 if (scrollParkedOffscreen(sw, getWindowId(sw))) {
                     continue;
                 }
                 m_scrollTabPaintAnchor = sw; // topmost strip member wins
                 // Everything collected so far sits BELOW the new anchor, so it
-                // cannot be this pass's injection trigger.
+                // cannot be this pass's blit trigger.
                 m_scrollTabAboveAnchor.clear();
-            } else if (sw->screen() == data.screen && isScrollTabIndicatorSurface(sw)) {
-                m_scrollTabDeferred.insert(sw);
             } else if (sw->screen() == data.screen || QRectF(sw->expandedGeometry()).intersects(passOutputGeo)) {
                 // Candidate above-anchor trigger (see the member's doc): a
                 // non-strip window on this output stacked over the current
                 // anchor. Provisional while the walk runs — a later strip
                 // member resets it above — so what survives is exactly the
-                // windows above the FINAL anchor. paintWindow injects the
-                // indicators just before the first of these that paints, which
-                // is what keeps a culled anchor from degrading into the
-                // natural-slot paint ON TOP of the very dialog or OSD covering
-                // the strip (and from flickering against it as occlusion comes
-                // and goes).
+                // windows above the FINAL anchor. paintWindow blits the pills
+                // just before the first of these that paints, which is what
+                // keeps a culled anchor from losing the pills under the very
+                // dialog or OSD covering the strip (and from flickering
+                // against it as occlusion comes and goes).
                 //
                 // screen() OR rect intersection, per the transition-relevance
                 // convention above: a window straddling outputs but ASSIGNED to
@@ -234,16 +273,14 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // not have culled the anchor anyway, since prePaintWindow marks
                 // it translucent on foreign passes. Over-inclusion is harmless:
                 // a member this pass never paints simply never triggers.
-                m_scrollTabAboveAnchor.insert(sw);
+                m_scrollTabAboveAnchor.append(sw);
             }
         }
         // No column on this output — the mode-teardown race (indicators
         // outliving their strip by a frame), or every strip column parked
         // off the viewport at once (short strip flung past its extent, or
-        // transiently mid-leg): nothing to stack above, so leave the
-        // surfaces on their normal layer-slot paint.
+        // transiently mid-leg): nothing to stack above, so no pills this pass.
         if (!m_scrollTabPaintAnchor) {
-            m_scrollTabDeferred.clear();
             m_scrollTabAboveAnchor.clear();
         }
     }
@@ -477,6 +514,13 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
 void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                     int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
 {
+    // GL-current point reached on every pass the effect takes part in,
+    // including the transition-owned ones below: textures retired by a strip
+    // that went away are deleted here. The clear sites drain too (under a
+    // made-current context), because once the last indicator is gone the
+    // effect can leave the paint chain and this is never reached again; this
+    // covers a retire that happens between a clear and the next pass.
+    m_scrollTabPainter->drainRetiredTextures();
     // While a desktop-switch transition is live for this output, paintOutput
     // draws the two-desktop blend into the screen target and returns true, so we
     // skip the normal scene paint. Otherwise (no transition, or it just settled)
@@ -493,7 +537,25 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     if (m_stripTransition.paintOutput(renderTarget, viewport, mask, deviceRegion, screen)) {
         return;
     }
+    // The scene walk's own damage region is the clip for the pill blit, for
+    // the whole walk (see m_scrollTabWalkRegion): every trigger inside
+    // paintWindow reads it, and so does the fallback below.
+    const ScrollTabWalkScope walkScope(*this, deviceRegion, /*resetPaintedLatch=*/false);
     KWin::effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+    // Post-walk fallback: the pills' damage touched neither a strip window
+    // nor anything stacked above the strip, so no paintWindow trigger fired
+    // and the pass would otherwise have repainted the band from underneath
+    // and erased them. Nothing above the anchor painted in this region
+    // (that would have been the second trigger — the collection admits
+    // closing windows too, so a grab-held corpse over the strip triggers
+    // like any live occluder), so blitting last is the same stacking as
+    // blitting at the anchor's slot. Still requires an
+    // anchor: with no strip column on the output there is nothing the pills
+    // belong to this pass.
+    if (screen && m_scrollTabPaintAnchor && !m_scrollTabPainted && !m_capturingSnapshot
+        && m_scrollTabPainter->hasIndicators(screen)) {
+        paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
+    }
 }
 
 void PlasmaZonesEffect::postPaintScreen()
@@ -508,17 +570,24 @@ void PlasmaZonesEffect::postPaintScreen()
     //
     // Pass over. Defensive hygiene: every capture path in this tree reaches
     // paintWindow from INSIDE the pass (before this runs), so the clear only
-    // protects a hypothetical paintWindow outside any bracket. Cleared at the
-    // TOP deliberately — nothing below reads the latch, and clearing first
-    // means any future reader added to this function sees the bracket as
-    // already closed rather than a stale output.
+    // protects a hypothetical paintWindow outside any bracket. Recorded
+    // first, then cleared: notePassOutcome below is the ONE reader that
+    // needs the bracket's output, and nothing after it does, so a future
+    // reader added lower down sees the bracket as already closed.
+    //
+    // Whether this pass issued the pill blit is what the input side gates on
+    // (a model with nothing blitted must answer nothing). A pass that had
+    // indicators but no anchor (every column parked) records false.
+    if (m_currentPassOutput && m_scrollTabPainter->hasIndicators(m_currentPassOutput)) {
+        m_scrollTabPainter->notePassOutcome(m_currentPassOutput, m_scrollTabBlitIssued);
+    }
     m_currentPassOutput = nullptr;
     // The re-slotting state holds raw EffectWindow pointers, and between
     // passes a window can die; the next prePaintScreen recomputes them, but
     // clearing here means no dangling pointer ever survives the bracket.
     m_scrollTabPaintAnchor = nullptr;
-    m_scrollTabDeferred.clear();
-    m_scrollTabDrawn.clear();
+    m_scrollTabPainted = false;
+    m_scrollTabBlitIssued = false;
     m_scrollTabAboveAnchor.clear();
     // Same reasoning, one map further: the per-pass resolve memo keys on raw
     // EffectWindow* and stores raw LogicalOutput*, and either can die between
@@ -534,6 +603,19 @@ void PlasmaZonesEffect::postPaintScreen()
     // Free strip-pass entries whose view spring has settled (the spring's own
     // repaint pump drives live legs; this is resource hygiene, not a ticker).
     m_stripTransition.reapSettled();
+    // A view leg slides the pills under a stationary pointer, and hover is
+    // otherwise motion-driven only: on the active→settled edge re-evaluate
+    // it at the live pointer, off the paint path (the hover update can start
+    // or stop the mouse interception, which is not a paint-time call).
+    const bool legActive = m_stripViewAnimator->hasActiveAnimations();
+    if (m_scrollTabLegWasActive && !legActive && m_scrollTabPainter->hasAnyIndicators()) {
+        QTimer::singleShot(0, this, [this] {
+            if (KWin::effects) {
+                m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+            }
+        });
+    }
+    m_scrollTabLegWasActive = legActive;
     // Per-output damage dedup shared by the two window loops below: K live
     // transitions (or suppressed windows) on one output otherwise issue K
     // identical full-output addRepaint calls per frame. One repaint per
@@ -1215,8 +1297,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // offset is part of the tested rect, so a column scrolling back toward the
     // viewport re-earns the flag on the frame it starts to intersect.
     //
-    // Term order is the convention this file states at the tab-indicator
-    // branch in paintWindow: the cheap hash probe first, the resolve after.
+    // Term order is deliberate: the cheap hash probe first, the resolve after.
     // `m_scrollVisualDelta.contains(windowId)` is one lookup in the same map
     // the isEmpty() gate just tested, while scrollManagedOutputFor walks the
     // tracked-screen resolution (memoised per pass, but only after the first
@@ -1225,63 +1306,6 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     if (w && !m_scrollVisualDelta.isEmpty() && m_scrollVisualDelta.contains(windowId) && scrollManagedOutputFor(w)
         && !parkedOffscreen) {
         data.setTransformed();
-    }
-
-    // Tab-indicator paint flags. Membership in the re-slot set is tested FIRST
-    // and doubles as the surface test: prePaintScreen only ever puts indicator
-    // surfaces in it, so a hit needs no isScrollTabIndicatorSurface call, and a
-    // miss on the empty set costs one hash probe. The animating clause keeps
-    // its own ordering rationale — the cheap animator lookup before the surface
-    // resolve — for the frames where no re-slot is in play.
-    const bool tabIndicatorReslotted = w && m_scrollTabDeferred.contains(w);
-    const bool tabIndicatorSliding = w && m_stripViewAnimator->isAnimatingOn(w->screen())
-        && (tabIndicatorReslotted || isScrollTabIndicatorSurface(w));
-
-    // TRANSFORMED is about WHERE it is drawn, so it is the sliding surface's
-    // flag alone. The indicator is translated off its committed rect for the
-    // whole view leg (paintWindow adds the strip's offset to it), so KWin must
-    // stop deciding where it goes from that rect.
-    //
-    // Sliding COLUMNS deliberately get no such per-window flag for the same
-    // view offset: prePaintScreen's screen-level mask already keeps the
-    // whole strip output's paint honest while a view leg runs, and the block
-    // above adds the per-window flag only where a window is RELOCATED off
-    // its committed rect (a visualDelta entry). The indicator keeps its own
-    // flag as the one surface whose paint slot is REORDERED (the anchor
-    // injection) as well as translated — belt-and-braces against a pass
-    // where the screen mask alone would let KWin reason from the committed
-    // rect of a surface that is not even painted at its natural position.
-    if (tabIndicatorSliding) {
-        data.setTransformed();
-    }
-    // TRANSLUCENT is about OCCLUSION, and both cases need it.
-    //
-    // Sliding needs it for the reason the transition branch above does: a
-    // surface drawn away from its frame leaves the pixels it vacated
-    // uncomposited, and the last presented frame reads back as a ghost
-    // indicator standing still while the real one slides.
-    //
-    // RE-SLOTTING needs it for a different and load-bearing reason, and it
-    // applies at rest — the common case — not only during a leg. paintWindow
-    // draws this surface early, at the anchor's stacking slot, while KWin still
-    // sees it at the top of the layer bucket. Per this file's own reading of
-    // KWin 6.7's workspacescene.cpp (see the decorated-window note above), a
-    // window that is NOT marked translucent contributes its opaque region to
-    // the accumulation, and `visible -= deviceOpaque` then subtracts that
-    // region from every window BELOW it. A floating window raised over the
-    // strip is below this surface, so it would be culled exactly where the
-    // indicator claims opacity — and it paints AFTER the injected draw, so the
-    // indicator would win there and the mis-stacking this whole mechanism
-    // exists to fix would come straight back.
-    //
-    // In practice the daemon's overlay is a translucent QQuickWindow and
-    // declares no opaque region at all, so the cull does not fire today. That
-    // is a fact about another process's surface, not an invariant this file can
-    // hold, and the failure it guards is silent. Asserting the flag costs
-    // nothing here: there is no opaque indicator content for KWin to cull
-    // behind in the first place.
-    if (tabIndicatorReslotted || tabIndicatorSliding) {
-        data.setTranslucent();
     }
 
     OffscreenEffect::prePaintWindow(view, w, data);
@@ -1394,25 +1418,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // symmetry keeps it latent).
     //
     // The record is deduplicated by MEMBERSHIP (first-wins), not by comparing
-    // against the tail. A tail check only catches back-to-back repeats, and the
-    // shape that would defeat it is a window driven through this function twice
-    // in one capture walk with other records in between — the deferred tab
-    // indicator, which injectScrollTabIndicators drives at the ANCHOR's slot
-    // before its own natural slot arrives. Recorded twice, the composite would
-    // alpha-blend it twice and draw it at two different depths.
+    // against the tail. A tail check only catches back-to-back repeats, while
+    // the shape that would defeat it is a window driven through this function
+    // twice in one capture walk with other records in between. Recorded twice,
+    // the composite would alpha-blend that window twice and draw it at two
+    // different depths.
     //
     // POSITION IN THIS LIST IS THE COMPOSITE'S STACKING ORDER — StripTransition
     // Manager replays it bottom to top — so which record survives decides the
-    // indicator's depth, and first-wins is the one that matches the injection's
-    // stated contract below: above all columns, below whatever the stacking
-    // puts over the strip. That IS the anchor's slot. The natural layer slot is
-    // precisely the mis-stacking the re-slotting exists to override, so keeping
-    // the later record would re-introduce it.
+    // window's depth, and first-wins keeps the depth its first (natural) slot
+    // gave it rather than a later re-entry's.
     //
-    // Insurance rather than an observed fault: the above-strip election counts
-    // a same-screen indicator as a strip member when it picks the boundary, and
-    // excludes anything not intersecting the output, so the deferred set and
-    // the above-strip set look disjoint today. Cheap to keep correct either way.
+    // Insurance rather than an observed fault: nothing drives a window through
+    // this function twice inside one strip capture today. Cheap to keep correct
+    // either way.
     if (!m_capturingSnapshot && m_stripCaptureExclusionOutput && m_stripCaptureAboveStrip.contains(w)) {
         if (!m_stripCaptureSkippedWindows.contains(w)) {
             m_stripCaptureSkippedWindows.append(w);
@@ -1420,57 +1439,38 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         return;
     }
 
-    // Tab-indicator paint re-slotting, part one: skip the surface at its
-    // NATURAL slot once the injection below has drawn it in THIS SCENE WALK.
-    // The drawn set is scoped to the walk, not to the pass: a bracket can
-    // contain more than one full walk (the desktop-transition capture, the
-    // strip capture), and each of those swaps an empty set in around its
-    // nested paintScreen and hands this one back afterwards. Scoping it to the
-    // pass instead let a capture walk mark every indicator drawn and the
-    // PRESENTED walk then skip them at both this slot and the injection, so
-    // they drew zero times. The clears in prePaintScreen / postPaintScreen
-    // remain the bracket-level hygiene for the outermost walk.
-    // The natural slot is the layer bucket, which the scene walks after every
-    // ordinary toplevel — exactly the stacking that painted the indicator
-    // across floating windows raised over the strip. The drawn-set gate (not
-    // deferred-set membership) keeps this a true last resort: a pass where
-    // NEITHER injection trigger fired (the anchor culled and nothing above it
-    // painted either) leaves the set empty and the surface paints here rather
-    // than not at all. Injection re-enters this function under
-    // m_directPaintCapture, which is why that latch exempts the skip.
-    if (!m_capturingSnapshot && !m_directPaintCapture && m_scrollTabDrawn.contains(w)) {
-        return;
-    }
-    // Part two: the anchor's own paint runs to completion below (whichever of
-    // this function's draw branches takes it), and the guard then composites
-    // every deferred indicator right on top of it — above all columns, below
-    // whatever the stacking puts over the strip. A scope guard rather than a
-    // call at the tail because the anchor may exit through any of the branch
-    // returns (shader transition, direct-capture, redirected present).
-    const bool injectTabsAfterThisWindow = !m_capturingSnapshot && !m_directPaintCapture && w
-        && w == m_scrollTabPaintAnchor && !m_scrollTabDeferred.isEmpty();
-    const auto tabInjectGuard = qScopeGuard([&]() {
-        if (injectTabsAfterThisWindow) {
-            injectScrollTabIndicators(renderTarget, viewport, deviceRegion);
+    // Compositor-drawn tab indicators: blit them at the ANCHOR's slot — right
+    // after the topmost strip window this pass draws — so they sit above every
+    // column and below whatever the stacking puts over the strip. A scope
+    // guard rather than a call at the tail because the anchor may exit through
+    // any of the branch returns (shader transition, direct-capture, redirected
+    // present). Painted at most once per output pass (m_scrollTabPainted):
+    // prePaintScreen resets the latch, and the two triggers below are mutually
+    // exclusive through it.
+    //
+    // The latch is scoped to the PASS, not to a scene walk, because the blit
+    // is not a window: the capture walks (desktop transition, strip pass)
+    // swap their own window-drawn bookkeeping around a nested paintScreen,
+    // but a pill blit inside a capture is simply part of what the capture
+    // sees — exactly where the columns are — and re-blitting it again on the
+    // presented walk would double it. One blit per pass is right either way.
+    const bool blitTabsAfterThisWindow =
+        !m_capturingSnapshot && !m_directPaintCapture && w && w == m_scrollTabPaintAnchor && !m_scrollTabPainted;
+    const auto tabBlitGuard = qScopeGuard([&]() {
+        if (blitTabsAfterThisWindow && !m_scrollTabPainted) {
+            paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
         }
     });
-    // Part two-and-a-half: the anchor's paint alone is not a reliable trigger.
-    // The scene culls a fully occluded anchor — a dialog or a raised floating
-    // window covering the column — and then the guard above never arms, the
-    // indicators fell through to their natural layer slot, and they painted ON
-    // TOP of the very window covering the strip (dialogs, and the passive
-    // shell's OSDs with it). Worse than one bad frame: whether the anchor
-    // survives culling shifts with whatever occludes it, so the indicators
-    // FLICKERED between correctly-stacked and over-everything. So ALSO inject
+    // Second trigger: the anchor's paint alone is not reliable. The scene
+    // culls a fully occluded anchor — a dialog or a raised floating window
+    // covering the column — and then the guard above never arms. So ALSO blit
     // just before the first window stacked above the anchor paints — an
     // occluded anchor implies a visible occluder above it, so one of the two
-    // triggers always fires. Injection marks every indicator drawn, which
-    // makes the two triggers and the natural-slot skip mutually exclusive; the
-    // size compare keeps the common already-injected case to two integer
-    // reads.
-    if (!m_capturingSnapshot && !m_directPaintCapture && w && !m_scrollTabDeferred.isEmpty()
-        && m_scrollTabDrawn.size() < m_scrollTabDeferred.size() && m_scrollTabAboveAnchor.contains(w)) {
-        injectScrollTabIndicators(renderTarget, viewport, deviceRegion);
+    // triggers always fires, and the pills land under that occluder rather
+    // than flickering over it as the anchor's culling comes and goes.
+    if (!m_capturingSnapshot && !m_directPaintCapture && w && m_scrollTabPaintAnchor && !m_scrollTabPainted
+        && m_scrollTabAboveAnchor.contains(w)) {
+        paintScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
@@ -1829,28 +1829,6 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!viewOffset.isNull()) {
                 data += viewOffset;
             }
-        } else if (KWin::LogicalOutput* out = w ? w->screen() : nullptr;
-                   out && m_stripViewAnimator->isAnimatingOn(out) && isScrollTabIndicatorSurface(w)) {
-            // The tab indicators take the SAME offset as the columns they
-            // label, from the same spring, inside the same paint pass. That is
-            // the whole reason they were given a surface of their own: a second
-            // spring in the daemon could never catch this one, because the
-            // daemon renders and commits its surface for the compositor to
-            // composite a frame or more later.
-            //
-            // The daemon pushes each indicator at its post-scroll rect, exactly
-            // as the apply path commits each column's post-scroll geometry, so
-            // one shared offset puts both back where they were and slides them
-            // in step.
-            //
-            // The cheap map lookup is deliberately first: the indicator test
-            // behind it resolves the window's surface and compares its window
-            // class, and no surface needs an offset on an output whose strip is
-            // at rest.
-            // The tab-indicator surface has no tile entry of its own, which is
-            // exactly why the axis is held per output rather than read off a
-            // batch.
-            data += m_stripViewAnimator->offsetFor(out);
         }
     }
 
@@ -1886,25 +1864,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
-    // Direct-drive callers own this latch — THREE of them, and only one is a
+    // Direct-drive callers own this latch — TWO of them, and only one is a
     // capture: the desktop transition's compositeWindowsInto (which drives
     // windows that were never in this frame's scene walk into an offscreen
-    // capture), the strip pass's top-composite (which drives the
+    // capture) and the strip pass's top-composite (which drives the
     // above-strip windows onto the SCREEN target after its quad, once per
-    // frame of every scroll leg), and injectScrollTabIndicators (which draws
-    // the tab indicators at the anchor's stacking slot instead of their own).
-    // All three drive this paintWindow directly with the chain iterator at
-    // begin(), so continuing the paint chain below would re-enter this very
-    // function (double fold, the animator transform applied twice) and then
-    // drive later effects' paintWindow hooks without the prePaintWindow they
-    // key off. Terminate with a raw draw instead.
+    // frame of every scroll leg). Both drive this paintWindow directly with
+    // the chain iterator at begin(), so continuing the paint chain below would
+    // re-enter this very function (double fold, the animator transform applied
+    // twice) and then drive later effects' paintWindow hooks without the
+    // prePaintWindow they key off. Terminate with a raw draw instead.
     //
     // The raw draw skips the rest of the paintWindow chain for the driven
-    // window, which is the accepted trade at all three sites rather than an
+    // window, which is the accepted trade at both sites rather than an
     // oversight — see the chain-continuation note below for what that costs.
-    // For an indicator it costs nothing anyone can see: the later effects that
-    // matter act on toplevels (windowaperture parks WINDOWS, not layer
-    // surfaces), and the surface declares no blur region to lose.
     if (m_directPaintCapture) {
         KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
         return;
@@ -1931,52 +1904,38 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
-void PlasmaZonesEffect::injectScrollTabIndicators(const KWin::RenderTarget& renderTarget,
-                                                  const KWin::RenderViewport& viewport,
-                                                  const KWin::Region& deviceRegion)
+void PlasmaZonesEffect::paintScrollTabIndicators(const KWin::RenderTarget& renderTarget,
+                                                 const KWin::RenderViewport& viewport, const KWin::Region& deviceRegion)
 {
-    // Same direct-drive shape as the strip pass's above-strip composite:
-    // drive each surface through OUR OWN paintWindow so the view offset
-    // applies (the indicator branch in the transform block), with
-    // m_directPaintCapture terminating its tail in a raw draw — the scene's
-    // draw-window iterator is not at this window, so continuing the paint
-    // chain from here would corrupt the walk. The surfaces DID get
-    // prePaintWindow this frame (they are in the scene walk; only their
-    // natural paint slot is skipped), so no per-window state is missing.
-    //
-    // Blending is asserted rather than inherited: this runs between two scene
-    // item draws, and the ambient GL state at that point belongs to whatever
-    // the scene renderer last drew. ScopedGlState puts it back either way, so
-    // the next item's assumptions hold.
-    const ShaderInternal::ScopedGlState glStateGuard;
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    m_directPaintCapture = true;
-    const auto directPaintGuard = qScopeGuard([this]() {
-        m_directPaintCapture = false;
-    });
-    for (KWin::EffectWindow* indicator : std::as_const(m_scrollTabDeferred)) {
-        if (!indicator || indicator->isDeleted() || m_scrollTabDrawn.contains(indicator)) {
-            continue;
-        }
-        // Marked drawn BEFORE the paint, not after: the natural-slot skip
-        // keys on this set, and the injected paintWindow re-entry must never
-        // be able to recurse back here whatever branch it exits through.
-        m_scrollTabDrawn.insert(indicator);
-        KWin::ItemEffect keepRenderable(indicator->windowItem());
-        KWin::WindowPaintData indicatorData;
-        indicatorData.setOpacity(indicator->opacity());
-        const int indicatorMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-        // The trigger's deviceRegion, NEVER an infinite region. Paint order
-        // only becomes stacking order if every window above repaints the same
-        // pixels after us, and KWin hands each of them only the damage region
-        // — an unclipped injection painted indicators outside it, where no
-        // occluder ever drew again, and the strip surfaced over fullscreen
-        // windows, Spectacle's overlay, and the lock surface until the next
-        // full-damage frame. See the declaration's parameter doc for why the
-        // trigger's region is also the semantically correct clip.
-        paintWindow(renderTarget, viewport, indicator, indicatorMask, deviceRegion, indicatorData);
+    // Once per output pass, whichever trigger fired first. Latched BEFORE the
+    // paint so a re-entrant trigger during the blit (none exists, but the
+    // latch is what makes that true) cannot double it.
+    m_scrollTabPainted = true;
+    KWin::LogicalOutput* out = m_currentPassOutput;
+    if (!out) {
+        return;
     }
+    // The SAME offset the columns take in the transform block above, read in
+    // the same paint pass: that is the entire reason the pills are drawn here
+    // rather than by the daemon — they move on exactly the frame the windows
+    // do, for a view leg, an edge auto-scroll tick, or anything else that
+    // slides the strip.
+    const QPointF viewOffset = m_stripViewAnimator->offsetFor(out);
+    // Clip to the WALK's region, not the trigger window's. KWin hands each
+    // paintWindow the damage intersected with that window's own bounds, so a
+    // trigger-bounded clip would cut every pill outside the anchor column
+    // (the columns beside it, a band reserved outside the column) off a
+    // stock install at rest. The walk region is still exactly the set of
+    // pixels that gets recomposited above us this pass, which is the
+    // property the clip exists for. The trigger's region is the fallback
+    // only for a paintWindow reached outside any paintScreen bracket.
+    const KWin::Region& clip = m_scrollTabWalkRegionValid ? m_scrollTabWalkRegion : deviceRegion;
+    // The latch above stays unconditional (it is the once-per-pass re-entry
+    // guard); whether the blit actually reached the GPU is recorded apart,
+    // because the painter can refuse (a latched raster failure) and the pass
+    // outcome must then say "nothing on screen" or pill input would answer
+    // for invisible pills.
+    m_scrollTabBlitIssued = m_scrollTabPainter->paint(out, renderTarget, viewport, clip, viewOffset);
 }
 
 } // namespace PlasmaZones

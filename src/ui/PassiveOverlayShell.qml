@@ -50,15 +50,11 @@ Window {
     // Sibling tiers below: the modalSlots container (z=2, hosting the
     // snap-assist / layout-picker / cheatsheet slots in
     // PassiveOverlayModalSlots.qml), zoneSelectorSlot (z=1),
-    // scrollDropIndicatorSlot (z=0.6), mainOverlaySlot (z=0).
-    // The scrolling tab indicators are NOT here: they have a surface of
-    // their own (ScrollTabShell.qml) so the compositor can slide them with
-    // the strip without dragging this shell's OSD sideways too.
-    // The osdSlot's z is
-    // dynamic (3 normally, 1.5 while a modal slot is visible — see the
-    // binding on osdSlot). Each is a sibling Item with its own
-    // properties + Loader, animated independently via the
-    // SurfaceAnimator's per-(Surface, target) keying.
+    // scrollDropIndicatorSlot (z=0.6), mainOverlaySlot (z=0). The osdSlot's
+    // z is dynamic (3 normally, 1.5 while a modal slot is visible — see the
+    // binding on osdSlot). Each is a sibling Item with its own properties +
+    // Loader, animated independently via the SurfaceAnimator's
+    // per-(Surface, target) keying.
 
     id: root
 
@@ -425,18 +421,15 @@ Window {
         // stretching in from the stale rect of the previous drag, true for
         // cursor-driven target changes. Written by C++ BEFORE the rect.
         property bool animateMoves: true
-        // Content lifecycle gate, toggled by C++ on show/hide. Like the tab
-        // strips (and unlike the OSD-style slots) the content is NOT
-        // re-instantiated per update — the rect changes as the drag moves and
-        // flows through the `indicatorRect` binding.
+        // Content lifecycle gate, toggled by C++ on show/hide. Unlike the
+        // OSD-style slots the content is NOT re-instantiated per update — the
+        // rect changes as the drag moves and flows through the
+        // `indicatorRect` binding.
         property bool loaded: false
 
         anchors.fill: parent
         // Indicator tier: above the main overlay (z=0) and below the zone
-        // selector (z=1), the OSDs and the modals. Ordering against the
-        // scrolling tab strips is NOT decided here — they live on their own
-        // layer-shell surface (ScrollTabShell.qml), and z only orders siblings
-        // inside this window's scene graph.
+        // selector (z=1), the OSDs and the modals.
         z: 0.6
         opacity: 0
         visible: false

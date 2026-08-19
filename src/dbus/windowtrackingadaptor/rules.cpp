@@ -476,9 +476,10 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     if (!query) {
         return {};
     }
-    // NO screen/mode stamping here, unlike scrollOpenRuleParams: this runs
-    // from the strip-relayout path, which knows the window but not which
-    // screen's resolve it belongs to, and a wrong stamp is worse than none —
+    // NO screen/mode stamping here, unlike scrollOpenRuleParams: this is
+    // driven by the effect's per-tab query (TilingAdaptor::scrollTabColors)
+    // and the per-window title relay, both of which know the window but not
+    // which screen's resolve it belongs to, and a wrong stamp is worse than none —
     // it would make a ScreenId-conditioned rule match the wrong monitor. A
     // rule pairing a tab colour with a ScreenId or Mode condition is therefore
     // inert on this path by design; the per-CONTEXT colour actions are the
@@ -501,16 +502,19 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     //    either: every one of its six seeders runs on the OPEN path only, and
     //    a rules save bumps the revision, so after any save the peek misses
     //    forever for every already-open window (they will not open again).
-    //    This function runs per tab on every re-enrichment, which includes
-    //    every window TITLE change, so a permanent miss means a full rule-set
-    //    walk per tab per retitle.
+    //    This function runs once per window per call of
+    //    TilingAdaptor::scrollTabColors (the effect queries it per tab it
+    //    paints) and again on every per-window relay the daemon fires on a
+    //    title change, so a permanent miss means a full rule-set walk per tab
+    //    per retitle.
     //
     // A private memo keyed the same way is free of both: nothing else reads it,
     // so its filter can be exactly right for THIS query, and a second call
     // costs a hash lookup again.
     // The key is the revision PLUS the query fields that move under a live
-    // window. Title is load-bearing: the enrichment refresh that calls this is
-    // driven by title changes, so a revision-only key would pin a
+    // window. Title is load-bearing: the daemon re-drives this per window on
+    // every title change (the metadataChanged relay that emits
+    // scrollTabColorsChanged), so a revision-only key would pin a
     // `Title contains …` rule to its first verdict for the window's lifetime.
     // The colour-scheme token is in the key for the same reason with a
     // different trigger: it moves on a light/dark flip with no rules edit, so
@@ -519,8 +523,8 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     // Shadow-keyed so the writer and the windowClosed remover share one key
     // space BY CONSTRUCTION — the close path removes by shadowWindowId, and
     // a raw-keyed entry would survive until the pruneStaleWindows sweep.
-    // (The sole caller today passes canonical ids, so this is pinning the
-    // pairing structurally rather than fixing a live leak.)
+    // (The D-Bus scrollTabColors caller passes whatever id the effect holds,
+    // so the shadow key is what makes the two callers share one entry.)
     const QString memoKey = shadowWindowId(windowId);
     const auto memoIt = m_tabColorMemo.constFind(memoKey);
     if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->title == query->title
@@ -589,7 +593,7 @@ QVariantMap WindowTrackingAdaptor::dropIndicatorRuleParams(const QString& window
     // is spelled with the per-CONTEXT actions instead.
     //
     // NO memo either, unlike the tab colours: this resolves ONCE per drag
-    // rather than per tab per relayout, so a cache would cost more in
+    // rather than per tab per effect query, so a cache would cost more in
     // invalidation correctness than the single resolve it saves.
     ensureRuleEvaluator();
     // admitNothingStamped: same no-stamp shape as the tab colours above.

@@ -24,6 +24,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QTimer>
 #include <QtMath>
@@ -37,6 +38,13 @@ TilingHandler::TilingHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
 {
+    // Colour-scheme and system-font changes re-resolve the compositor-drawn
+    // tab pills' theme (see eventFilter). qGuiApp outlives this handler, and
+    // Qt drops the filter when the filtering object is destroyed, so no
+    // explicit removal is needed.
+    if (qGuiApp) {
+        qGuiApp->installEventFilter(this);
+    }
 }
 
 QSize TilingHandler::declaredMinSize(KWin::EffectWindow* w)
@@ -712,6 +720,10 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
+    // The tab-colour verdict dies with the window: the cache is per window
+    // and nothing else evicts it, so every close funnels through here (this
+    // is the one untrack funnel every caller passes).
+    dropScrollTabColorsForWindow(windowId);
     // The announce stamp dies with the tracking, and that erasure is what makes
     // a late error reply for a CLOSED window harmless: the arm reads back 0,
     // mismatches its captured stamp, and no-ops instead of re-inserting a
@@ -1176,6 +1188,18 @@ void TilingHandler::clearPerSessionDaemonState()
     }
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_lastReportedMinSize.clear();
+    // The tab-indicator model, colour verdicts and paint overrides describe
+    // the dead session's strips: a straight old→new owner handover produces
+    // no serviceUnregistered edge, so without this drain the painter would
+    // keep blitting pills for columns the new daemon never laid out (its
+    // replay only names screens that still have a strip, and its "[]"
+    // retraction is latched on its own membership set). The bring-up fetches
+    // in loadSettings re-seed what the new session has; the clear pairs with
+    // a full repaint because clearAll damages nothing itself.
+    clearScrollTabState();
+    if (KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
     // Tiled membership belongs to the dead session as well. The
     // serviceUnregistered teardown normally clears it (paired there with the
     // decoration restore), but a straight old→new owner handover produces no

@@ -11,13 +11,8 @@
 // empty-strip sketch in step by comment alone; here they share one
 // definition of each.
 
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include <QLatin1String>
 #include <QRect>
 #include <QRectF>
@@ -25,9 +20,6 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
-
-#include <functional>
-#include <optional>
 
 namespace PlasmaZones::StripZones {
 
@@ -161,98 +153,6 @@ inline QVariantList numberMapsForTiles(const QVector<VisibleTile>& tiles)
         zones.append(zone);
     }
     return zones;
-}
-
-/// The overlay's tab-indicator model, parsed from ScrollEngine's
-/// tabStripsChanged payload ({x, y, width, height, position, activeIndex,
-/// tabs: [windowId, …]} per tabbed column that resolves an indicator,
-/// documented on ScrollEngine.h).
-///
-/// This is the daemon's ONLY reader of that schema, so the wire format has one
-/// producer (ScrollEngine::applyLayout) and one consumer rather than a copy in
-/// the composition root that drifts from the emitter.
-///
-/// @p titleForWindow supplies each tab's display title for a canonical window
-/// id; an empty answer falls back to the id's app id, so a window the registry
-/// has not seen still labels its tab. @p urgentForWindow reports whether that
-/// window is demanding attention; it may be empty, in which case no tab is
-/// urgent, which is the correct reading of "the compositor never told us".
-/// @p colorsForWindow supplies that window's per-window colour overrides (the
-/// TabColor* window rules) as an activeColor / inactiveColor / urgentColor
-/// map, absent keys meaning "no override"; it too may be empty.
-///
-/// Returns nullopt when the payload does not parse as an array — that is "we
-/// know nothing about the strips", which is not the same as "there are none",
-/// so the caller must leave the live indicators alone rather than clearing
-/// them.
-inline std::optional<QVariantList>
-parseTabStripPayload(const QString& stripsJson, const std::function<QString(const QString&)>& titleForWindow,
-                     const std::function<bool(const QString&)>& urgentForWindow,
-                     const std::function<QVariantMap(const QString&)>& colorsForWindow, QJsonParseError* parseError)
-{
-    const QJsonDocument doc = QJsonDocument::fromJson(stripsJson.toUtf8(), parseError);
-    if ((parseError && parseError->error != QJsonParseError::NoError) || !doc.isArray()) {
-        return std::nullopt;
-    }
-    QVariantList strips;
-    const QJsonArray arr = doc.array();
-    strips.reserve(arr.size());
-    for (const QJsonValue& stripValue : arr) {
-        const QJsonObject stripObj = stripValue.toObject();
-        QVariantMap strip;
-        // qRound(toDouble()), not toInt(): QJsonValue::toInt() yields 0 for any
-        // non-integral number, so a producer that ever writes a fractional
-        // coordinate would silently park the whole strip at the screen origin.
-        strip.insert(QLatin1String("x"), qRound(stripObj.value(QLatin1String("x")).toDouble()));
-        strip.insert(QLatin1String("y"), qRound(stripObj.value(QLatin1String("y")).toDouble()));
-        strip.insert(QLatin1String("width"), qRound(stripObj.value(QLatin1String("width")).toDouble()));
-        strip.insert(QLatin1String("height"), qRound(stripObj.value(QLatin1String("height")).toDouble()));
-        // The engine always writes the position; a missing key would mean a
-        // producer/consumer version split, and Top is the least surprising
-        // reading of a rect whose orientation we cannot confirm.
-        strip.insert(QLatin1String("position"),
-                     stripObj.value(QLatin1String("position"))
-                         .toInt(static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Top)));
-        // -1, not 0, purely defensive: the producer always writes the key, but
-        // a missing one must read as "no active tab" rather than lighting up
-        // tab 0.
-        const int activeIndex = stripObj.value(QLatin1String("activeIndex")).toInt(-1);
-        QVariantList tabs;
-        const QJsonArray tabIds = stripObj.value(QLatin1String("tabs")).toArray();
-        tabs.reserve(tabIds.size());
-        for (int i = 0; i < tabIds.size(); ++i) {
-            const QString windowId = tabIds.at(i).toString();
-            QString title = titleForWindow ? titleForWindow(windowId) : QString();
-            if (title.isEmpty()) {
-                title = PhosphorIdentity::WindowId::extractAppId(windowId);
-            }
-            QVariantMap tab;
-            // The canonical id rides along so a click on the tab can name the
-            // window it should focus. The overlay treats it as an opaque
-            // token and hands it straight back.
-            tab.insert(QLatin1String("windowId"), windowId);
-            tab.insert(QLatin1String("title"), title);
-            tab.insert(QLatin1String("active"), i == activeIndex);
-            // Urgency rides per tab rather than per strip: any tab of a tabbed
-            // column can be the one demanding attention, and the hidden ones
-            // are exactly the tabs the user cannot otherwise see asking.
-            tab.insert(QLatin1String("urgent"), urgentForWindow && urgentForWindow(windowId));
-            // Per-window colour overrides, the top tier of niri's resolution
-            // order. Inserted as a nested map rather than three flat keys so
-            // the overlay can tell "this window overrode nothing" from "this
-            // window overrode to empty" with one lookup.
-            if (colorsForWindow) {
-                const QVariantMap colors = colorsForWindow(windowId);
-                if (!colors.isEmpty()) {
-                    tab.insert(QLatin1String("colors"), colors);
-                }
-            }
-            tabs.append(tab);
-        }
-        strip.insert(QLatin1String("tabs"), tabs);
-        strips.append(strip);
-    }
-    return strips;
 }
 
 } // namespace PlasmaZones::StripZones
