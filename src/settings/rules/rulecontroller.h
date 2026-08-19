@@ -333,7 +333,7 @@ public:
     ///   domain: "context"|"window" }` where each param descriptor is
     /// `{ key, kind, label }`. `kind` is one of the descriptor kinds the
     /// ActionRow editor dispatches on (enum, number, percent, bool, color,
-    /// zoneOrdinals, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
+    /// zoneOrdinals, zoneNames, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
     /// animationEvent, shaderEffect, overlayShader, decorationChain,
     /// curveEditor); for
     /// `kind == "enum"` there is also an `options` list of

@@ -412,6 +412,7 @@ private Q_SLOTS:
             QStringLiteral("shaderEffect"),
             QStringLiteral("overlayShader"),
             QStringLiteral("zoneOrdinals"),
+            QStringLiteral("zoneNames"),
             QStringLiteral("curveEditor"),
             QStringLiteral("screenId"),
             QStringLiteral("virtualDesktop"),

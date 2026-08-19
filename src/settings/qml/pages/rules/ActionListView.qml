@@ -220,6 +220,15 @@ ColumnLayout {
                 return raw.join(", ");
             return rawStr;
         }
+        if (kind === "zoneNames") {
+            // `raw` is a JS array of zone-name strings; quote each so a name
+            // made of digits cannot read as an ordinal.
+            if (Array.isArray(raw))
+                return raw.map(function (n) {
+                    return i18nc("a quoted zone name", "“%1”", String(n));
+                }).join(", ");
+            return rawStr;
+        }
         if (kind === "screenId") {
             // Show the friendly monitor label for the stored canonical id; fall
             // back to the raw id when the monitor isn't currently connected so the
@@ -388,6 +397,18 @@ ColumnLayout {
                         required property int index
 
                         spacing: Kirigami.Units.largeSpacing
+                        // SnapToZone carries two target lists (numbers and
+                        // names) and a rule usually fills only one; an empty
+                        // list would otherwise render as a labelled blank pill.
+                        // Other kinds keep their pill even when empty so an
+                        // unset picker is still visible as such.
+                        visible: {
+                            var kind = paramRow.modelData.kind;
+                            if (kind !== "zoneOrdinals" && kind !== "zoneNames")
+                                return true;
+                            var raw = actionDelegate._action[paramRow.modelData.key];
+                            return Array.isArray(raw) && raw.length > 0;
+                        }
 
                         Label {
                             Layout.alignment: Qt.AlignVCenter

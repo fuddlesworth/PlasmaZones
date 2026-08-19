@@ -242,6 +242,59 @@ void readHexColorSlot(const PhosphorRules::ResolvedActions& resolved, QLatin1Str
     }
 }
 
+/// The SnapToZone targets of a Placement-slot action, re-validated against the
+/// SAME bounds the descriptor validator applies at load (1..MaxZoneOrdinal for
+/// ordinals; non-blank, at most MaxZoneNameLength for names) so a future loader
+/// change can never feed a bad target into zone resolution. Names are trimmed
+/// here once so the engine's lookup and the ownership predicate agree on what
+/// counts as a name. The single reader for both params: the directive builder
+/// and the two "does a rule own this window" predicates all go through it, so
+/// the validity rule cannot drift between them.
+struct PlacementTargets
+{
+    QList<int> ordinals;
+    QStringList names;
+    bool any() const
+    {
+        return !ordinals.isEmpty() || !names.isEmpty();
+    }
+};
+
+PlacementTargets placementTargetsOf(const PhosphorRules::RuleAction& action)
+{
+    PlacementTargets targets;
+    const QJsonArray ordinals = action.params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
+    targets.ordinals.reserve(ordinals.size());
+    for (const QJsonValue& v : ordinals) {
+        const int n = v.toInt(0);
+        if (n >= 1 && n <= PhosphorRules::MaxZoneOrdinal) {
+            targets.ordinals.append(n);
+        }
+    }
+    const QJsonArray names = action.params.value(QString(PhosphorRules::ActionParam::ZoneNames)).toArray();
+    targets.names.reserve(names.size());
+    for (const QJsonValue& v : names) {
+        if (!v.isString()) {
+            continue;
+        }
+        const QString name = v.toString().trimmed();
+        if (!name.isEmpty() && name.size() <= PhosphorRules::MaxZoneNameLength) {
+            targets.names.append(name);
+        }
+    }
+    return targets;
+}
+
+/// Whether @p resolved carries a Placement-slot action with at least one valid
+/// SnapToZone target. Gates on a VALID target, not the slot's mere presence:
+/// placementTargetsOf drops out-of-range ordinals and blank names, and an
+/// all-rejected SnapToZone payload owns nothing.
+bool hasValidPlacementTarget(const PhosphorRules::ResolvedActions& resolved)
+{
+    const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement));
+    return placement && placementTargetsOf(*placement).any();
+}
+
 } // namespace
 
 void WindowTrackingAdaptor::ensureRuleEvaluator()
@@ -884,25 +937,18 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     const std::optional<PhosphorRules::RuleAction> action =
         resolved.slot(QString(PhosphorRules::ActionSlot::Placement));
     if (!action) {
-        // No SnapToZone: return the (possibly route-only) directive. With no ordinals
-        // the snap engine treats it as "nothing to snap", so a RouteToScreen WITHOUT
-        // an accompanying SnapToZone produces no snap here. The bare "move to monitor
-        // X" is performed by applyOpenScreenRouting on the snap open-path facade (it
-        // runs only when nothing snapped the window), not in this directive builder.
+        // No SnapToZone: return the (possibly route-only) directive. With no
+        // targets the snap engine treats it as "nothing to snap", so a
+        // RouteToScreen WITHOUT an accompanying SnapToZone produces no snap here.
+        // The bare "move to monitor X" is performed by applyOpenScreenRouting on
+        // the snap open-path facade (it runs only when nothing snapped the
+        // window), not in this directive builder.
         return directive;
     }
-    // The descriptor validator already guaranteed a non-empty array of in-range
-    // 1-based ordinals at load; re-validate defensively against the SAME bound
-    // (1..MaxZoneOrdinal) so a future loader change can never feed a bad ordinal
-    // into zone resolution.
-    const QJsonArray arr = action->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
-    directive.zoneOrdinals.reserve(arr.size());
-    for (const QJsonValue& v : arr) {
-        const int n = v.toInt(0);
-        if (n >= 1 && n <= PhosphorRules::MaxZoneOrdinal) {
-            directive.zoneOrdinals.append(n);
-        }
-    }
+    // Ordinals and names, re-validated by the shared reader (see placementTargetsOf).
+    PlacementTargets targets = placementTargetsOf(*action);
+    directive.zoneOrdinals = std::move(targets.ordinals);
+    directive.zoneNames = std::move(targets.names);
     return directive;
 }
 
@@ -982,23 +1028,11 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {
-        // No route. A placement directive with at least one valid ordinal still
+        // No route. A placement directive with at least one valid target still
         // means the rule system owns this window's target, whether or not the
         // engine committed a snap — return true so the remembered-placement
-        // fallback does not relocate it. Gate on a VALID ordinal, not the slot's
-        // mere presence: placementZonesByRule drops out-of-range ordinals, and an
-        // all-rejected SnapToZone payload owns nothing.
-        if (const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
-            const QJsonArray ordinals = placement->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
-            const bool anyValid = std::any_of(ordinals.cbegin(), ordinals.cend(), [](const QJsonValue& v) {
-                const int n = v.toInt(0);
-                return n >= 1 && n <= PhosphorRules::MaxZoneOrdinal;
-            });
-            if (anyValid) {
-                return true;
-            }
-        }
-        return false;
+        // fallback does not relocate it.
+        return hasValidPlacementTarget(resolved);
     }
     const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
     if (target.isEmpty()) {
@@ -1117,18 +1151,11 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
 
     // A valid SnapToZone placement directive owns the window's placement even
     // on this channel (the snap facade acts on it) — signal the match so the
-    // caller's reclaim veto sees it, mirroring the snap twin's ordinal check.
+    // caller's reclaim veto sees it, mirroring the snap twin's target check.
     // The routed-screen RETURN stays empty: placement is not a tiling
     // redirect.
-    if (const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
-        const QJsonArray ordinals = placement->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
-        const bool anyValid = std::any_of(ordinals.cbegin(), ordinals.cend(), [](const QJsonValue& v) {
-            const int n = v.toInt(0);
-            return n >= 1 && n <= PhosphorRules::MaxZoneOrdinal;
-        });
-        if (anyValid) {
-            markMatched();
-        }
+    if (hasValidPlacementTarget(resolved)) {
+        markMatched();
     }
 
     // RouteToScreen: redirect the window onto a different ENGINE-OWNED monitor

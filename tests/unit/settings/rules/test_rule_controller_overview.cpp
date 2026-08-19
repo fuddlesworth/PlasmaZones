@@ -701,6 +701,7 @@ void TestRuleControllerOverview::inputHints()
     // the param descriptor in actionTypes() — ActionRow reads `param.hint`.
     const QVariantList actions = controller.actionTypes();
     bool sawSnapToZoneZones = false;
+    bool sawSnapToZoneNames = false;
     for (const QVariant& a : actions) {
         const QVariantMap action = a.toMap();
         if (action.value(QStringLiteral("value")).toString() != QLatin1String("snapToZone")) {
@@ -708,15 +709,24 @@ void TestRuleControllerOverview::inputHints()
         }
         for (const QVariant& p : action.value(QStringLiteral("params")).toList()) {
             const QVariantMap param = p.toMap();
-            if (param.value(QStringLiteral("key")).toString() != QLatin1String("zones")) {
-                continue;
+            const QString key = param.value(QStringLiteral("key")).toString();
+            if (key == QLatin1String("zones")) {
+                sawSnapToZoneZones = true;
+                QCOMPARE(param.value(QStringLiteral("kind")).toString(), QStringLiteral("zoneOrdinals"));
+                QVERIFY2(!param.value(QStringLiteral("hint")).toString().isEmpty(),
+                         "SnapToZone's zones param must carry an input hint");
+            } else if (key == QLatin1String("zoneNames")) {
+                // The zone-name twin (discussion #924) is free text too, so it
+                // carries its own hint and its own kind for the editor dispatch.
+                sawSnapToZoneNames = true;
+                QCOMPARE(param.value(QStringLiteral("kind")).toString(), QStringLiteral("zoneNames"));
+                QVERIFY2(!param.value(QStringLiteral("hint")).toString().isEmpty(),
+                         "SnapToZone's zoneNames param must carry an input hint");
             }
-            sawSnapToZoneZones = true;
-            QVERIFY2(!param.value(QStringLiteral("hint")).toString().isEmpty(),
-                     "SnapToZone's zones param must carry an input hint");
         }
     }
     QVERIFY2(sawSnapToZoneZones, "actionTypes() must expose the SnapToZone zones param");
+    QVERIFY2(sawSnapToZoneNames, "actionTypes() must expose the SnapToZone zoneNames param");
 }
 
 void TestRuleControllerOverview::templatesProduceSeededRules()

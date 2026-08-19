@@ -198,7 +198,10 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Opacity (%)");
     }
     if (type == ActionType::SnapToZone && key == ActionParam::Zones) {
-        return PhosphorI18n::tr("Zones");
+        return PhosphorI18n::tr("Zone numbers");
+    }
+    if (type == ActionType::SnapToZone && key == ActionParam::ZoneNames) {
+        return PhosphorI18n::tr("Zone names");
     }
     // Unsnapped-position restore override (window-domain, single bool value).
     // off is not inert: it force-suppresses restore for matched windows,
@@ -369,6 +372,11 @@ QString paramHint(const QString& type, const QString& key)
         return PhosphorI18n::tr(
             "Zone numbers like “1, 2”, or a range like “1-3”. "
             "Multiple zones snap the window to their combined area.");
+    }
+    if (type == ActionType::SnapToZone && key == ActionParam::ZoneNames) {
+        return PhosphorI18n::tr(
+            "Zone names like “Editor, Terminal”, found in whichever layout is active. "
+            "Give numbers, names, or both.");
     }
     return {};
 }
@@ -543,6 +551,11 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // passes the validator (non-empty array of positive ordinals) before
             // the user edits the zone list.
             payload[key] = QVariantList{1};
+        } else if (kind == QLatin1String("zoneNames")) {
+            // Seed an empty array: the zoneOrdinals seed above already makes a
+            // fresh SnapToZone rule savable, and an empty name list is valid
+            // alongside a non-empty ordinal list. The user adds names from here.
+            payload[key] = QVariantList{};
         } else if (kind == QLatin1String("decorationChain")) {
             // Seed an empty array: unlike zoneOrdinals, an empty chain IS a
             // valid payload (the "no decoration" sentinel), so a fresh

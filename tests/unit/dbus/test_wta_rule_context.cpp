@@ -328,6 +328,42 @@ private Q_SLOTS:
         QCOMPARE(directive.zoneOrdinals, QList<int>{1});
     }
 
+    // The zone-NAME form of SnapToZone (discussion #924): the directive carries
+    // the names beside the ordinals, trimmed, with blank entries dropped the way
+    // out-of-range ordinals are, and an empty ordinal array beside real names is
+    // a legitimate "names only" directive.
+    void testPlacementZonesByRule_zoneNames_carriedIntoDirective()
+    {
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst10"), QStringLiteral("namedapp"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("namedapp"));
+        RuleAction snapTo;
+        snapTo.type = QString(ActionType::SnapToZone);
+        snapTo.params.insert(QString(ActionParam::Zones), QJsonArray{});
+        snapTo.params.insert(QString(ActionParam::ZoneNames),
+                             QJsonArray{QStringLiteral("  Editor "), QStringLiteral("Terminal")});
+        rule.actions = {snapTo};
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("namedapp|inst10"), m_screenId);
+        QVERIFY(directive.zoneOrdinals.isEmpty());
+        QCOMPARE(directive.zoneNames, (QStringList{QStringLiteral("Editor"), QStringLiteral("Terminal")}));
+    }
+
     // The negative half of the pair: the SAME rule against a screen carrying a
     // DIFFERENT layout must not fire. Guards against the stamp degenerating into
     // "any non-empty layout matches".

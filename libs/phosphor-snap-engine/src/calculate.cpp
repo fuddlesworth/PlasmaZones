@@ -52,16 +52,18 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
 
     // The placement resolver is the daemon's SnapToZone window-rule evaluation —
     // the engine never reads the rule store directly (LGPL boundary). It returns
-    // the 1-based zone ordinals to snap into, or an empty list when no SnapToZone
-    // rule matched this window. Unset resolver (unit tests) ⇒ no rule snapping.
+    // the 1-based zone ordinals and/or zone names to snap into, or two empty
+    // lists when no SnapToZone rule matched this window. Unset resolver (unit
+    // tests) ⇒ no rule snapping.
     if (!m_placementZonesResolver) {
         return SnapResult::noSnap();
     }
     const PlacementDirective directive = m_placementZonesResolver(windowId, windowScreenName);
-    if (directive.zoneOrdinals.isEmpty()) {
+    if (directive.zoneOrdinals.isEmpty() && directive.zoneNames.isEmpty()) {
         return SnapResult::noSnap();
     }
     const QList<int>& ordinals = directive.zoneOrdinals;
+    const QStringList& names = directive.zoneNames;
 
     // A RouteToScreen action pins the placement to a specific monitor: resolve the
     // zones on THAT screen and move the window there (the apply path honours
@@ -114,10 +116,17 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
         return SnapResult::noSnap();
     }
 
-    // Resolve each ordinal to its zone id (an ordinal naming a zone the active
+    // Resolve each ordinal and each name to its zone id (a target the active
     // layout lacks is skipped — a span rule is layout-agnostic and may reference
-    // a zone count this layout does not have).
+    // a zone count, or a zone name, this layout does not have). Ordinals and
+    // names union; a zone reached both ways is added once.
     QStringList zoneIds;
+    const auto addZone = [&zoneIds](const PhosphorZones::Zone* zone) {
+        const QString id = zone->id().toString();
+        if (!zoneIds.contains(id)) {
+            zoneIds.append(id);
+        }
+    };
     for (const int ordinal : ordinals) {
         PhosphorZones::Zone* zone = layout->zoneByNumber(ordinal);
         if (!zone) {
@@ -125,7 +134,16 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
                 << "calculateSnapToPlacementRule: zone ordinal" << ordinal << "absent in layout" << layout->name();
             continue;
         }
-        zoneIds.append(zone->id().toString());
+        addZone(zone);
+    }
+    for (const QString& name : names) {
+        PhosphorZones::Zone* zone = layout->zoneByName(name);
+        if (!zone) {
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "calculateSnapToPlacementRule: zone named" << name << "absent in layout" << layout->name();
+            continue;
+        }
+        addZone(zone);
     }
     if (zoneIds.isEmpty()) {
         return SnapResult::noSnap();
@@ -142,8 +160,8 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
     }
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
-        << "calculateSnapToPlacementRule: snapping" << windowId << "to zones" << ordinals << "on screen"
-        << placementScreen << (placementScreen != windowScreenName ? "(routed)" : "(opening screen)");
+        << "calculateSnapToPlacementRule: snapping" << windowId << "to zones" << ordinals << "names" << names
+        << "on screen" << placementScreen << (placementScreen != windowScreenName ? "(routed)" : "(opening screen)");
 
     SnapResult result;
     result.shouldSnap = true;

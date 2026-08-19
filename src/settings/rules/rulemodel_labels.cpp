@@ -464,7 +464,18 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
             nums.append(QString::number(z.toInt()));
         }
-        // Empty array, or nothing survived the filter. Either way fall back to
+        // Zone names ride alongside the numbers: render each in quotes so a
+        // name that happens to be digits cannot be read as an ordinal. Blank
+        // names are dropped the same way out-of-range ordinals are.
+        const QJsonArray names = action.params.value(PhosphorRules::ActionParam::ZoneNames).toArray();
+        for (const QJsonValue& n : names) {
+            const QString name = n.isString() ? n.toString().trimmed() : QString();
+            if (name.isEmpty()) {
+                continue;
+            }
+            nums.append(PhosphorI18n::tr("“%1”").arg(name));
+        }
+        // Empty arrays, or nothing survived the filters. Either way fall back to
         // the bare label rather than a dangling "Snap to zones ", the shape
         // OverrideDecorationChain uses for its all-empty-ids case.
         if (nums.isEmpty()) {

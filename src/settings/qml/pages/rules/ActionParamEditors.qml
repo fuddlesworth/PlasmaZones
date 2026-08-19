@@ -47,6 +47,151 @@ QtObject {
         }
     }
 
+    /// Whether a SnapToZone action payload carries at least one non-blank zone
+    /// name. The ordinal editor's empty guard consults this so "names only" is
+    /// a reachable state; the name editor's twin guard below consults the
+    /// ordinal list the same way.
+    function _snapToZoneHasNames(action) {
+        var names = action ? action[row._zoneNamesKey] : undefined;
+        if (!Array.isArray(names))
+            return false;
+        for (var i = 0; i < names.length; i++) {
+            if (typeof names[i] === "string" && names[i].trim().length > 0)
+                return true;
+        }
+        return false;
+    }
+
+    /// Whether a SnapToZone action payload carries at least one ordinal.
+    function _snapToZoneHasOrdinals(action) {
+        var zones = action ? action[row._zoneOrdinalsKey] : undefined;
+        return Array.isArray(zones) && zones.length > 0;
+    }
+
+    /// Distinct, sorted zone names across every layout the settings app knows
+    /// about, for the zone-name picker. Names are what the layouts carry today;
+    /// the rule resolves against whichever layout is active on the placement
+    /// screen at open time, so this is a suggestion list, not a constraint.
+    readonly property var _knownZoneNames: {
+        var layouts = (row.appSettings && row.appSettings.layouts) || [];
+        var seen = ({});
+        var out = [];
+        for (var i = 0; i < layouts.length; i++) {
+            var zones = (layouts[i] && layouts[i].zones) || [];
+            for (var j = 0; j < zones.length; j++) {
+                var name = zones[j] && typeof zones[j].name === "string" ? zones[j].name.trim() : "";
+                if (name.length === 0)
+                    continue;
+                var key = name.toLowerCase();
+                if (seen[key])
+                    continue;
+                seen[key] = true;
+                out.push(name);
+            }
+        }
+        out.sort(function (a, b) {
+            return a.localeCompare(b);
+        });
+        return out;
+    }
+
+    // Comma/semicolon-separated zone-name input for `kind == "zoneNames"`
+    // (SnapToZone), with a picker of the names found in the current layouts.
+    // Stores a JSON array of trimmed, deduped (case-insensitive) name strings;
+    // multiple names span their combined area together with any ordinals.
+    property Component _zoneNamesEditor: Component {
+        RowLayout {
+            id: zoneNamesRow
+
+            readonly property var _param: parent.modelData
+            readonly property var _names: Array.isArray(row.action[_param.key]) ? row.action[_param.key] : []
+
+            spacing: Kirigami.Units.smallSpacing
+
+            function commit(parsed) {
+                // A SnapToZone action needs at least one target across its name
+                // and ordinal lists. With no ordinals, an empty name list would
+                // produce an action the validator drops on save, so keep the last
+                // valid value instead (restored via Qt.binding so the declarative
+                // text binding survives). With ordinals present, clearing the
+                // names is a legitimate "numbers only" target.
+                if (parsed.length === 0 && !editors._snapToZoneHasOrdinals(row.action)) {
+                    zoneNamesField.text = Qt.binding(function () {
+                        return zoneNamesRow._names.join(", ");
+                    });
+                    return;
+                }
+                row.actionEdited(row._withParam(_param.key, parsed));
+            }
+
+            function parseNames(text) {
+                var seen = ({});
+                var parsed = [];
+                var tokens = text.split(/[,;]+/);
+                for (var i = 0; i < tokens.length; i++) {
+                    var t = tokens[i].trim();
+                    if (t.length === 0)
+                        continue;
+                    var key = t.toLowerCase();
+                    if (seen[key])
+                        continue;
+                    seen[key] = true;
+                    parsed.push(t);
+                }
+                return parsed;
+            }
+
+            TextField {
+                id: zoneNamesField
+
+                Layout.fillWidth: true
+                // Normalised display (trimmed, deduped) re-binds after each edit.
+                text: zoneNamesRow._names.join(", ")
+                placeholderText: i18nc("@info:placeholder zone names for a snap-to-zone rule", "e.g. Editor, Terminal")
+                Accessible.name: zoneNamesRow._param.label
+                Accessible.description: i18nc("@info:whatsthis", "Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.")
+                onEditingFinished: zoneNamesRow.commit(zoneNamesRow.parseNames(text))
+            }
+
+            ToolButton {
+                id: zoneNamePicker
+
+                icon.name: "list-add"
+                enabled: editors._knownZoneNames.length > 0
+                Accessible.name: i18nc("@action:button", "Add a zone name from your layouts")
+                ToolTip.text: Accessible.name
+                ToolTip.visible: hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                onClicked: zoneNameMenu.open()
+
+                Menu {
+                    id: zoneNameMenu
+
+                    y: zoneNamePicker.height
+
+                    Repeater {
+                        model: editors._knownZoneNames
+
+                        delegate: MenuItem {
+                            required property string modelData
+
+                            text: modelData
+                            onTriggered: {
+                                var next = zoneNamesRow._names.slice();
+                                for (var i = 0; i < next.length; i++) {
+                                    if (String(next[i]).trim().toLowerCase() === modelData.toLowerCase())
+                                        return;
+                                }
+                                next.push(modelData);
+                                zoneNamesRow.commit(next);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Comma/space/range-separated zone-number input for `kind == "zoneOrdinals"`
     // (SnapToZone). Stores a JSON array of 1-based ordinals; multiple ordinals
     // span their combined area. Accepts "1, 2", "1;2", "1 2", and ranges "1-3".
@@ -104,15 +249,18 @@ QtObject {
                 parsed.sort(function (a, b) {
                     return a - b;
                 });
-                // A SnapToZone action requires a non-empty ordinal list (the
-                // descriptor validator rejects []). If the user cleared the field
-                // or typed only invalid tokens, keep the last valid value rather
-                // than committing an empty list — that would produce an action the
-                // validator drops on save, silently losing the rule with the Save
-                // button still enabled. Restore via Qt.binding (not a bare
-                // `text = ...`) so the declarative `text: _zones.join(", ")`
-                // binding survives and keeps normalising on later edits.
-                if (parsed.length === 0) {
+                // A SnapToZone action needs at least one target across its
+                // ordinal and name lists (the descriptor validator rejects an
+                // action with neither). If the user cleared the field or typed
+                // only invalid tokens AND no zone names are set, keep the last
+                // valid value rather than committing an empty list — that would
+                // produce an action the validator drops on save, silently losing
+                // the rule with the Save button still enabled. Restore via
+                // Qt.binding (not a bare `text = ...`) so the declarative
+                // `text: _zones.join(", ")` binding survives and keeps
+                // normalising on later edits. With names present, an empty
+                // ordinal list is a legitimate "names only" target.
+                if (parsed.length === 0 && !paramEditors._snapToZoneHasNames(row.action)) {
                     text = Qt.binding(function () {
                         return _zones.join(", ");
                     });

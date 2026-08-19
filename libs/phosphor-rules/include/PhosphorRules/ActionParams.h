@@ -65,9 +65,16 @@ inline constexpr QLatin1StringView Mode{"mode"};
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
-// SnapToZone target-zone key — wire is a non-empty JSON array of 1-based zone
-// ordinals (e.g. `[1]` or `[1, 2]`); multiple entries snap to their union.
+// SnapToZone target-zone key — wire is a JSON array of 1-based zone ordinals
+// (e.g. `[1]` or `[1, 2]`); multiple entries snap to their union. May be
+// empty or absent when `ZoneNames` carries at least one name.
 inline constexpr QLatin1StringView Zones{"zones"};
+// SnapToZone target-zone-name key — wire is a JSON array of zone-name strings
+// (e.g. `["Editor"]`). Names resolve against the zones of whatever layout is
+// active on the placement screen, so a name-keyed rule follows the zone across
+// layouts where an ordinal would not. Entries union with `Zones`; at least one
+// of the two arrays must carry a valid entry.
+inline constexpr QLatin1StringView ZoneNames{"zoneNames"};
 // RouteToScreen target-monitor key — wire is the canonical EDID screen id
 // (`Manuf:Model:Serial`, optionally `/CONNECTOR`-disambiguated, or a virtual
 // screen id), the same form the ScreenId match field and the settings
@@ -90,6 +97,13 @@ inline constexpr QLatin1StringView Chain{"chain"};
 /// (ruleaction_builtins_engine.cpp) and the v3→v4 migration so the two stay in
 /// lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
+
+/// Upper bound on a `SnapToZone` zone-name entry (each `ActionParam::ZoneNames`
+/// string), in characters. The layout editor caps zone names at 40 but a
+/// hand-edited or legacy layout may carry a longer one, so this is only a
+/// grossly-malformed-payload guard in the spirit of MaxZoneOrdinal, not the
+/// editor's limit.
+inline constexpr int MaxZoneNameLength = 128;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the

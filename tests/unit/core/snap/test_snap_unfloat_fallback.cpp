@@ -510,6 +510,53 @@ private Q_SLOTS:
         QVERIFY2(!result.shouldSnap, "no matching rule → the placement rule must not snap the window");
     }
 
+    // A name-keyed directive resolves against the active layout's zone NAMES
+    // (case-insensitive, trimmed), so the rule follows the zone wherever it sits
+    // in the layout's numbering (discussion #924). A name the layout lacks is
+    // skipped like an absent ordinal, and a zone reached both by name and by
+    // ordinal is added once so the span does not double-count it.
+    void testResolveWindowRestore_placementRule_zoneNames_resolveByName()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        PhosphorZones::Layout* layout = installLayout(3);
+        layout->zones().at(2)->setName(QStringLiteral("Editor"));
+        const QString editorId = layout->zones().at(2)->id().toString();
+
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneNames = {QStringLiteral("  editor "), QStringLiteral("Nowhere")};
+            return d;
+        });
+
+        PhosphorEngine::SnapResult result =
+            engine.resolveWindowRestore(QStringLiteral("fresh|win"), QStringLiteral("DP-1"), /*sticky*/ false);
+        QVERIFY2(result.shouldSnap, "a SnapToZone rule keyed on a zone name must snap the window");
+        QCOMPARE(result.zoneIds, QStringList{editorId});
+
+        // Name + the same zone's ordinal: one zone id, not two.
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneOrdinals = {3};
+            d.zoneNames = {QStringLiteral("Editor")};
+            return d;
+        });
+        result = engine.resolveWindowRestore(QStringLiteral("fresh|win2"), QStringLiteral("DP-1"), /*sticky*/ false);
+        QVERIFY(result.shouldSnap);
+        QCOMPARE(result.zoneIds, QStringList{editorId});
+
+        // Only names the layout lacks: nothing to snap to.
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneNames = {QStringLiteral("Nowhere")};
+            return d;
+        });
+        result = engine.resolveWindowRestore(QStringLiteral("fresh|win3"), QStringLiteral("DP-1"), /*sticky*/ false);
+        QVERIFY2(!result.shouldSnap, "a name absent from the active layout must not snap");
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // resolveUnfloatGeometry: placement-record fallback (daemon-restart path)
     //

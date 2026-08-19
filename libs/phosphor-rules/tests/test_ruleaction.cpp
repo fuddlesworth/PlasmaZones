@@ -1024,10 +1024,67 @@ private Q_SLOTS:
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal})).has_value());
 
-        // A key outside allowedKeys ({zones}) is rejected.
+        // A key outside allowedKeys ({zones, zoneNames}) is rejected.
         QJsonObject stray = withZones(QJsonArray{1});
         stray.insert(QStringLiteral("value"), 3);
         QVERIFY(!RuleAction::fromJson(stray).has_value());
+    }
+
+    void testSnapToZone_zoneNames_fromJson()
+    {
+        // The name-keyed twin of `zones`: a JSON array of non-blank strings.
+        // Either array alone is a complete target, the two union, and a payload
+        // with neither (or with both present but empty) names nothing and is
+        // rejected. Each present key is still shape-checked on its own, so a
+        // malformed `zoneNames` cannot ride in on a valid `zones`.
+        const auto withNames = [](const QJsonValue& names) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+            o.insert(QString(ActionParam::ZoneNames), names);
+            return o;
+        };
+
+        QVERIFY(RuleAction::fromJson(withNames(QJsonArray{QStringLiteral("Editor")})).has_value());
+        QVERIFY(RuleAction::fromJson(withNames(QJsonArray{QStringLiteral("Editor"), QStringLiteral("Terminal")}))
+                    .has_value());
+        QVERIFY(RuleAction::fromJson(withNames(QJsonArray{QString(MaxZoneNameLength, QLatin1Char('a'))})).has_value());
+
+        QVERIFY(!RuleAction::fromJson(withNames(QStringLiteral("Editor"))).has_value()); // not an array
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{})).has_value()); // empty, no other target
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{QString()})).has_value()); // empty string
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{QStringLiteral("   ")})).has_value()); // blank
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{1})).has_value()); // number, not string
+        QVERIFY(
+            !RuleAction::fromJson(withNames(QJsonArray{QString(MaxZoneNameLength + 1, QLatin1Char('a'))})).has_value());
+
+        // Names and ordinals together: the union is accepted, and an empty
+        // ordinal array beside a real name list is fine (names are the target).
+        QJsonObject both = withNames(QJsonArray{QStringLiteral("Editor")});
+        both.insert(QString(ActionParam::Zones), QJsonArray{2});
+        QVERIFY(RuleAction::fromJson(both).has_value());
+        QJsonObject emptyOrdinals = withNames(QJsonArray{QStringLiteral("Editor")});
+        emptyOrdinals.insert(QString(ActionParam::Zones), QJsonArray{});
+        QVERIFY(RuleAction::fromJson(emptyOrdinals).has_value());
+        QJsonObject namesEmptyWithZones = withNames(QJsonArray{});
+        namesEmptyWithZones.insert(QString(ActionParam::Zones), QJsonArray{1});
+        QVERIFY(RuleAction::fromJson(namesEmptyWithZones).has_value());
+
+        // Both present, both empty: nothing to snap to.
+        QJsonObject bothEmpty = withNames(QJsonArray{});
+        bothEmpty.insert(QString(ActionParam::Zones), QJsonArray{});
+        QVERIFY(!RuleAction::fromJson(bothEmpty).has_value());
+
+        // A malformed ordinal list is still rejected even when names are valid.
+        QJsonObject badOrdinals = withNames(QJsonArray{QStringLiteral("Editor")});
+        badOrdinals.insert(QString(ActionParam::Zones), QJsonArray{0});
+        QVERIFY(!RuleAction::fromJson(badOrdinals).has_value());
+
+        // Round-trip keeps both arrays verbatim.
+        const auto parsed = RuleAction::fromJson(both);
+        QVERIFY(parsed.has_value());
+        const QJsonObject out = parsed->toJson();
+        QCOMPARE(out.value(QString(ActionParam::ZoneNames)).toArray(), QJsonArray{QStringLiteral("Editor")});
+        QCOMPARE(out.value(QString(ActionParam::Zones)).toArray(), QJsonArray{2});
     }
 
     void testScopedExclusions_fromJsonRoundTrip()

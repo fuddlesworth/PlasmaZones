@@ -229,6 +229,32 @@ private Q_SLOTS:
         QVERIFY(original.zone(0) != copy->zone(0));
     }
 
+    // zoneByName backs the name form of the SnapToZone rule: trimmed,
+    // case-insensitive, and a duplicate name resolves to the lowest-numbered
+    // zone regardless of insertion order.
+    void testLayout_zoneByName_trimmedCaseInsensitiveLowestNumber()
+    {
+        PhosphorZones::Layout layout(QStringLiteral("Named"));
+        auto* a = new PhosphorZones::Zone();
+        a->setName(QStringLiteral("Editor"));
+        a->setZoneNumber(2);
+        auto* b = new PhosphorZones::Zone();
+        b->setName(QStringLiteral(" editor "));
+        b->setZoneNumber(1);
+        auto* c = new PhosphorZones::Zone();
+        c->setName(QStringLiteral("Terminal"));
+        c->setZoneNumber(3);
+        layout.addZone(a);
+        layout.addZone(b);
+        layout.addZone(c);
+
+        QCOMPARE(layout.zoneByName(QStringLiteral("terminal")), c);
+        QCOMPARE(layout.zoneByName(QStringLiteral("  EDITOR")), b);
+        QVERIFY(layout.zoneByName(QStringLiteral("Browser")) == nullptr);
+        QVERIFY(layout.zoneByName(QString()) == nullptr);
+        QVERIFY(layout.zoneByName(QStringLiteral("   ")) == nullptr);
+    }
+
     void testLayout_clone_newId()
     {
         PhosphorZones::Layout original(QStringLiteral("Original"));
