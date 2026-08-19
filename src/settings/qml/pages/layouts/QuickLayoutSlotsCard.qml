@@ -1,6 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Bound so the slot delegate runs in THIS file's context with no
+// model-accessor context interposed. Unbound, Qt gives a delegate a child
+// context whose context object is the integer-model accessor until the
+// incubator's setInitialState clears it, and that accessor's dynamic
+// metaobject answers ANY unknown name (creating a property for it). The page
+// incubates asynchronously, so a binding flushed before that clear (the combo's
+// model reading its appSettings / noneText / layoutFilter / currentLayoutId)
+// resolved `root` and `i18n` to undefined and left the row blank. The delegate
+// takes its index through a required property, which is all Bound permits.
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

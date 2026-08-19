@@ -633,7 +633,10 @@ ComboBox {
                     PZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
-                        autoAssign: modelData.layout && modelData.layout.autoAssign === true
+                        // Ternary, not `a && b`: on the None entry `layout` is
+                        // undefined and `undefined && x` is undefined, which
+                        // cannot be assigned to a bool.
+                        autoAssign: modelData.layout ? modelData.layout.autoAssign === true : false
                         globalAutoAssign: root.appSettings && root.appSettings.autoAssignAllLayouts === true
                     }
 
