@@ -94,6 +94,21 @@ Item {
 
     Component.onCompleted: root.cachePage(root.controller.currentPageId)
 
+    // ── Loading state ────────────────────────────────────────────────
+    // The page id whose Loader is current AND still incubating, or "".
+    // Maintained imperatively by the delegates (see _reportIncubating):
+    // only one delegate is current at a time, but on fast navigation the
+    // new page can report loading BEFORE the old one reports done, so
+    // the clear path only clears its OWN id.
+    property string _loadingPageId: ""
+
+    function _reportIncubating(id, incubating) {
+        if (incubating)
+            root._loadingPageId = id;
+        else if (root._loadingPageId === id)
+            root._loadingPageId = "";
+    }
+
     // Cache the page the instant it becomes current (covers normal
     // navigation, restored-on-startup ids, programmatic switches).
     Connections {
@@ -124,6 +139,14 @@ Item {
             // removing the storm.
             property bool _everCurrent: false
 
+            // True while this page is the one being shown but its item is
+            // still incubating — the window where the viewport would
+            // otherwise be blank (the item does not exist yet and the fade
+            // keeps opacity at 0 until it does). Reported up to the host,
+            // which shows one shared loading indicator over the viewport.
+            readonly property bool isIncubating: pageLoader.isCurrent && pageLoader.status === Loader.Loading
+            onIsIncubatingChanged: root._reportIncubating(pageLoader.pageId, pageLoader.isIncubating)
+
             // Deep-link reveal latch: when this page is built + current,
             // consume any pending anchor targeting it and invoke the page's
             // duck-typed revealAnchor() contract. Covers first build
@@ -146,8 +169,15 @@ Item {
             active: pageLoader.isCurrent || pageLoader._everCurrent
             // Latch the initial current page so navigating away from it doesn't
             // unload it (onIsCurrentChanged never fires for the initial value).
-            Component.onCompleted: if (pageLoader.isCurrent)
-                pageLoader._everCurrent = true
+            // Same initial-value rule for isIncubating: a delegate created
+            // already-current starts loading during construction, so report
+            // the initial state explicitly.
+            Component.onCompleted: {
+                if (pageLoader.isCurrent)
+                    pageLoader._everCurrent = true;
+                if (pageLoader.isIncubating)
+                    root._reportIncubating(pageLoader.pageId, true);
+            }
             source: {
                 // Depend on _registryRevision (same idiom as currentEntry):
                 // pageData() is non-notifying, so a re-registration that
@@ -230,6 +260,18 @@ Item {
                 target: root.controller
             }
         }
+    }
+
+    // Shown while the current page's Loader is still incubating (first
+    // visit to a heavy page). Sits above the cached pages: the current
+    // Loader holds z 1 but its opacity is pinned to 0 for the whole
+    // incubation window, and the indicator hides itself the moment
+    // loading ends, before the page fades up.
+    PageLoadingIndicator {
+        anchors.fill: parent
+        anchors.margins: root.contentMargins
+        z: 2
+        loading: root._loadingPageId !== ""
     }
 
     // Empty state when no page is selected.
