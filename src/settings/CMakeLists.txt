@@ -169,8 +169,11 @@ set(plasmazones_settings_SRCS
     # daemon's org.plasmazones.Rules adaptor.
     rules/rulemodel.h
     rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    # Label composition + summaries, split from rulemodel.cpp for file-size.
     rules/rulemodel_labels.cpp
+    # The static section / match-field name tables, split from
+    # rulemodel_labels.cpp when that file in turn reached the size ceiling.
+    rules/rulemodel_fieldtables.cpp
     rules/rulecontroller.h
     rules/rulecontroller.cpp
     # Read-only / projection methods of RuleController — sections,

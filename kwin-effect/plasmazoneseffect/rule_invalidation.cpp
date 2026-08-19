@@ -11,6 +11,10 @@
 
 #include "plasmazoneseffect.h"
 
+// plasmazoneseffect.h only forward-declares DragTracker; the drag gate below
+// calls isDragging(), and unity batching must not be what supplies the type.
+#include "handlers/dragtracker.h"
+
 #include <effect/effecthandler.h>
 
 #include <QSet>

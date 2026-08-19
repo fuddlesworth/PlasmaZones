@@ -54,7 +54,8 @@ namespace {
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
 /// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
 /// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule /
-/// scrollingTemplateForContext so the five callers cannot drift.
+/// scrollingTemplateForContext / scrollingTemplateExplicitlyNone so the six
+/// callers cannot drift.
 template<typename TryFn>
 auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
@@ -262,7 +263,23 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
                 entry.snappingLayout.clear();
             }
             if (entry.scrollingTemplateLayout == layoutId) {
-                entry.scrollingTemplateLayout.clear();
+                // The reserved word rather than empty, but ONLY where the
+                // template is actually in force. Empty means "inherit the
+                // configured default", so clearing a Scrolling context's slot
+                // handed a screen whose template was just deleted to whatever
+                // OTHER template happened to be the default — silently
+                // reshaping it with a template the user never picked. Writing
+                // "explicitly none" leaves it with no template, which is what
+                // deleting its template means and what the dangling-id path
+                // already resolves to.
+                //
+                // A non-Scrolling context keeps the plain clear: the slot is
+                // only a remembered value for a mode this context is not in,
+                // the user never asked for an opt-out, and the sentinel would
+                // also defeat the drop-if-nothing-remains test below and
+                // leave the rule behind as clutter.
+                entry.scrollingTemplateLayout =
+                    entry.mode == AssignmentEntry::Scrolling ? QString(NoScrollingTemplate) : QString();
             }
             const ContextDims dims = decodeDims(rule.match);
             // Track the affected (screen, desktop) for the post-update
@@ -292,9 +309,11 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             continue;
         }
 
-        // Shape 2: a window-property (or otherwise non-context) rule. Remove
-        // only the SetSnappingLayout / SetScrollingTemplate actions referencing
-        // the deleted id; every other action is preserved verbatim.
+        // Shape 2: a window-property (or otherwise non-context) rule. Only the
+        // SetSnappingLayout / SetScrollingTemplate actions referencing the
+        // deleted id are touched (removed, or rewritten to the no-template word
+        // for a Scrolling context — see the gate below); every other action is
+        // preserved verbatim.
         //
         // A MIXED context rule (context-only match + assignment actions +
         // some non-assignment action) lands here too — it fails
@@ -307,11 +326,33 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // window-negating rules), so there is no engine state to re-derive —
         // the store write's rulesChanged still reaches every projection
         // consumer.
-        if (isContextAssignmentRule(rule)) {
+        const bool contextRule = isContextAssignmentRule(rule);
+        if (contextRule) {
             const ContextDims dims = decodeDims(rule.match);
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
         }
         PWR::Rule trimmed = rule;
+        // A Scrolling context takes the SAME opt-out Shape 1 writes, for the
+        // same reason: empty means "inherit the configured default", so
+        // ERASING the action here handed a screen whose template was just
+        // deleted to whatever other template happened to be the default. The
+        // rewrite runs BEFORE the erase below and replaces the id with a word
+        // no UUID matches, so the erase leaves the action standing.
+        //
+        // Gated on the rule being a CONTEXT assignment in Scrolling mode.
+        // A non-Scrolling context, and any pure window-property rule, keeps
+        // the plain erase: the slot there is either a dormant value for a mode
+        // the context is not in or not a context slot at all, the user asked
+        // for no opt-out, and the sentinel would keep a rule alive that the
+        // empty-actions drop below should have taken.
+        if (contextRule && entryFromRuleMatchActions(rule).mode == AssignmentEntry::Scrolling) {
+            for (PWR::RuleAction& action : trimmed.actions) {
+                if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)
+                    && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
+                    action.params.insert(PWR::ActionParam::LayoutId, QString(NoScrollingTemplate));
+                }
+            }
+        }
         trimmed.actions.erase(
             std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
                            [&layoutId](const PWR::RuleAction& action) {
@@ -337,7 +378,8 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // not the no-op a per-context bare mode would be.
         kept.append(trimmed);
         qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: trimmed rule" << rule.id.toString()
-                            << "— removed the layout or template reference for the deleted id, kept all others";
+                            << "— cleared the deleted id (a Scrolling context's template slot is rewritten to the "
+                               "no-template word rather than removed), kept all other actions";
     }
     if (changed) {
         m_ruleStore->setAllRules(kept);
@@ -417,8 +459,10 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
                             << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
                             << "layout=" << layout->name();
     } else {
-        // Clearing: remove the exact-shape rule entirely. Skip the signal
-        // when there was nothing to remove.
+        // Clearing: strip the exact-shape rule's assignment slots.
+        // removeAssignmentRule deletes the rule outright only when nothing
+        // else survives on it — a rule carrying other actions keeps them.
+        // Skip the signal when there was nothing to remove.
         if (!removeAssignmentRule(screenId, virtualDesktop, activity)) {
             return;
         }
@@ -470,11 +514,11 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
         entry = entryFromRuleMatchActions(*rule);
     }
     entry.mode = AssignmentEntry::Scrolling;
-    // Normalize to the canonical braced form at the library choke point so
-    // every caller (adaptor, controller, registry) stores one spelling. A
-    // braceless bus-supplied uuid stored verbatim would defeat the purge's
-    // exact string compare on template delete and the upsert no-op guard's
-    // byte-wise action compare. Empty stays empty (clears the template).
+    // Three arguments, three stored values: the reserved word stores itself,
+    // an empty argument clears the slot so the context inherits the configured
+    // default, and anything else is a template id — normalized to the canonical
+    // braced form when it resolves, and turned into the reserved word when it
+    // does not.
     if (templateId == NoScrollingTemplate) {
         // The reserved word bypasses the UUID normalization below, which is
         // the WRITE half of the token's contract (scrollingTemplateForContext
@@ -482,18 +526,38 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
         // store an empty field, silently turning "explicitly none" into
         // "inherit the default" — the exact state the user asked not to be in.
         entry.scrollingTemplateLayout = QString(NoScrollingTemplate);
+    } else if (templateId.isEmpty()) {
+        // The documented CLEAR form: drop this context's own choice so it
+        // inherits the configured default again. Only an empty argument means
+        // that — see the unresolvable arm below, which deliberately does not.
+        entry.scrollingTemplateLayout.clear();
     } else {
         QUuid parsed = QUuid::fromString(templateId);
-        // Existence validation against the native template store: an unknown id
-        // stores as "no template", matching the resolver's deleted-template
-        // degrade rather than persisting a dangling reference. Without a wired
-        // store (some tests) the id is stored as-is — the resolver degrades the
-        // same way at read time.
-        if (!parsed.isNull() && m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
-            qCDebug(lcZonesLib) << "assignScrollingTemplate: unknown template" << parsed << "— storing no template";
-            parsed = QUuid();
+        // Existence validation against the native template store. Without a
+        // wired store (some tests, embedders) a well-formed id is stored as-is
+        // and the resolver degrades it at read time instead.
+        const bool unknownToStore =
+            !parsed.isNull() && m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed);
+        if (parsed.isNull() || unknownToStore) {
+            // The caller named a template that does not resolve, and the
+            // reserved word — not empty — is what that means. Empty would
+            // inherit the configured DEFAULT template, so a mistyped or
+            // already-deleted id silently reshaped the screen with a template
+            // nobody picked for it. This is the same verdict
+            // purgeLayoutIdFromAssignments reaches when the template a
+            // Scrolling context was using is deleted, and the entry is
+            // Scrolling by construction here (the mode is stamped above).
+            qCDebug(lcZonesLib) << "assignScrollingTemplate: unresolvable template" << templateId
+                                << "— storing the explicit no-template word rather than inheriting the default";
+            entry.scrollingTemplateLayout = QString(NoScrollingTemplate);
+        } else {
+            // Normalized to the canonical braced form at this ONE choke point
+            // so every caller (adaptor, controller, registry) stores one
+            // spelling. A braceless bus-supplied uuid stored verbatim would
+            // defeat the purge's exact string compare on template delete and
+            // the upsert no-op guard's byte-wise action compare.
+            entry.scrollingTemplateLayout = parsed.toString();
         }
-        entry.scrollingTemplateLayout = parsed.isNull() ? QString() : parsed.toString();
     }
     upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
     // Emit unconditionally — see assignLayout: the write suppression is real,

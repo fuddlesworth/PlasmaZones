@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorScrollEngine unit tests, thirteen targets. Headless throughout: two
+# PhosphorScrollEngine unit tests, fourteen targets. Headless throughout: two
 # files drive the axis-free primitives directly (StripAxis and the park
 # decision, which take their axis as an argument and so need no fixture), two
-# exercise the pure strip model against the shared screen fixture, and nine
+# exercise the pure strip model against the shared screen fixture, and ten
 # drive the engine through null (or stubbed) daemon dependencies and the
 # geometry-provider seam. None needs a QPA platform, so
 # by convention the strip tests run APPLESS and the engine tests GUILESS
@@ -12,7 +12,7 @@
 # deleteLater) — the convention lives in each file's *_MAIN macro; nothing
 # here enforces it.
 #
-# The eleven fixture-driven suites register TWICE, once per axis, via
+# The twelve fixture-driven suites register TWICE, once per axis, via
 # pse_add_test. The two axis-free ones use pse_add_axis_free_test and register
 # once: the shared fixture HEADER still rides their target (the function adds
 # it to every target, and automoc produces nothing for it), but they never
@@ -118,6 +118,11 @@ pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)
+# The template channel's seed blueprint and its consumption cursor, split out
+# of the per-screen suite once that file passed the size ceiling. Same stub,
+# different question: which blueprint ENTRY a column takes, and which events
+# leave an entry spent.
+pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstubsettings.h)
 # The behaviour suite is the only one that needs a window-tracking stub: the
 # sticky gate and the client-decides width both short-circuit on a null
 # tracker, so their per-screen resolution is unobservable without one.

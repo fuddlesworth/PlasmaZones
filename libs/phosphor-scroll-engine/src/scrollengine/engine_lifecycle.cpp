@@ -9,6 +9,8 @@
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
+#include <QVariant>
+
 #include <algorithm>
 #include <utility>
 
@@ -44,7 +46,7 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     // the class has no appId to parse, and this gate would then silently skip
     // the float restore for the window's whole life.
     const QString appId = currentAppIdFor(windowId);
-    if (!m_windowTracker || appId.isEmpty() || appId == windowId) {
+    if (!m_windowTracker || !PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         return;
     }
     // The window floats regardless (the caller already decided that), so only
@@ -82,7 +84,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // out of this map below (sticky handling, default display, the
     // client-decides verdict and the insert position) plus the template
     // blueprint, and the screenId-taking wrappers would each rebuild it.
-    const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
+    const QVariantMap screenOverrides = overridesForScreen(screenId);
 
     // Fixed-size / oversized windows cannot honour a column slot: float them
     // at their native size instead of forcing a tile (the min size is the
@@ -141,7 +143,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // anchors that every structural mutation had to invalidate, and the
     // strip stash already restores structure where it matters.
     const QString appId = currentAppIdFor(windowId);
-    if (m_windowTracker && !appId.isEmpty() && appId != windowId) {
+    if (m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
         if (const auto record =
                 m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId)) {
@@ -209,7 +211,16 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // would, on a vertical strip, feed the client's cross extent into
             // the column's MAIN intent and open every client-sized window at
             // the wrong length along the strip.
-            width = ColumnWidth::makeFixed(params.axis.mainSize(geo->size()));
+            //
+            // Bounded like every other Fixed intent this engine mints (the
+            // settings and override arms both qBound before the round). The
+            // rect comes from IWindowTrackingService, which an embedder
+            // implements, and validatedUnmanagedGeometry validates only that a
+            // geometry EXISTS for the window on that screen — its extents are
+            // whatever the compositor reported, so a degenerate or absurd one
+            // would become the column's standing width intent.
+            const int clientMain = params.axis.mainSize(geo->size());
+            width = ColumnWidth::makeFixed(qBound(1, clientMain, static_cast<int>(kMaxFixedExtentPx)));
         }
     }
 
@@ -330,6 +341,29 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // blueprint; the blueprint outranks every default, including a
         // client-decides width already resolved into `width`.
         const auto blueprintIt = screenOverrides.constFind(ScrollPerScreenKeys::templateColumns());
+        // Blueprint-swap detection, here rather than on the override map's
+        // writes. The map is dropped and rebuilt on ordinary context changes
+        // that leave the template alone (a desktop switch does it twice), so
+        // reacting to the write restarted the seed for events the user never
+        // made. Comparing the VALUE the cursor is counting against restarts
+        // it exactly when the template really changed.
+        //
+        // The reset needs an ESTABLISHED identity to compare against, not
+        // merely a stored one. A state rebuilt by a mode round trip or staged
+        // from the persisted blob arrives holding a real cursor and no
+        // identity at all, and treating that absence as a mismatch reset the
+        // cursor the carry had just restored — the refill all over again, one
+        // arrival later. Not established means STAMP and keep the cursor;
+        // only an established value that differs is a genuine swap. Null is
+        // no help as the unset marker: it is the ordinary identity of a
+        // context with no template. See ScrollState::hasBlueprintIdentity.
+        const QVariant blueprintNow = blueprintIt != screenOverrides.constEnd() ? *blueprintIt : QVariant();
+        if (!state->hasBlueprintIdentity()) {
+            state->setBlueprintIdentity(blueprintNow);
+        } else if (state->blueprintIdentity() != blueprintNow) {
+            state->setBlueprintIdentity(blueprintNow);
+            state->resetBlueprintCursor();
+        }
         // The entry this column would take: the strip's consumption cursor,
         // floored at the live column count. ScrollState::blueprintCursor
         // carries the full contract for both halves — the cursor makes an
@@ -359,27 +393,42 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                     && fraction <= 1.0) {
                     width = ColumnWidth::makeProportion(fraction);
                 }
-                // Guarded on PRESENCE, mirroring the width arm's fall-through:
-                // an entry that carries a width only must leave `display` on
-                // the effective default resolved above. Reading an absent key
-                // as 0 forced every such column to Normal and silently
-                // discarded a Tabbed default (from the settings-channel
-                // default, or a SetScrollDefaultColumnDisplay rule) for
-                // exactly the first N columns. The in-tree daemon always
-                // writes both keys on every entry, so this guard is a
-                // public-API belt for embedder-supplied maps rather than a
-                // fix for a shipped bug.
-                if (!openParams.tabbed && entry.contains(ScrollPerScreenKeys::templateColumnDisplay())) {
-                    display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
-                        ? ColumnDisplay::Tabbed
-                        : ColumnDisplay::Normal;
+                // Guarded on the VALUE, not merely on the key's presence, and
+                // for the same reason effectiveDefaultColumnDisplay is:
+                // QVariant::toInt() answers 0 for anything unconvertible, and
+                // 0 is a legal ColumnDisplay (Normal). Reading "any value that
+                // is not 1" as Normal let a garbage override — or a display
+                // kind a future build knows and this one does not — silently
+                // replace a Tabbed default (from the settings channel, or a
+                // SetScrollDefaultColumnDisplay rule) for exactly the first N
+                // columns. An entry that carries no usable display leaves
+                // `display` on the effective default resolved above, which is
+                // the same fall-through the width arm's range test gives.
+                const auto displayIt = entry.constFind(ScrollPerScreenKeys::templateColumnDisplay());
+                if (!openParams.tabbed && displayIt != entry.constEnd()) {
+                    bool displayOk = false;
+                    const int displayValue = displayIt->toInt(&displayOk);
+                    if (displayOk
+                        && (displayValue == static_cast<int>(ColumnDisplay::Normal)
+                            || displayValue == static_cast<int>(ColumnDisplay::Tabbed))) {
+                        display = static_cast<ColumnDisplay>(displayValue);
+                    }
                 }
             }
         }
         const ScrollInsertPosition insertPos = effectiveInsertPosition(screenOverrides);
         if (insertPos == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
-            inserted =
-                state->strip().insertWindowIntoActiveColumn(windowId, width, std::nullopt, params, minWidth, minHeight);
+            // The same ENGAGED-ONLY optional the openColumnPlacement=consume
+            // arm above builds, not a bare nullopt. The two arms are the rule
+            // and config spellings of one intent, and this one silently
+            // dropped an openWindowTabbed rule's verdict on the host column
+            // while its twin applied it. Engaged only when the rule actually
+            // spoke: nullopt leaves the host column's own display alone, which
+            // is what an arriving TILE should do by default.
+            const std::optional<ColumnDisplay> displayOverride =
+                openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
+            inserted = state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
+                                                                   minHeight);
         }
         if (!inserted) {
             inserted = state->strip().insertWindow(

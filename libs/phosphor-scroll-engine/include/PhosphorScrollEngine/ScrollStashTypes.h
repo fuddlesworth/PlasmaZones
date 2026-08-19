@@ -11,6 +11,7 @@
 #include <PhosphorProtocol/ScrollAxisEnum.h>
 
 #include <QString>
+#include <QVariant>
 #include <QVector>
 
 namespace PhosphorScrollEngine {
@@ -102,6 +103,46 @@ struct StashedStrip
     /// it is main-axis pixels, so replaying one captured on the other axis
     /// scrolls the restored strip to a nonsense position.
     PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal;
+    /// The strip's template blueprint cursor, carried across the round trip.
+    ///
+    /// Restoring the columns re-inserts them through paths that consume no
+    /// blueprint entry, so the far side would otherwise recover spent-ness
+    /// only as far as the qMax(cursor, columnCount) floor reaches — which is
+    /// the LIVE column count. A strip that had opened four columns and closed
+    /// two came back believing it had spent two, and handed entries 2 and 3
+    /// out for a second time. Travelling with the structure is what makes the
+    /// round trip lossless, exactly as focusedWindowId and viewAnchor do for
+    /// focus and view.
+    ///
+    /// Carried even by an entry with NO columns. A strip whose windows were
+    /// all floated or minimized away resolves to nothing structural while
+    /// still standing for the entries it spent, so the cursor is the whole
+    /// payload of such an entry — see stashStripStructure, which stores one
+    /// for that case alone.
+    int blueprintCursor = 0;
+    /// The blueprint the cursor above was counting against, so the far side
+    /// can tell a resumed template from a swapped one.
+    ///
+    /// Rides beside the cursor because the two are only meaningful together:
+    /// a cursor restored without the blueprint that produced it leaves the
+    /// consumption site unable to distinguish "same template, resume" from
+    /// "new template, restart", and it guessed restart — discarding the
+    /// cursor this entry just carried.
+    ///
+    /// NULL means "this entry hands no identity over", and the restore skips
+    /// the stamp rather than establishing a null one. Two entries hold null: a
+    /// context that genuinely has no template, and one staged from the
+    /// persisted blob (see below). Both want the same treatment — let the
+    /// consumption site stamp whatever blueprint is in force and keep the
+    /// cursor — which is why the restore tests isValid() instead of leaning on
+    /// ScrollState's established flag alone.
+    ///
+    /// NOT serialized, deliberately, unlike the cursor. A restored blob's
+    /// state has no established identity either, so the consumption site
+    /// stamps whatever blueprint is in force and keeps the cursor — the same
+    /// answer persisting the value would produce, without a second staleness
+    /// class in the blob.
+    QVariant blueprintIdentity;
     /// Monotonic stamp of when this entry was staged (mode exit or
     /// persistence load), from m_stashSequence. serializeStripState
     /// resolves a window listed by two DIFFERENT stash keys in favour of
@@ -114,6 +155,11 @@ struct StashedStrip
     /// than by stamp.
     quint64 sequence = 0;
 
+    /// STRUCTURALLY empty: no columns to rebuild. Deliberately says nothing
+    /// about blueprintCursor, because both callers ask this to decide whether
+    /// there is structure worth restoring or writing out — a cursor-only entry
+    /// answers true here and is kept alive by the explicit cursor tests at
+    /// those sites instead.
     bool isEmpty() const
     {
         return columns.isEmpty();

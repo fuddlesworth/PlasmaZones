@@ -290,7 +290,18 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
                                   std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis) const
 {
     StashedStrip out;
-    if (!state || state->strip().isEmpty()) {
+    if (!state) {
+        return out;
+    }
+    // Spent-ness and the blueprint it counts against are captured BEFORE the
+    // no-columns exit, not beside the focus and view below. A strip whose
+    // windows have all been floated or minimized away has no columns while its
+    // cursor is still live, and taking this after the exit handed such a state
+    // back a default-constructed entry — cursor 0, the exact under-count the
+    // carry exists to stop. See StashedStrip::blueprintCursor.
+    out.blueprintCursor = state->blueprintCursor();
+    out.blueprintIdentity = state->blueprintIdentity();
+    if (state->strip().isEmpty()) {
         return out;
     }
     for (const Column& col : state->strip().columns()) {
@@ -351,7 +362,15 @@ void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& 
                                        std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis)
 {
     StashedStrip stash = buildStashFromState(state, preResolvedFallbackAxis);
-    if (stash.isEmpty()) {
+    // A cursor-only entry is worth storing even with no columns to rebuild.
+    // The screen still stands for the blueprint entries it spent — its windows
+    // are floated or minimized, and every path that brings them back to the
+    // strip (unfloat, unminimize) consumes no entry — so dropping the entry
+    // here restarted the blueprint on the next fresh open. Structure-less
+    // entries carry nothing else: no tiles to claim, so restoreFromStripStash
+    // never matches one, and the cursor reaches the state through the
+    // arrival-time raise like any other.
+    if (stash.isEmpty() && stash.blueprintCursor <= 0) {
         return;
     }
     // Recency stamp: serializeStripState resolves a window listed under two
@@ -380,6 +399,44 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         return false;
     }
     StashedStrip& stashStrip = it.value();
+    // Spent-ness comes back BEFORE the tile claim below, not after it. Raised
+    // rather than assigned, for the same reason readers floor the cursor at
+    // the column count: this runs once per ARRIVAL, and a window that opened
+    // fresh alongside the restore has already advanced the cursor past what
+    // the stash recorded. Ahead of the claim because the claim can fail — an
+    // arrival this entry does not name, or an entry with no tiles at all —
+    // and the cursor is owed to the state either way.
+    state->setBlueprintCursor(qMax(state->blueprintCursor(), stashStrip.blueprintCursor));
+    // The blueprint the cursor counts against, handed over only when the stash
+    // actually carries one AND the state has none of its own.
+    //
+    // Both halves matter. A state that has already stamped an identity has
+    // consumed an entry or been restored earlier, and that value is the newer
+    // account. And a stash identity that is NULL must not be stamped at all:
+    // null is what an entry staged from the persisted blob holds (the identity
+    // is deliberately not serialized), and establishing it would make the
+    // consumption site compare null against the live blueprint, read a swap,
+    // and reset the very cursor this restore just carried — the original
+    // defect, moved to the restart path. Leaving it unestablished sends that
+    // site down its stamp-and-keep arm, which is the right answer for a
+    // persisted cursor and identical to what stamping would give for a context
+    // that genuinely has no template (its live blueprint is null too).
+    if (stashStrip.blueprintIdentity.isValid() && !state->hasBlueprintIdentity()) {
+        state->setBlueprintIdentity(stashStrip.blueprintIdentity);
+    }
+    if (stashStrip.isEmpty()) {
+        // Cursor-only entry (see stashStripStructure): no columns, so there is
+        // nothing to claim and no tile whose consumption could ever retire it.
+        // The cursor above was its entire payload and has now been handed
+        // over, so the entry retires HERE and nowhere else: pruneStaleWindows'
+        // zero-tile reap deliberately exempts a cursor-only carrier (it must
+        // outlive the bring-up to reach this arrival), so without this erase
+        // the entry would stand for the process lifetime, re-raising a cursor
+        // the state already holds at a hash lookup per arrival.
+        m_stripStash.erase(it);
+        m_stripStashConsumed.remove(key);
+        return false;
+    }
     QVector<StashedColumn>& stash = stashStrip.columns;
     int colIdx = -1;
     int tileIdx = -1;
@@ -906,50 +963,54 @@ void ScrollEngine::refreshConfigFromSettings()
 
 void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
 {
-    const QVariantMap previous = m_perScreenOverrides.value(screenId);
+    // Keyed by the screen's CURRENT context: the producer resolved these
+    // overrides for (screen, desktop, activity), so storing them under the
+    // screen alone would let one desktop's template overwrite another's.
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    const QVariantMap previous = m_perScreenOverrides.value(key);
     if (previous == overrides) {
         return;
     }
-    // Compared BEFORE the insert, and on the blueprint key alone: every other
-    // override in this map answers per-open (widths, presets, insert
-    // position) and re-reads itself on the next open, while the blueprint is
-    // the one key a live cursor points INTO. A gap edit or a preset tweak
-    // must not restart the seed.
-    const bool blueprintChanged = previous.value(ScrollPerScreenKeys::templateColumns())
-        != overrides.value(ScrollPerScreenKeys::templateColumns());
-    m_perScreenOverrides.insert(screenId, overrides);
-    if (blueprintChanged) {
-        resetBlueprintCursorsForScreen(screenId);
-    }
+    m_perScreenOverrides.insert(key, overrides);
+    // Deliberately no cursor reset here. A blueprint SWAP is noticed at the
+    // consumption site by comparing ScrollState::blueprintIdentity against
+    // the blueprint actually in force, which is the only place that can tell
+    // a genuine template change from this map merely being rewritten. Every
+    // desktop switch drops and re-pushes these overrides with the template
+    // unchanged, and resetting on the write made that ordinary event refill
+    // entries the strip's columns already stood for.
     scheduleRetileForScreen(screenId);
 }
 
 void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 {
-    const bool hadBlueprint = m_perScreenOverrides.value(screenId).contains(ScrollPerScreenKeys::templateColumns());
-    if (m_perScreenOverrides.remove(screenId) > 0) {
-        // Dropping the blueprint is a blueprint change like any other: a
-        // template re-applied later has to seed from its own first entry
-        // rather than resume a cursor that counted the old one's.
-        if (hadBlueprint) {
-            resetBlueprintCursorsForScreen(screenId);
+    // Every context on the screen, not just the current one: this is the
+    // whole-SCREEN door, and the caller is telling us the screen has left
+    // scrolling entirely, so no context's overrides survive it. A caller that
+    // means "this CONTEXT resolved no overrides" must not come here — it
+    // pushes an empty map through applyPerScreenConfig instead, which reads
+    // identically at every effective* reader without touching the sibling
+    // contexts. The in-tree caller is updateScrollingScreens' departing-screen
+    // loop, which runs after setActiveScreens has already dropped the screen.
+    bool removed = false;
+    for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
+        if (it.key().screenId == screenId) {
+            it = m_perScreenOverrides.erase(it);
+            removed = true;
+        } else {
+            ++it;
         }
-        scheduleRetileForScreen(screenId);
     }
-}
-
-void ScrollEngine::resetBlueprintCursorsForScreen(const QString& screenId)
-{
-    // EVERY state on the screen, not just the visible one: the override map
-    // is keyed by screen while states are per (screen, desktop, activity), so
-    // a template swap lands on all of them at once. A background desktop
-    // whose cursor kept counting the old blueprint would seed its next open
-    // from the wrong entry the moment you switched to it.
-    const auto& states = m_states.states();
-    for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        if (it.key().screenId == screenId && it.value()) {
-            it.value()->resetBlueprintCursor();
-        }
+    if (removed) {
+        // Deliberately no cursor reset. The strips on this screen survive a
+        // trip out of scrolling — only the CURRENT context's state is torn
+        // down — so their columns still stand for the blueprint entries they
+        // took. Zeroing the cursor here meant a desktop switch away and back
+        // handed those entries out a second time, which is the exact refill
+        // the cursor exists to prevent. A template that genuinely changed
+        // while the screen was away is caught by the identity compare at the
+        // consumption site.
+        scheduleRetileForScreen(screenId);
     }
 }
 

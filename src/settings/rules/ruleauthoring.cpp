@@ -640,6 +640,15 @@ QVariantList matchFields()
     return out;
 }
 
+QString operatorLabel(Operator op)
+{
+    // The picker builders below and the collapsed rule-list summary
+    // (rulemodel_labels.cpp) now share one vocabulary. They used to disagree
+    // by omission rather than by wording: the summary rendered no operator at
+    // all, so "Title contains X" and "Title is X" read identically.
+    return operatorLabelImpl(op);
+}
+
 QVariantList operatorsForField(int fieldValue)
 {
     // Bounded cast: QML hands us a raw int, and an out-of-range value must

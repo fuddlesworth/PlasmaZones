@@ -302,6 +302,12 @@ QtObject {
             id: templateCombo
 
             readonly property var _param: parent.modelData
+            // The reserved "explicitly no template" word the action can carry,
+            // as opposed to an empty slot, which inherits the configured
+            // default. The authoritative declaration is
+            // PhosphorZones::NoScrollingTemplate in AssignmentEntry.h, whose
+            // spelling checklist names this site.
+            readonly property string _noTemplateToken: "none"
             readonly property var _templates: {
                 let entries = [];
                 const all = (row.appSettings && row.appSettings.layouts) || [];
@@ -312,6 +318,18 @@ QtObject {
                             "id": all[i].id
                         });
                 }
+                // The reserved "explicitly no template" word, last, the way
+                // every other template list in the app orders it (the unified
+                // layout list sorts it there and the layout picker reads it off
+                // the tail). It is a real value the action can carry, so
+                // without a row for it the stored token had no entry to match
+                // and fell through to the raw-id displayText below, printing
+                // "none" at the user — and an action already set to it could
+                // not be re-picked once changed.
+                entries.push({
+                    "label": i18nc("@item:inlistbox scrolling template rule action, use no template at all", "None"),
+                    "id": templateCombo._noTemplateToken
+                });
                 return entries;
             }
 

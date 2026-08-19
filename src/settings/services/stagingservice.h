@@ -5,8 +5,10 @@
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 
+#include <functional>
 #include <optional>
 
 namespace PlasmaZones {
@@ -17,9 +19,9 @@ class Settings;
 /// accumulates between `load()` and `save()`.
 ///
 /// Covers three staging categories:
-///   1. **Assignments** — per-(screen × desktop × activity) snapping /
-///      tiling layout assignments, plus per-slot clears and the atomic
-///      mode+layout staging used by the Overview page.
+///   1. **Assignments** — per-(screen × desktop × activity) engine mode with
+///      its snapping / tiling layouts, staged atomically by the Overview page,
+///      plus the scrolling template slot which stages on its own.
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
@@ -37,9 +39,11 @@ class Settings;
 class StagingService
 {
 public:
-    /// A single entry in the assignment staging map. `stagedMode` (Overview
-    /// page's atomic write) takes precedence over the per-field snapping
-    /// / tiling fields.
+    /// A single entry in the assignment staging map. `stagedMode` is set by
+    /// stageAssignmentEntry (the Overview page's atomic write) and the
+    /// snapping / tiling fields are its payload rather than an alternative
+    /// route — an entry with no staged mode was created by
+    /// stageScrollingTemplate and carries the template slot only.
     struct StagedAssignment
     {
         QString screenId;
@@ -68,31 +72,14 @@ public:
 
     // ── Assignment staging ────────────────────────────────────────────
 
-    /// Stage a snapping-layout assignment. The snapping and tiling slots are
-    /// mutually exclusive in the unified Rule model — one assignment
-    /// context carries either a snapping layout or a tiling algorithm, not
-    /// both — so staging here clears any staged tiling assignment for the
-    /// same context. Callers that want to write both atomically must use
-    /// `stageAssignmentEntry`.
-    void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-
-    /// Stage a tiling-algorithm assignment. See `stageSnapping` — the two
-    /// slots are mutually exclusive, so this clears any staged snapping
-    /// assignment for the same context.
-    void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-
     /// Remove any staged entry for the (screen × desktop × activity)
     /// context entirely — a true unstage. After this, the flush leaves the
     /// context's daemon-side assignment untouched. No-op when nothing is
     /// staged for the context.
     void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
 
-    /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",
-    /// reverting the context back to snapping mode).
-    void stageTilingClear(const QString& screen, int desktop, const QString& activity);
-
-    /// Atomic mode+layout staging used by the Overview page, bypasses the
-    /// per-field paths and flushes through `setAssignmentEntry`.
+    /// Atomic mode+layout staging used by the Overview page. The only way in:
+    /// the flush's one live path is this entry's explicit-mode branch.
     void stageAssignmentEntry(const QString& screen, int desktop, const QString& activity, int mode,
                               const QString& snappingLayoutId, const QString& tilingAlgorithmId);
 
@@ -101,22 +88,6 @@ public:
     /// `stageAssignmentEntry` when the template dropdown was touched, and
     /// omits it otherwise so an untouched slot is never rewritten.
     void stageScrollingTemplate(const QString& screen, int desktop, const QString& activity, const QString& templateId);
-
-    /// Out-param query for the scrolling template slot, same shape as
-    /// `stagedSnappingLayout`. The staged value may legitimately be an empty
-    /// string (inherit the default) or the explicit-none token, so the
-    /// return value is the only way to tell "staged" from "not staged".
-    bool stagedScrollingTemplate(const QString& screen, int desktop, const QString& activity, QString& out) const;
-
-    /// Out-param query: returns true if the context has a staged
-    /// snapping value, writes the staged value (possibly empty string for
-    /// a cleared state) into @p out.
-    bool stagedSnappingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
-
-    /// Same as `stagedSnappingLayout` for the tiling-algorithm slot.
-    /// Reattaches the `autotile:` id prefix when needed so callers can
-    /// compare against full layout IDs.
-    bool stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
 
     /// Raw staged-assignment lookup for callers that need the full entry
     /// (e.g., Q_INVOKABLE getStagedAssignment returns a variant-map
@@ -139,7 +110,36 @@ public:
     /// staged, did nothing, and cleared the unsaved badge while the daemon had
     /// never applied the edits. Every call this method makes is an idempotent
     /// setter, so re-flushing the whole retained map on the next Save is safe.
-    [[nodiscard]] bool flushAssignmentsToDaemon();
+    /// @param templateExists Optional predicate answering whether a scrolling
+    /// template UUID still names a live template. Supplied because the
+    /// daemon's `setScrollingTemplateLayout` is a VOID slot: it refuses an
+    /// unknown id with a warning and a bare return, which on the wire is an
+    /// ordinary successful reply, so the flush's transport check cannot see
+    /// the refusal. Without this the staged pick was discarded, the map
+    /// cleared and the unsaved badge dropped as though it had saved — and the
+    /// refusal is reachable in one session, by deleting a template on the
+    /// Layouts page while a Monitors-page pick is still staged. Left unset
+    /// (fixtures, embedders) the pre-check is skipped and the old behaviour
+    /// stands.
+    ///
+    /// What a refusal does, precisely, because two earlier readings of this
+    /// doc got it wrong. The pre-check runs BEFORE the entry write, and only
+    /// the template call is skipped: the `setAssignmentEntry` carrying the
+    /// user's mode and layout switch still goes out, because dropping that too
+    /// would silently discard an edit the daemon can perfectly well accept.
+    /// The verdict goes false so the badge stays lit, and the refused id is
+    /// ERASED from the retained entry so the next Save is not doomed to refuse
+    /// forever — a deleted template never comes back, so retrying it is not a
+    /// retry, it is a deadlock. The staged mode and layouts survive that erase
+    /// and re-flush normally.
+    ///
+    /// @param refusedTemplateIds Optional sink for the ids the pre-check
+    /// refused. StagingService is not a QObject and cannot raise a signal, so
+    /// the caller owns telling the user; SettingsController::save() turns a
+    /// non-empty list into `layoutOperationFailed`. Untouched when nothing was
+    /// refused.
+    [[nodiscard]] bool flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists = {},
+                                                QStringList* refusedTemplateIds = nullptr);
 
     // ── Virtual screen staging ────────────────────────────────────────
 
@@ -165,7 +165,14 @@ public:
     /// Persist staged VS configs to Settings (KConfig) for on-disk
     /// durability. Runs BEFORE `Settings::save()` — the subsequent save
     /// writes everything out in one go.
-    void flushVirtualScreensToSettings(Settings& settings);
+    ///
+    /// Returns false when a staged config named screens but not one of them
+    /// survived validation. That config is skipped rather than written,
+    /// because an empty screen list reads as "no split" and would persist the
+    /// removal of a split the user still has. The staging map is untouched
+    /// either way (only the daemon flush clears it), so the retry has the
+    /// edit; the verdict is there for the caller's commit gate.
+    [[nodiscard]] bool flushVirtualScreensToSettings(Settings& settings);
 
     /// Push staged VS configs to the daemon via D-Bus. Runs AFTER
     /// `Settings::save()` but BEFORE `notifyReload` so virtual screen IDs
