@@ -233,6 +233,15 @@ SettingsFlickable {
                     title: i18n("Max windows")
                     searchAnchor: "maxWindows"
                     description: i18n("Maximum number of windows to tile on this screen")
+                    // Disabled while the default is cleared: with no algorithm
+                    // selected there is no per-algorithm slot to tune, and the
+                    // controller refuses the write. Left interactive, the
+                    // slider would hold the dragged value for the session and
+                    // snap back on reload — a silent discard. The ratio and
+                    // master rows hide themselves through their capability
+                    // flags, which answer false for the reserved word; this
+                    // row is always visible, so it needs the gate spelled out.
+                    enabled: root.selectedAlgorithm !== root._noAlgorithmToken
 
                     SettingsSlider {
                         id: previewWindowSlider

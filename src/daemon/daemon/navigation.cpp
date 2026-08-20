@@ -426,11 +426,14 @@ void Daemon::handleIncreaseMasterRatio()
     // hint-setting the macro does — and, for the same reason, the
     // state gate below it.
     //
-    // The engine holds no state for an explicit algorithm opt-out, so it
-    // rejects the hint and NavigationController falls back to the first
-    // (hash-ordered) entry of m_autotileScreens — mutating an unrelated
-    // screen's split ratio. Non-creating probe, same as handleRetile.
-    if (!m_autotileEngine->stateForScreen(screenId)) {
+    // isAutotileScreen above is the ROUTER's answer, which is Autotile for an
+    // explicit algorithm opt-out too — but updateEngineScreens leaves such a
+    // screen out of the engine set, the hint is only honored for a member, and
+    // NavigationController would otherwise fall back to the first
+    // (hash-ordered) entry of that set and move an unrelated screen's ratio.
+    // Membership, not "has a TilingState": a member with no tiled windows yet
+    // still gets the engine's own feedback instead of silence.
+    if (!m_autotileEngine->isActiveOnScreen(screenId)) {
         return;
     }
     m_autotileEngine->setActiveScreenHint(screenId);
@@ -448,8 +451,8 @@ void Daemon::handleDecreaseMasterRatio()
     if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
     // See handleIncreaseMasterRatio for the active-screen-hint and
-    // state-gate rationale.
-    if (!m_autotileEngine->stateForScreen(screenId)) {
+    // engine-membership rationale.
+    if (!m_autotileEngine->isActiveOnScreen(screenId)) {
         return;
     }
     m_autotileEngine->setActiveScreenHint(screenId);

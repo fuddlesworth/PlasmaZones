@@ -13,7 +13,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <iterator> // std::size, in setQuickLayoutShortcut's dispatch check
+#include <iterator> // std::size, in the quick-layout and snap-to-zone dispatch checks
 
 namespace PlasmaZones {
 

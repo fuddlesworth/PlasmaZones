@@ -69,17 +69,24 @@ constexpr int PendingOrderTimeoutMs = 10000;
 // a default-valued slot safe to drop from disk: whichever one drifts, a slot
 // the writer considered redundant reconstructs as something else on read (the
 // silent "max windows reverts to its default" class of bug).
+bool isAmbientMaxWindows(int globalMaxWindows)
+{
+    return globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
+}
+
+bool isAmbientSplitRatio(qreal globalSplitRatio)
+{
+    return qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio);
+}
+
 int reconstructedMaxWindows(int globalMaxWindows, const PhosphorTiles::TilingAlgorithm* algo)
 {
-    return (algo && globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows) ? algo->defaultMaxWindows()
-                                                                                            : globalMaxWindows;
+    return (algo && isAmbientMaxWindows(globalMaxWindows)) ? algo->defaultMaxWindows() : globalMaxWindows;
 }
 
 qreal reconstructedSplitRatio(qreal globalSplitRatio, const PhosphorTiles::TilingAlgorithm* algo)
 {
-    const bool ambient =
-        qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio);
-    return (algo && ambient) ? algo->defaultSplitRatio() : globalSplitRatio;
+    return (algo && isAmbientSplitRatio(globalSplitRatio)) ? algo->defaultSplitRatio() : globalSplitRatio;
 }
 
 QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString, AlgorithmSettings>& saved,
@@ -415,10 +422,21 @@ void AutotileEngine::refreshConfigFromSettings()
             // ratio (a scripted algorithm shipping 0.6 must not be clamped to
             // the schema 0.5 by every routine refresh). masterCount has no
             // per-algorithm default, so the SYNC'd global stands for it.
-            // Same two helpers the write filter decides with, so a slot the
-            // writer dropped as redundant reconstructs to exactly what it held.
-            m_config->maxWindows = reconstructedMaxWindows(s->autotileMaxWindows(), algo);
-            m_config->splitRatio = reconstructedSplitRatio(s->autotileSplitRatio(), algo);
+            // Shares the AMBIENCE TEST with the write filter — that predicate
+            // is the thing whose drift would make a dropped slot reconstruct
+            // as something else — while keeping the assignment conditional.
+            // The override case deliberately writes nothing: the live scalar
+            // and the settings global differ on purpose inside the write-back
+            // guard window (setAlgorithm can install an algorithm's own
+            // default without writing it back to the global key), and
+            // clobbering the live value there could later mint a per-algorithm
+            // slot recording a value the user never chose.
+            if (isAmbientMaxWindows(s->autotileMaxWindows())) {
+                m_config->maxWindows = algo->defaultMaxWindows();
+            }
+            if (isAmbientSplitRatio(s->autotileSplitRatio())) {
+                m_config->splitRatio = algo->defaultSplitRatio();
+            }
         }
     }
 

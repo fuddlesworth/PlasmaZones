@@ -87,7 +87,12 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
         // deserialization chokepoint also self-heals configs that already
         // carry one.
         if (it.key() == PhosphorZones::NoTilingAlgorithm) {
-            qCWarning(PhosphorTileEngine::lcTileEngine)
+            // Debug, not a warning: this runs on EVERY settings refresh, and
+            // the drop only reaches disk when something later persists the
+            // map, which may never happen for a user who does not touch
+            // tuning. At warning level a config that once acquired the key
+            // would log on every settings change for the rest of its life.
+            qCDebug(PhosphorTileEngine::lcTileEngine)
                 << "perAlgoFromVariantMap: dropping the reserved no-algorithm key" << it.key();
             continue;
         }

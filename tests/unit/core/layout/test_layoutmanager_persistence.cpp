@@ -581,14 +581,35 @@ private Q_SLOTS:
         QVERIFY2(!stored.contains(2), "the batch arm must refuse the reserved opt-out id, like the single setter");
         QCOMPARE(stored.size(), 1);
 
-        // And the refusal holds across the sidecar: the loader drops the word
-        // too, so a hand-edited file cannot resurrect the dead press.
+        // The LOADER's own refusal, exercised by writing the word straight into
+        // the sidecar rather than through a setter. Reloading what the batch
+        // setter just wrote would prove nothing — the write side already
+        // refused slot 2, so its absence after a reload holds whether or not
+        // the loader filters anything. A hand-edited file is the only way the
+        // word reaches readQuickLayouts, and it must not resurrect the dead
+        // press there either.
+        const QString path = ConfigDefaults::quickLayoutsFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QJsonObject autotileSlots;
+        autotileSlots.insert(QStringLiteral("1"), QStringLiteral("autotile:bsp"));
+        autotileSlots.insert(QStringLiteral("2"), QStringLiteral("autotile:none"));
+        QJsonObject document;
+        document.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, autotileSlots);
+        {
+            QFile sidecar(path);
+            QVERIFY(sidecar.open(QIODevice::WriteOnly));
+            sidecar.write(QJsonDocument(document).toJson());
+        }
+
         QScopedPointer<PhosphorZones::LayoutRegistry> reloaded(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         reloaded->loadAssignments();
         const QHash<int, QString> afterReload = reloaded->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile);
+        // Slot 1 is the positive control: it proves the document landed on the
+        // path the registry actually reads, so slot 2's absence is the loader
+        // refusing the word rather than a file that was never loaded at all.
         QCOMPARE(afterReload.value(1), QStringLiteral("autotile:bsp"));
-        QVERIFY(!afterReload.contains(2));
+        QVERIFY2(!afterReload.contains(2), "the loader must drop a hand-edited reserved opt-out id");
     }
 
     // The batch setter CLEARS the mode's array before applying, and only that

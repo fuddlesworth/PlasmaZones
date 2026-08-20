@@ -73,12 +73,16 @@ ColumnLayout {
             }
             // The local list does not carry this layout, so there are
             // no zones to draw. The daemon still reports the resolved
-            // name, so show that rather than nothing — and if it reports
-            // none either, the raw id beats captioning a missing layout
-            // "Default", which is a different state entirely. Same ladder
-            // as the tiling preview below.
+            // name, so show that rather than nothing.
+            //
+            // No raw-id rung here, unlike the tiling preview below, and the
+            // asymmetry is deliberate: an algorithm id is a readable word
+            // ("bsp"), while a snapping layout id is a braced UUID, so
+            // falling back to it would caption the card "{8f3c…}". The
+            // InlineMessage on the page already names the unresolved id for
+            // this case.
             return {
-                "displayName": (previews.view.screenState && previews.view.screenState.layoutName) || previews.view.localLayoutId || i18n("Default"),
+                "displayName": (previews.view.screenState && previews.view.screenState.layoutName) || i18n("Default"),
                 "zones": []
             };
         }

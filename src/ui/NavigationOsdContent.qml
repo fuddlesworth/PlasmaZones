@@ -404,9 +404,10 @@ Item {
 
     /// Success copy for the current action, including the zone numbers and
     /// direction arrows the reason token carries. No "layout" arm on
-    /// purpose: that action is failure-only by producer contract. All three
-    /// emitters (Daemon::showLayoutsUnavailableOsd, and the two no_templates
-    /// sites in shortcuts_wiring.cpp and start.cpp) hardcode success=false.
+    /// purpose: that action is failure-only by producer contract. All four
+    /// emitters (Daemon::showLayoutsUnavailableOsd, the two no_templates
+    /// sites in shortcuts_wiring.cpp and start.cpp, and the slot_unavailable
+    /// site in shortcuts_wiring.cpp) hardcode success=false.
     /// snap_all, snap_assist and resnap are equally failure-only (every
     /// emitter in snaphandler.cpp, engine_navigation.cpp and the snap
     /// engine's navigation.cpp sends success=false) and equally arm-less —

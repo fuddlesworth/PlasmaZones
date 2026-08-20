@@ -209,7 +209,17 @@ QString LayoutAdaptor::getAllScreenAssignments()
             if (!entry.scrollingTemplateLayout.isEmpty()) {
                 screenObj[QLatin1String("scrollingTemplate")] = entry.scrollingTemplateLayout;
             }
-            screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+            // Only when the rule actually DECLARES a mode. exactContextEntry
+            // decodes through a helper that starts every entry at Snapping, so
+            // a layout-only pin — a SetSnappingLayout or SetScrollingTemplate
+            // with no SetEngineMode, a shape the exact-context lookup admits
+            // on purpose — would otherwise be published as an explicit
+            // Snapping choice the user never made. Since this JSON is staged
+            // and written back per context, that would stamp the pin with a
+            // mode and change what it means.
+            if (m_layoutManager->exactContextDeclaresEngineMode(screenId, 0, QString())) {
+                screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+            }
         }
 
         // Per-desktop entries (desktop > 0) — only include explicitly assigned

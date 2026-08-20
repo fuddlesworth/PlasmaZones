@@ -166,6 +166,7 @@ inline constexpr QLatin1String NoScrollingTemplate{"none"};
 ///   - ProfileRow                   (the profile-diff cell)
 ///   - TilingAlgorithmPage          (the cleared-default guard and caption)
 ///   - TilingSimplePage             (the same guard on the simple page)
+///   - AlgorithmPreviewCard         (the cleared-default combo caption)
 /// Keep this list current: it is the only safety net for those sites, and the
 /// two LayoutContextMenu occurrences are the highest-stakes of them because
 /// they author the stored value rather than merely reading it.

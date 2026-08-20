@@ -272,6 +272,11 @@ SettingsFlickable {
                     title: i18n("Max windows")
                     searchAnchor: "simpleMaxWindows"
                     description: i18n("Maximum number of windows to tile")
+                    // See the twin on TilingAlgorithmPage: with the default
+                    // cleared there is no algorithm to tune, the controller
+                    // refuses the write, and an interactive slider would
+                    // silently discard the drag on reload.
+                    enabled: root.selectedAlgorithm !== root._noAlgorithmToken
 
                     SettingsSlider {
                         id: maxWindowsSlider

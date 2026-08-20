@@ -78,7 +78,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="deleteLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Permanently delete the layout with the given ID. A Snapping context whose assignment referenced the deleted layout is rewritten to the reserved word &quot;none&quot; (explicitly no layout) rather than cleared: an empty slot would inherit the configured default layout, silently reshaping a screen whose layout was just deleted. A non-Snapping context's dormant reference is plainly cleared."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Permanently delete the layout with the given ID. The deletion is REFUSED, and no layoutDeleted is emitted, when the registry cannot keep the layout, its file and its settings sidecar mutually consistent (an unwritable sidecar, an undeletable layout file) — the layout is then still registered, and since this method has no return value the absence of layoutDeleted is the only signal of that. A context whose assignment referenced the deleted layout is rewritten to the reserved word &quot;none&quot; (explicitly no layout) rather than cleared, wherever that slot is the one in force: an empty slot would inherit the configured default layout, silently reshaping a screen whose layout was just deleted. A dormant reference — a slot belonging to a mode the context is not in — is plainly cleared."/>
             <arg name="id" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to delete."/>
             </arg>

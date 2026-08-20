@@ -358,7 +358,8 @@ public:
 
 Q_SIGNALS:
     // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;
-    // @c removeLayout / @c removeLayoutById fire `layoutRemoved`.
+    // @c removeLayout / @c removeLayoutById fire `layoutRemoved` on success;
+    // a refused removal (see their @return) fires nothing.
     void layoutAdded(Layout* layout);
     void layoutRemoved(Layout* layout);
 

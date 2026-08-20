@@ -211,33 +211,35 @@ private Q_SLOTS:
         UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
         controller.setCurrentScreenName(QStringLiteral("DP-1"));
         controller.setCurrentLayoutSupport(LayoutSupport::Placement);
-        // The filter the daemon actually computes for an autotile-active
-        // screen: manual OFF. updateLayoutFilterForScreen derives
-        // includeManual as "not scrolling and (manual or not autotile)", which
-        // is false once autotile is the only active family, and the quick-slot
-        // path builds the same pair. Passing manual=true here tested a
-        // combination no screen ever runs under.
+        // The filter the daemon computes PER SCREEN for an autotile-active
+        // screen: manual OFF. updateLayoutFilterForScreen's classify sets
+        // exactly one family flag for a given screen, and includeManual is
+        // "not scrolling and (manual or not autotile)", so an autotile screen
+        // gets (false, true, false); the quick-slot path builds the same pair.
+        // (Its GLOBAL branch unions across screens, so (true, true) does occur
+        // there — but only as a seed that every list consumer re-derives per
+        // screen before reading, so the per-screen pair is what a press
+        // actually runs under.)
         controller.setLayoutFilter(/*manual=*/false, /*autotile=*/true, /*templates=*/false);
 
         const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
         mgr->assignLayout(QStringLiteral("DP-1"), desktop, QString(), layout);
         mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(), QStringLiteral("autotile:bsp"));
 
-        // The None row is appended outside both the manual and autotile
-        // blocks, so it survives this filter too, still pinned last. Note the
-        // fixture wires no algorithm registry, so the list carries no autotile
-        // rows to sit in front of it — what is pinned here is the row's seat
-        // relative to whatever real rows exist, not a mixed-family ordering.
+        // Presence only, deliberately. The None row is appended outside both
+        // the manual and the autotile block, so it survives a filter that
+        // admits neither family — which is what this one is: manual is off,
+        // and the fixture wires no algorithm registry, so appendAutotilePreviews
+        // returns immediately. The list is therefore exactly one row, and a
+        // pinned-last or a uniqueness assertion here would hold by
+        // construction rather than by anything the code does. Both of those
+        // are asserted by the snapping case above, where real rows exist for
+        // the None row to sit behind.
         const QString noneId = QString(PhosphorZones::NoSnappingLayout);
         const auto listed = controller.layouts();
         QVERIFY(PhosphorZones::LayoutUtils::findLayout(listed, noneId) != nullptr);
-        QCOMPARE(listed.last().id, noneId);
-        QCOMPARE(std::count_if(listed.cbegin(), listed.cend(),
-                               [&noneId](const auto& p) {
-                                   return p.id == noneId;
-                               }),
-                 1);
 
+        // The substantive half: the press writes the ALGORITHM slot.
         QVERIFY(controller.applyLayoutById(QString(PhosphorZones::NoSnappingLayout)));
         QCOMPARE(controller.currentLayoutId(), noneId);
         const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), desktop);

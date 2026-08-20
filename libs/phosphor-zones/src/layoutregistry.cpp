@@ -673,7 +673,8 @@ bool LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         // so dropping the whole rule would lose its SetEngineMode +
         // SetTilingAlgorithm autotile intent. purgeLayoutIdFromAssignments
         // rebuilds each affected rule with only the referencing layout slots
-        // cleared, dropping a rule only when nothing meaningful remains. It
+        // cleared. A context-assignment rule is never dropped; only a
+        // window-property rule whose sole action was the dead reference is. It
         // also sweeps the quick-slot arrays for the same id, so a stale
         // binding can never resurrect the deleted layout on a shortcut press.
         purgeLayoutIdFromAssignments(layoutIdStr);

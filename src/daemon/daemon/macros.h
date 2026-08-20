@@ -21,14 +21,17 @@
 // Autotile-mode handle (the macro is autotile-only by definition, so
 // handleForMode skips the router round-trip).
 //
-// The stateForScreen gate mirrors handleRetile (navigation.cpp): the router
-// answers Autotile for the explicit algorithm opt-out, but the engine holds
-// no state for such a screen and rejects the hint (isAutotileScreen is
-// m_autotileScreens membership, which the opt-out arm of updateEngineScreens
-// keeps the screen out of). The engine's NavigationController would then fall
-// back to the first entry of m_autotileScreens — hash-ordered — and mutate an
-// UNRELATED screen's tiling state. The overload is non-creating, so probing
-// here allocates nothing.
+// The isActiveOnScreen gate asks the one question that matters before setting
+// the hint: will the engine HONOR it? The router answers Autotile for the
+// explicit algorithm opt-out, but updateEngineScreens deliberately leaves such
+// a screen out of the engine set, and the hint is only accepted for a member.
+// Without the gate the engine's NavigationController fell back to the first
+// entry of that set — hash-ordered — and mutated an UNRELATED screen.
+//
+// Membership, NOT "has a TilingState": a screen that legitimately tiles but
+// holds no state yet (no tiled windows) is still a member, so the engine keeps
+// answering it with its own navigationFeedback rather than the daemon
+// swallowing the press silently.
 #define HANDLE_AUTOTILE_ONLY(name, engineCall)                                                                         \
     void Daemon::handle##name()                                                                                        \
     {                                                                                                                  \
@@ -39,7 +42,7 @@
             return;                                                                                                    \
         if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))                          \
             return;                                                                                                    \
-        if (!m_autotileEngine->stateForScreen(screenId))                                                               \
+        if (!m_autotileEngine->isActiveOnScreen(screenId))                                                             \
             return;                                                                                                    \
         m_autotileEngine->setActiveScreenHint(screenId);                                                               \
         m_autotileEngine->engineCall;                                                                                  \

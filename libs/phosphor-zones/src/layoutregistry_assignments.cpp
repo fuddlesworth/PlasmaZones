@@ -210,10 +210,12 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
     //     SetSnappingLayout (mode-toggle losslessness), so blanket-deleting it
     //     would drop its SetEngineMode + SetTilingAlgorithm autotile intent.
     //     Rebuild via ContextRuleBridge::makeAssignmentActions with the
-    //     snapping layout cleared but mode + tilingAlgorithm preserved; only
-    //     drop the whole rule when, after the clear, nothing but a default
-    //     (Snapping) engine-mode remains — a pure Snapping mode-only context
-    //     rule encodes no intent beyond the default.
+    //     snapping layout cleared but mode + tilingAlgorithm preserved. The
+    //     rule is never dropped: reaching this shape at all means an exact
+    //     context rule that DECLARES an engine mode, which is a first-class
+    //     pin (hasExplicitSnappingModePin reads exactly it), so a rule left
+    //     with a bare Snapping mode still carries the user's intent rather
+    //     than encoding nothing.
     //
     //  2. A window-property rule that legitimately carries a SetSnappingLayout
     //     action (the phased rollout introduces exactly such rules). Rebuilding
@@ -266,9 +268,9 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
                 // must not silently adopt the registry-wide default layout
                 // (which is what an empty slot resolves to), so it takes the
                 // explicit no-layout word. A non-Snapping context keeps the
-                // plain clear — the slot is dormant data there, and the
-                // sentinel would defeat the drop-if-nothing-remains test
-                // below.
+                // plain clear — the slot is dormant data there, and writing an
+                // opt-out into a mode the context is not in would claim a
+                // choice the user never made.
                 entry.snappingLayout = entry.mode == AssignmentEntry::Snapping ? QString(NoSnappingLayout) : QString();
             }
             if (entry.scrollingTemplateLayout == layoutId) {
@@ -284,9 +286,7 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
                 //
                 // A non-Scrolling context keeps the plain clear: the slot is
                 // only a remembered value for a mode this context is not in,
-                // the user never asked for an opt-out, and the sentinel would
-                // also defeat the drop-if-nothing-remains test below and
-                // leave the rule behind as clutter.
+                // and the user never asked for an opt-out there.
                 entry.scrollingTemplateLayout =
                     entry.mode == AssignmentEntry::Scrolling ? QString(NoScrollingTemplate) : QString();
             }
@@ -355,10 +355,14 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // erased the action outright, dropped the rule, and handed the context
         // to the registry-wide default — the exact silent reshape the reserved
         // word exists to prevent, and a contract this method publishes.
-        const bool contextShape = rule.match.isContextOnly()
+        // Only the SHAPE needs testing here. hasAnyAssignmentSlotAction would
+        // be redundant twice over: it counts SetEngineMode among the slot
+        // actions, and every rule reaching Shape 2 carries a SetSnappingLayout
+        // or SetScrollingTemplate by construction — the referencesDeleted test
+        // at the top of the loop is what let it in.
+        const bool contextRule = rule.match.isContextOnly()
             && (matchIsExactContextBase(rule.match) || matchIsExactContextDesktop(rule.match)
                 || matchIsExactContextActivity(rule.match));
-        const bool contextRule = contextShape && (hasEngineModeAction(rule) || hasAnyAssignmentSlotAction(rule));
         if (contextRule) {
             const ContextDims dims = decodeDims(rule.match);
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));

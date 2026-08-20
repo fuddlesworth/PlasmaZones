@@ -1187,12 +1187,20 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 // silent posture as the per-context opt-out above: nothing
                 // tiles there either, by the same choice.
                 if (algoId.isEmpty()) {
-                    algoId = m_settings ? m_settings->defaultAutotileAlgorithm() : QString();
-                    if (algoId == PhosphorZones::NoTilingAlgorithm) {
+                    if (m_settings && m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm) {
                         continue;
                     }
+                    // The engine's LIVE global id, not the setting. A bare
+                    // context enters the engine set with no per-screen
+                    // Algorithm override, so it tiles with whatever the engine
+                    // currently holds — and that can differ from the setting,
+                    // because the layout picker and the D-Bus setAlgorithm both
+                    // move the engine without writing it back. Naming the
+                    // setting here would announce an algorithm the screen is
+                    // not using.
+                    algoId = m_autotileEngine ? m_autotileEngine->algorithmId() : QString();
                     if (algoId.isEmpty()) {
-                        algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+                        continue;
                     }
                 }
                 auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;

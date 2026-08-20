@@ -740,22 +740,29 @@ void Daemon::handleAutotileDisabled()
             for (const QString& screenId : effectiveIds) {
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
-                QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
-                // Widen to the empty-activity entry when the activity-scoped
-                // one carries no snapping slot. The cascade returns the most
-                // specific entry WHOLE — it does not merge fields across
-                // levels — and clearAutotileAssignments leaves exactly that
-                // shape behind: flipping an Autotile entry to Snapping
-                // preserves tilingAlgorithm, not snappingLayout. Without the
-                // widening the skip below misses, parseUuid("") fails, and the
-                // loop deletes the activity entry and overwrites the broader
-                // one with the fallback layout — silently destroying the
-                // user's stored no-layout choice on any system using
-                // activities. The mode-toggle arms widen for the same reason.
-                if (existingSnapId.isEmpty() && !activity.isEmpty()) {
-                    existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                // The OPT-OUT test alone widens to the empty-activity entry.
+                // The cascade returns the most specific entry WHOLE rather
+                // than merging fields, and clearAutotileAssignments leaves
+                // exactly the shape that hides a broader opt-out: flipping an
+                // Autotile entry to Snapping preserves tilingAlgorithm, not
+                // snappingLayout. Without the widening the skip missed,
+                // parseUuid("") failed, and the loop deleted the activity
+                // entry and overwrote the broader one with the fallback —
+                // silently destroying the user's stored no-layout choice on
+                // any system using activities.
+                //
+                // Deliberately scoped to this test rather than to
+                // existingSnapId itself: the valid-UUID arm below decides
+                // whether this context already has a usable layout of its
+                // OWN, and answering that with a broader entry's layout would
+                // leave the empty activity-scoped entry in place while
+                // skipping the fill this loop exists to perform.
+                QString optOutProbe = existingSnapId;
+                if (optOutProbe.isEmpty() && !activity.isEmpty()) {
+                    optOutProbe = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
                 }
-                if (existingSnapId == PhosphorZones::NoSnappingLayout) {
+                if (optOutProbe == PhosphorZones::NoSnappingLayout) {
                     // The explicit opt-out IS a stored choice, not a missing
                     // assignment: parseUuid("none") fails like a dangling id
                     // would, and without this skip the loop replaces the
