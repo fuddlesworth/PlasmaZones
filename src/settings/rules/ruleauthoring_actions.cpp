@@ -295,25 +295,6 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetTabIndicatorUrgentColor) {
         return PhosphorI18n::tr("Set the urgent tab color");
     }
-    // Tab label font. "Tab label" rather than "tab indicator" so these read as
-    // the TEXT properties they are, next to the geometry and colour actions
-    // above that shape the pill itself. There is no size action: the label is
-    // auto-fitted to the pill's thickness.
-    if (type == ActionType::SetTabIndicatorFontFamily) {
-        return PhosphorI18n::tr("Set the tab label font");
-    }
-    if (type == ActionType::SetTabIndicatorFontWeight) {
-        return PhosphorI18n::tr("Set the tab label weight");
-    }
-    if (type == ActionType::SetTabIndicatorFontItalic) {
-        return PhosphorI18n::tr("Make tab labels italic");
-    }
-    if (type == ActionType::SetTabIndicatorFontUnderline) {
-        return PhosphorI18n::tr("Underline tab labels");
-    }
-    if (type == ActionType::SetTabIndicatorFontStrikeout) {
-        return PhosphorI18n::tr("Strike through tab labels");
-    }
     if (type == ActionType::TabColorActive) {
         return PhosphorI18n::tr("Set this window's active tab color");
     }
@@ -641,19 +622,6 @@ QString boolActionStateLabel(const QString& type, bool on)
     if (type == ActionType::SetTabIndicatorPlaceWithinColumn) {
         return on ? PhosphorI18n::tr("Tab indicator inside the column")
                   : PhosphorI18n::tr("Tab indicator beside the column");
-    }
-    // Tab label style flags. Same outcome-not-negation phrasing, and the off
-    // phrases name the plain form rather than saying "not italic", so a rule
-    // list reads as an instruction either way.
-    if (type == ActionType::SetTabIndicatorFontItalic) {
-        return on ? PhosphorI18n::tr("Italic tab labels") : PhosphorI18n::tr("Upright tab labels");
-    }
-    if (type == ActionType::SetTabIndicatorFontUnderline) {
-        return on ? PhosphorI18n::tr("Underlined tab labels") : PhosphorI18n::tr("Tab labels without an underline");
-    }
-    if (type == ActionType::SetTabIndicatorFontStrikeout) {
-        return on ? PhosphorI18n::tr("Struck-through tab labels")
-                  : PhosphorI18n::tr("Tab labels without a line through them");
     }
     // Drop indicator, same outcome-not-negation phrasing as the tab family.
     if (type == ActionType::SetDropIndicatorEnabled) {

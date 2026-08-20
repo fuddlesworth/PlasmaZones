@@ -3101,13 +3101,10 @@ private:
     // All are re-fetched on every settingsChanged (loadCachedSettings runs
     // whole), so a settings-page edit repaints without a relog.
     //
-    // The font members are Scrolling.TabIndicator's OWN five font keys, not
-    // the Appearance label font the zone-label overlays use: the chip label
-    // sits inside a pill the user sizes in this same group, so it is sized
-    // and styled from here. Defaults come from
-    // ConfigDefaults::scrollingTabIndicatorFont*() in
-    // configdefaults_scrolling.h. There is no size key: the pill's Width
-    // drives its thickness and the raster fits the label to that thickness.
+    // The font members mirror the six Appearance label-font keys the daemon
+    // pushes onto the QML overlay through writeFontProperties
+    // (src/daemon/overlayservice/internal.h). Defaults come from
+    // ConfigDefaults::labelFont*() in configdefaults_appearance.h.
 
     /// ConfigDefaults::scrollingTabIndicatorEnabled(). Master switch: false
     /// means the effect paints no pills at all.
@@ -3128,16 +3125,16 @@ private:
     QColor m_cachedTabIndicatorActiveColor;
     QColor m_cachedTabIndicatorInactiveColor;
     QColor m_cachedTabIndicatorUrgentColor;
-    /// ConfigDefaults::scrollingTabIndicatorFontFamily(): empty means the
-    /// system font family.
-    QString m_cachedTabIndicatorFontFamily;
-    /// ConfigDefaults::scrollingTabIndicatorFontWeight(), a CSS-style 100..900
-    /// weight.
-    int m_cachedTabIndicatorFontWeight = 700;
-    /// ConfigDefaults::scrollingTabIndicatorFont{Italic,Underline,Strikeout}().
-    bool m_cachedTabIndicatorFontItalic = false;
-    bool m_cachedTabIndicatorFontUnderline = false;
-    bool m_cachedTabIndicatorFontStrikeout = false;
+    /// ConfigDefaults::labelFontFamily(): empty means the system font family.
+    QString m_cachedLabelFontFamily;
+    /// ConfigDefaults::labelFontSizeScale().
+    double m_cachedLabelFontSizeScale = 1.0;
+    /// ConfigDefaults::labelFontWeight(), a CSS-style 100..900 weight.
+    int m_cachedLabelFontWeight = 700;
+    /// ConfigDefaults::labelFont{Italic,Underline,Strikeout}().
+    bool m_cachedLabelFontItalic = false;
+    bool m_cachedLabelFontUnderline = false;
+    bool m_cachedLabelFontStrikeout = false;
     /// Coalescing latch for onScrollTabIndicatorStyleChanged: a settings-page
     /// apply lands several tab-key replies in one turn, and each would
     /// otherwise rebuild every screen's model synchronously (JSON re-parse,
@@ -3148,9 +3145,7 @@ private:
     /// cached theme/font (the label font is built from these members) and
     /// queues ONE rebuild of every screen's model for the burst.
     void onScrollTabIndicatorStyleChanged();
-    /// Builds the tab-label TYPEFACE from the cached font members above.
-    /// The returned font's size is a fallback only: the raster re-sizes the
-    /// label to fit each chip's thickness. Defined in
+    /// Builds the tab-label font from the cached label-font members. Defined in
     /// daemon_settings_scrolltabs.cpp.
     QFont scrollTabIndicatorFont() const;
     // ── end scrolling tab indicator paint settings ──

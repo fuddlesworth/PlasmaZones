@@ -233,11 +233,6 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         QString(PWR::ActionSlot::TabIndicatorLength),
         QString(PWR::ActionSlot::TabIndicatorStyle),
         QString(PWR::ActionSlot::TabIndicatorPosition),
-        QString(PWR::ActionSlot::TabIndicatorFontFamily),
-        QString(PWR::ActionSlot::TabIndicatorFontWeight),
-        QString(PWR::ActionSlot::TabIndicatorFontItalic),
-        QString(PWR::ActionSlot::TabIndicatorFontUnderline),
-        QString(PWR::ActionSlot::TabIndicatorFontStrikeout),
         QString(PWR::ActionSlot::DropIndicatorEnabled),
         QString(PWR::ActionSlot::DropIndicatorColor),
         QString(PWR::ActionSlot::DropIndicatorBorderColor),
@@ -368,21 +363,6 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             out = qRound(d);
         }
     };
-    // Free-string slots. Stores an EMPTY string rather than treating it as
-    // unset, matching the descriptor's hasStringAllowingEmpty: for the label's
-    // font family, empty is the user asking for the system font, and is the
-    // only way a rule walks one screen back to the default after a global
-    // family was picked. Do not "tidy" this into an isEmpty() guard.
-    const auto readString = [&resolved](QLatin1StringView slot, std::optional<QString>& out) {
-        const auto action = resolved.slot(QString(slot));
-        if (!action) {
-            return;
-        }
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        if (v.isString()) {
-            out = v.toString();
-        }
-    };
     const auto readColor = [&resolved](QLatin1StringView slot, std::optional<QString>& out) {
         const auto action = resolved.slot(QString(slot));
         if (!action) {
@@ -414,14 +394,6 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     readColor(PWR::ActionSlot::TabIndicatorActiveColor, params.tabIndicatorActiveColor);
     readColor(PWR::ActionSlot::TabIndicatorInactiveColor, params.tabIndicatorInactiveColor);
     readColor(PWR::ActionSlot::TabIndicatorUrgentColor, params.tabIndicatorUrgentColor);
-    // The label font. No size slot to read: the painter fits the label to the
-    // pill thickness, so there is nothing for a size to change.
-    readString(PWR::ActionSlot::TabIndicatorFontFamily, params.tabIndicatorFontFamily);
-    readInt(PWR::ActionSlot::TabIndicatorFontWeight, params.tabIndicatorFontWeight, PWR::MinTabIndicatorFontWeight,
-            PWR::MaxTabIndicatorFontWeight);
-    readBool(PWR::ActionSlot::TabIndicatorFontItalic, params.tabIndicatorFontItalic);
-    readBool(PWR::ActionSlot::TabIndicatorFontUnderline, params.tabIndicatorFontUnderline);
-    readBool(PWR::ActionSlot::TabIndicatorFontStrikeout, params.tabIndicatorFontStrikeout);
 
     // Drop indicator. Same per-property cascade as the tab indicator above, so
     // a theme rule can set the colours while a separate rule turns it off.

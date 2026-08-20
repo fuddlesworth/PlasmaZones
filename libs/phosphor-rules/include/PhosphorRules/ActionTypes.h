@@ -428,21 +428,6 @@ inline constexpr QLatin1StringView SetTabIndicatorCornerRadius{"setTabIndicatorC
 inline constexpr QLatin1StringView SetTabIndicatorActiveColor{"setTabIndicatorActiveColor"};
 inline constexpr QLatin1StringView SetTabIndicatorInactiveColor{"setTabIndicatorInactiveColor"};
 inline constexpr QLatin1StringView SetTabIndicatorUrgentColor{"setTabIndicatorUrgentColor"};
-/// Tab label font family. Free string `ActionParam::Value`; EMPTY is a real
-/// value here, not an unset one — it means "use the system font" and is how a
-/// rule takes a screen back to the default after a global family was chosen.
-inline constexpr QLatin1StringView SetTabIndicatorFontFamily{"setTabIndicatorFontFamily"};
-/// Tab label font weight on the CSS scale. Numeric `ActionParam::Value`,
-/// 100..900.
-inline constexpr QLatin1StringView SetTabIndicatorFontWeight{"setTabIndicatorFontWeight"};
-/// Tab label font style flags. Boolean `ActionParam::Value` each, one action
-/// per flag so a rule that italicises leaves underline and strikeout alone.
-/// There is deliberately no font SIZE action to pair with these: the painter
-/// auto-fits the label to the pill thickness, so a size would have nothing to
-/// change.
-inline constexpr QLatin1StringView SetTabIndicatorFontItalic{"setTabIndicatorFontItalic"};
-inline constexpr QLatin1StringView SetTabIndicatorFontUnderline{"setTabIndicatorFontUnderline"};
-inline constexpr QLatin1StringView SetTabIndicatorFontStrikeout{"setTabIndicatorFontStrikeout"};
 
 // ── Per-context drop-indicator overrides (domain Context) ──
 // The drop-target highlight painted while a drag re-insert is armed. Context
