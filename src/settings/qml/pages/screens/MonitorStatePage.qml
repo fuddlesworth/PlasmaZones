@@ -909,7 +909,6 @@ SettingsFlickable {
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localLayoutId
                 layoutFilter: 0
-                noneText: i18n("Default")
                 // The explicit opt-out row, same third state the template
                 // selector below carries: Default inherits the configured
                 // default layout, None uses no layout at all.
@@ -960,7 +959,6 @@ SettingsFlickable {
                 // row and left the selector blank.
                 currentLayoutId: stateView.localAlgorithmId === root._noLayoutToken ? root._noLayoutToken : (stateView.localAlgorithmId ? root._autotilePrefix + stateView.localAlgorithmId : "")
                 layoutFilter: 1
-                noneText: i18n("Default")
                 // Same third state as the snapping selector above: Default
                 // inherits the configured default algorithm, None keeps the
                 // screen in autotile mode with nothing tiling it.
@@ -1006,7 +1004,6 @@ SettingsFlickable {
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localTemplateId
                 layoutFilter: 2
-                noneText: i18n("Default")
                 // The third state this family needs and the other two do not.
                 showExplicitNoneOption: true
                 explicitNoneValue: root._noTemplateToken

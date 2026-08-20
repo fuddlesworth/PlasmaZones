@@ -896,10 +896,12 @@ void Daemon::handleSnappingToAutotile()
     // restore. A restored context never needs the engine's global algorithm:
     // restoreAutotileAssignments only flips entries whose tilingAlgorithm is
     // non-empty (its predicate in layoutregistry_batch.cpp is exactly
-    // "Snapping mode AND non-empty tilingAlgorithm"), so every restored context
-    // carries a concrete algorithm of its own, and that algorithm reaches the
-    // engine as a PerScreenKeys::Algorithm override the next time
-    // updateEngineScreens resolves that context, not through the global id.
+    // "Snapping mode AND non-empty tilingAlgorithm"), so no restored context
+    // depends on the global id. A restored context carrying a REAL algorithm
+    // reaches the engine as a PerScreenKeys::Algorithm override the next time
+    // updateEngineScreens resolves it; one carrying the reserved word — the
+    // predicate admits it, since the word is non-empty — is skipped by that
+    // same pass's opt-out arm instead. Neither route reads the global.
     //
     // Setting the global anyway on a restore-only enable is destructive: the
     // engine's live global algorithm CAN differ from

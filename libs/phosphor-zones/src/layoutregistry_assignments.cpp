@@ -52,8 +52,9 @@ namespace {
 /// every variant misses. @p tryOne must return a @c std::optional; an engaged
 /// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
-/// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
-/// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule /
+/// by layoutForScreen / resolveStoredAssignmentId (which both
+/// storedAssignmentIdForScreen and assignmentIdForScreen delegate to) /
+/// assignmentEntryForScreen / hasMatchingAssignmentRule /
 /// scrollingTemplateForContext / scrollingTemplateExplicitlyNone so the six
 /// callers cannot drift.
 template<typename TryFn>

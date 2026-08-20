@@ -36,6 +36,12 @@ SettingsFlickable {
     // persisted setting on load / external edits / per-screen scope changes via
     // onEffectiveAlgorithmChanged.
     property string selectedAlgorithm: root.effectiveAlgorithm
+    // The reserved "explicitly no algorithm" word
+    // (PhosphorZones::NoTilingAlgorithm), which the library card's Clear
+    // Default stores in defaultAutotileAlgorithm. Named rather than spelled
+    // inline, matching MonitorStatePage's tokens; the constant's own doc block
+    // lists every QML site that hardcodes the literal.
+    readonly property string _noAlgorithmToken: "none"
 
     onEffectiveAlgorithmChanged: root.selectedAlgorithm = root.effectiveAlgorithm
     // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
@@ -206,8 +212,8 @@ SettingsFlickable {
                         // writeSetting in per-screen scope would plant the
                         // word in a per-screen Algorithm override — a slot
                         // whose engine-side resolver has no sentinel arm.
-                        // A rebuild under a "none" default just keeps state.
-                        if (algoId === "none")
+                        // A rebuild under a cleared default just keeps state.
+                        if (algoId === root._noAlgorithmToken)
                             return;
                         // Drive the page off the user's pick immediately, then
                         // persist. Only the Algorithm key is written; resetting

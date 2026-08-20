@@ -56,6 +56,9 @@ SettingsFlickable {
     // same reason as on TilingAlgorithmPage: the combo's currentValue
     // transiently resets while its model rebuilds after a Save.
     property string selectedAlgorithm: appSettings.defaultAutotileAlgorithm
+    // The reserved "explicitly no algorithm" word
+    // (PhosphorZones::NoTilingAlgorithm) — see the twin on TilingAlgorithmPage.
+    readonly property string _noAlgorithmToken: "none"
 
     readonly property var algoCapabilities: AlgoCaps.capabilitiesFor(root._cachedAlgos, root.selectedAlgorithm)
     readonly property bool algoSupportsSplitRatio: AlgoCaps.supportsSplitRatio(algoCapabilities)
@@ -214,8 +217,8 @@ SettingsFlickable {
                         // The persisted default can be the reserved opt-out
                         // word (the library card's Clear Default), which is
                         // not a pickable algorithm on this page — a rebuild
-                        // under a "none" default just keeps state.
-                        if (algoId === "none")
+                        // under a cleared default just keeps state.
+                        if (algoId === root._noAlgorithmToken)
                             return;
                         root.selectedAlgorithm = algoId;
                         appSettings.defaultAutotileAlgorithm = algoId;

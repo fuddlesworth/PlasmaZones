@@ -121,10 +121,9 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 /// and sorts on it, the daemon's UnifiedLayoutController carries it through
 /// its apply and current-selection answers, the picker's apply path compares
 /// against it, the daemon's scrolling signal path and the rules label
-/// renderer each translate it for display, and four QML files
-/// (LayoutPickerContent, MonitorStatePage, ActionParamEditors for the rule
-/// action's own None row, and ActionListView for that action's read-only
-/// pill) hardcode the literal against this declaration.
+/// renderer each translate it for display, and the QML files listed on
+/// @ref NoSnappingLayout hardcode the literal against this declaration —
+/// the three sentinels share one spelling, so they share one QML risk list.
 ///
 /// Only that last group is at RISK from a respelling. Every C++ site above
 /// reaches the token through this constant, so they follow a change here for
@@ -151,10 +150,25 @@ inline constexpr QLatin1String NoScrollingTemplate{"none"};
 /// validator and canonicalizer skip it, the purge writes it when a Snapping
 /// context's layout is deleted, the unified layout list builds the picker's
 /// None row around the word and sorts on it, UnifiedLayoutController's apply
-/// and display-id paths carry it, the rules label/pill renderers translate it
-/// for display, and the Monitors page, the rule param editors, and the
-/// read-only rule pill (ActionListView) hardcode the literal in QML against
-/// this declaration.
+/// and display-id paths carry it, and the rules label/pill renderers translate
+/// it for display.
+///
+/// The QML sites are the ones actually AT RISK from a respelling, because they
+/// spell the literal rather than reaching this constant. All of them, for all
+/// three sentinels:
+///   - LayoutPickerContent          (the overlay picker's None card)
+///   - MonitorStatePage             (per-screen selectors and staging)
+///   - MonitorModePreviews          (the per-mode preview captions)
+///   - ActionParamEditors           (the rule action's own None row)
+///   - ActionListView               (that action's read-only pill)
+///   - LayoutComboBox               (the shared selector's None wording)
+///   - LayoutContextMenu            (Clear Default — these WRITE the word)
+///   - ProfileRow                   (the profile-diff cell)
+///   - TilingAlgorithmPage          (the cleared-default guard and caption)
+///   - TilingSimplePage             (the same guard on the simple page)
+/// Keep this list current: it is the only safety net for those sites, and the
+/// two LayoutContextMenu occurrences are the highest-stakes of them because
+/// they author the stored value rather than merely reading it.
 inline constexpr QLatin1String NoSnappingLayout{"none"};
 
 /// Reserved value of @ref AssignmentEntry::tilingAlgorithm meaning "this

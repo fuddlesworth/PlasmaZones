@@ -259,8 +259,16 @@ bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
     // `recommended`, because none of them should be able to pull it back up:
     // a row that means "none of these" reads as an afterthought to the
     // choices, and landing between two real entries reads as one.
-    const bool aNone = a.id == PhosphorZones::NoScrollingTemplate;
-    const bool bNone = b.id == PhosphorZones::NoScrollingTemplate;
+    // Both constants are tested, not just the template one. They spell the
+    // same word today, so a single test happens to pin both rows — but the
+    // generic row is stamped with NoSnappingLayout, so renaming that constant
+    // alone would silently unpin it into alphabetical mid-list order with no
+    // compile error.
+    const auto isNoneRow = [](const QString& id) {
+        return id == PhosphorZones::NoScrollingTemplate || id == PhosphorZones::NoSnappingLayout;
+    };
+    const bool aNone = isNoneRow(a.id);
+    const bool bNone = isNoneRow(b.id);
     if (aNone != bNone) {
         return bNone;
     }
@@ -491,8 +499,23 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
         // — mirrors the manual active-layout exemption above so the picker/OSD
         // can't lose the currently-tiling algorithm (broken cycling / empty
         // selector).
-        const QString activeAlgoId =
-            layoutManager->tilingAlgorithmForScreen(resolvedScreenId, virtualDesktop, activity);
+        //
+        // Gated on the context actually BEING in Autotile mode. The algorithm
+        // slot is mode-independent storage: the lossless mode toggle leaves a
+        // remembered algorithm on a context now running Snapping or Scrolling,
+        // where nothing tiles with it. Reading the slot alone therefore
+        // resurfaced a hidden algorithm's card on screens that are not using
+        // it, which is neither what the exemption is for nor what its own
+        // comment claims.
+        // Taken from the resolved ASSIGNMENT id rather than the raw slot: that
+        // id carries the algorithm only while the context is actually in
+        // Autotile mode, so the mode test and the lookup come from one call
+        // and cannot disagree.
+        const QString activeAssignmentId =
+            layoutManager->assignmentIdForScreen(resolvedScreenId, virtualDesktop, activity);
+        const QString activeAlgoId = PhosphorLayout::LayoutId::isAutotile(activeAssignmentId)
+            ? PhosphorLayout::LayoutId::extractAlgorithmId(activeAssignmentId)
+            : QString();
         list.erase(std::remove_if(list.begin(), list.end(),
                                   [layoutManager, &activeAlgoId](const LayoutPreview& preview) {
                                       if (!preview.isAutotile()) {

@@ -407,17 +407,27 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // independently. (Scrolling screens never reach here — the template
     // branch above returns.)
     PhosphorZones::Layout* currentLayout = nullptr;
+    // An explicitly opted-out context has NO current layout, and that is a
+    // resolved answer rather than a failure to resolve. Distinguishing the two
+    // matters here: the fallbacks below exist for "could not work out what is
+    // in force", and letting an opt-out reach them adopted the default (or the
+    // first visible row) as if the screen were using it, so the first press
+    // stepped from that layout's index and skipped the row it should have
+    // landed on. Leaving currentLayout null takes the not-in-the-list arm,
+    // which starts the walk from either end.
+    const bool explicitlyNoLayout = !resolvedScreenId.isEmpty()
+        && snappingLayoutForScreen(resolvedScreenId, desktop, m_currentActivity) == NoSnappingLayout;
     if (!resolvedScreenId.isEmpty()) {
         currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
     }
-    if (!currentLayout) {
+    if (!currentLayout && !explicitlyNoLayout) {
         currentLayout = defaultLayout();
     }
-    if (!currentLayout) {
+    if (!currentLayout && !explicitlyNoLayout) {
         currentLayout = visible.first();
     }
 
-    int currentIndex = visible.indexOf(currentLayout);
+    int currentIndex = currentLayout ? visible.indexOf(currentLayout) : -1;
     if (currentIndex < 0) {
         // Current layout is not in the visible list (e.g. hidden).
         // For forward cycling, start before the first so we land on visible[0].

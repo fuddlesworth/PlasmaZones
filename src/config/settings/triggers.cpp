@@ -348,9 +348,12 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
-// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle. defaultAutotileAlgorithm passes through
-// PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
-// JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
+// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle.
+// defaultAutotileAlgorithm is stored as-is with no registry lookup in this
+// layer — validation is the engine's on consumption, which is what lets the
+// reserved no-algorithm word be stored at all (see its setter). Per-algorithm
+// settings round-trip as a JSON string and sanitize via
+// AutotileConfig::perAlgoFromVariantMap.
 
 P_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)

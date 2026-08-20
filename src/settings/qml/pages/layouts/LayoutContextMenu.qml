@@ -55,6 +55,13 @@ Menu {
     readonly property bool isAutotile: Boolean(layout && layout.isAutotile === true)
     readonly property bool isTemplate: Boolean(layout && layout.isScrollingTemplate === true)
     readonly property string layoutId: layout ? (layout.id || "") : ""
+    // The reserved no-layout / no-algorithm word (PhosphorZones::NoSnappingLayout
+    // and NoTilingAlgorithm, which share one spelling). Named here because the
+    // Clear Default handler below WRITES it — of the QML sites that hardcode the
+    // literal, the write sites are the ones a respelling would corrupt rather
+    // than merely mis-render, so they should be the easiest to find. The
+    // constants' own doc block carries the full list of QML sites.
+    readonly property string noLayoutToken: "none"
     // Cache the aspect-ratio options + screen list rather than
     // re-deriving them on every binding read. The Instantiator
     // delegate models below depend on these — re-evaluation on
@@ -372,7 +379,7 @@ Menu {
                 // expresses "no default algorithm" (unassigned screens stay
                 // in tiling mode but nothing tiles).
                 layoutContextMenu.settingsController.beginExternalEdit("tiling-algorithm");
-                layoutContextMenu.appSettings.defaultAutotileAlgorithm = defaultItem.isFamilyDefault ? "none" : layoutContextMenu.layoutId.replace("autotile:", "");
+                layoutContextMenu.appSettings.defaultAutotileAlgorithm = defaultItem.isFamilyDefault ? layoutContextMenu.noLayoutToken : layoutContextMenu.layoutId.replace("autotile:", "");
                 layoutContextMenu.settingsController.endExternalEdit();
             } else {
                 // Same shape for snapping (PhosphorZones::NoSnappingLayout):
@@ -380,7 +387,7 @@ Menu {
                 // layout, so only the sentinel gives unassigned screens no
                 // zones at all.
                 layoutContextMenu.settingsController.beginExternalEdit("snapping-window-behavior");
-                layoutContextMenu.appSettings.defaultLayoutId = defaultItem.isFamilyDefault ? "none" : layoutContextMenu.layoutId;
+                layoutContextMenu.appSettings.defaultLayoutId = defaultItem.isFamilyDefault ? layoutContextMenu.noLayoutToken : layoutContextMenu.layoutId;
                 layoutContextMenu.settingsController.endExternalEdit();
             }
         }
