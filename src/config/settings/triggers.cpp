@@ -520,6 +520,16 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 }
 
 // snapToZone1..9 — same dispatch pattern as quickLayout.
+//
+// The count is named once here rather than spelled as three independent 9s
+// (two bounds checks and a signal-array extent). There is no protocol constant
+// to derive it from the way the quick-layout twin uses QuickLayoutSlotCount —
+// these slots are settings-only — but the static_assert below still ties the
+// array to this constant, so raising the count without adding the matching
+// NOTIFY emitters fails the build instead of dispatching through a garbage
+// member pointer.
+inline constexpr int SnapToZoneSlotCount = 9;
+
 #define P_SNAP_TO_ZONE(N)                                                                                              \
     QString Settings::snapToZone##N##Shortcut() const                                                                  \
     {                                                                                                                  \
@@ -543,7 +553,7 @@ P_SNAP_TO_ZONE(9)
 
 QString Settings::snapToZoneShortcut(int index) const
 {
-    if (index < 0 || index >= 9) {
+    if (index < 0 || index >= SnapToZoneSlotCount) {
         return {};
     }
     return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::snapToZoneKey(index + 1));
@@ -551,7 +561,7 @@ QString Settings::snapToZoneShortcut(int index) const
 
 void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
 {
-    if (index < 0 || index >= 9) {
+    if (index < 0 || index >= SnapToZoneSlotCount) {
         return;
     }
     const QString key = ConfigDefaults::snapToZoneKey(index + 1);
@@ -559,13 +569,14 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
         return;
     }
     m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
-    static constexpr ShortcutSignalFn signals[9] = {
+    static constexpr ShortcutSignalFn signals[] = {
         &Settings::snapToZone1ShortcutChanged, &Settings::snapToZone2ShortcutChanged,
         &Settings::snapToZone3ShortcutChanged, &Settings::snapToZone4ShortcutChanged,
         &Settings::snapToZone5ShortcutChanged, &Settings::snapToZone6ShortcutChanged,
         &Settings::snapToZone7ShortcutChanged, &Settings::snapToZone8ShortcutChanged,
         &Settings::snapToZone9ShortcutChanged,
     };
+    static_assert(std::size(signals) == SnapToZoneSlotCount, "add a NOTIFY emitter for each new snap-to-zone slot");
     Q_EMIT(this->*signals[index])();
     Q_EMIT settingsChanged();
 }

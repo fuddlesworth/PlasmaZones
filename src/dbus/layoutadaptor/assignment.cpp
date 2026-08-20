@@ -107,8 +107,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
     // assignLayoutById is taught the word (it upserts the opt-out entry), the
     // resolved getters emit it, and refusing it here made setAssignmentEntry
     // the only verb able to write back what these verbs' own getters return.
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
-        && layoutId != PhosphorZones::NoSnappingLayout) {
+    if (requiresManualLayoutValidation(layoutId)) {
         layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
         if (!layout) {
             return;
@@ -295,8 +294,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     // assignLayoutById is taught the word (it upserts the opt-out entry), the
     // resolved getters emit it, and refusing it here made setAssignmentEntry
     // the only verb able to write back what these verbs' own getters return.
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
-        && layoutId != PhosphorZones::NoSnappingLayout) {
+    if (requiresManualLayoutValidation(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop"));
         if (!layout) {
             return;
@@ -675,8 +673,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     // assignLayoutById is taught the word (it upserts the opt-out entry), the
     // resolved getters emit it, and refusing it here made setAssignmentEntry
     // the only verb able to write back what these verbs' own getters return.
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
-        && layoutId != PhosphorZones::NoSnappingLayout) {
+    if (requiresManualLayoutValidation(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen activity"));
         if (!layout) {
             return;
@@ -782,8 +779,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     // assignLayoutById is taught the word (it upserts the opt-out entry), the
     // resolved getters emit it, and refusing it here made setAssignmentEntry
     // the only verb able to write back what these verbs' own getters return.
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
-        && layoutId != PhosphorZones::NoSnappingLayout) {
+    if (requiresManualLayoutValidation(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop activity"));
         if (!layout) {
             return;

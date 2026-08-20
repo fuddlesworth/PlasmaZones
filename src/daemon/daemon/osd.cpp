@@ -334,6 +334,20 @@ void Daemon::showLockedOsd(const QString& screenId)
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
+void Daemon::showUnlockedOsd(const QString& screenId)
+{
+    if (shouldSuppressOsd(screenId)) {
+        return;
+    }
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+
+    showKdeTextOsd(QStringLiteral("object-unlocked"), PhosphorI18n::tr("Layout Unlocked"));
+    qCInfo(lcDaemon) << "Showing unlocked text OSD for screen=" << screenId;
+}
+
 void Daemon::showLockedPreviewOsd(const QString& screenId)
 {
     if (shouldSuppressOsd(screenId)) {
@@ -1144,7 +1158,7 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 continue;
             }
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+                QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
                 // Bare autotile (mode set, no concrete algorithm) draws its
                 // algorithm from the suppressed global default, so it won't tile
                 // (see updateEngineScreens) — show "not assigned" rather than
@@ -1163,6 +1177,23 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 // reserved word as the display name.
                 if (algoId == PhosphorZones::NoTilingAlgorithm) {
                     continue;
+                }
+                // A bare context that is NOT suppressed genuinely tiles, with
+                // the global default. Announce THAT rather than handing an
+                // empty id to the lookup below, which resolved no algorithm
+                // and bailed with a misleading "algorithm not found" warning —
+                // a real tiling screen silently announcing nothing on every
+                // desktop switch. A globally cleared default takes the same
+                // silent posture as the per-context opt-out above: nothing
+                // tiles there either, by the same choice.
+                if (algoId.isEmpty()) {
+                    algoId = m_settings ? m_settings->defaultAutotileAlgorithm() : QString();
+                    if (algoId == PhosphorZones::NoTilingAlgorithm) {
+                        continue;
+                    }
+                    if (algoId.isEmpty()) {
+                        algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+                    }
                 }
                 auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
                 const QString displayName = algo ? algo->name() : algoId;

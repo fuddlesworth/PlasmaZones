@@ -254,6 +254,12 @@ std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, cons
     return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
 }
 
+bool LayoutAdaptor::requiresManualLayoutValidation(const QString& layoutId)
+{
+    return !PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
+        && layoutId != PhosphorZones::NoSnappingLayout;
+}
+
 PhosphorZones::Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
 {
     auto uuidOpt = parseAndValidateUuid(id, operation);

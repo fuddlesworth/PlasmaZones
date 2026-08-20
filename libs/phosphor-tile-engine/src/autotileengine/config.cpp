@@ -31,15 +31,7 @@
 
 // Qt and std
 #include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
 #include <QTimer>
-#include <QVarLengthArray>
-#include <algorithm>
-#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -69,6 +61,27 @@ constexpr int PendingOrderTimeoutMs = 10000;
 // the settings key (write-back never touches it), splitRatio/masterCount from
 // the engine scalars writeBackTuning writes to the settings just before this
 // filter runs.
+// The ambient-vs-override rule, in one place. A global still sitting at its
+// schema default is AMBIENT — it expresses no choice, so the algorithm's own
+// default applies. A global that has been moved is an explicit override and
+// wins. Both the write filter below and the on-demand read fallback in
+// refreshConfigFromSettings decide with it, and their agreement is what makes
+// a default-valued slot safe to drop from disk: whichever one drifts, a slot
+// the writer considered redundant reconstructs as something else on read (the
+// silent "max windows reverts to its default" class of bug).
+int reconstructedMaxWindows(int globalMaxWindows, const PhosphorTiles::TilingAlgorithm* algo)
+{
+    return (algo && globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows) ? algo->defaultMaxWindows()
+                                                                                            : globalMaxWindows;
+}
+
+qreal reconstructedSplitRatio(qreal globalSplitRatio, const PhosphorTiles::TilingAlgorithm* algo)
+{
+    const bool ambient =
+        qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio);
+    return (algo && ambient) ? algo->defaultSplitRatio() : globalSplitRatio;
+}
+
 QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString, AlgorithmSettings>& saved,
                                                              PhosphorTiles::ITileAlgorithmRegistry* registry,
                                                              int globalMaxWindows, qreal globalSplitRatio,
@@ -79,17 +92,10 @@ QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString
         auto* algo = registry ? registry->algorithm(it.key()) : nullptr;
         bool matchesReconstruction = false;
         if (algo) {
-            // Mirror of the read fallback: a schema-default global is ambient,
-            // so the algorithm's own default applies; a non-default global is
-            // an explicit override. masterCount has no per-algorithm default,
-            // so its reconstruction is always the global.
-            const int fallbackMax = globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows
-                ? algo->defaultMaxWindows()
-                : globalMaxWindows;
-            const qreal fallbackRatio =
-                qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio)
-                ? algo->defaultSplitRatio()
-                : globalSplitRatio;
+            // masterCount has no per-algorithm default, so its reconstruction
+            // is always the global.
+            const int fallbackMax = reconstructedMaxWindows(globalMaxWindows, algo);
+            const qreal fallbackRatio = reconstructedSplitRatio(globalSplitRatio, algo);
             matchesReconstruction = qFuzzyCompare(1.0 + it->splitRatio, 1.0 + fallbackRatio)
                 && it->masterCount == globalMasterCount && it->maxWindows == fallbackMax && it->customParams.isEmpty();
         }
@@ -409,13 +415,10 @@ void AutotileEngine::refreshConfigFromSettings()
             // ratio (a scripted algorithm shipping 0.6 must not be clamped to
             // the schema 0.5 by every routine refresh). masterCount has no
             // per-algorithm default, so the SYNC'd global stands for it.
-            if (s->autotileMaxWindows() == PhosphorTiles::AutotileDefaults::DefaultMaxWindows) {
-                m_config->maxWindows = algo->defaultMaxWindows();
-            }
-            if (qFuzzyCompare(1.0 + s->autotileSplitRatio(),
-                              1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio)) {
-                m_config->splitRatio = algo->defaultSplitRatio();
-            }
+            // Same two helpers the write filter decides with, so a slot the
+            // writer dropped as redundant reconstructs to exactly what it held.
+            m_config->maxWindows = reconstructedMaxWindows(s->autotileMaxWindows(), algo);
+            m_config->splitRatio = reconstructedSplitRatio(s->autotileSplitRatio(), algo);
         }
     }
 

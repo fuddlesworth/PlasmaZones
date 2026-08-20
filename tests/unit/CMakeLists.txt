@@ -644,8 +644,13 @@ add_executable(test_unified_layout_controller_none
     ${CMAKE_SOURCE_DIR}/src/daemon/controllers/unifiedlayoutcontroller.cpp
 )
 target_include_directories(test_unified_layout_controller_none PRIVATE ${CMAKE_SOURCE_DIR}/src)
+# PhosphorZones and PhosphorLayoutApi named explicitly: the suite constructs
+# LayoutRegistry / Layout / Zone and calls LayoutId directly, and this file's
+# convention is that a target names what it uses rather than riding another
+# target's PUBLIC link interface.
 target_link_libraries(test_unified_layout_controller_none
-    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+            PhosphorZones::PhosphorZones PhosphorLayoutApi::PhosphorLayoutApi)
 add_test(NAME test_unified_layout_controller_none COMMAND test_unified_layout_controller_none)
 
 # Shortcut teardown contract (discussion #851): unregisterShortcuts() must not

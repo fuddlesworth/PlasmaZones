@@ -141,6 +141,12 @@ public:
     void showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& templ, const QString& screenId,
                                   bool locked = false);
     void showLockedOsd(const QString& screenId);
+    /// Text counterpart of @ref showLockedOsd for the UNLOCK direction, used
+    /// when the unlocked context resolves nothing to preview (an explicit
+    /// no-layout opt-out, or a scrolling context with no template). Without
+    /// it, unlocking such a screen was the one lock/unlock pairing that gave
+    /// no feedback at all while locking still showed a card.
+    void showUnlockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
     /// OSD shown when a context has no active layout because its default

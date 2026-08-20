@@ -116,8 +116,7 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
         // validation re-adds entries — a skipped key deletes the stored
         // opt-out on a get->set round trip. Same exemption setAssignmentEntry
         // gives the word.
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
-            && !PhosphorLayout::LayoutId::isScrolling(layoutId) && layoutId != PhosphorZones::NoSnappingLayout) {
+        if (!layoutId.isEmpty() && requiresManualLayoutValidation(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch screen assignment"));
             if (!uuidOpt) {
                 continue;
@@ -191,8 +190,7 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
         // validation re-adds entries — a skipped key deletes the stored
         // opt-out on a get->set round trip. Same exemption setAssignmentEntry
         // gives the word.
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
-            && !PhosphorLayout::LayoutId::isScrolling(layoutId) && layoutId != PhosphorZones::NoSnappingLayout) {
+        if (!layoutId.isEmpty() && requiresManualLayoutValidation(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch desktop assignment"));
             if (!uuidOpt) {
                 continue;
@@ -243,8 +241,7 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         // validation re-adds entries — a skipped key deletes the stored
         // opt-out on a get->set round trip. Same exemption setAssignmentEntry
         // gives the word.
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
-            && !PhosphorLayout::LayoutId::isScrolling(layoutId) && layoutId != PhosphorZones::NoSnappingLayout) {
+        if (!layoutId.isEmpty() && requiresManualLayoutValidation(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch activity assignment"));
             if (!uuidOpt) {
                 continue;
@@ -288,8 +285,7 @@ void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
         // validation re-adds entries — a skipped key deletes the stored
         // opt-out on a get->set round trip. Same exemption setAssignmentEntry
         // gives the word.
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)
-            && !PhosphorLayout::LayoutId::isScrolling(layoutId) && layoutId != PhosphorZones::NoSnappingLayout) {
+        if (!layoutId.isEmpty() && requiresManualLayoutValidation(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch combined assignment"));
             if (!uuidOpt) {
                 continue;

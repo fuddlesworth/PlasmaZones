@@ -568,14 +568,25 @@ void Daemon::connectShortcutSignals()
         // needs no split — showLockedPreviewOsd is itself template-aware and
         // falls back to the text card when the context has no template.
         if (wasLocked) {
+            // Each arm falls back to the plain text card when it has nothing
+            // to preview — an explicit no-layout opt-out resolves no layout,
+            // and a scrolling context can hold no template. Without the
+            // fallback this was the one lock/unlock pairing that answered a
+            // deliberate keypress with nothing at all, while the lock
+            // direction still drew a card (showLockedPreviewOsd carries the
+            // same fallback internally).
             if (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
                 const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
                     screenId, currentDesktopForScreen(screenId), currentActivity());
                 if (templ.isValid()) {
                     showScrollingTemplateOsd(templ, screenId);
+                } else {
+                    showUnlockedOsd(screenId);
                 }
             } else if (PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId)) {
                 showLayoutOsd(layout, screenId);
+            } else {
+                showUnlockedOsd(screenId);
             }
         } else {
             showLockedPreviewOsd(screenId);

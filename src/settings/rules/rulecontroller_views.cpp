@@ -387,6 +387,18 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         // reads this as `tilingEnabled` (kept for backwards-compatibility
         // with the existing tile component); the field's semantics are now
         // "the engine running on this screen is NOT disabled".
+        //
+        // KNOWN LIMITATION, and the reason this is not simply "the effective
+        // mode": the parity above holds for a screen whose mode comes from an
+        // assignment RULE, which is what this accumulator can see. A screen
+        // with only a DisableEngine rule and no assignment rule takes its mode
+        // from the daemon's default-tier synthesis instead, and that tier can
+        // answer Autotile (no default layout id, but a default algorithm set).
+        // Such a screen reads as Snapping here, so a tiling-disable on it
+        // shows as enabled. Closing the gap needs the resolved per-screen mode
+        // passed in — this controller has no settings or daemon handle to
+        // derive it — and the cost was judged out of proportion to a tile
+        // badge. Pass it through `screens` if this ever needs to be exact.
         const QString effectiveModeWire = PhosphorZones::modeToWireString(
             PhosphorZones::modeFromWireString(summary.engineMode).value_or(PhosphorZones::AssignmentEntry::Snapping));
         const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);

@@ -62,7 +62,13 @@ bool Daemon::isAnyScreenAutotile() const
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        // An explicitly opted-out screen is in Autotile MODE but nothing tiles
+        // there, and this predicate gates announcements about the algorithm in
+        // use (the algorithm-changed OSD). Counting it meant a setup whose
+        // every tiling screen was opted out still showed an algorithm card for
+        // a change that rearranged nothing.
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+            && PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) != PhosphorZones::NoTilingAlgorithm) {
             return true;
         }
     }

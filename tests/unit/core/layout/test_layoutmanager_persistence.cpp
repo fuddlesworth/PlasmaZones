@@ -228,8 +228,10 @@ private Q_SLOTS:
         // Discriminating, thanks to Survivor above: the fresh registry HAS a
         // default layout, so nullptr here proves the on-disk sentinel is in
         // force rather than an empty registry answering nullptr for
-        // everything.
-        QVERIFY(mgr2->layoutCount() >= 1);
+        // everything. Asserted on defaultLayout() itself, which is the
+        // property that makes the check discriminating — a non-zero layout
+        // count only implies it.
+        QVERIFY(mgr2->defaultLayout() != nullptr);
         QCOMPARE(mgr2->layoutForScreen(QStringLiteral("screen1"), 0, QString()), nullptr);
     }
 
