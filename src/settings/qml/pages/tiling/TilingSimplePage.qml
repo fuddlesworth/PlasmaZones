@@ -266,7 +266,11 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                // Gated with the row it adjoins, so the pair collapses
+                // together and leaves no dangling rule line.
+                SettingsSeparator {
+                    enabled: root.selectedAlgorithm !== root._noAlgorithmToken
+                }
 
                 SettingsRow {
                     title: i18n("Max windows")
@@ -274,8 +278,9 @@ SettingsFlickable {
                     description: i18n("Maximum number of windows to tile")
                     // See the twin on TilingAlgorithmPage: with the default
                     // cleared there is no algorithm to tune, the controller
-                    // refuses the write, and an interactive slider would
-                    // silently discard the drag on reload.
+                    // refuses the write, and a live slider would silently
+                    // discard the drag on reload. SettingsRow is
+                    // `visible: enabled && …`, so this collapses the row.
                     enabled: root.selectedAlgorithm !== root._noAlgorithmToken
 
                     SettingsSlider {

@@ -591,7 +591,12 @@ private Q_SLOTS:
         const QString path = ConfigDefaults::quickLayoutsFilePath();
         QDir().mkpath(QFileInfo(path).absolutePath());
         QJsonObject autotileSlots;
-        autotileSlots.insert(QStringLiteral("1"), QStringLiteral("autotile:bsp"));
+        // Slot 1 carries a value the batch setter above never wrote. That is
+        // what makes it a control: "autotile:bsp" would already be on disk
+        // from the setter, so it would read back even if this document landed
+        // on a path the registry never opens, and the test would pass in a
+        // world where the hand write did nothing.
+        autotileSlots.insert(QStringLiteral("1"), QStringLiteral("autotile:spiral"));
         autotileSlots.insert(QStringLiteral("2"), QStringLiteral("autotile:none"));
         QJsonObject document;
         document.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, autotileSlots);
@@ -605,10 +610,12 @@ private Q_SLOTS:
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
         reloaded->loadAssignments();
         const QHash<int, QString> afterReload = reloaded->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile);
-        // Slot 1 is the positive control: it proves the document landed on the
-        // path the registry actually reads, so slot 2's absence is the loader
-        // refusing the word rather than a file that was never loaded at all.
-        QCOMPARE(afterReload.value(1), QStringLiteral("autotile:bsp"));
+        // Slot 1 is the positive control: only the hand-written document can
+        // put this value on disk, so its presence proves the file landed on
+        // the path the registry actually reads — which in turn makes slot 2's
+        // absence the loader refusing the word rather than a file that was
+        // never loaded at all.
+        QCOMPARE(afterReload.value(1), QStringLiteral("autotile:spiral"));
         QVERIFY2(!afterReload.contains(2), "the loader must drop a hand-edited reserved opt-out id");
     }
 

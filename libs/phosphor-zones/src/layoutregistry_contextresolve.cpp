@@ -910,6 +910,7 @@ bool LayoutRegistry::exactContextDeclaresEngineMode(const QString& screenId, int
     const PhosphorRules::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity);
     return rule && hasEngineModeAction(*rule);
 }
+
 const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
                                                                 const QString& activity) const
 {

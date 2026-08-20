@@ -238,6 +238,11 @@ private Q_SLOTS:
         const QString noneId = QString(PhosphorZones::NoSnappingLayout);
         const auto listed = controller.layouts();
         QVERIFY(PhosphorZones::LayoutUtils::findLayout(listed, noneId) != nullptr);
+        // Pins the premise the dropped assertions were traded against: the
+        // list really is just the None row here, so a manual row leaking
+        // through this filter fails the case rather than quietly restoring
+        // the ordering question the comment above says does not arise.
+        QCOMPARE(listed.size(), 1);
 
         // The substantive half: the press writes the ALGORITHM slot.
         QVERIFY(controller.applyLayoutById(QString(PhosphorZones::NoSnappingLayout)));

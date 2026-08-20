@@ -21,17 +21,27 @@
 // Autotile-mode handle (the macro is autotile-only by definition, so
 // handleForMode skips the router round-trip).
 //
-// The isActiveOnScreen gate asks the one question that matters before setting
-// the hint: will the engine HONOR it? The router answers Autotile for the
-// explicit algorithm opt-out, but updateEngineScreens deliberately leaves such
-// a screen out of the engine set, and the hint is only accepted for a member.
-// Without the gate the engine's NavigationController fell back to the first
-// entry of that set — hash-ordered — and mutated an UNRELATED screen.
+// The stateForScreen gate stops these handlers acting on the WRONG screen.
+// setActiveScreenHint itself accepts any id; the filtering happens inside
+// NavigationController, and it has two different fallbacks:
 //
-// Membership, NOT "has a TilingState": a screen that legitimately tiles but
-// holds no state yet (no tiled windows) is still a member, so the engine keeps
-// answering it with its own navigationFeedback rather than the daemon
-// swallowing the press silently.
+//   - resolveActiveScreen (the master-count path) drops a non-member and
+//     falls back to the first entry of the engine set, hash-ordered.
+//   - tiledWindowsForFocusedScreen (the focusMaster / swapWithMaster path)
+//     takes the hinted screen ONLY when a TilingState exists for it, and
+//     otherwise runs a ranked scan that returns ANOTHER screen's state.
+//
+// So membership alone is not enough here: a screen that is a member but holds
+// no state still routes focus and window-order changes onto an unrelated
+// monitor. Gating on the state covers both fallbacks for all four users. The
+// overload is non-creating, so the probe allocates nothing.
+//
+// The cost is that a stateless screen answers a press with silence rather
+// than the engine's own "no windows" feedback. That is the right trade: the
+// screen has no tiled windows for these verbs to act on either way, and a
+// missing card is better than acting on a monitor the user was not looking at.
+// The two out-of-line master-ratio handlers gate on MEMBERSHIP instead, which
+// is sufficient there because they only reach resolveActiveScreen.
 #define HANDLE_AUTOTILE_ONLY(name, engineCall)                                                                         \
     void Daemon::handle##name()                                                                                        \
     {                                                                                                                  \
@@ -42,7 +52,7 @@
             return;                                                                                                    \
         if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))                          \
             return;                                                                                                    \
-        if (!m_autotileEngine->isActiveOnScreen(screenId))                                                             \
+        if (!m_autotileEngine->stateForScreen(screenId))                                                               \
             return;                                                                                                    \
         m_autotileEngine->setActiveScreenHint(screenId);                                                               \
         m_autotileEngine->engineCall;                                                                                  \
