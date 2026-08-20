@@ -146,8 +146,15 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
         // for a window the view does not carry — both mean zero, which is what
-        // the default gives.
-        entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
+        // the default gives. Dropped on a floating entry like the other paint
+        // hints: the engine only ever writes it inside the tiled emit loop,
+        // and a garbled floating delta could seed a view spring for a screen
+        // whose strip never moved.
+        if (!entry.floating) {
+            entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
+        } else if (obj.contains(QLatin1String("viewDelta"))) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping viewDelta on floating entry" << entry.windowId;
+        }
         // Set only by the scroll engine's drag edge auto-scroll batches;
         // absent everywhere else, which is what the default gives. Dropped
         // on a floating entry like its sibling paint hints below (visual

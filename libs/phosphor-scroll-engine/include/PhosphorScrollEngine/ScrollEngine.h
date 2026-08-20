@@ -556,9 +556,12 @@ public:
     bool dragAutoScrollActive() const override;
     /// The ONE disarm: hands the drop target back to the ordinary hit-test
     /// and restarts the start delay. Every caller must either re-aim
-    /// (repairDragAutoScrollTarget) or clear lastTarget itself — a bare
-    /// cancel leaves the auto-scroll's last edge slot standing for a
-    /// release to commit.
+    /// (repairDragAutoScrollTarget), clear lastTarget itself, or accept the
+    /// stale target deliberately the way the tick's no-geometry exits do
+    /// (foreign screen, dead state, dead work area — where a hit-test is
+    /// impossible and the daemon's own screen-mismatch teardown follows).
+    /// A thoughtless bare cancel leaves the auto-scroll's last edge slot
+    /// standing for a release to commit.
     void cancelDragAutoScroll() override;
     /// The rect the dragged window would occupy if it were dropped at the
     /// currently remembered target — the drop indicator the daemon paints.

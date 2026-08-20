@@ -239,6 +239,19 @@ void PlasmaZonesEffect::connectDragTracker()
                     }
                 });
 
+            // Symmetric with the dragStopped re-drive: the pill hover guard
+            // goes inert for the whole drag, and without this a hover (or
+            // its interception) held at drag START stays latched until the
+            // first motion event opens the guard — one event of lag for a
+            // pointer drag, the whole drag for a keyboard-initiated move
+            // whose pointer never moves. BEFORE the managed-screen fast
+            // path below: scrolling screens are a subset of managed screens,
+            // so a tail call after its early return could never run for any
+            // screen that actually has pills.
+            if (m_tilingHandler && KWin::effects) {
+                m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
+            }
+
             // Fast path: the effect-side autotile cache is USUALLY correct.
             // We still consult it synchronously so the common case runs at
             // zero latency. The async beginDrag reply above runs as a
@@ -332,15 +345,6 @@ void PlasmaZonesEffect::connectDragTracker()
                     qCWarning(lcEffect) << "dragStarted: keyboard grab refused (another effect holds it) for"
                                         << windowId << "- Escape will cancel the interactive move";
                 }
-            }
-            // Symmetric with the dragStopped re-drive below: the pill hover
-            // guard goes inert for the whole drag, and without this a hover
-            // (or its interception) held at drag START stays latched until
-            // the first motion event opens the guard — one event of lag for
-            // a pointer drag, the whole drag for a keyboard-initiated move
-            // whose pointer never moves.
-            if (m_tilingHandler && KWin::effects) {
-                m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
             }
         });
     connect(m_dragTracker.get(), &DragTracker::dragMoved, this,

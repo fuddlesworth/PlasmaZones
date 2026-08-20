@@ -3,12 +3,8 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
-#include <PhosphorEngine/GapResolution.h>
-#include <PhosphorEngine/ICrossSurfaceResolver.h>
-#include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "scrollenginelogging.h"
 #include "scrollpark_p.h"

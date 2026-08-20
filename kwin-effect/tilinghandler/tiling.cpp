@@ -141,6 +141,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // every strip window's decoration ~60 times a second for the length of
     // an edge hold. A structural change mid-hold gives ownership back first,
     // so its batch arrives without the flag and invalidates as before.
+    // Accepted trade: the POSITIONAL rule fields (positionX/Y, width,
+    // height) DO move on a view tick, so a rule scoped on them freezes for
+    // the length of the hold and refreshes on the first non-immediate batch
+    // — a bounded cosmetic lag bought for not re-resolving every window's
+    // decoration at heartbeat rate.
     QSet<QString> immediateTickScreens;
     for (const auto& req : validatedRequests) {
         if (req.viewImmediate) {
@@ -1309,97 +1314,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // A window can only be tile-managed by one screen at a time —
             // markWindowTiled enforces the single-owner sweep itself.
             markWindowTiled(snap.screenId, snap.windowId);
-            // Remember (or forget) where a parked column should be PAINTED.
-            //
-            // Every applied entry updates this, monocle or not and whether or
-            // not the geometry itself is re-committed. It used to sit beside
-            // the scroll animation decision further down, inside the
-            // skip-if-already-at-target branch — so a column re-parked at the
-            // rect it already held took the skip and kept the PREVIOUS batch's
-            // strip position, which the paint path then drew it at for as long
-            // as it stayed parked. The commit being unchanged says nothing
-            // about where the column now sits on the strip.
-            // Change-gated, and a REAL change pairs with damage: the entry
-            // moves where the paint path draws the window (the sibling
-            // removers document the same rule), and the apply that follows
-            // frequently commits nothing for a parked column (its committed
-            // rect is the park, stable between batches, so the no-op skip
-            // fires) — with no view leg live, nothing else damages, and the
-            // last presented frame keeps drawing the column at the old
-            // strip position. The gate keeps the steady state (same visual
-            // pos every batch) at zero repaint cost.
-            // Computed here, above the visual-delta write, because that write
-            // must take the remove arm for it: the apply below commits
-            // nothing for a self-fullscreened non-member (the fullscreen
-            // bail), so an inserted relocation would only be removed again at
-            // the tail of this same lambda — insert-repaint-remove-repaint,
-            // two addRepaintFull calls per batch forever, since the change
-            // gate can never latch on an entry that never survives the
-            // lambda. Selecting the remove arm converges on a stable ABSENT
-            // entry: one honest repaint on the transition batch, then zero.
-            // Also read by the commanded-rect disarm at the tail.
-            KWin::Window* kwcForBail = snap.window->window();
-            const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
-                && (!kwcForBail || kwcForBail->isRequestedFullScreen())
-                && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
-            {
-                // Stored as the TRANSLATION from the batch's park rect to the
-                // strip position, not as the strip position itself. The paint
-                // path adds it to wherever the window is actually committed,
-                // which preserves the offset applyWindowGeometry's X11
-                // constrain-and-centre pass puts between the park rect and the
-                // committed frame — subtracting the committed frame from the
-                // strip position (the previous form) erased that offset and
-                // drew a fixed-size game at its column's top-left, the top of
-                // the screen, for the length of every park. For an
-                // unconstrained window the committed rect IS the park rect and
-                // the two forms are identical.
-                bool visualDeltaChanged = false;
-                if (snap.hasVisualPos && !fullscreenBailSkippedCommit) {
-                    // Bounded on the way in, for the same reason viewDelta is
-                    // and with the same constant: the wire deliberately does
-                    // not validate visualX/visualY, on the stated grounds that
-                    // the effect clamps the delta before it reaches the paint
-                    // path. It has to actually do that — the delta is added to
-                    // the committed rect at draw time AND folds into the
-                    // backdrop capture, so a garbled pair would draw the column
-                    // and its sample arbitrarily far off until the next batch.
-                    // The subtraction itself runs in qint64, per axis. Both
-                    // operands are unvalidated ints off the wire, so a plain
-                    // QPoint difference can overflow BEFORE the qBound the
-                    // protocol layer explicitly leans on ever sees the value —
-                    // and signed overflow is undefined, not a wrapped number
-                    // the clamp could then rescue. Widen, clamp, then narrow.
-                    const qint64 rawX = qint64(snap.visualPos.x()) - qint64(snap.geometry.x());
-                    const qint64 rawY = qint64(snap.visualPos.y()) - qint64(snap.geometry.y());
-                    constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
-                    const QPoint delta(static_cast<int>(qBound(-kMaxDelta, rawX, kMaxDelta)),
-                                       static_cast<int>(qBound(-kMaxDelta, rawY, kMaxDelta)));
-                    const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
-                    visualDeltaChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
-                    m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
-                } else {
-                    visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
-                }
-                // The KWin::effects term matches the sibling removers across
-                // the handler — one rule for every m_scrollVisualDelta damage
-                // pair. Unlike those removers (rare events: window close,
-                // screen change), this site is driven per batch and the edge
-                // auto-scroll heartbeat re-derives every parked column's
-                // relocation from the moving strip each tick, so this fires
-                // at ~60 Hz for the length of a drag hold — full-canvas
-                // damage there recomposites every unrelated monitor. Scoped
-                // to the window's own output; the relocation cannot paint
-                // beyond it (the paint path clips parked columns to their
-                // output), and Full stays as the unresolvable fallback.
-                if (visualDeltaChanged && KWin::effects) {
-                    if (KWin::LogicalOutput* vout = m_effect->outputForScreenId(snap.screenId)) {
-                        KWin::effects->addRepaint(KWin::Rect(vout->geometry()));
-                    } else {
-                        KWin::effects->addRepaintFull();
-                    }
-                }
-            }
+            // NOTE: the parked-column visual-delta write for this entry
+            // happens BELOW, after the windowed-fullscreen block, so its
+            // fullscreen-bail term reads the membership this batch just
+            // adopted or cleared rather than last batch's — see the block's
+            // own comment down there.
             // Re-report the declared minimum size when it changed since the
             // last report. KWin exposes minSize with no change signal, and
             // the one report at announce is too early for clients that set
@@ -1574,6 +1493,102 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     }
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
+                }
+            }
+
+            // Remember (or forget) where a parked column should be PAINTED.
+            //
+            // Every applied entry updates this, monocle or not and whether or
+            // not the geometry itself is re-committed. It used to sit beside
+            // the scroll animation decision further down, inside the
+            // skip-if-already-at-target branch — so a column re-parked at the
+            // rect it already held took the skip and kept the PREVIOUS batch's
+            // strip position, which the paint path then drew it at for as long
+            // as it stayed parked. The commit being unchanged says nothing
+            // about where the column now sits on the strip.
+            // Change-gated, and a REAL change pairs with damage: the entry
+            // moves where the paint path draws the window (the sibling
+            // removers document the same rule), and the apply that follows
+            // frequently commits nothing for a parked column (its committed
+            // rect is the park, stable between batches, so the no-op skip
+            // fires) — with no view leg live, nothing else damages, and the
+            // last presented frame keeps drawing the column at the old
+            // strip position. The gate keeps the steady state (same visual
+            // pos every batch) at zero repaint cost.
+            //
+            // The fullscreen-bail term makes the write take the REMOVE arm
+            // for a self-fullscreened non-member: the apply below commits
+            // nothing for it (the fullscreen bail), so an inserted relocation
+            // would only be removed again by a later batch's re-evaluation —
+            // insert-repaint-remove-repaint churn, since the change gate can
+            // never latch on an entry that never survives. Selecting the
+            // remove arm converges on a stable ABSENT entry. Evaluated AFTER
+            // the windowed-fullscreen block above, so the membership term
+            // reflects this batch's own adopt/clear — evaluated before it,
+            // the effect-restart adopt batch read "non-member", wrongly
+            // dropped a legitimate relocation and disarmed the commanded-rect
+            // counter for that batch. Also read by the commanded-rect disarm
+            // at the tail of this lambda.
+            KWin::Window* kwcForBail = snap.window->window();
+            const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
+                && (!kwcForBail || kwcForBail->isRequestedFullScreen())
+                && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+            {
+                // Stored as the TRANSLATION from the batch's park rect to the
+                // strip position, not as the strip position itself. The paint
+                // path adds it to wherever the window is actually committed,
+                // which preserves the offset applyWindowGeometry's X11
+                // constrain-and-centre pass puts between the park rect and the
+                // committed frame — subtracting the committed frame from the
+                // strip position (the previous form) erased that offset and
+                // drew a fixed-size game at its column's top-left, the top of
+                // the screen, for the length of every park. For an
+                // unconstrained window the committed rect IS the park rect and
+                // the two forms are identical.
+                bool visualDeltaChanged = false;
+                if (snap.hasVisualPos && !fullscreenBailSkippedCommit) {
+                    // Bounded on the way in, for the same reason viewDelta is
+                    // and with the same constant: the wire deliberately does
+                    // not validate visualX/visualY, on the stated grounds that
+                    // the effect clamps the delta before it reaches the paint
+                    // path. It has to actually do that — the delta is added to
+                    // the committed rect at draw time AND folds into the
+                    // backdrop capture, so a garbled pair would draw the column
+                    // and its sample arbitrarily far off until the next batch.
+                    // The subtraction itself runs in qint64, per axis. Both
+                    // operands are unvalidated ints off the wire, so a plain
+                    // QPoint difference can overflow BEFORE the qBound the
+                    // protocol layer explicitly leans on ever sees the value —
+                    // and signed overflow is undefined, not a wrapped number
+                    // the clamp could then rescue. Widen, clamp, then narrow.
+                    const qint64 rawX = qint64(snap.visualPos.x()) - qint64(snap.geometry.x());
+                    const qint64 rawY = qint64(snap.visualPos.y()) - qint64(snap.geometry.y());
+                    constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
+                    const QPoint delta(static_cast<int>(qBound(-kMaxDelta, rawX, kMaxDelta)),
+                                       static_cast<int>(qBound(-kMaxDelta, rawY, kMaxDelta)));
+                    const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
+                    visualDeltaChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
+                    m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
+                } else {
+                    visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
+                }
+                // The KWin::effects term matches the sibling removers across
+                // the handler — one rule for every m_scrollVisualDelta damage
+                // pair. Unlike those removers (rare events: window close,
+                // screen change), this site is driven per batch and the edge
+                // auto-scroll heartbeat re-derives every parked column's
+                // relocation from the moving strip each tick, so this fires
+                // at ~60 Hz for the length of a drag hold — full-canvas
+                // damage there recomposites every unrelated monitor. Scoped
+                // to the window's own output; the relocation cannot paint
+                // beyond it (the paint path clips parked columns to their
+                // output), and Full stays as the unresolvable fallback.
+                if (visualDeltaChanged && KWin::effects) {
+                    if (KWin::LogicalOutput* vout = m_effect->outputForScreenId(snap.screenId)) {
+                        KWin::effects->addRepaint(KWin::Rect(vout->geometry()));
+                    } else {
+                        KWin::effects->addRepaintFull();
+                    }
                 }
             }
 

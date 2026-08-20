@@ -169,9 +169,15 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
         // batch and persist mark describe the foreground one would be
         // silent; say so and give the target back instead. Disarm, not
         // re-aim — the hit-test would answer from the wrong context too.
-        qCWarning(lcScrollEngine) << "dragAutoScrollTick: context moved under the preview for" << preview.windowId
-                                  << "on" << preview.targetScreenId
-                                  << "— a context-change handler failed to cancel first; disarming";
+        // Warned ONCE per preview: the heartbeat keeps ticking and the
+        // mismatch persists for the rest of the drag, so an ungated warning
+        // repeats per 16 ms tick.
+        if (!preview.contextMoveWarned) {
+            preview.contextMoveWarned = true;
+            qCWarning(lcScrollEngine) << "dragAutoScrollTick: context moved under the preview for" << preview.windowId
+                                      << "on" << preview.targetScreenId
+                                      << "— a context-change handler failed to cancel first; disarming";
+        }
         return disarm();
     }
     const ScrollLayoutParams params = layoutParamsForScreen(preview.targetScreenId);
@@ -328,11 +334,13 @@ bool ScrollEngine::writeDragAutoScrollTarget(const ScrollState& state, const Scr
     if (visible.isEmpty()) {
         // Nothing on screen to anchor a promise to. Give the target back
         // AND re-aim like every other ownership-ending exit — a bare cancel
-        // would leave the stale edge slot standing for a release to commit,
-        // and it would clear ownership before this tick's own applyLayout,
-        // which latches viewImmediateApply off the flag. The settled-strip
-        // disarm makes this unreachable today; it is a latch that must not
-        // exist, and if it ever fires it must behave like the others.
+        // would leave the stale edge slot standing for a release to commit.
+        // KNOWN residual of this arm: ownership is cleared before this
+        // tick's own applyLayout, so the batch the tick already produced is
+        // emitted without the viewImmediate stamp (one animated frame); the
+        // re-aim does not change that. The settled-strip disarm makes this
+        // unreachable today; it is a latch that must not exist, and if it
+        // ever fires it must behave like the others.
         cancelDragAutoScroll();
         return repairDragAutoScrollTarget(cursorPos);
     }

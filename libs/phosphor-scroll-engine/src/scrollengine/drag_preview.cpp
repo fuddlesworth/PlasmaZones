@@ -882,15 +882,18 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     // landing at a shifted index, and the next cursor motion re-resolves a
     // fresh target.
     //
-    // The heartbeat still ticks with the cursor held still, but it cannot
-    // relight the cleared target: the cancel below drops ownership, so the
-    // next tick's disarmAndReaim short-circuits on `owned == false` and
-    // leaves lastTarget alone, and only genuine cursor motion re-resolves.
-    // The indicator therefore stays dark until the user moves again — which
-    // is deliberate: after a neighbour vanishes there is no honest target to
+    // The heartbeat still ticks with the cursor held still. With the cursor
+    // OUTSIDE both bands it cannot relight the cleared target: the cancel
+    // below drops ownership, so the next tick's disarmAndReaim
+    // short-circuits on `owned == false` and leaves lastTarget alone — the
+    // indicator stays dark until genuine cursor motion re-resolves, which is
+    // deliberate: after a neighbour vanishes there is no honest target to
     // paint, and painting the OLD rect would promise a slot that no longer
-    // exists. A dark indicator says "aim again", which is what the fallback
-    // at commit will otherwise decide for the user.
+    // exists. With the cursor parked IN a band the disarm buys a fresh start
+    // delay instead — the direction-change branch re-arms and, once the
+    // delay is served, re-writes the edge slot against the POST-close strip,
+    // which is an honest target again. A momentary dark indicator plus a
+    // deliberate re-light is the most this layer can promise.
     const auto it = m_states.windowKeys().constFind(windowId);
     if (it != m_states.windowKeys().constEnd() && it.value() == m_dragInsertPreview->targetKey) {
         m_dragInsertPreview->lastTarget = DragInsertTarget{};

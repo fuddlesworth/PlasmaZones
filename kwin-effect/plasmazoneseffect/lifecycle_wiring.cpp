@@ -465,15 +465,17 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // crossed activities and painted the incoming activity's columns shifted
     // for one leg. Activities are never per-output, so every output drops.
     connect(KWin::effects, &KWin::EffectsHandler::currentActivityChanged, this,
-            [this, lastActivity = QString()](const QString& newActivity) mutable {
+            [this, lastActivity = KWin::effects->currentActivity()](const QString& newActivity) mutable {
                 // Same-value guard, the equivalent of the desktop twin's
                 // oldDesktop == newDesktop bail (this signal carries only the
-                // new id, so the previous one is cached in the connection).
-                // Purely defensive: a re-announced current activity (an
-                // activity-manager reconnect, a session-start echo) must not
-                // kill a live view leg on every output for a switch that
-                // never happened, and a genuine A->B->A round trip still
-                // drops on both hops because the cache follows each one.
+                // new id, so the previous one is cached in the connection,
+                // seeded from the activity current at connect time so even a
+                // session-start echo of it is caught). Purely defensive: a
+                // re-announced current activity (an activity-manager
+                // reconnect, a session-start echo) must not kill a live view
+                // leg on every output for a switch that never happened, and
+                // a genuine A->B->A round trip still drops on both hops
+                // because the cache follows each one.
                 if (!newActivity.isEmpty() && newActivity == lastActivity) {
                     return;
                 }

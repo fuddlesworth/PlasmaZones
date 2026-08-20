@@ -767,8 +767,10 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
         // the cross-output branch below.
         if (!m_scrollTabHoverScreen.isEmpty()) {
             if (KWin::LogicalOutput* prev = m_effect->outputForScreenId(m_scrollTabHoverScreen)) {
-                if (ScrollTabIndicatorPainter* p = m_effect->m_scrollTabPainter.get();
-                    p && p->setHover(prev, QPointF(-1.0e9, -1.0e9))) {
+                // No null guard on the painter, matching every other deref in
+                // this function: it is ctor-constructed and never reset.
+                ScrollTabIndicatorPainter* p = m_effect->m_scrollTabPainter.get();
+                if (p->setHover(prev, QPointF(-1.0e9, -1.0e9))) {
                     const QRect bounds = p->boundsFor(prev);
                     if (bounds.isValid()) {
                         KWin::effects->addRepaint(KWin::Rect(bounds));
@@ -814,7 +816,13 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
         // so skipping the probe off-band is behaviour-preserving. boundsFor
         // is offset-free while the pointer is in view space, hence the
         // translate.
-        const QRect band = painter->boundsFor(out).translated(viewOffset.toPoint());
+        // Inflated by one: pillAt's hit test is float-inclusive at the far
+        // edges while QRect::contains is integer-exclusive, and both pos and
+        // viewOffset round through toPoint() — without the slack a pointer
+        // on the outer sub-pixel row of the band could resolve a hit with
+        // the occlusion probe skipped. Over-covering by a pixel only runs
+        // the probe once more; under-covering lights an occluded pill.
+        const QRect band = painter->boundsFor(out).translated(viewOffset.toPoint()).adjusted(-1, -1, 1, 1);
         const bool nearBand = band.isValid() && band.contains(pos.toPoint());
         const QPointF hoverPos = (nearBand && scrollTabPillOccludedAt(pos, out)) ? QPointF(-1.0e9, -1.0e9) : pos;
         // One hit scan answers both the hover update and "is the pointer over

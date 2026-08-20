@@ -14,10 +14,7 @@
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
-
-#include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
 

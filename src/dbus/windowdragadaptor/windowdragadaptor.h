@@ -12,6 +12,7 @@
 #include <QPoint>
 #include <QString>
 #include <QRect>
+#include <QSize>
 #include <QUuid>
 #include <QSet>
 #include <QVector>
@@ -508,7 +509,9 @@ private:
     PhosphorEngine::IPlacementEngine* dragInsertPreviewEngine() const;
 
     /// The window's client-reported minimum size as known by ANY engine
-    /// (snap, autotile or scroll), or 0x0 when none tracks it. Queried
+    /// (scroll and autotile today; snap answers 0x0 until it grows a
+    /// min-size model, its slot is future-proofing), or 0x0 when none
+    /// tracks it. Queried
     /// BEFORE a drag-insert commit: a cross-engine adoption releases the
     /// source's tracking (windowFloatingStateSynced -> handoffRelease), so
     /// the value must be read while the source still holds it, then pushed

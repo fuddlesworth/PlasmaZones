@@ -254,6 +254,12 @@ struct DragInsertPreview
     /// configured start delay. Only meaningful while autoScrollDirection
     /// is non-zero.
     QElapsedTimer autoScrollArmed;
+    /// One-shot latch for the tick's context-moved diagnostic. The daemon's
+    /// heartbeat keeps ticking a live preview, and the mismatch persists for
+    /// the rest of the drag once a context-change handler misses a cancel —
+    /// without the latch the warning repeats per 16 ms tick and drowns the
+    /// journal. Dies with the preview, which is the right lifetime.
+    bool contextMoveWarned = false;
     /// Sub-pixel remainder carried between ticks. The view anchor is
     /// integer pixels, so without this a speed under one pixel per tick
     /// would round to zero forever and the strip would never move.
