@@ -371,7 +371,7 @@ inline QString indicatorBorderColor()
 /// instead of failing to build. The indicator* keys are additionally the QML
 /// property names the overlay's drop-indicator slot exposes.
 namespace WindowPaintKeys {
-/// The three tab-indicator paint keys the KWin effect reads off the per-screen
+/// The tab-indicator paint keys the KWin effect reads off the per-screen
 /// context override map (TilingAdaptor::setScrollTabPaintOverrides). The
 /// effect draws the pills, so the spellings live in
 /// PhosphorProtocol::Service::ScrollTabKey, which both sides of the D-Bus
@@ -389,6 +389,31 @@ inline QString gapsBetweenTabs()
 inline QString cornerRadius()
 {
     static const QString s(PhosphorProtocol::Service::ScrollTabKey::CornerRadius);
+    return s;
+}
+inline QString tabFontFamily()
+{
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::FontFamily);
+    return s;
+}
+inline QString tabFontWeight()
+{
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::FontWeight);
+    return s;
+}
+inline QString tabFontItalic()
+{
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::FontItalic);
+    return s;
+}
+inline QString tabFontUnderline()
+{
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::FontUnderline);
+    return s;
+}
+inline QString tabFontStrikeout()
+{
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::FontStrikeout);
     return s;
 }
 inline QString indicatorEnabled()

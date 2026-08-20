@@ -3,6 +3,7 @@
 
 #include "scrolltabindicatorpainter.h"
 
+#include <QFontInfo>
 #include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
@@ -11,6 +12,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <vector>
 
 // Layout + rasterisation of the scrolling strip's tab indicators.
 //
@@ -210,6 +213,63 @@ ChipMetrics chipMetricsOf(const IndicatorAxes& axes, const ScrollTabIndicatorSty
     return metrics;
 }
 
+/// Vertical breathing room, in logical px, left between the chip's two long
+/// edges and the label's line box (one px each side). Small on purpose: the
+/// chip is already inset from the pill, so this only has to stop the
+/// ascender and descender from touching the chip's rounded ends.
+constexpr qreal kLabelChipMargin = 2.0;
+
+/// The chip label font and its metrics, fitted to one chip thickness.
+struct FittedLabel
+{
+    int thickness = 0;
+    QFont font;
+    QFontMetricsF metrics;
+};
+
+/// @p base re-sized so its rendered line height fits inside a chip of
+/// @p thickness logical px, measured on @p device (the same paint device the
+/// text is drawn on, so the fit, the elide width and the rendered glyphs all
+/// resolve against one font engine).
+///
+/// The estimate-then-verify shape is deliberate. A fixed pixelSize-to-height
+/// ratio is NOT safe across families: height() is ascent + descent + leading,
+/// and how much of the em box each takes varies by typeface (and by hinting
+/// at small sizes), so a ratio tuned on one font overflows on another. So the
+/// ratio is MEASURED from this very font at its own size, used to land the
+/// first guess, and then the guess is checked by measurement and walked down
+/// until it really fits. The walk terminates: every step decrements, and the
+/// floor is 1px. A font that cannot honour pixelSize at all (a bitmap face)
+/// walks to that floor and is then clipped by the indicator clip rect, which
+/// is the same outcome the un-fitted code had.
+FittedLabel fitLabelFont(const QFont& base, int thickness, const QPaintDevice* device)
+{
+    const qreal budget = std::max(1.0, qreal(thickness) - kLabelChipMargin);
+    QFont probe = base;
+    // Measure the ratio in PIXEL terms: the base font is usually point-sized
+    // (it comes from the system font database), and a point size cannot be
+    // scaled against a pixel budget without knowing the device's DPI.
+    const int probeSize = std::max(1, QFontInfo(base).pixelSize());
+    probe.setPixelSize(probeSize);
+    const qreal probeHeight = QFontMetricsF(probe, device).height();
+
+    int pixelSize = probeSize;
+    if (probeHeight > 0.0) {
+        pixelSize = int(std::floor(probeSize * budget / probeHeight));
+    }
+    pixelSize = std::max(1, pixelSize);
+
+    QFont font = base;
+    font.setPixelSize(pixelSize);
+    QFontMetricsF metrics(font, device);
+    while (pixelSize > 1 && metrics.height() > budget) {
+        --pixelSize;
+        font.setPixelSize(pixelSize);
+        metrics = QFontMetricsF(font, device);
+    }
+    return {thickness, font, metrics};
+}
+
 /// Offset along the long axis of tab @p index, in indicator-local px.
 int tabOffset(int index, int perTab, int gaps)
 {
@@ -313,10 +373,17 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
     // Draw in ABSOLUTE logical coordinates throughout; the image simply is
     // the window onto them at `bounds`.
     painter.translate(-bounds.topLeft());
-    painter.setFont(style.font);
-    // Metrics from the SAME paint device the text is drawn on, so the elide
-    // width and the rendered width resolve against one font engine.
-    const QFontMetricsF metrics(style.font, &image);
+    // The label font is NOT hoisted, because it is not one font: the chip
+    // style sizes it to the chip's thickness, which is per indicator. Fitted
+    // fonts are memoised by thickness for the length of this call — the
+    // indicators of one output nearly always share a thickness (it comes from
+    // the one Width setting), so in practice this is one fit per raster, and
+    // a linear scan over a handful of entries is cheaper than any keyed
+    // container. The cache is per-call by design: the style's font can change
+    // between rasters and a longer-lived cache would need its own
+    // invalidation. The segment-bar style returns before any of this and pays
+    // nothing.
+    std::vector<FittedLabel> fitted;
 
     for (const ScrollTabIndicator& indicator : indicators) {
         const IndicatorAxes axes = axesOf(indicator, style);
@@ -375,6 +442,23 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
         painter.setPen(Qt::NoPen);
 
         const qreal chipRadius = tabRadius(style, chip.thickness);
+        // Fit the label to THIS indicator's chip thickness (memoised above).
+        // Done once per indicator rather than per tab: every chip of one
+        // indicator shares the thickness, which is the indicator's short
+        // extent minus the inset.
+        auto fittedIt = std::find_if(fitted.begin(), fitted.end(), [&](const FittedLabel& f) {
+            return f.thickness == chip.thickness;
+        });
+        if (fittedIt == fitted.end()) {
+            fitted.push_back(fitLabelFont(style.font, chip.thickness, &image));
+            // Re-derived AFTER the push: a growing vector reallocates, which
+            // would leave the iterator above dangling.
+            fittedIt = std::prev(fitted.end());
+        }
+        const FittedLabel& label = *fittedIt;
+        painter.setFont(label.font);
+        const QFontMetricsF& metrics = label.metrics;
+
         for (int i = 0; i < axes.tabCount; ++i) {
             const ScrollTabPill& pill = indicator.tabs.at(i);
             const QRectF rect = rects.at(i);

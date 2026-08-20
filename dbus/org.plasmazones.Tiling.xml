@@ -119,7 +119,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="scrollTabPaintOverrides">
-            <annotation name="org.gtk.GDBus.DocString" value="Every screen's current tab-indicator paint overrides resolved from context rules (a Set tab style / gaps / corner radius / colour rule scoped to a screen, desktop or activity), as a map of effective screen id to a map of paint key to value. Keys are tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor and urgentColor. Only the keys a rule actually set are present, and each layers over the matching global Scrolling.TabIndicator setting for that screen alone. The replay half of scrollTabPaintOverridesChanged. Screens with no override are absent."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Every screen's current tab-indicator paint overrides resolved from context rules (a Set tab style / gaps / corner radius / colour / label-font rule scoped to a screen, desktop or activity), as a map of effective screen id to a map of paint key to value. Keys are tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor, urgentColor, fontFamily, fontWeight, fontItalic, fontUnderline and fontStrikeout. An empty fontFamily is a set value meaning the system font, not an absent override. Only the keys a rule actually set are present, and each layers over the matching global Scrolling.TabIndicator setting for that screen alone. The replay half of scrollTabPaintOverridesChanged. Screens with no override are absent."/>
             <arg name="overrides" type="a{sv}" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Map of effective screen id to a paint-key map."/>
@@ -224,7 +224,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
 
         <signal name="scrollTabPaintOverridesChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="A screen's context-rule tab-indicator paint overrides changed. Same key set as scrollTabPaintOverrides. An empty map means the screen has no override and the global settings apply to it again."/>
+            <annotation name="org.gtk.GDBus.DocString" value="A screen's context-rule tab-indicator paint overrides changed. Same eleven-key set as scrollTabPaintOverrides (tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor, urgentColor, fontFamily, fontWeight, fontItalic, fontUnderline, fontStrikeout). An empty map means the screen has no override and the global settings apply to it again."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Effective screen id."/>
             </arg>

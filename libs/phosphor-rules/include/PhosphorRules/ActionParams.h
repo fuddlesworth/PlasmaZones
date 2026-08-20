@@ -165,6 +165,22 @@ inline constexpr double MaxTabIndicatorCornerRadius = 64.0;
 inline constexpr double MinTabIndicatorLengthRatio = 0.05;
 inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
 
+/// Bounds for the tab label's font WEIGHT, the CSS/QFont::Weight scale where
+/// 400 is regular and 700 is bold. Kept beside the other tab-indicator bounds
+/// and shared by the same two consumers, so the descriptor validator and the
+/// context resolver check one number rather than two hand-mirrored ones.
+///
+/// The floor is 100, not 0 — a zero weight is not a lighter font, it is an
+/// out-of-scale value the font stack rounds to whatever it likes. So this pair
+/// takes the EXPLICIT-FLOOR validator helper, like the signed bounds above,
+/// even though both ends are positive.
+///
+/// The family beside it has no bounds constant because it is a free string,
+/// and the three style FLAGS have none because they are booleans. There is no
+/// font-SIZE pair at all: the painter fits the label to the pill thickness.
+inline constexpr double MinTabIndicatorFontWeight = 100.0;
+inline constexpr double MaxTabIndicatorFontWeight = 900.0;
+
 /// Drop-indicator numeric bounds, mirroring the config layer's
 /// (ConfigDefaults::scrollingDropIndicator*Min/Max) so a rule cannot author a
 /// value the settings page would refuse. Both floors are 0 and neither is a

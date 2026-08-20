@@ -79,6 +79,15 @@ static_assert(ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs() == 0,
               "ISettings::scrollingTabIndicatorGapsBetweenTabs defaults to 0 — update it with this default");
 static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
               "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
+static_assert(ConfigDefaults::scrollingTabIndicatorFontWeight() == 700,
+              "ISettings::scrollingTabIndicatorFontWeight defaults to 700 (bold, what the pills already looked like) "
+              "— update it with this default");
+static_assert(!ConfigDefaults::scrollingTabIndicatorFontItalic(),
+              "ISettings::scrollingTabIndicatorFontItalic defaults to false — update it with this default");
+static_assert(!ConfigDefaults::scrollingTabIndicatorFontUnderline(),
+              "ISettings::scrollingTabIndicatorFontUnderline defaults to false — update it with this default");
+static_assert(!ConfigDefaults::scrollingTabIndicatorFontStrikeout(),
+              "ISettings::scrollingTabIndicatorFontStrikeout defaults to false — update it with this default");
 // The drop indicator's paint keys, same story: the overlay service reads them
 // through ISettings, so a stub answering from the interface body must agree.
 // The two COLOUR defaults have no assert here and cannot get one: QColor is not
@@ -403,6 +412,30 @@ P_STORE_SET_STRING(setScrollingTabIndicatorInactiveColor, scrollingTabIndicatorG
 P_STORE_GET(QString, scrollingTabIndicatorUrgentColor, scrollingTabIndicatorGroup, urgentColorKey, QString)
 P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGroup, urgentColorKey,
                    scrollingTabIndicatorUrgentColorChanged)
+
+// The tab labels' own font. Empty family means the system font, and there is
+// no size key: Width gives the pill its thickness and the painter fits the
+// label to it. The family default is a QString, unassertable here for the same
+// reason as the colour trio above; the weight and the three flags are pinned.
+P_STORE_GET(QString, scrollingTabIndicatorFontFamily, scrollingTabIndicatorGroup, fontFamilyKey, QString)
+P_STORE_SET_STRING(setScrollingTabIndicatorFontFamily, scrollingTabIndicatorGroup, fontFamilyKey,
+                   scrollingTabIndicatorFontFamilyChanged)
+
+P_STORE_GET(int, scrollingTabIndicatorFontWeight, scrollingTabIndicatorGroup, fontWeightKey, int)
+P_STORE_SET_INT(setScrollingTabIndicatorFontWeight, scrollingTabIndicatorGroup, fontWeightKey,
+                scrollingTabIndicatorFontWeightChanged)
+
+P_STORE_GET(bool, scrollingTabIndicatorFontItalic, scrollingTabIndicatorGroup, fontItalicKey, bool)
+P_STORE_SET_BOOL(setScrollingTabIndicatorFontItalic, scrollingTabIndicatorGroup, fontItalicKey,
+                 scrollingTabIndicatorFontItalicChanged)
+
+P_STORE_GET(bool, scrollingTabIndicatorFontUnderline, scrollingTabIndicatorGroup, fontUnderlineKey, bool)
+P_STORE_SET_BOOL(setScrollingTabIndicatorFontUnderline, scrollingTabIndicatorGroup, fontUnderlineKey,
+                 scrollingTabIndicatorFontUnderlineChanged)
+
+P_STORE_GET(bool, scrollingTabIndicatorFontStrikeout, scrollingTabIndicatorGroup, fontStrikeoutKey, bool)
+P_STORE_SET_BOOL(setScrollingTabIndicatorFontStrikeout, scrollingTabIndicatorGroup, fontStrikeoutKey,
+                 scrollingTabIndicatorFontStrikeoutChanged)
 
 // ── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────────────
 // The drop-target highlight painted during a drag re-insert. Paint-only: the

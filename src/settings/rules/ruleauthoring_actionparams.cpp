@@ -174,6 +174,23 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetTabIndicatorCornerRadius && key == ActionParam::Value) {
         return PhosphorI18n::tr("Corner radius (px, -1 is fully rounded)");
     }
+    // Tab label font. No size param anywhere in this family — the label is
+    // fitted to the pill's thickness, so a size would fight the auto-fit.
+    if (type == ActionType::SetTabIndicatorFontFamily && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Font (leave empty for the system font)");
+    }
+    if (type == ActionType::SetTabIndicatorFontWeight && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Weight (100 is thinnest, 900 is boldest)");
+    }
+    if (type == ActionType::SetTabIndicatorFontItalic && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show the tab labels in italic");
+    }
+    if (type == ActionType::SetTabIndicatorFontUnderline && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Underline the tab labels");
+    }
+    if (type == ActionType::SetTabIndicatorFontStrikeout && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Draw a line through the tab labels");
+    }
     // Drop indicator. The two colour pairs share one label for the same reason
     // the tab colours do: the action label already names which colour it is.
     if ((type == ActionType::SetDropIndicatorColor || type == ActionType::SetDropIndicatorBorderColor
@@ -571,8 +588,11 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         } else {
             // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
             // animationEvent, shaderEffect, overlayShader, curveEditor,
-            // screenId) and plain
-            // strings all start empty. Four kinds are seeded above instead:
+            // screenId) and plain strings all start empty. The tab-indicator
+            // font family is a plain string rather than a picker, and empty is
+            // a meaningful value for it (it means the system font), so unlike
+            // the pickers its seeded rule is already savable. Four kinds are
+            // seeded above instead:
             // zoneOrdinals and virtualDesktop because their validators reject an
             // empty value, zoneNames and decorationChain because an empty ARRAY
             // (not an empty string) is their valid starting shape. The
