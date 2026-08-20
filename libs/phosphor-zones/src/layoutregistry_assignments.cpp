@@ -566,6 +566,22 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
     // the snapping/autotile write choke point the token's doc names.
     if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)
         || layoutId == NoSnappingLayout) {
+        // Seeded from the EXACT context rule only. Known limitation, stated
+        // because the losslessness contract above is easy to over-read: when
+        // no exact rule exists yet, an activity-scoped write starts from an
+        // empty entry, so the siblings a BROADER (empty-activity) entry
+        // remembers are not carried onto it — and since the cascade returns
+        // the most specific entry whole rather than merging fields, the new
+        // entry shadows them.
+        //
+        // This is a property of every caller of this write path, not of any
+        // one mode: the picker's manual, autotile and no-layout branches all
+        // reach it. The daemon's mode-toggle arms compensate by widening the
+        // sibling slots themselves before writing through
+        // setAssignmentEntryDirect. Widening HERE would fix all callers at
+        // once, but it also makes every activity-scoped write copy the
+        // broader entry's values rather than leave them where they are, which
+        // is a different memory model and wants its own decision.
         AssignmentEntry existing;
         if (const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity)) {
             existing = entryFromRuleMatchActions(*rule);

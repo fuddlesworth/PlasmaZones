@@ -349,6 +349,16 @@ void Daemon::handleTilingModeToggle()
             if (entry.tilingAlgorithm.isEmpty() && !activity.isEmpty()) {
                 entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
             }
+            // The template slot takes the same widening as the algorithm one
+            // above: all three siblings are memory for modes this context is
+            // not currently in, and a new activity-scoped entry that drops any
+            // of them shadows what the broader entry still remembers.
+            entry.scrollingTemplateLayout =
+                m_layoutManager->scrollingTemplateLayoutForScreen(screenId, desktop, activity);
+            if (entry.scrollingTemplateLayout.isEmpty() && !activity.isEmpty()) {
+                entry.scrollingTemplateLayout =
+                    m_layoutManager->scrollingTemplateLayoutForScreen(screenId, desktop, QString());
+            }
             m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
             refreshCheatsheetIfVisible();
             if (m_overlayService) {
@@ -422,6 +432,17 @@ void Daemon::handleTilingModeToggle()
             entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
             if (entry.snappingLayout.isEmpty() && !activity.isEmpty()) {
                 entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+            }
+            // The TEMPLATE slot needs the same widening, for the same reason:
+            // a new activity-scoped entry whose template slot is empty
+            // shadows a template the broader entry still remembers, and a
+            // later toggle into Scrolling would then resolve the configured
+            // default instead of the user's own pick.
+            entry.scrollingTemplateLayout =
+                m_layoutManager->scrollingTemplateLayoutForScreen(screenId, desktop, activity);
+            if (entry.scrollingTemplateLayout.isEmpty() && !activity.isEmpty()) {
+                entry.scrollingTemplateLayout =
+                    m_layoutManager->scrollingTemplateLayoutForScreen(screenId, desktop, QString());
             }
             m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
             refreshCheatsheetIfVisible();

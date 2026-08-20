@@ -170,6 +170,11 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // per-screen count either under-armed (all-scrolling apply: 0,
     // letting the no-op resnap OSD fire over the mode card) or
     // over-armed (multi-screen: surplus parked until the watchdog).
+    // An opted-out screen among changedScreenIds needs no filtering here,
+    // unlike the single-screen mode-toggle path which gates the whole call.
+    // This one covers every changed screen at once, so it has to run
+    // regardless, and an opted-out screen simply contributes no entries: its
+    // layout resolves null downstream, so no window is moved on its account.
     armResnapOsdSuppression(1);
     m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, changedScreenIds,
                                                                           currentDesktop());

@@ -938,6 +938,50 @@ private Q_SLOTS:
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), nullptr);
     }
 
+    void testBatch_desktopActivityCombined_roundTripTheSnappingOptOut()
+    {
+        // The other three batch families. All four share applyBatchAssignments
+        // and one shouldSkipLayoutAssignment predicate, so this is structural
+        // rather than four independent behaviours — but each family decides
+        // its own key shape and its own drop set, and only the Screen family
+        // was pinned. The same clear-then-rebuild hazard applies to each: a
+        // value the validation skips DELETES the stored rule.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* fallback = createTestLayout(QStringLiteral("Fallback"));
+        mgr->addLayout(fallback);
+        const QString none = QString(PhosphorZones::NoSnappingLayout);
+        const QString activity = QStringLiteral("act-1");
+
+        // Per-desktop.
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), none);
+        QHash<QPair<QString, int>, QString> desktops;
+        desktops.insert(qMakePair(QStringLiteral("DP-1"), 2), mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 2));
+        mgr->setAllDesktopAssignments(desktops);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).snappingLayout, none);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 2, QString()), nullptr);
+
+        // Per-activity.
+        mgr->assignLayoutById(QStringLiteral("DP-2"), 0, activity, none);
+        QHash<QPair<QString, QString>, QString> activities;
+        activities.insert(qMakePair(QStringLiteral("DP-2"), activity),
+                          mgr->assignmentIdForScreen(QStringLiteral("DP-2"), 0, activity));
+        mgr->setAllActivityAssignments(activities);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-2"), 0, activity).snappingLayout, none);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-2"), 0, activity), nullptr);
+
+        // Combined (screen + desktop + activity).
+        mgr->assignLayoutById(QStringLiteral("DP-3"), 3, activity, none);
+        QHash<PhosphorZones::CombinedAssignmentKey, QString> combined;
+        PhosphorZones::CombinedAssignmentKey key;
+        key.screenId = QStringLiteral("DP-3");
+        key.virtualDesktop = 3;
+        key.activity = activity;
+        combined.insert(key, mgr->assignmentIdForScreen(QStringLiteral("DP-3"), 3, activity));
+        mgr->setAllCombinedAssignments(combined);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-3"), 3, activity).snappingLayout, none);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-3"), 3, activity), nullptr);
+    }
+
     void testAssignmentEntry_snappingLayout_deleteScrubsOnAMixedRule()
     {
         // The snapping twin of the scrolling mixed-rule scrub above: the
