@@ -10,6 +10,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QLatin1String>
 #include <QLoggingCategory>
@@ -359,6 +360,19 @@ bool TilingAlgorithmController::writeAlgorithmField(const QString& algorithmId, 
                                                     const QVariant& value)
 {
     if (algorithmId.isEmpty())
+        return false;
+    // The reserved no-algorithm word names no algorithm, so it can never key a
+    // tuning slot. Both tiling pages seed their working algorithm from
+    // defaultAutotileAlgorithm, which the library's Clear Default sets to this
+    // word, and the always-visible Max windows slider stays live in that state
+    // (the ratio / master / custom rows hide only because capabilitiesFor
+    // answers null for it). A drag then persisted a fully materialized slot
+    // under "none" that no reader ever resolves. Narrowed to the reserved word
+    // rather than a registry-membership test on purpose: editing the slot of a
+    // legitimately dangling id — an uninstalled Luau algorithm — stays
+    // possible. setCustomParam already refuses unregistered ids via its own
+    // registry lookup, so only the built-in field setters needed this.
+    if (algorithmId == PhosphorZones::NoTilingAlgorithm)
         return false;
     QVariantMap perAlgo = m_settings->autotilePerAlgorithmSettings();
     const bool hadSlot = perAlgo.contains(algorithmId);

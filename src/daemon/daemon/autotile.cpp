@@ -193,13 +193,27 @@ void Daemon::updateEngineScreens()
             }
             // Bare autotile (mode set, no concrete algorithm — e.g. a mode-only
             // rule or a plain mode swap) draws its algorithm from the global
-            // default, which the suppress setting disables. Don't tile such a
-            // context when its default is suppressed (globally or by a
-            // per-context rule): tiling is active and would rearrange windows
-            // with a default the user opted out of. A concrete assigned
-            // algorithm is explicit and always tiles.
+            // default, so it must not tile when that default is unavailable.
+            // Two independent ways for it to be unavailable, both checked:
+            //
+            //   - the default is SUPPRESSED (globally or by a per-context
+            //     rule), and
+            //   - the default IS the explicit no-algorithm word, i.e. the user
+            //     cleared it.
+            //
+            // Either way tiling is active and would rearrange windows with a
+            // default the user opted out of. Without the second test the bare
+            // shape escaped entirely: extractAlgorithmId answers EMPTY (not the
+            // sentinel) for a bare "autotile:" id, so the opt-out arm above
+            // misses it, and the screen then tiled with whatever stale global
+            // id the engine still held — AutotileEngine::refreshConfigFromSettings
+            // deliberately declines to update that id for the reserved word, and
+            // its comment there states this exclusion as a guarantee.
+            //
+            // A concrete assigned algorithm is explicit and always tiles.
             if (algoId.isEmpty()
-                && m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
+                && (m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)
+                    || (m_settings && m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm))) {
                 continue;
             }
             autotileScreens.insert(screenId);
@@ -720,7 +734,21 @@ void Daemon::handleAutotileDisabled()
             for (const QString& screenId : effectiveIds) {
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
-                const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                // Widen to the empty-activity entry when the activity-scoped
+                // one carries no snapping slot. The cascade returns the most
+                // specific entry WHOLE — it does not merge fields across
+                // levels — and clearAutotileAssignments leaves exactly that
+                // shape behind: flipping an Autotile entry to Snapping
+                // preserves tilingAlgorithm, not snappingLayout. Without the
+                // widening the skip below misses, parseUuid("") fails, and the
+                // loop deletes the activity entry and overwrites the broader
+                // one with the fallback layout — silently destroying the
+                // user's stored no-layout choice on any system using
+                // activities. The mode-toggle arms widen for the same reason.
+                if (existingSnapId.isEmpty() && !activity.isEmpty()) {
+                    existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                }
                 if (existingSnapId == PhosphorZones::NoSnappingLayout) {
                     // The explicit opt-out IS a stored choice, not a missing
                     // assignment: parseUuid("none") fails like a dangling id
@@ -835,10 +863,24 @@ void Daemon::handleSnappingToAutotile()
         // loop clears the activity-scoped entry holding it), so an opted-out
         // screen stays opted out across a global autotile enable — the same
         // contract the scrolling exemption gives explicit assignments.
-        if (!PhosphorLayout::LayoutId::isAutotile(existing) && !PhosphorLayout::LayoutId::isScrolling(existing)
-            && existing != PhosphorZones::NoSnappingLayout) {
-            screensToConvert.append(screenId);
+        if (PhosphorLayout::LayoutId::isAutotile(existing) || PhosphorLayout::LayoutId::isScrolling(existing)
+            || existing == PhosphorZones::NoSnappingLayout) {
+            continue;
         }
+        // Nothing to convert TO when the global default is the reserved
+        // no-algorithm word and this screen has no algorithm of its own that
+        // the disable preserved. Converting anyway wrote "autotile:none" as an
+        // EXPLICIT per-context entry, which then outranks the global default
+        // forever: configuring a default afterwards could never reach the
+        // screen again, and every surface stayed silent about it. Leaving the
+        // screen in Snapping keeps the enable a no-op for it and leaves no
+        // durable pin behind, matching how the suppressed-default sibling
+        // avoids stamping a decision the user did not make.
+        if (defaultAlgoId == PhosphorZones::NoTilingAlgorithm
+            && m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity).isEmpty()) {
+            continue;
+        }
+        screensToConvert.append(screenId);
     }
 
     // The restore above can flip contexts on other desktops and activities even

@@ -185,7 +185,16 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // defeat the "synthesized fallback only" intent.
         if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
             hasAnyStored = true;
-            auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
+            // exactContextEntry, NOT assignmentEntryForScreen: the gate above
+            // is blind to the rule's enabled flag, while the cascade resolvers
+            // skip disabled rules and fall through to the synthesized default.
+            // Pairing them reported that default as if the user had stored it
+            // — the very shadowing this block's comment says it avoids — and
+            // the KCM stages this JSON and writes it back per context, so a
+            // save round trip overwrote a DISABLED pin's payload with the
+            // default's id. getScreenStates already sources its explicit
+            // markers from this same enabled-blind reader.
+            auto entry = m_layoutManager->exactContextEntry(screenId, 0, QString());
             QString effectiveId = entry.activeLayoutId();
             if (!effectiveId.isEmpty()) {
                 screenObj[QLatin1String("default")] = effectiveId;
@@ -209,9 +218,22 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // desktop row in the KCM would show the display default redundantly.
         for (int desktop = 1; desktop <= desktopCount; ++desktop) {
             if (m_layoutManager->hasExplicitAssignment(screenId, desktop, QString())) {
-                QString desktopId = m_layoutManager->assignmentIdForScreen(screenId, desktop, QString());
+                // Enabled-blind read, for the same reason as the base entry
+                // above: the gate admits a disabled pin, so resolving through
+                // the cascade would report the synthesized default as stored.
+                const auto desktopEntry = m_layoutManager->exactContextEntry(screenId, desktop, QString());
+                const QString desktopId = desktopEntry.activeLayoutId();
+                // A mode-only SNAPPING pin resolves to an EMPTY id — Snapping
+                // is the only mode with no bare sentinel to stand in for it
+                // (Autotile and Scrolling answer "autotile:" / "scrolling:").
+                // Such a pin carries no id to publish under this flat
+                // desktop-keyed shape, so it stays unrepresented here. It must
+                // still mark the screen as carrying stored state, or a screen
+                // whose ONLY stored entry is that pin disappeared from the
+                // readback altogether. The omission of the row itself is
+                // documented on the method in org.plasmazones.LayoutRegistry.xml.
+                hasAnyStored = true;
                 if (!desktopId.isEmpty()) {
-                    hasAnyStored = true;
                     screenObj[QString::number(desktop)] = desktopId;
                 }
             }

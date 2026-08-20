@@ -816,11 +816,20 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
 
     if (m_layoutManager && m_screenManager) {
         const QString activity = currentActivity();
-        // Only the AUTOTILE arm depends on the master autotile switch. The
-        // templates arm must be resolved regardless: with autotile off and
-        // scrolling on, gating the whole resolution on autotileEnabled left
-        // scrollingActive false and handed a scrolling screen the manual list.
-        const bool autotileEnabled = m_settings->autotileEnabled();
+        // Both engine arms resolve through the ROUTER, never through a master
+        // switch. The switch gates whether autotile is OFFERED and DEFAULTED
+        // (setDefaultAutotileAlgorithmProvider in init_services.cpp returns an
+        // empty algorithm when off, and the mode cycle skips a disabled mode);
+        // it does not un-claim a screen carrying an EXPLICIT autotile
+        // assignment, which updateEngineScreens still admits and the engine
+        // still tiles. Reading the switch here made this filter disagree with
+        // the live engine: the picker and visibleLayoutCount both resolve the
+        // autotile family through resolvePerScreenLayoutInclude, so a screen
+        // with autotile off but an explicit assignment drew ALGORITHM cards
+        // while the controller held a manual-only list — every visible card a
+        // silent dead press, and the cycle gate counting rows the controller
+        // never cycles. The quick-slot sibling (shortcuts_wiring.cpp) already
+        // derives its filter from currentModeFor for exactly this reason.
 
         // Templates needs BOTH conjuncts, the same pair
         // resolvePerScreenLayoutInclude in overlayservice.cpp requires. Not
@@ -839,7 +848,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         const auto classify = [&](const QString& screenId) {
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-            if (autotileEnabled && PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)
                        && layoutSupportForScreen(screenId) == LayoutSupport::Templates) {

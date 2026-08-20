@@ -556,10 +556,10 @@ void LayoutRegistry::addLayout(PhosphorZones::Layout* layout)
     }
 }
 
-void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
+bool LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
 {
     if (!layout || layout->isSystemLayout() || !m_layouts.contains(layout)) {
-        return;
+        return false;
     }
 
     // Store state BEFORE any operations that might invalidate the pointer
@@ -595,7 +595,7 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
             m_layoutSettings.setSettingsFor(layoutIdStr, removedSettings);
             qCWarning(lcZonesLib) << "Failed to persist the layout settings sidecar — keeping layout" << layoutIdStr
                                   << "rather than leaving its settings orphaned on disk";
-            return;
+            return false;
         }
     }
 
@@ -617,7 +617,7 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
                                       << "after its layout file could not be deleted";
             }
         }
-        return;
+        return false;
     }
 
     // Remove from layouts list
@@ -674,11 +674,12 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     }
 
     Q_EMIT layoutsChanged();
+    return true;
 }
 
-void LayoutRegistry::removeLayoutById(const QUuid& id)
+bool LayoutRegistry::removeLayoutById(const QUuid& id)
 {
-    removeLayout(layoutById(id));
+    return removeLayout(layoutById(id));
 }
 
 PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* source)
@@ -902,7 +903,20 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
                 continue;
             }
             stored = parsed.toString();
-        } else if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+            // Mirror setQuickLayoutSlot's refusal of the reserved opt-out id.
+            // A quick slot is an "apply this layout" binding; the opt-out has
+            // its own picker card, and a press on such a slot resolves nothing
+            // (a silent dead press). Accepting it here while the single setter
+            // refuses it let a bus batch write land the exact value the single
+            // setter exists to keep out.
+            if (PhosphorLayout::LayoutId::extractAlgorithmId(layoutId) == NoTilingAlgorithm) {
+                qCWarning(lcZonesLib) << "Batch: skipping the reserved opt-out id for quick slot" << number << ":"
+                                      << layoutId;
+                continue;
+            }
+            // Autotile IDs have no corresponding Layout* — accept as-is.
+        } else {
             // See setQuickLayoutSlot for the two-step parse/lookup
             // rationale — catches malformed UUID strings separately
             // from lookup-miss for clearer diagnostics.

@@ -181,9 +181,16 @@ public:
      * scrolling assignment to live snapping, and routing on the cascade
      * alone would write a dead template while the visible snap screen moved
      * nothing (the resolver-first-then-cascade double check
-     * resolvePerScreenLayoutInclude already uses). Defaults to Placement,
-     * the fail-safe: an un-pushed value can only under-route to the classic
-     * placement assignment, never mis-route a pick into template state.
+     * resolvePerScreenLayoutInclude already uses).
+     *
+     * The INITIAL value is Placement, the fail-safe: an un-pushed value can
+     * only under-route to the classic placement assignment, never mis-route a
+     * pick into template state. That safety belongs to the default alone —
+     * the member is sticky and screen-agnostic, so EVERY entry point must
+     * push before it applies. A value left behind by a press on a different
+     * (or since-changed) screen refuses the apply outright: a stale Templates
+     * makes applyEntry reject both the autotile branch and, on a still-
+     * Scrolling cascade, the manual branch.
      */
     void setCurrentLayoutSupport(PhosphorEngine::IPlacementEngine::LayoutSupport support)
     {

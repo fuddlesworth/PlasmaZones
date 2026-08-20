@@ -423,7 +423,16 @@ void Daemon::handleIncreaseMasterRatio()
     // HANDLE_AUTOTILE_ONLY macro sets this hint for every other autotile
     // shortcut; these two handlers exist out-of-line only to thread the
     // per-screen `effectiveSplitRatioStep`, so they must replicate the
-    // hint-setting the macro does.
+    // hint-setting the macro does — and, for the same reason, the
+    // state gate below it.
+    //
+    // The engine holds no state for an explicit algorithm opt-out, so it
+    // rejects the hint and NavigationController falls back to the first
+    // (hash-ordered) entry of m_autotileScreens — mutating an unrelated
+    // screen's split ratio. Non-creating probe, same as handleRetile.
+    if (!m_autotileEngine->stateForScreen(screenId)) {
+        return;
+    }
     m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
@@ -438,7 +447,11 @@ void Daemon::handleDecreaseMasterRatio()
         return;
     if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
-    // See handleIncreaseMasterRatio for the active-screen-hint rationale.
+    // See handleIncreaseMasterRatio for the active-screen-hint and
+    // state-gate rationale.
+    if (!m_autotileEngine->stateForScreen(screenId)) {
+        return;
+    }
     m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);

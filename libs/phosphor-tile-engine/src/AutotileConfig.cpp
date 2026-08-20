@@ -3,6 +3,7 @@
 
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include "tileenginelogging.h"
 #include <QRegularExpression>
 #include <algorithm>
@@ -76,6 +77,20 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
         }
         if (!validAlgoId.match(it.key()).hasMatch())
             continue;
+        // The reserved no-algorithm word passes the id regex but names no
+        // algorithm, so a slot keyed by it is dead weight no reader resolves.
+        // Dropping it HERE rather than only at the writing controller matters
+        // twice over: the raw per-algorithm D-Bus setter is a second writer,
+        // and persistablePerAlgoSettings deliberately preserves slots whose id
+        // the registry does not know, so a slot that once landed on disk would
+        // otherwise be re-persisted forever. Filtering at this single
+        // deserialization chokepoint also self-heals configs that already
+        // carry one.
+        if (it.key() == PhosphorZones::NoTilingAlgorithm) {
+            qCWarning(PhosphorTileEngine::lcTileEngine)
+                << "perAlgoFromVariantMap: dropping the reserved no-algorithm key" << it.key();
+            continue;
+        }
         const QVariantMap entry = it.value().toMap();
         const QVariant ratioVar = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio);
         const qreal ratio =

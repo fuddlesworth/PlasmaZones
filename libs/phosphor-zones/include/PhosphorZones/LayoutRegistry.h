@@ -154,8 +154,8 @@ public:
     Layout* layoutByName(const QString& name) const override;
 
     Q_INVOKABLE void addLayout(Layout* layout) override;
-    Q_INVOKABLE void removeLayout(Layout* layout) override;
-    Q_INVOKABLE void removeLayoutById(const QUuid& id) override;
+    Q_INVOKABLE bool removeLayout(Layout* layout) override;
+    Q_INVOKABLE bool removeLayoutById(const QUuid& id) override;
     Q_INVOKABLE Layout* duplicateLayout(Layout* source) override;
 
     /// The literal suffix @ref duplicateLayout appends to the source layout's

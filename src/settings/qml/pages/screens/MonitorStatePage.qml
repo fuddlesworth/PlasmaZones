@@ -868,9 +868,11 @@ SettingsFlickable {
                 // Deliberately NOT gated on appSettings.autotileEnabled: an
                 // assignment is durable state, and hiding the Tiling button
                 // while a screen is already assigned Tiling would make that
-                // state unrepresentable here. With the feature disabled the
-                // router downgrades the screen to Snapping until it is
-                // re-enabled; the assignment itself is preserved.
+                // state unrepresentable here. The master switch gates whether
+                // tiling is OFFERED and DEFAULTED, not whether an explicit
+                // per-screen assignment is honored, so a screen assigned
+                // Tiling keeps tiling with the feature switched off and this
+                // button keeps showing the mode the screen actually runs.
                 model: [i18nc("tiling mode name", "Snapping"), i18nc("tiling mode name", "Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {

@@ -512,6 +512,17 @@ void LayoutRegistry::readQuickLayouts()
             if (stored.isEmpty()) {
                 continue;
             }
+            // Refuse the reserved opt-out id, exactly as both write paths do
+            // (setQuickLayoutSlot and setAllQuickLayoutSlots). A hand-edited
+            // sidecar would otherwise resurrect the silent dead press those
+            // refusals exist to prevent, since nothing re-validates a loaded
+            // slot before it is pressed.
+            if (PhosphorLayout::LayoutId::isAutotile(stored)
+                && PhosphorLayout::LayoutId::extractAlgorithmId(stored) == NoTilingAlgorithm) {
+                qCWarning(lcZonesLib) << "Dropping the reserved opt-out id from stored quick slot" << i << ":"
+                                      << stored;
+                continue;
+            }
             // Canonicalize a UUID-shaped value to the braced spelling this
             // library compares and writes everywhere. A hand-edited sidecar can
             // hold the unbraced form, and the id-keyed sweeps (purge on delete,

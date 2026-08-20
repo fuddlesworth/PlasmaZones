@@ -220,6 +220,20 @@ void Daemon::handleTilingModeToggle()
 
     // Set the screen context so applyEntry knows which screen to assign
     m_unifiedLayoutController->setCurrentScreenName(screenId);
+    // Push the capability too. The member is sticky and screen-agnostic, so
+    // without this the toggle judged its own applyLayoutById calls by whatever
+    // the last picker / cycle / quick-slot press left behind: a Templates
+    // value from a scrolling screen makes applyEntry refuse the autotile
+    // branch outright, and refuse the manual branch as well while the cascade
+    // still reads Scrolling — the toggle then silently no-ops, repeatably.
+    //
+    // Placement, NOT layoutSupportForScreen(screenId): every applyLayoutById
+    // target in this handler is placement-family (a manual UUID or an autotile
+    // id — the scrolling target is a direct entry write that bypasses
+    // applyEntry). Pushing the live capability would answer Templates on a
+    // scrolling screen and reproduce the refusal on the Scrolling→Snapping arm,
+    // where the entry has not been rewritten yet.
+    m_unifiedLayoutController->setCurrentLayoutSupport(PhosphorEngine::IPlacementEngine::LayoutSupport::Placement);
 
     // Temporarily include both layout types so applyLayoutById can find the
     // target across the mode boundary.  The subsequent layoutApplied /
