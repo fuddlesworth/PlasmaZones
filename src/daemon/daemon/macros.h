@@ -21,27 +21,35 @@
 // Autotile-mode handle (the macro is autotile-only by definition, so
 // handleForMode skips the router round-trip).
 //
-// The stateForScreen gate stops these handlers acting on the WRONG screen.
+// This gate stops these handlers acting on the WRONG screen.
 // setActiveScreenHint itself accepts any id; the filtering happens inside
-// NavigationController, and it has two different fallbacks:
+// NavigationController, which has two different fallbacks, each with its own
+// admission test:
 //
-//   - resolveActiveScreen (the master-count path) drops a non-member and
+//   - resolveActiveScreen (the master-count path) drops a NON-MEMBER and
 //     falls back to the first entry of the engine set, hash-ordered.
 //   - tiledWindowsForFocusedScreen (the focusMaster / swapWithMaster path)
-//     takes the hinted screen ONLY when a TilingState exists for it, and
-//     otherwise runs a ranked scan that returns ANOTHER screen's state.
+//     takes the hinted screen only when it is a member AND has a TilingState
+//     AND that state holds tiled windows; otherwise it runs a ranked scan
+//     that returns ANOTHER screen's state.
 //
-// So membership alone is not enough here: a screen that is a member but holds
-// no state still routes focus and window-order changes onto an unrelated
-// monitor. Gating on the state covers both fallbacks for all four users. The
-// overload is non-creating, so the probe allocates nothing.
+// Both conditions are needed, and neither implies the other. A non-member can
+// still hold a live state for the current key — setAutotileScreens prunes only
+// the removed screens' states for the CURRENT desktop, and deliberately leaves
+// other-context states behind — so a state probe alone would let a screen the
+// engine dropped misroute the count verbs. Conversely a member can hold an
+// existing-but-EMPTY state (nothing reaps a state when its last window
+// leaves), which the focus verbs reject, sending them to the cross-screen
+// scan. Testing membership AND tiled windows is exactly the pair the hinted
+// branch requires, so a press that passes here can only act on this screen.
 //
-// The cost is that a stateless screen answers a press with silence rather
-// than the engine's own "no windows" feedback. That is the right trade: the
-// screen has no tiled windows for these verbs to act on either way, and a
-// missing card is better than acting on a monitor the user was not looking at.
-// The two out-of-line master-ratio handlers gate on MEMBERSHIP instead, which
-// is sufficient there because they only reach resolveActiveScreen.
+// None of these four verbs mean anything on a screen with no tiled windows, so
+// the cost is only that such a press is silent instead of drawing the engine's
+// own "no windows" card. stateForScreen is non-creating, so the probe
+// allocates nothing.
+//
+// The two out-of-line master-ratio handlers reach only resolveActiveScreen, so
+// membership alone is sufficient there.
 #define HANDLE_AUTOTILE_ONLY(name, engineCall)                                                                         \
     void Daemon::handle##name()                                                                                        \
     {                                                                                                                  \
@@ -52,7 +60,10 @@
             return;                                                                                                    \
         if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))                          \
             return;                                                                                                    \
-        if (!m_autotileEngine->stateForScreen(screenId))                                                               \
+        if (!m_autotileEngine->isActiveOnScreen(screenId))                                                             \
+            return;                                                                                                    \
+        const PhosphorEngine::IPlacementState* tilingState = m_autotileEngine->stateForScreen(screenId);               \
+        if (!tilingState || tilingState->tiledWindowCount() == 0)                                                      \
             return;                                                                                                    \
         m_autotileEngine->setActiveScreenHint(screenId);                                                               \
         m_autotileEngine->engineCall;                                                                                  \

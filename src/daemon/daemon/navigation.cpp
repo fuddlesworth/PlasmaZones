@@ -424,7 +424,7 @@ void Daemon::handleIncreaseMasterRatio()
     // shortcut; these two handlers exist out-of-line only to thread the
     // per-screen `effectiveSplitRatioStep`, so they must replicate the
     // hint-setting the macro does — and, for the same reason, the
-    // state gate below it.
+    // membership gate below it.
     //
     // isAutotileScreen above is the ROUTER's answer, which is Autotile for an
     // explicit algorithm opt-out too — but updateEngineScreens leaves such a
@@ -451,7 +451,7 @@ void Daemon::handleDecreaseMasterRatio()
     if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
     // See handleIncreaseMasterRatio for the active-screen-hint and
-    // engine-membership rationale.
+    // membership rationale.
     if (!m_autotileEngine->isActiveOnScreen(screenId)) {
         return;
     }

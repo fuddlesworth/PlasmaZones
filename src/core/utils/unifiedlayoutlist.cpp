@@ -408,8 +408,10 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
 {
     QVector<LayoutPreview> list;
 
-    // HARD PRECONDITION, unlike the three include* flags: a null registry
-    // yields an empty list outright, template rows and the None row included,
+    // HARD PRECONDITION, unlike the three include* flags: a null LAYOUT
+    // registry — the layoutManager parameter, not the algorithm registry,
+    // which is merely one of the optional sources below — yields an empty
+    // list outright, template rows and the None row included,
     // even though neither needs the registry. Both other families do — the
     // manual walk enumerates its layouts and the autotile hidden-filter reads
     // the context's algorithm and the per-algorithm overrides off it — so a
