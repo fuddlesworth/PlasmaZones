@@ -10,13 +10,15 @@
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QTimer>
+#include <QtNumeric>
 
 // The compositor-drawn scrolling tab indicators' PAINT settings: the loaders
 // that mirror the daemon's Scrolling.TabIndicator style / gaps / radius /
-// colours and its five own font keys into the effect's cached members, the
-// change funnel that rebuilds the pills when any of them moves, and the
-// label-font builder. Split from daemon_settings.cpp (which hosts
+// colours and the six Appearance label-font keys into the effect's cached
+// members, the change funnel that rebuilds the pills when any of them moves,
+// and the label-font builder. Split from daemon_settings.cpp (which hosts
 // loadCachedSettings and the ~50 other loaders) for the file-size ceiling;
 // loadCachedSettings calls loadScrollTabIndicatorSettings() in the same
 // position the block used to sit.
@@ -132,70 +134,75 @@ void PlasmaZonesEffect::loadScrollTabIndicatorSettings()
     loadTabColor(QStringLiteral("scrollingTabIndicatorInactiveColor"), &m_cachedTabIndicatorInactiveColor);
     loadTabColor(QStringLiteral("scrollingTabIndicatorUrgentColor"), &m_cachedTabIndicatorUrgentColor);
 
-    // Label font. The pills carry their OWN font keys
-    // (Scrolling.TabIndicator), not the Appearance label font the zone-label
-    // overlays use: the chip label lives inside a pill whose thickness the
-    // user sets in the same settings group, so tying it to the global label
-    // font meant one slider silently resized text in two unrelated places.
-    //
-    // There is deliberately NO size key here. The pill's Width setting drives
-    // its thickness, and the raster fits the label to that thickness per
-    // indicator (see scrolltabindicatorpainter_raster.cpp), so Width IS the
-    // size control and a second one could only disagree with it.
-    // Duplicates ConfigDefaults::scrollingTabIndicatorFontWeight{Min,Max}()
-    // (100..900).
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorFontFamily"), [this](const QVariant& v) {
+    // Label font, the same six Appearance keys writeFontProperties
+    // (src/daemon/overlayservice/internal.h) pushes onto the QML overlay, so a
+    // compositor-drawn chip label matches every other PlasmaZones label.
+    // Duplicates ConfigDefaults::labelFontSizeScale{Min,Max}() (0.25..3.0) and
+    // labelFontWeight{Min,Max}() (100..900).
+    loadSettingAsync(QStringLiteral("labelFontFamily"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::QString) {
             return;
         }
         const QString family = v.toString();
-        if (m_cachedTabIndicatorFontFamily != family) {
-            m_cachedTabIndicatorFontFamily = family;
+        if (m_cachedLabelFontFamily != family) {
+            m_cachedLabelFontFamily = family;
             onScrollTabIndicatorStyleChanged();
         }
     });
 
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorFontWeight"), [this](const QVariant& v) {
+    loadSettingAsync(QStringLiteral("labelFontSizeScale"), [this](const QVariant& v) {
+        bool ok = false;
+        const double scale = v.toDouble(&ok);
+        if (!ok || !qIsFinite(scale) || scale < 0.25 || scale > 3.0) {
+            return;
+        }
+        if (!qFuzzyCompare(m_cachedLabelFontSizeScale, scale)) {
+            m_cachedLabelFontSizeScale = scale;
+            onScrollTabIndicatorStyleChanged();
+        }
+    });
+
+    loadSettingAsync(QStringLiteral("labelFontWeight"), [this](const QVariant& v) {
         bool ok = false;
         const int weight = v.toInt(&ok);
         if (!ok || weight < 100 || weight > 900) {
             return;
         }
-        if (m_cachedTabIndicatorFontWeight != weight) {
-            m_cachedTabIndicatorFontWeight = weight;
+        if (m_cachedLabelFontWeight != weight) {
+            m_cachedLabelFontWeight = weight;
             onScrollTabIndicatorStyleChanged();
         }
     });
 
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorFontItalic"), [this](const QVariant& v) {
+    loadSettingAsync(QStringLiteral("labelFontItalic"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
         const bool italic = v.toBool();
-        if (m_cachedTabIndicatorFontItalic != italic) {
-            m_cachedTabIndicatorFontItalic = italic;
+        if (m_cachedLabelFontItalic != italic) {
+            m_cachedLabelFontItalic = italic;
             onScrollTabIndicatorStyleChanged();
         }
     });
 
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorFontUnderline"), [this](const QVariant& v) {
+    loadSettingAsync(QStringLiteral("labelFontUnderline"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
         const bool underline = v.toBool();
-        if (m_cachedTabIndicatorFontUnderline != underline) {
-            m_cachedTabIndicatorFontUnderline = underline;
+        if (m_cachedLabelFontUnderline != underline) {
+            m_cachedLabelFontUnderline = underline;
             onScrollTabIndicatorStyleChanged();
         }
     });
 
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorFontStrikeout"), [this](const QVariant& v) {
+    loadSettingAsync(QStringLiteral("labelFontStrikeout"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
         const bool strikeout = v.toBool();
-        if (m_cachedTabIndicatorFontStrikeout != strikeout) {
-            m_cachedTabIndicatorFontStrikeout = strikeout;
+        if (m_cachedLabelFontStrikeout != strikeout) {
+            m_cachedLabelFontStrikeout = strikeout;
             onScrollTabIndicatorStyleChanged();
         }
     });
@@ -228,31 +235,27 @@ void PlasmaZonesEffect::onScrollTabIndicatorStyleChanged()
 
 QFont PlasmaZonesEffect::scrollTabIndicatorFont() const
 {
-    // Only the TYPEFACE half of the label font is decided here: family,
-    // weight, italic, underline, strikeout. The SIZE the returned font
-    // carries is a fallback and nothing more — the raster re-sizes the label
-    // to fit each chip's thickness before it draws
-    // (scrolltabindicatorpainter_raster.cpp), because the pill's Width
-    // setting is what the user sizes these labels with. The segment-bar style
-    // draws no text at all, so for it the size is never read either.
-    //
-    // The starting point is QFontDatabase's SmallestReadableFont, the same
-    // system font Kirigami's desktop platform plugin hands out as
-    // Kirigami.Theme.smallFont (the "Small" font on Plasma's Fonts page). It
-    // supplies the family when the user has not named one, and its own size
-    // stands as the fallback, so a chip whose fit somehow never ran still
-    // draws at a readable system size rather than at whatever QFont defaults
-    // to.
-    QFont font = QFontDatabase::systemFont(QFontDatabase::SmallestReadableFont);
-    if (!m_cachedTabIndicatorFontFamily.isEmpty()) {
-        font.setFamily(m_cachedTabIndicatorFontFamily);
+    // Kirigami.Theme.smallFont, exactly: Kirigami's desktop platform plugin
+    // hands out QFontDatabase's SmallestReadableFont system font (the "Small"
+    // font on Plasma's Fonts page), so reading the same database entry here
+    // gives the pills the size the QML rendering had, with no Kirigami link.
+    // The base pixel size is measured through QFontInfo because the system
+    // font is point-sized and the user's scale applies to the resolved pixel
+    // height, as the QML's `smallFont.pixelSize * fontSizeScale` did.
+    const QFont base = QFontDatabase::systemFont(QFontDatabase::SmallestReadableFont);
+    const int basePixelSize = qMax(1, QFontInfo(base).pixelSize());
+
+    QFont font = base;
+    if (!m_cachedLabelFontFamily.isEmpty()) {
+        font.setFamily(m_cachedLabelFontFamily);
     }
+    font.setPixelSize(qMax(1, qRound(basePixelSize * m_cachedLabelFontSizeScale)));
     // The loader already constrains the weight to the 100..900 band, so the
     // member is always a valid QFont::Weight value.
-    font.setWeight(static_cast<QFont::Weight>(m_cachedTabIndicatorFontWeight));
-    font.setItalic(m_cachedTabIndicatorFontItalic);
-    font.setUnderline(m_cachedTabIndicatorFontUnderline);
-    font.setStrikeOut(m_cachedTabIndicatorFontStrikeout);
+    font.setWeight(static_cast<QFont::Weight>(m_cachedLabelFontWeight));
+    font.setItalic(m_cachedLabelFontItalic);
+    font.setUnderline(m_cachedLabelFontUnderline);
+    font.setStrikeOut(m_cachedLabelFontStrikeout);
     return font;
 }
 

@@ -171,11 +171,6 @@ inline constexpr QLatin1StringView TabIndicatorCornerRadius{"tab-indicator-corne
 inline constexpr QLatin1StringView TabIndicatorActiveColor{"tab-indicator-active-color"};
 inline constexpr QLatin1StringView TabIndicatorInactiveColor{"tab-indicator-inactive-color"};
 inline constexpr QLatin1StringView TabIndicatorUrgentColor{"tab-indicator-urgent-color"};
-inline constexpr QLatin1StringView TabIndicatorFontFamily{"tab-indicator-font-family"};
-inline constexpr QLatin1StringView TabIndicatorFontWeight{"tab-indicator-font-weight"};
-inline constexpr QLatin1StringView TabIndicatorFontItalic{"tab-indicator-font-italic"};
-inline constexpr QLatin1StringView TabIndicatorFontUnderline{"tab-indicator-font-underline"};
-inline constexpr QLatin1StringView TabIndicatorFontStrikeout{"tab-indicator-font-strikeout"};
 // Per-context drop-indicator slots, one per property so independent context
 // rules cascade per-property. Filled by the SetDropIndicator* actions and read
 // by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.

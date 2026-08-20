@@ -116,13 +116,8 @@ struct ScrollTabIndicatorStyle
     QColor themeText;
     QColor themeBackground;
     QColor themeNegativeText;
-    /// The label TYPEFACE, resolved by the caller from family / weight /
-    /// italic / underline / strikeout. Its SIZE is a fallback only: the chip
-    /// style re-sizes the label to fit each chip's thickness before drawing
-    /// it, so the pill's Width setting is what sizes these labels. The
-    /// segment-bar style draws no text and reads this field not at all.
-    /// Still part of operator==, because a typeface change must dirty the
-    /// model even though it cannot move a rect.
+    /// Already scaled by the caller from family / size scale / weight /
+    /// italic / underline / strikeout.
     QFont font;
     /// Kirigami.Units.smallSpacing equivalent (Kirigami is not available in
     /// the compositor, so the caller supplies the number).

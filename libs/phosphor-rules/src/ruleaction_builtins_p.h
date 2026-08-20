@@ -36,18 +36,6 @@ inline bool hasNonEmptyString(const QJsonObject& params, QLatin1StringView key)
     return v.isString() && !v.toString().isEmpty();
 }
 
-/// Validates that @p params has a string at @p key, EMPTY INCLUDED. The
-/// counterpart to hasNonEmptyString, for the slots where empty is a value the
-/// user can mean rather than an unfilled field. The tab-indicator font family
-/// is the one such slot today: empty there means "the system font", which is
-/// how a rule takes one screen back to the default after a global family was
-/// picked. Every slot naming an ID or a token wants hasNonEmptyString instead,
-/// because an empty id resolves to nothing downstream.
-inline bool hasStringAllowingEmpty(const QJsonObject& params, QLatin1StringView key)
-{
-    return params.value(key).isString();
-}
-
 /// Validates that @p params has a JSON bool at @p key.
 inline bool hasBool(const QJsonObject& params, QLatin1StringView key)
 {
@@ -194,11 +182,6 @@ inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio
 // open-coding the * 100.0 in the descriptor.
 inline constexpr double kMinTabIndicatorLengthPercent = kMinTabIndicatorLengthRatio * 100.0;
 inline constexpr double kMaxTabIndicatorLengthPercent = kMaxTabIndicatorLengthRatio * 100.0;
-// The label font's weight scale, aliased the same way. Both ends are positive
-// but the floor is 100 rather than 0, so this pair takes the explicit-floor
-// helper too: a zero would not be a lighter font, only an off-scale number.
-inline constexpr double kMinTabIndicatorFontWeight = MinTabIndicatorFontWeight;
-inline constexpr double kMaxTabIndicatorFontWeight = MaxTabIndicatorFontWeight;
 
 // Drop indicator. Every floor here really is zero — a zero border width is a
 // fill with no edge and a zero radius is a square corner, neither a sentinel —

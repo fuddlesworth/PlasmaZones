@@ -503,48 +503,6 @@ public:
     {
         return QString();
     }
-    /// The font the tab labels are drawn in. EMPTY MEANS THE SYSTEM FONT: the
-    /// painter asks the platform for its default family rather than naming one
-    /// here, so a user who never touches this follows their desktop font.
-    ///
-    /// This family exists so the pills stop borrowing the snapping zone-label
-    /// font, which is a different surface with different sizing pressure.
-    ///
-    /// THERE IS NO SIZE KEY, on purpose. The pill's thickness comes from the
-    /// Width setting, and the painter fits the label to the band it was given.
-    /// A size of its own would let the text draw outside that band, which is
-    /// the same reasoning that makes Width exact for every style.
-    static QString scrollingTabIndicatorFontFamily()
-    {
-        return QString();
-    }
-    /// Bold, matching what the pills already looked like: before they had a
-    /// font of their own they inherited the zone label's weight, which is 700.
-    /// Keeping that number here means existing installs see no visual change.
-    static constexpr int scrollingTabIndicatorFontWeight()
-    {
-        return 700;
-    }
-    static constexpr int scrollingTabIndicatorFontWeightMin()
-    {
-        return 100;
-    }
-    static constexpr int scrollingTabIndicatorFontWeightMax()
-    {
-        return 900;
-    }
-    static constexpr bool scrollingTabIndicatorFontItalic()
-    {
-        return false;
-    }
-    static constexpr bool scrollingTabIndicatorFontUnderline()
-    {
-        return false;
-    }
-    static constexpr bool scrollingTabIndicatorFontStrikeout()
-    {
-        return false;
-    }
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling.DropIndicator — the drop-target highlight painted during a drag
     // re-insert. EVERY key here is PAINT-only: they never enter the engine, which

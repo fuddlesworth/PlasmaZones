@@ -452,16 +452,6 @@ public:
                    setScrollingTabIndicatorInactiveColor NOTIFY scrollingTabIndicatorInactiveColorChanged)
     Q_PROPERTY(QString scrollingTabIndicatorUrgentColor READ scrollingTabIndicatorUrgentColor WRITE
                    setScrollingTabIndicatorUrgentColor NOTIFY scrollingTabIndicatorUrgentColorChanged)
-    Q_PROPERTY(QString scrollingTabIndicatorFontFamily READ scrollingTabIndicatorFontFamily WRITE
-                   setScrollingTabIndicatorFontFamily NOTIFY scrollingTabIndicatorFontFamilyChanged)
-    Q_PROPERTY(int scrollingTabIndicatorFontWeight READ scrollingTabIndicatorFontWeight WRITE
-                   setScrollingTabIndicatorFontWeight NOTIFY scrollingTabIndicatorFontWeightChanged)
-    Q_PROPERTY(bool scrollingTabIndicatorFontItalic READ scrollingTabIndicatorFontItalic WRITE
-                   setScrollingTabIndicatorFontItalic NOTIFY scrollingTabIndicatorFontItalicChanged)
-    Q_PROPERTY(bool scrollingTabIndicatorFontUnderline READ scrollingTabIndicatorFontUnderline WRITE
-                   setScrollingTabIndicatorFontUnderline NOTIFY scrollingTabIndicatorFontUnderlineChanged)
-    Q_PROPERTY(bool scrollingTabIndicatorFontStrikeout READ scrollingTabIndicatorFontStrikeout WRITE
-                   setScrollingTabIndicatorFontStrikeout NOTIFY scrollingTabIndicatorFontStrikeoutChanged)
     // Scrolling.DropIndicator
     Q_PROPERTY(bool scrollingDropIndicatorEnabled READ scrollingDropIndicatorEnabled WRITE
                    setScrollingDropIndicatorEnabled NOTIFY scrollingDropIndicatorEnabledChanged)
@@ -1379,16 +1369,6 @@ public:
     void setScrollingTabIndicatorInactiveColor(const QString& color) override;
     QString scrollingTabIndicatorUrgentColor() const override;
     void setScrollingTabIndicatorUrgentColor(const QString& color) override;
-    QString scrollingTabIndicatorFontFamily() const override;
-    void setScrollingTabIndicatorFontFamily(const QString& family) override;
-    int scrollingTabIndicatorFontWeight() const override;
-    void setScrollingTabIndicatorFontWeight(int weight) override;
-    bool scrollingTabIndicatorFontItalic() const override;
-    void setScrollingTabIndicatorFontItalic(bool italic) override;
-    bool scrollingTabIndicatorFontUnderline() const override;
-    void setScrollingTabIndicatorFontUnderline(bool underline) override;
-    bool scrollingTabIndicatorFontStrikeout() const override;
-    void setScrollingTabIndicatorFontStrikeout(bool strikeout) override;
     // Scrolling.DropIndicator. Paint-only, so ISettings alone — the engine
     // never reads these (it resolves the indicator's rect from the same layout
     // math the drop uses).
