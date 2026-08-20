@@ -705,9 +705,10 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                // const overload: a non-creating lookup. The non-const overload
-                // would lazily allocate an empty TilingState for a known screen
-                // during this read-only OSD preview build.
+                // const overload for const-correctness on a read-only build.
+                // BOTH stateForScreen overloads are non-creating today (the
+                // lazy-allocation the non-const one once performed is gone),
+                // so callers elsewhere gate on the non-const form safely.
                 const auto* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();

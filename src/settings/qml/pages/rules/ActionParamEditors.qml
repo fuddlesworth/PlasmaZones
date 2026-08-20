@@ -31,6 +31,12 @@ QtObject {
     /// against it exactly as they did inline, with no rewrites.
     required property var row
 
+    /// The reserved explicit-opt-out word (PhosphorZones::NoSnappingLayout /
+    /// NoTilingAlgorithm — one spelling, see the AssignmentEntry.h checklist).
+    /// Named once here so the two editors that offer the None row share it,
+    /// matching MonitorStatePage's `_noLayoutToken` convention.
+    readonly property string noLayoutToken: "none"
+
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -461,7 +467,7 @@ QtObject {
             // (PhosphorZones::NoSnappingLayout, whose spelling checklist
             // names this site).
             showExplicitNoneOption: true
-            explicitNoneValue: "none"
+            explicitNoneValue: editors.noLayoutToken
             showPreview: true
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
@@ -635,9 +641,14 @@ QtObject {
                 // blank. Matches the list resolver's already-prefixed handling.
                 // The reserved word stays bare: the explicit-none row is keyed
                 // "none", and prefixing it would leave the combo blank for a
-                // stored opt-out.
+                // stored opt-out. A hand-edited "autotile:none" gets the same
+                // tolerance the corrupted prefixed real ids get — mapped to
+                // the bare word so it seats the None row instead of leaving
+                // the combo blank.
                 const stored = row.action[_param.key] || "";
-                if (stored === "" || stored === "none" || stored.startsWith("autotile:"))
+                if (stored === "autotile:" + editors.noLayoutToken)
+                    return editors.noLayoutToken;
+                if (stored === "" || stored === editors.noLayoutToken || stored.startsWith("autotile:"))
                     return stored;
                 return "autotile:" + stored;
             }
@@ -646,8 +657,12 @@ QtObject {
             // The reserved "explicitly no algorithm" word
             // (PhosphorZones::NoTilingAlgorithm, whose spelling checklist
             // names this site). Bare on the wire like the algorithm ids.
-            showExplicitNoneOption: true
-            explicitNoneValue: "none"
+            // NOT offered for setAlgorithmParam, which shares this editor by
+            // kind: parameters tuned for "no algorithm" is a meaningless
+            // payload, and the SetAlgorithmParam summary would render the raw
+            // word as an algorithm apparently named "none".
+            showExplicitNoneOption: row.action.type !== "setAlgorithmParam"
+            explicitNoneValue: editors.noLayoutToken
             showPreview: true
             onActivated: function (index) {
                 const bareId = currentValue.startsWith("autotile:") ? currentValue.substring(9) : currentValue;

@@ -119,6 +119,40 @@ private Q_SLOTS:
                                       QStringLiteral("bsp"));
         entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+
+        // The snapping slot's negative leg: the reserved-word exemption must
+        // not widen the vocabulary. A non-UUID, non-reserved word is still
+        // refused, leaving the stored entry untouched — a mutation deleting
+        // the snapping validation outright would pass every positive test
+        // above while accepting any garbage id.
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Snapping),
+                                      QStringLiteral("banana"), QString());
+        entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+    }
+
+    void testSetAssignmentEntry_sentinelWriteReachesTheChangeNotification()
+    {
+        // setAssignmentEntry only STAGES the changed screen; the batched
+        // screenLayoutChanged emission on applyAssignmentChanges is what
+        // tells D-Bus clients (the settings app's Monitors page) about the
+        // opt-out. A staging path that dropped sentinel writes would leave
+        // every client stale with no test failing.
+        QSignalSpy changedSpy(m_adaptor, &LayoutAdaptor::screenLayoutChanged);
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Snapping),
+                                      QString(PhosphorZones::NoSnappingLayout), QString());
+        m_adaptor->applyAssignmentChanges();
+        QVERIFY2(changedSpy.count() >= 1, "the batched apply must announce the opted-out screen");
+        bool sawScreen = false;
+        for (const auto& emission : changedSpy) {
+            if (emission.at(0).toString() == QStringLiteral("DP-1")) {
+                sawScreen = true;
+            }
+        }
+        QVERIFY2(sawScreen, "the notification must carry the screen whose opt-out was staged");
     }
 
     void testSetGet_roundTripFlipsModeToScrolling()

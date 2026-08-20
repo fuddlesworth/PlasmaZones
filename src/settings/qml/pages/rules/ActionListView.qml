@@ -156,7 +156,7 @@ ColumnLayout {
             }
             return rawStr;
         }
-        if ((kind === "scrollingTemplate" || kind === "snappingLayout" || kind === "tilingAlgorithm") && rawStr === "none") {
+        if ((kind === "scrollingTemplate" || kind === "snappingLayout" || kind === "tilingAlgorithm") && (rawStr === "none" || (kind === "tilingAlgorithm" && rawStr === "autotile:none"))) {
             // The reserved "explicitly none" token (NoScrollingTemplate /
             // NoSnappingLayout / NoTilingAlgorithm in AssignmentEntry.h,
             // one spelling for all three) is the value every None pick

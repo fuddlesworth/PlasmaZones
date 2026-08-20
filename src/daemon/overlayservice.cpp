@@ -764,6 +764,14 @@ bool OverlayService::isSnappingContextInactive(const QString& screenId) const
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return true;
     }
+    // The explicit snapping opt-out: no layout is in force, every snap and
+    // detection consumer answers null for this screen (layoutForScreen's
+    // opt-out arm), so drawing the drag overlay here would render the
+    // DEFAULT layout's zones — zones nothing will ever snap into, the
+    // drag-vs-overlay disagreement class of #724 in the other direction.
+    if (assignmentId == PhosphorZones::NoSnappingLayout) {
+        return true;
+    }
     if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
         return !m_layoutSupportResolver || m_layoutSupportResolver(screenId) == LayoutSupportTemplates;
     }
@@ -1087,9 +1095,14 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         // The None row: this list is a PICKER of the context's layout (or
         // template), so it carries the opt-out alongside the real choices —
         // template-flavoured on a Templates screen, the generic no-layout row
-        // everywhere else. Mirrored in visibleLayoutCount below, which must
-        // agree with this row for row.
-        true,
+        // everywhere else. Derived from the include resolution, NOT passed
+        // unconditionally: a LayoutSupport::None screen zeroes all three
+        // family flags precisely so the picker's show bails on the empty
+        // list, and an unconditional row would hand that screen a lone None
+        // card whose press writes an opt-out where no layout concept exists.
+        // Mirrored in visibleLayoutCount below, which must agree with this
+        // row for row.
+        inc.manual || inc.autotile || inc.templates,
         // Template cards depict the columns this screen's strip will hold, so
         // they follow the screen's strip axis. Count-neutral, which is why
         // visibleLayoutCount does not pay for the same resolve.
@@ -1171,11 +1184,13 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, inc.templates,
         m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
-        // Same None row as buildLayoutsList, on the same condition. This is
+        // Same None row as buildLayoutsList, on the same condition (derived
+        // from the include resolution, so a LayoutSupport::None screen counts
+        // zero rows and the picker/trigger-edge gates keep refusing). This is
         // the row-for-row agreement the header of that function calls out: a
         // count short by one here would size the popup for fewer cards than
         // it draws.
-        true
+        inc.manual || inc.autotile || inc.templates
         // No strip axis: this function is asked per cursor tick by the
         // trigger-edge probe, and the axis only transposes each card's bands.
         // It cannot add or drop a row, so taking the default here leaves the

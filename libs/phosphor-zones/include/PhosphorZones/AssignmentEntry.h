@@ -152,8 +152,9 @@ inline constexpr QLatin1String NoScrollingTemplate{"none"};
 /// context's layout is deleted, the unified layout list builds the picker's
 /// None row around the word and sorts on it, UnifiedLayoutController's apply
 /// and display-id paths carry it, the rules label/pill renderers translate it
-/// for display, and the Monitors page and rule param editors hardcode the
-/// literal in QML against this declaration.
+/// for display, and the Monitors page, the rule param editors, and the
+/// read-only rule pill (ActionListView) hardcode the literal in QML against
+/// this declaration.
 inline constexpr QLatin1String NoSnappingLayout{"none"};
 
 /// Reserved value of @ref AssignmentEntry::tilingAlgorithm meaning "this
@@ -264,7 +265,9 @@ struct AssignmentEntry
         }
         return snappingLayout;
     }
-    /// True when the entry carries a concrete layout/algorithm PAYLOAD.
+    /// True when the entry carries a layout/algorithm PAYLOAD — including
+    /// the reserved opt-out word, which is a stored choice, not an absence
+    /// (an entry whose only content is "none" answers true here).
     /// This is NOT the cascade's visibility predicate — that is
     /// activeLayoutId() non-empty, which a payload-less Scrolling entry
     /// satisfies through the "scrolling:" sentinel while isValid() stays

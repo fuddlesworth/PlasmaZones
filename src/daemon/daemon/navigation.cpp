@@ -478,6 +478,14 @@ void Daemon::handleRetile()
     if (isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile)) {
         return;
     }
+    // An autotile-classified screen the engine holds no state for (the
+    // explicit algorithm opt-out, or a transient window) has nothing to
+    // retile: the engine-global retile() iterates active screens and would
+    // no-op for it, and the success card below would claim a retile that
+    // never happened on the screen the user fired from.
+    if (!m_autotileEngine->stateForScreen(focusedScreen)) {
+        return;
+    }
     m_autotileEngine->retile();
     if (navigationOsdAllowed(focusedScreen)) {
         // focusedScreen is guaranteed non-empty here — the early-return

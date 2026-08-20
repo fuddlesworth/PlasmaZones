@@ -318,7 +318,13 @@ void Daemon::connectShortcutSignals()
         const int visibleCount = m_overlayService->visibleLayoutCount(screenId);
         const bool templateStoreEmpty = m_overlayService->screenResolvesToTemplates(screenId)
             && (!m_scrollingTemplateStore || m_scrollingTemplateStore->count() == 0);
-        if (templateStoreEmpty || visibleCount == 0) {
+        // <= 1, not == 0: the synthetic None row keeps every family's count
+        // at >= 1, so an empty manual/autotile vocabulary counts exactly 1
+        // (the lone None card) — a picker offering only the opt-out on a
+        // screen with nothing to opt out OF is the empty-list case, and the
+        // cycle gate in start.cpp uses the same threshold; the two must
+        // agree.
+        if (templateStoreEmpty || visibleCount <= 1) {
             // An empty template store (fresh install, or every template
             // deleted) is something the user can act on. The generic "engine
             // provides no layouts" card would misdescribe it, so this goes out

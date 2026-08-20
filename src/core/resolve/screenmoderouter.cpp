@@ -82,6 +82,21 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     // checked above, so a cascade that still reports one of them is stale
     // assignment state mid-transition — trust the engines and fall back
     // to Snapping.
+    // One cascade-Autotile shape is NOT stale transition state: the explicit
+    // algorithm opt-out ("autotile:none"). updateEngineScreens deliberately
+    // leaves that screen out of the engine set FOREVER, so "engine inactive +
+    // cascade Autotile" is its permanent steady state, and downgrading it to
+    // Snapping makes every mode-keyed surface (mode toggle, OSD gating,
+    // cheatsheet, snap partitioning) treat an opted-out tiling screen as a
+    // live snapping screen. The declared mode is the user's standing choice —
+    // honor it. Scoped strictly to the sentinel: a bare-Autotile context with
+    // an empty or concrete algorithm and an inactive engine keeps the
+    // downgrade (that shape ships as the suppressed-default behavior and
+    // genuinely is transitional or suppression-driven).
+    if (mode == PhosphorZones::AssignmentEntry::Autotile
+        && m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity) == PhosphorZones::NoTilingAlgorithm) {
+        return PhosphorZones::AssignmentEntry::Autotile;
+    }
     if (mode == PhosphorZones::AssignmentEntry::Autotile || mode == PhosphorZones::AssignmentEntry::Scrolling) {
         return PhosphorZones::AssignmentEntry::Snapping;
     }

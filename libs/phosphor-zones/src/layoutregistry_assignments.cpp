@@ -408,7 +408,17 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
                                "kept all other actions";
     }
     if (changed) {
-        m_ruleStore->setAllRules(kept);
+        if (!m_ruleStore->setAllRules(kept)) {
+            // The in-memory rule set is mutated and rulesChanged(false) has
+            // fired even on a save failure, so the running session stays
+            // consistent — but rules.json still holds the deleted id and the
+            // scrub (including the sentinel rewrites) is undone on the next
+            // daemon start. Nothing here can retry a failed save; leave the
+            // trace the silent discard used to swallow.
+            qCWarning(lcZonesLib) << "purgeLayoutIdFromAssignments: rule-store save failed — the scrub of" << layoutId
+                                  << "is not persisted; the stale store reloads on next start and the dangling id"
+                                  << "degrades at resolve time until something rewrites the rules";
+        }
         // Notify per-screen observers (overlays, autotile state, settings
         // tile caption, etc.) so they refresh against the new cascade —
         // without it, a layout delete left those consumers showing stale
@@ -531,6 +541,17 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
         upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
         Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
     } else {
+        // Deliberate asymmetry with assignScrollingTemplate's unresolvable-id
+        // arm (which stores the no-template word): an unknown or stale layout
+        // UUID here resolves to nullptr and assignLayout's null arm CLEARS
+        // the assignment, so the context inherits the default. The D-Bus
+        // assign verbs pre-validate layout existence, so this arm fires only
+        // for internal callers or an id deleted between validation and apply
+        // — states where the caller never expressed an opt-out, and where
+        // inheriting the default matches what every pre-opt-out caller
+        // expects of a failed assign. Rewriting to the opt-out word here
+        // would turn an internal error into a user-visible "this screen now
+        // has no layout".
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
     }
 }
@@ -712,6 +733,20 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
         if (!entry) {
             return std::nullopt; // genuine miss — the caller may retry
+        }
+        // The autotile opt-out is an opt-out here too, and the test must run
+        // BEFORE the non-Snapping settle below (which would swallow it into
+        // the plain {nullptr} that still falls through to defaultLayout()).
+        // Without this arm an autotile:none screen resolves the registry-wide
+        // default, and the ungated consumers (zone detection, window drag,
+        // resnap) snap windows into zones no overlay ever draws — the exact
+        // defeat of the opt-out this flag exists to prevent on the snapping
+        // side. A REAL algorithm id must not take this arm: those screens
+        // legitimately fall through (autotile-mode resolution is the engine's
+        // job; the default layout here is transition scaffolding).
+        if (entry->mode == AssignmentEntry::Autotile && entry->tilingAlgorithm == NoTilingAlgorithm) {
+            explicitlyNone = true;
+            return std::optional<PhosphorZones::Layout*>(nullptr);
         }
         // An entry exists; the cascade is settled — never retry. Any
         // NON-Snapping mode has no snap Layout*: an Autotile or Scrolling

@@ -535,8 +535,45 @@ ComboBox {
         readonly property bool hasLayout: modelData.layout != null
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
         readonly property bool isCurrentSelection: root.currentIndex === index
+        // The subtitle the sighted user reads under the row name — hoisted to
+        // the delegate so the screen reader gets it too: the two leading rows
+        // ("Default" and "None") are otherwise indistinguishable by name
+        // alone.
+        readonly property string subtitleText: {
+            if (isDefaultOption && !hasLayout) {
+                // "Default"/"None" with no resolution (e.g., quick layout slots)
+                return i18n("No layout assigned");
+            } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {
+                // The explicit-none row means "deliberately none", not an
+                // unresolved default — without this branch it fell into the
+                // wording below and read as a configuration warning. Worded
+                // per family now that all three carry the row.
+                if (root.layoutFilter === 2)
+                    return i18n("No template");
+                if (root.layoutFilter === 1)
+                    return i18n("No algorithm");
+                return i18n("No layout");
+            } else if (!hasLayout) {
+                return i18n("No default configured");
+            }
+            // A scrolling template's zoneCount carries the number of bands
+            // its preview draws, which is its starting columns, or its width
+            // presets, or the single fallback band a template with neither
+            // draws (default width when a fraction, half width otherwise), so
+            // the honest wording here is widths not columns.
+            // Read the category off the resolved layout: the option's own
+            // category follows layoutFilter when one is set.
+            const count = (modelData.layout && modelData.layout.zoneCount) || 0;
+            const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n width", "%n widths", count) : i18np("%n zone", "%n zones", count);
+            if (isDefaultOption) {
+                let layoutName = (modelData.layout && modelData.layout.displayName) || "";
+                return i18n("→ %1 (%2)", layoutName, countText);
+            }
+            return countText;
+        }
 
         Accessible.name: modelData.text || ""
+        Accessible.description: subtitleText
         // Reserve the scrollbar's gutter so the row content ends at the
         // scrollbar's left edge instead of running underneath it — otherwise
         // the seam between the full-width delegate and the floating scrollbar
@@ -666,40 +703,9 @@ ComboBox {
 
                 Label {
                     visible: root.showPreview
-                    text: {
-                        if (isDefaultOption && !hasLayout) {
-                            // "Default"/"None" with no resolution (e.g., quick layout slots)
-                            return i18n("No layout assigned");
-                        } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {
-                            // The explicit-none row means "deliberately
-                            // none", not an unresolved default — without
-                            // this branch it fell into the wording below and
-                            // read as a configuration warning. Worded per
-                            // family now that all three carry the row.
-                            if (root.layoutFilter === 2)
-                                return i18n("No template");
-                            if (root.layoutFilter === 1)
-                                return i18n("No algorithm");
-                            return i18n("No layout");
-                        } else if (!hasLayout) {
-                            return i18n("No default configured");
-                        }
-                        // A scrolling template's zoneCount carries the number of
-                        // bands its preview draws, which is its starting columns,
-                        // or its width presets, or the single fallback band a
-                        // template with neither draws (default width when a
-                        // fraction, half width otherwise), so the honest
-                        // wording here is widths not columns.
-                        // Read the category off the resolved layout: the option's
-                        // own category follows layoutFilter when one is set.
-                        const count = (modelData.layout && modelData.layout.zoneCount) || 0;
-                        const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n width", "%n widths", count) : i18np("%n zone", "%n zones", count);
-                        if (isDefaultOption) {
-                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18n("→ %1 (%2)", layoutName, countText);
-                        }
-                        return countText;
-                    }
+                    // Hoisted to the delegate's subtitleText so the screen
+                    // reader announces the same distinction the eye gets.
+                    text: subtitleText
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.textColor
                     opacity: 0.7

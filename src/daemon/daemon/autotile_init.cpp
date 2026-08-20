@@ -288,8 +288,15 @@ void Daemon::handleTilingModeToggle()
         // saved order wiped remembered orders for screens the
         // capture below may not cover (their live state can be
         // empty right now while their saved order is still the
-        // re-entry seed).
-        m_lastEngineOrders.remove(TilingStateKey{screenId, desktop, activity});
+        // re-entry seed). Gate on live engine state: an autotile:none
+        // screen classifies as Autotile (its steady state) while sitting
+        // OUTSIDE the engine set, so captureAutotileOrders returns nothing
+        // for it — an unconditional remove here would erase the order saved
+        // when the screen last left a real algorithm, and a later return to
+        // one would reseed from the zone-ordered fallback instead.
+        if (m_autotileEngine->stateForScreen(screenId)) {
+            m_lastEngineOrders.remove(TilingStateKey{screenId, desktop, activity});
+        }
         for (auto it = currentOrders.constBegin(); it != currentOrders.constEnd(); ++it) {
             m_lastEngineOrders[it.key()] = it.value();
         }
@@ -317,6 +324,17 @@ void Daemon::handleTilingModeToggle()
             PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(screenId, desktop, activity);
             entry.mode = Mode::Snapping;
             entry.snappingLayout = QString(PhosphorZones::NoSnappingLayout);
+            // Re-resolve the sibling slot with the same empty-activity
+            // widening the scrolling arm uses: when the resolved "none" came
+            // from the broader empty-activity entry, this direct write
+            // creates an activity-scoped entry that would otherwise shadow
+            // the broader entry's algorithm memory from single-resolve
+            // consumers (the cascade returns the most specific entry whole,
+            // not field-merged).
+            entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
+            if (entry.tilingAlgorithm.isEmpty() && !activity.isEmpty()) {
+                entry.tilingAlgorithm = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, QString());
+            }
             m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
             refreshCheatsheetIfVisible();
             if (m_overlayService) {
@@ -384,6 +402,15 @@ void Daemon::handleTilingModeToggle()
             PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(screenId, desktop, activity);
             entry.mode = PhosphorZones::AssignmentEntry::Autotile;
             entry.tilingAlgorithm = QString(PhosphorZones::NoTilingAlgorithm);
+            // Sibling-slot widening, mirroring the scrolling arm (and the
+            // snapping-None twin above): without it a "none" resolved from
+            // the broader empty-activity entry seeds an activity-scoped
+            // entry whose snapping slot is empty, shadowing the remembered
+            // snapping layout from single-resolve consumers.
+            entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+            if (entry.snappingLayout.isEmpty() && !activity.isEmpty()) {
+                entry.snappingLayout = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+            }
             m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
             refreshCheatsheetIfVisible();
             if (m_overlayService) {
@@ -681,8 +708,22 @@ void Daemon::handleTilingModeToggle()
             // resnapped, suppressing the intended pre-tile float-back in
             // buildAutotileRestoreEntries. The raw call returns nothing for an
             // empty order, letting those windows correctly float back.
-            QVector<ZoneAssignmentEntry> entries =
-                concreteSnap->calculateResnapFromAutotileOrder(windowOrder, resnapScreenId, preClaimedZoneIds);
+            // A toggle landing on the explicit no-layout opt-out resolves no
+            // layout on purpose; the calc would warn "no layout for screen"
+            // on every such toggle and return empty. Skip the call for the
+            // identical outcome without the misleading warning — windows are
+            // not marked resnapped, buildAutotileRestoreEntries's
+            // isWindowSnapped gate leaves the previously-snapped ones where
+            // they are, and they float in place, which is the opt-out's
+            // stated behavior. (Any null resolve skips the call from THIS
+            // site — including a genuinely empty registry, where the outcome
+            // is identical; the engine's warning still fires for its other
+            // callers.)
+            QVector<ZoneAssignmentEntry> entries;
+            if (m_layoutManager->resolveLayoutForScreen(resnapScreenId)) {
+                entries =
+                    concreteSnap->calculateResnapFromAutotileOrder(windowOrder, resnapScreenId, preClaimedZoneIds);
+            }
             // Derive the exclusion set from the entries actually produced —
             // not a min(windows, zoneCount) guess. With zones pre-claimed by
             // branch-b restores, fewer windows get a zone; a window that got

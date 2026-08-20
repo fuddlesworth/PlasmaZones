@@ -190,6 +190,45 @@ private Q_SLOTS:
         QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("screen1"), 0, QString()), nullptr);
         QVERIFY(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).contains(1));
+
+        // The purge must also fire the per-context refresh signal: overlays
+        // and the autotile derive re-read the cascade off layoutAssigned, so
+        // a scrub that mutates the store silently leaves them on the deleted
+        // layout until something unrelated nudges them.
+        QSignalSpy purgeAssignedSpy(mgr.data(), &PhosphorZones::LayoutRegistry::layoutAssigned);
+        auto* second = createTestLayout(QStringLiteral("AlsoAssigned"));
+        mgr->addLayout(second);
+        // A SURVIVING layout, so the fresh registry below has a non-null
+        // defaultLayout(): without it the reloaded nullptr assertion passes
+        // even when the sentinel never reached disk (an empty registry
+        // answers nullptr for everything).
+        auto* survivor = createTestLayout(QStringLiteral("Survivor"));
+        mgr->addLayout(survivor);
+        mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), second);
+        purgeAssignedSpy.clear();
+        mgr->removeLayout(second);
+        QVERIFY2(purgeAssignedSpy.count() >= 1, "the delete scrub must emit layoutAssigned for the affected context");
+
+        // And the scrub must have reached DISK, not just the in-memory rule
+        // set: a fresh registry over the same guard-isolated dirs reads the
+        // reserved word back, so a daemon restart cannot resurrect the
+        // deleted layout's context (the failure mode a save() swallowed by
+        // setAllRules would produce). Same fresh-registry pattern the sidecar
+        // tests below use.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        mgr2->setLayoutDirectory(mgr->layoutDirectory());
+        mgr2->loadLayouts();
+        mgr2->loadAssignments();
+        const auto reloaded = mgr2->assignmentEntryForScreen(QStringLiteral("screen1"), 0);
+        QCOMPARE(reloaded.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(reloaded.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        // Discriminating, thanks to Survivor above: the fresh registry HAS a
+        // default layout, so nullptr here proves the on-disk sentinel is in
+        // force rather than an empty registry answering nullptr for
+        // everything.
+        QVERIFY(mgr2->layoutCount() >= 1);
+        QCOMPARE(mgr2->layoutForScreen(QStringLiteral("screen1"), 0, QString()), nullptr);
     }
 
     // A failed sidecar write must abandon the whole removal rather than

@@ -417,7 +417,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="131"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="142"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="62"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="188"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="189"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="874"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
@@ -1145,7 +1145,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="461"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="672"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="545"/>
         <source>No layout assigned</source>
         <translation>Раскладка не назначена</translation>
     </message>
@@ -1996,7 +1996,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="48"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="287"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="47"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="949"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="951"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="152"/>
         <source>Tiling algorithm</source>
         <translation>Алгоритм мозаичного размещения</translation>
@@ -3372,7 +3372,7 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="84"/>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="112"/>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="136"/>
-        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="140"/>
+        <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="141"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierComboBox.qml.cpp" line="34"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="142"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="54"/>
@@ -3380,8 +3380,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="80"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="81"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="201"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="59"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="117"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="60"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="118"/>
         <source>None</source>
         <translation>Нет</translation>
     </message>
@@ -3911,9 +3911,14 @@
         <translation>%1: %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="178"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="161"/>
+        <source>Tiling (no algorithm assigned)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="354"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="344"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="446"/>
         <source>On</source>
@@ -3921,12 +3926,12 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="452"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="178"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="354"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="344"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="446"/>
         <source>Off</source>
@@ -4079,7 +4084,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="580"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="611"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="346"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="387"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="393"/>
         <source>Accent</source>
         <translation>Акцент</translation>
     </message>
@@ -4122,7 +4127,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="265"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="998"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1001"/>
         <source>Scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4654,7 +4659,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="231"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
         <source>%n condition</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -4663,7 +4668,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="233"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="242"/>
         <source>%n conditions</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5055,12 +5060,12 @@
         <translation>Активная раскладка</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="204"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="213"/>
         <source>Any window</source>
         <translation>Любое окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="218"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="227"/>
         <source>(condition group)</source>
         <translation>(группа условий)</translation>
     </message>
@@ -9307,7 +9312,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="887"/>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="350"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="358"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="126"/>
         <source>Scrolling (no template)</source>
         <translation type="unfinished"></translation>
@@ -13254,7 +13259,7 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="395"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="288"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="696"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="567"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="448"/>
         <source>%n zone</source>
         <translation>
@@ -15359,11 +15364,11 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="67"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="128"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="68"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="129"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="908"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="957"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1002"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="959"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1005"/>
         <source>Default</source>
         <translation>По умолчанию</translation>
     </message>
@@ -15373,28 +15378,28 @@
         <translation>Выбор раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="680"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="552"/>
         <source>No template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="682"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="554"/>
         <source>No algorithm</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="683"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="555"/>
         <source>No layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="685"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="557"/>
         <source>No default configured</source>
         <translation>Значение по умолчанию не настроено</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="395"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="696"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="567"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="448"/>
         <source>%n width</source>
         <translation type="unfinished">
@@ -15404,7 +15409,7 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="699"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="570"/>
         <source>→ %1 (%2)</source>
         <translation>→ %1 (%2)</translation>
     </message>
@@ -16644,64 +16649,64 @@
         <translation>Добавить действие к этому правилу</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="232"/>
         <source>e.g. 1, 2 or 1-2</source>
         <comment>@info:placeholder zone numbers for a snap-to-zone rule</comment>
         <translation>например, 1, 2 или 1-2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="166"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="172"/>
         <source>e.g. Editor, Terminal</source>
         <comment>@info:placeholder zone names for a snap-to-zone rule</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="168"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="174"/>
         <source>Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone names field of a snap-to-zone rule</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="190"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="196"/>
         <source>Add a name…</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="191"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="197"/>
         <source>Add a zone name from your layouts</source>
         <comment>@info:accessibility</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="228"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="234"/>
         <source>One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone numbers field of a snap-to-zone rule</comment>
         <translation type="unfinished">Один или несколько номеров зон (нумерация с 1), к которым прилепляются подходящие окна. Несколько зон охватывают их общую область.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="399"/>
         <source>Reset to the system accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="394"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="400"/>
         <source>Follow the system accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="507"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="513"/>
         <source>None</source>
         <comment>@item:inlistbox scrolling template rule action, use no template at all</comment>
         <translation type="unfinished">Нет</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="530"/>
         <source>Choose a template…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="547"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="553"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="519"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
@@ -16709,7 +16714,7 @@
         <translation>Основной</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="547"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="553"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="519"/>
         <source>%1 · %2</source>
@@ -16717,36 +16722,36 @@
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="563"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="569"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="539"/>
         <source>Choose a monitor…</source>
         <translation>Выберите экран…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="607"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="613"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="492"/>
         <source>Choose a desktop…</source>
         <translation>Выберите рабочий стол…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="705"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="720"/>
         <source>Choose an event…</source>
         <translation>Выберите событие…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="817"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="832"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation>Добавить пакет…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="935"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="950"/>
         <source>Choose a shader…</source>
         <translation>Выберите шейдер…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="962"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="977"/>
         <source>Choose an overlay shader…</source>
         <translation>Выберите шейдер наложения…</translation>
     </message>
@@ -17618,31 +17623,31 @@
         <translation>Не удалось получить состояние экрана. Убедитесь, что служба запущена.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="84"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="85"/>
         <source>Snapping layout preview, %1</source>
         <comment>accessible name of the layout preview; %1 is the layout name</comment>
         <translation>Предпросмотр раскладки прилипания, %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="84"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="85"/>
         <source>Snapping layout preview</source>
         <comment>accessible name of the layout preview when no layout name is known</comment>
         <translation>Предпросмотр раскладки прилипания</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="146"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="147"/>
         <source>Tiling algorithm preview, %1</source>
         <comment>accessible name of the tiling preview; %1 is the algorithm name</comment>
         <translation>Предпросмотр алгоритма мозаичного размещения, %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="146"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="147"/>
         <source>Tiling algorithm preview</source>
         <comment>accessible name of the tiling preview when no algorithm name is known</comment>
         <translation>Предпросмотр алгоритма мозаичного размещения</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="214"/>
         <source>Scrolling strip preview with %n window</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -17651,18 +17656,18 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="214"/>
         <source>Scrolling strip preview, example strip</source>
         <comment>accessible name of the placeholder strip preview shown when the screen is not scrolling yet</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1058"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1061"/>
         <source>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1060"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1063"/>
         <source>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -17672,7 +17677,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="987"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -17683,38 +17688,38 @@
         <translation>Прилипание</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1044"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1047"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1044"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1047"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1062"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1065"/>
         <source>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1071"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1074"/>
         <source>Pick another template to replace it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1073"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1076"/>
         <source>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</source>
         <oldsource>This screen has no template of its own, so it follows the default template from the Layouts page.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1090"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1093"/>
         <source>Every starting column is in use, so further columns open at the template&apos;s own width and display.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1090"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1093"/>
         <source>This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -21293,7 +21298,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="339"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="591"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="597"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="474"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
@@ -22162,14 +22167,14 @@
         <translation type="unfinished">пикс.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="321"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="162"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="329"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="171"/>
         <source>Snapping (no layout)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="328"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="152"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="336"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="153"/>
         <source>Tiling (no algorithm)</source>
         <translation type="unfinished"></translation>
     </message>

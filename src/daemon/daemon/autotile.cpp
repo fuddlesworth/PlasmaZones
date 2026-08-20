@@ -721,6 +721,14 @@ void Daemon::handleAutotileDisabled()
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
                 const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                if (existingSnapId == PhosphorZones::NoSnappingLayout) {
+                    // The explicit opt-out IS a stored choice, not a missing
+                    // assignment: parseUuid("none") fails like a dangling id
+                    // would, and without this skip the loop replaces the
+                    // opt-out with the fallback layout (after deleting the
+                    // activity-scoped entry that held it).
+                    continue;
+                }
                 const auto existingSnapUuid = Utils::parseUuid(existingSnapId);
                 PhosphorZones::Layout* existing =
                     existingSnapUuid ? m_layoutManager->layoutById(*existingSnapUuid) : nullptr;
@@ -821,8 +829,14 @@ void Daemon::handleSnappingToAutotile()
         const QString existing = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         // Skip Scrolling screens too: a global autotile ENABLE must not
         // clobber an explicit scrolling assignment (its id is the
-        // "scrolling:" sentinel, which is not an autotile id).
-        if (!PhosphorLayout::LayoutId::isAutotile(existing) && !PhosphorLayout::LayoutId::isScrolling(existing)) {
+        // "scrolling:" sentinel, which is not an autotile id). The explicit
+        // snapping opt-out (the bare reserved word) gets the same protection:
+        // converting it would erase the stored no-layout choice (the write
+        // loop clears the activity-scoped entry holding it), so an opted-out
+        // screen stays opted out across a global autotile enable — the same
+        // contract the scrolling exemption gives explicit assignments.
+        if (!PhosphorLayout::LayoutId::isAutotile(existing) && !PhosphorLayout::LayoutId::isScrolling(existing)
+            && existing != PhosphorZones::NoSnappingLayout) {
             screensToConvert.append(screenId);
         }
     }

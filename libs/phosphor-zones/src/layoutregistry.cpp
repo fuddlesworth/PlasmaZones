@@ -261,12 +261,15 @@ bool LayoutRegistry::shouldSkipLayoutAssignment(const QString& layoutId, const Q
     if (layoutId.isEmpty()) {
         return true;
     }
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
-        // Autotile ids and the bare scrolling sentinel are valid without a
-        // PhosphorZones::Layout* lookup. Skipping the sentinel here would be
-        // DATA LOSS in the batch path: applyBatchAssignments drops the
-        // addressed rule family before this validation re-adds entries, so
-        // a rejected Scrolling context would lose its assignment for good.
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)
+        || layoutId == PhosphorZones::NoSnappingLayout) {
+        // Autotile ids, the bare scrolling sentinel, and the snapping opt-out
+        // word are valid without a PhosphorZones::Layout* lookup. Skipping any
+        // of them here would be DATA LOSS in the batch path:
+        // applyBatchAssignments drops the addressed rule family before this
+        // validation re-adds entries, so a rejected Scrolling context — or a
+        // snapping context explicitly set to no layout — would lose its
+        // assignment for good on a get->set round trip.
         return false;
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
@@ -806,6 +809,17 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         slots[number] = parsed.toString();
         qCInfo(lcZonesLib) << "Assigned template" << layoutId << "to quick slot" << number;
     } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        // The explicit opt-out is not a bindable slot value: a quick slot is
+        // an "apply this layout" binding, the opt-out has its own picker
+        // card, and a press on such a slot was a silent dead press (the
+        // controller's list keys the opt-out by the bare word, so
+        // applyLayoutById("autotile:none") resolves nothing). The snapping
+        // arm below already rejects the bare word through its UUID parse —
+        // this keeps the two families symmetric.
+        if (PhosphorLayout::LayoutId::extractAlgorithmId(layoutId) == NoTilingAlgorithm) {
+            qCWarning(lcZonesLib) << "Rejecting the reserved opt-out id for quick slot:" << layoutId;
+            return;
+        }
         // Autotile IDs have no corresponding Layout* — accept as-is.
         slots[number] = layoutId;
         qCInfo(lcZonesLib) << "Assigned autotile layout" << layoutId << "to quick slot" << number;

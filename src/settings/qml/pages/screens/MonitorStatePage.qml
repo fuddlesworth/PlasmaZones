@@ -236,7 +236,7 @@ SettingsFlickable {
             // below: an untouched algorithm carries the resolved value only
             // when the daemon marked it explicit, so a pure mode toggle cannot
             // freeze the global default algorithm onto this screen.
-            var algoId = root._carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
+            var algoId = siblingAlgo;
             if (!algoId) {
                 // Nothing to pin — either the user picked "Default", or
                 // nothing resolved (fresh config, or the context suppresses
@@ -262,7 +262,7 @@ SettingsFlickable {
             // assignment — toggle Snapping to Scrolling and back, hit Apply,
             // and the screen now pins today's global default and stops
             // following it. The entered mode is not exempt from that rule.
-            var layoutId = root._carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, resolvedSnapping);
+            var layoutId = siblingSnapping;
             if (!layoutId) {
                 // Nothing to pin — either the user picked "Default", or
                 // nothing resolved (the context suppresses the default
@@ -934,10 +934,12 @@ SettingsFlickable {
                 Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 text: i18n("This monitor uses %1, which is not in your layout list.", (stateView.screenState && stateView.screenState.layoutName) || stateView.localLayoutId)
-                // count > 1: while a layout fetch is in flight the model is
-                // just the Default row and every id resolves to -1, which is
-                // not a missing layout and must not raise this alarm.
-                visible: stateView.isSnapping && snappingSelector.currentIndex === -1 && snappingSelector.count > 1
+                // count > 2: while a layout fetch is in flight the model is
+                // just the two leading rows (Default and the explicit None),
+                // both present regardless of the fetched list, and every id
+                // resolves to -1 — which is not a missing layout and must not
+                // raise this alarm.
+                visible: stateView.isSnapping && snappingSelector.currentIndex === -1 && snappingSelector.count > 2
             }
 
             // Algorithm selector (tiling)
@@ -983,8 +985,9 @@ SettingsFlickable {
                 Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 text: i18n("This monitor uses %1, which is not in your algorithm list.", (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId)
-                // Same in-flight-fetch guard as the snapping hint above.
-                visible: stateView.isTiling && tilingSelector.currentIndex === -1 && tilingSelector.count > 1
+                // Same in-flight-fetch guard as the snapping hint above
+                // (count > 2: two always-present leading rows).
+                visible: stateView.isTiling && tilingSelector.currentIndex === -1 && tilingSelector.count > 2
             }
 
             // Template selector (scrolling). Third in the same selector band as

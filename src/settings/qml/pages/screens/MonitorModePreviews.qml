@@ -11,7 +11,8 @@ import org.kde.kirigami as Kirigami
  * One LayoutThumbnail per placement mode (snapping layout, tiling algorithm,
  * scrolling strip), exactly one visible at a time, split out of
  * MonitorStatePage when that page crossed the file-size ceiling. Pure view:
- * every input is read off the page's stateView / root handles so the
+ * inputs are read off the page's stateView / root handles (plus the
+ * appSettings context property for the shared font settings) so the
  * bindings stay live, and nothing here writes state.
  */
 ColumnLayout {
