@@ -18,6 +18,7 @@
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorZones/AssignmentEntry.h> // NoTilingAlgorithm — the reserved opt-out word
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "tileenginelogging.h"
@@ -371,7 +372,17 @@ void AutotileEngine::refreshConfigFromSettings()
     // slot and writeBackTuning() persisted the corruption — the "max windows
     // reverts to its default" data loss of discussion #853.
     m_refreshingFromSettings = true;
-    setAlgorithm(s->defaultAutotileAlgorithm());
+    // The reserved no-algorithm word never reaches setAlgorithm: it would be
+    // coerced to the registry default (logging "unknown algorithm"), which
+    // both defeats the opt-out AND — because the id actually changes — drops
+    // m_userTunedSplitRatio / m_userTunedMasterCount for every screen without
+    // an Algorithm override on every settings refresh. Screens governed by a
+    // "none" default are excluded from the engine set upstream
+    // (updateEngineScreens), so the engine's live global id is simply left
+    // untouched here.
+    if (const QString defaultAlgo = s->defaultAutotileAlgorithm(); defaultAlgo != PhosphorZones::NoTilingAlgorithm) {
+        setAlgorithm(defaultAlgo);
+    }
     m_refreshingFromSettings = false;
     if (m_algorithmId != oldAlgorithmId) {
         configChanged = true;

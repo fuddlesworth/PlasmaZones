@@ -136,12 +136,21 @@ ComboBox {
         let items = [];
         if (root.showNoneOption) {
             let defaultLayout = _resolveDefaultLayout();
+            // The configured default can BE the explicit opt-out (the library
+            // card's Clear Default writes the reserved word). findLayoutById
+            // then resolves nothing, which without this flag rendered the
+            // same "No layout assigned" subtitle a stale default gets — a
+            // warning wording for a state the user chose on purpose. The
+            // delegate reads the flag to caption the row like the explicit
+            // None row instead.
+            let defaultIsNone = root.resolvedDefaultId === "none" || root.resolvedDefaultId === "autotile:none";
             items.push({
                 "text": noneText,
                 "value": "",
                 "layout": defaultLayout,
                 "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
-                "isDefaultOption": true
+                "isDefaultOption": true,
+                "defaultIsNone": defaultIsNone
             });
         }
         if (root.showExplicitNoneOption && root.explicitNoneValue !== "") {
@@ -259,6 +268,13 @@ ComboBox {
 
             // For "Default" entry, also check which layout it resolves to
             if (old.isDefaultOption && ((old.layout ? old.layout.id : "") !== (nw.layout ? nw.layout.id : "")))
+                return false;
+
+            // A default flipping between the explicit opt-out and any other
+            // unresolvable id keeps layout === null on both sides, so the id
+            // compare above cannot see it — but the subtitle differs ("No
+            // layout" vs "No layout assigned"), so the model must invalidate.
+            if (old.isDefaultOption && (old.defaultIsNone === true) !== (nw.defaultIsNone === true))
                 return false;
         }
         return true;
@@ -540,7 +556,14 @@ ComboBox {
         // ("Default" and "None") are otherwise indistinguishable by name
         // alone.
         readonly property string subtitleText: {
-            if (isDefaultOption && !hasLayout) {
+            if (isDefaultOption && !hasLayout && modelData.defaultIsNone === true) {
+                // The configured default IS the explicit opt-out — caption it
+                // with the same per-family wording as the explicit None row,
+                // not the unresolved-default warning below.
+                if (root.layoutFilter === 1)
+                    return i18n("No algorithm");
+                return i18n("No layout");
+            } else if (isDefaultOption && !hasLayout) {
                 // "Default"/"None" with no resolution (e.g., quick layout slots)
                 return i18n("No layout assigned");
             } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {

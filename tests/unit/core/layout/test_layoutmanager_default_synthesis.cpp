@@ -112,6 +112,82 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Cleared defaults — the reserved no-layout word as the level-1 value.
+    //
+    // The library card's Clear Default stores the sentinel in the default keys:
+    // "no default at all", distinct from empty (which falls back — the snap arm
+    // to the first registered layout, the level-1 cascade to the autotile arm).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testLevel1Default_snapSentinel_answersNoLayout()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        mgr->setDefaultLayoutIdProvider([]() {
+            return QString(PhosphorZones::NoSnappingLayout);
+        });
+        mgr->setDefaultAutotileAlgorithmProvider([]() {
+            return QStringLiteral("bsp");
+        });
+
+        // The sentinel claims the snap arm (it is non-empty), so the autotile
+        // default must NOT creep in behind the cleared snap default…
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QString(PhosphorZones::NoSnappingLayout));
+
+        // …and defaultLayout() must answer null rather than degrade to the
+        // first registered layout (that net exists for STALE ids, not the
+        // opt-out), which keeps layoutForScreen's cascade-miss tail at null.
+        QCOMPARE(mgr->defaultLayout(), nullptr);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 4), nullptr);
+    }
+
+    void testLevel1Default_autotileSentinel_synthesizesAutotileNone()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultLayoutIdProvider([]() {
+            return QString();
+        });
+        mgr->setDefaultAutotileAlgorithmProvider([]() {
+            return QString(PhosphorZones::NoTilingAlgorithm);
+        });
+
+        // The synthesized entry carries the word raw — updateEngineScreens'
+        // existing opt-out arm consumes it and leaves the screen untiled.
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+        QCOMPARE(mgr->tilingAlgorithmForScreen(QStringLiteral("DP-1"), 4), QString(PhosphorZones::NoTilingAlgorithm));
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QStringLiteral("autotile:none"));
+    }
+
+    void testDefaultLayout_sentinelNull_realIdStillResolves()
+    {
+        // Mutation guard on the defaultLayout() sentinel arm: it must be
+        // scoped strictly to the reserved word — a REAL configured id keeps
+        // resolving, and a stale/unparseable id keeps the first-layout net.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        QString providerValue = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([&providerValue]() {
+            return providerValue;
+        });
+        QCOMPARE(mgr->defaultLayout(), layout);
+
+        providerValue = QStringLiteral("not-a-uuid");
+        QCOMPARE(mgr->defaultLayout(), layout); // first-layout net
+
+        providerValue = QString(PhosphorZones::NoSnappingLayout);
+        QCOMPARE(mgr->defaultLayout(), nullptr);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Suppress default layout assignment — the global gate + per-context override.
     //
     // The global setDefaultAssignmentSuppressedProvider gate makes an unassigned

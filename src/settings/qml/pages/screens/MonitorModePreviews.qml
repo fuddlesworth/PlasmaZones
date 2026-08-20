@@ -47,6 +47,16 @@ ColumnLayout {
             // screen must keep showing as unassigned rather than have
             // the preview reinstate the default the daemon withheld.
             if (previews.view.localLayoutCleared) {
+                // The global default can itself be the explicit opt-out (the
+                // library card's Clear Default). _findLayout misses it, and
+                // the tail literal would then caption the card "Default" —
+                // for a state where "Default" IS no layout. Name it honestly.
+                if (previews.page._layoutBridge.defaultLayoutId === previews.page._noLayoutToken) {
+                    return {
+                        "displayName": i18n("None"),
+                        "zones": []
+                    };
+                }
                 var fallback = previews.page._findLayout(previews.page._layoutBridge.defaultLayoutId);
                 if (fallback)
                     return fallback;
@@ -105,6 +115,19 @@ ColumnLayout {
             // algorithmId for a context whose algorithm is suppressed,
             // and that screen must keep showing as unassigned.
             if (previews.view.localAlgorithmCleared) {
+                // Same opt-out-as-default arm as the snapping preview above:
+                // without it the tail literal captions the card "Default"
+                // (algorithmName is empty for the reserved word and the
+                // cleared local id is empty too) — the exact miscaption the
+                // comment on that literal warns about, reached via the
+                // resolved default instead of the local pick.
+                if (previews.page._layoutBridge.defaultAutotileAlgorithm === previews.page._noLayoutToken) {
+                    return {
+                        "displayName": i18n("None"),
+                        "category": 1,
+                        "zones": []
+                    };
+                }
                 var fallback = previews.page._findLayout(previews.page._autotilePrefix + previews.page._layoutBridge.defaultAutotileAlgorithm);
                 if (fallback)
                     return fallback;

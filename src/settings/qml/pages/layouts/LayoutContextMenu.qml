@@ -339,15 +339,16 @@ Menu {
             return layoutContextMenu.layoutId === layoutContextMenu.appSettings.defaultLayoutId;
         }
 
-        // Templates are the one family whose default can be CLEARED, because
-        // "no default template" is a state a scrolling screen can genuinely
-        // sit in: it falls back to the engine's built-in width and height
-        // steps. A snapping screen with no default layout and a tiling screen
-        // with no default algorithm have no such fallback, so those two keep
-        // the plain set-only item that greys out on the current default.
-        text: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? i18n("Clear Default") : i18n("Set as Default")
-        icon.name: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? "edit-clear" : "favorite"
-        enabled: Boolean(layoutContextMenu.layout) && (layoutContextMenu.isTemplate || !defaultItem.isFamilyDefault)
+        // All three families can CLEAR their default. Templates clear to an
+        // empty slot (the engine falls back to its built-in width and height
+        // steps); snapping and tiling clear to the reserved no-layout word,
+        // because for them an empty slot means "inherit the bundled pick" —
+        // the sentinel is what makes an unassigned screen genuinely get no
+        // zones / no tiling, the explicit no-layout state the assignments
+        // already carry per context.
+        text: defaultItem.isFamilyDefault ? i18n("Clear Default") : i18n("Set as Default")
+        icon.name: defaultItem.isFamilyDefault ? "edit-clear" : "favorite"
+        enabled: Boolean(layoutContextMenu.layout)
         onTriggered: {
             // The active page here is a library page, which is never dirty
             // (its store writes immediately). Each family's default key is a
@@ -364,12 +365,21 @@ Menu {
                 layoutContextMenu.appSettings.defaultScrollingTemplate = defaultItem.isFamilyDefault ? "" : layoutContextMenu.layoutId;
                 layoutContextMenu.settingsController.endExternalEdit();
             } else if (layoutContextMenu.isAutotile) {
+                // Clearing writes the reserved word (PhosphorZones::
+                // NoTilingAlgorithm), not an empty string: the setting
+                // defaults to a concrete algorithm, so only the sentinel
+                // expresses "no default algorithm" (unassigned screens stay
+                // in tiling mode but nothing tiles).
                 layoutContextMenu.settingsController.beginExternalEdit("tiling-algorithm");
-                layoutContextMenu.appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                layoutContextMenu.appSettings.defaultAutotileAlgorithm = defaultItem.isFamilyDefault ? "none" : layoutContextMenu.layoutId.replace("autotile:", "");
                 layoutContextMenu.settingsController.endExternalEdit();
             } else {
+                // Same shape for snapping (PhosphorZones::NoSnappingLayout):
+                // an EMPTY defaultLayoutId falls back to the first registered
+                // layout, so only the sentinel gives unassigned screens no
+                // zones at all.
                 layoutContextMenu.settingsController.beginExternalEdit("snapping-window-behavior");
-                layoutContextMenu.appSettings.defaultLayoutId = layoutContextMenu.layoutId;
+                layoutContextMenu.appSettings.defaultLayoutId = defaultItem.isFamilyDefault ? "none" : layoutContextMenu.layoutId;
                 layoutContextMenu.settingsController.endExternalEdit();
             }
         }

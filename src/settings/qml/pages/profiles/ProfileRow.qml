@@ -288,6 +288,13 @@ ExpandableRowDelegate {
                     const idKinds = ["layoutId", "tilingAlgorithm", "screenId", "shaderPack", "decorationPack", "overlayShader"];
                     if (value.length === 0 && idKinds.indexOf(kind) >= 0)
                         return i18nc("a setting with no value", "Unset");
+                    // The reserved opt-out word for the two default keys
+                    // (PhosphorZones::NoSnappingLayout / NoTilingAlgorithm).
+                    // No catalogue carries it, so without this arm the pill
+                    // printed a layout apparently named "none" — the same
+                    // translation the rule list already does for the word.
+                    if (value === "none" && (kind === "layoutId" || kind === "tilingAlgorithm"))
+                        return i18nc("the explicit no-layout choice", "None");
                     const layouts = settingsController.layouts ? settingsController.layouts : [];
                     if (kind === "layoutId")
                         return diffColumn.resolveById(layouts, value, "id", "displayName");

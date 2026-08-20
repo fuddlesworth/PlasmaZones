@@ -872,7 +872,12 @@ void Daemon::handleSnappingToAutotile()
     // restore (see the top of this function), so it is unconditional. That is
     // safe because captureWindowPlacement is an idempotent record refresh — a
     // content-identical capture writes nothing.
-    if (m_autotileEngine && !screensToConvert.isEmpty()) {
+    // The reserved word never reaches the engine (its setAlgorithm coerces
+    // unknown ids to the registry default, the opposite of an opt-out, and
+    // the coercion also drops per-screen tuning). A "none" default still
+    // flows into the per-screen assignment writes below, where
+    // updateEngineScreens leaves those screens out of the engine set.
+    if (m_autotileEngine && !screensToConvert.isEmpty() && defaultAlgoId != PhosphorZones::NoTilingAlgorithm) {
         m_autotileEngine->setAlgorithm(defaultAlgoId);
     }
 

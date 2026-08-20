@@ -283,6 +283,16 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
 {
     if (m_defaultLayoutIdProvider) {
         const QString configuredId = m_defaultLayoutIdProvider();
+        // The explicit opt-out answers "no default at all", so it must NOT
+        // fall through to the first-registered-layout net below — that
+        // fallback exists to degrade a stale/unparseable UUID gracefully,
+        // and degrading the sentinel to a real layout would hand every
+        // defaultLayout() consumer (overlay seed, zone selector, D-Bus
+        // getActiveLayout, the cascade-miss tail of layoutForScreen) zones
+        // the user opted out of.
+        if (configuredId == PhosphorZones::NoSnappingLayout) {
+            return nullptr;
+        }
         if (!configuredId.isEmpty()) {
             if (PhosphorZones::Layout* layout = layoutById(QUuid::fromString(configuredId))) {
                 return layout;

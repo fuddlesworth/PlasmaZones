@@ -115,6 +115,16 @@ void Daemon::initLayoutAndSettingsWiring()
         if (id.isEmpty()) {
             return QString();
         }
+        // The reserved no-layout word is a valid configured default ("no
+        // default at all" — the library card's Clear Default) and is not a
+        // UUID, so it must pass through BEFORE the dead-id check below, which
+        // would degrade it to empty and let the level-1 cascade fall through
+        // to the autotile default — the exact silent-default creep the
+        // sentinel exists to stop. The registry synthesizes a Snapping entry
+        // carrying the word, and its existing opt-out arms answer "no layout".
+        if (id == PhosphorZones::NoSnappingLayout) {
+            return id;
+        }
         // Refuse an id whose layout no longer exists. Deleting a layout does not
         // clear this setting, so the level-1 default would otherwise keep handing
         // out a dead UUID: every unassigned screen resolves to it, which means the

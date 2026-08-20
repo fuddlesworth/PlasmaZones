@@ -211,6 +211,12 @@ SettingsFlickable {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted default.
                         const algoId = selectedId === "" ? appSettings.defaultAutotileAlgorithm : selectedId;
+                        // The persisted default can be the reserved opt-out
+                        // word (the library card's Clear Default), which is
+                        // not a pickable algorithm on this page — a rebuild
+                        // under a "none" default just keeps state.
+                        if (algoId === "none")
+                            return;
                         root.selectedAlgorithm = algoId;
                         appSettings.defaultAutotileAlgorithm = algoId;
                     }

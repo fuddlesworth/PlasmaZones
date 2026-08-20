@@ -200,6 +200,15 @@ SettingsFlickable {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted global default.
                         const algoId = selectedId === "" ? appSettings.defaultAutotileAlgorithm : selectedId;
+                        // The persisted default can be the reserved opt-out
+                        // word (the library card's Clear Default). It is not
+                        // a pickable algorithm here, and writing it through
+                        // writeSetting in per-screen scope would plant the
+                        // word in a per-screen Algorithm override — a slot
+                        // whose engine-side resolver has no sentinel arm.
+                        // A rebuild under a "none" default just keeps state.
+                        if (algoId === "none")
+                            return;
                         // Drive the page off the user's pick immediately, then
                         // persist. Only the Algorithm key is written; resetting
                         // global max-windows / split-ratio / master-count here

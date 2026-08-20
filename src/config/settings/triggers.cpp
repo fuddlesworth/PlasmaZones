@@ -8,6 +8,7 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QVariantList>
 #include <QVariantMap>
@@ -306,7 +307,12 @@ QString Settings::defaultLayoutId() const
 }
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
-    const QString normalized = normalizeUuidString(layoutId);
+    // The reserved no-layout word is a legal stored value ("no default at
+    // all", the library card's Clear Default) and is not a UUID, so it must
+    // bypass the normalizer below — which would degrade it to empty and then
+    // hit the malformed-input no-op guard, making the sentinel unwritable.
+    // Same exemption class as setAssignmentEntry's canonicalizer bypass.
+    const QString normalized = layoutId == PhosphorZones::NoSnappingLayout ? layoutId : normalizeUuidString(layoutId);
     // A non-empty input that normalised to empty is a malformed UUID
     // (the normaliser logs a warning at that point). Treat as a no-op
     // rather than silently clearing a previously-valid stored value —
