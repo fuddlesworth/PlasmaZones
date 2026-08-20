@@ -164,6 +164,11 @@ public:
     /// repaints for the dropped legs first, since nothing else will paint
     /// their offsets away.
     void reset();
+    /// Drop every LIVE leg driven by @p clock (a dying output's clock).
+    /// NOT a complete teardown on its own: an accumulator-only entry (one
+    /// applyImmediateDelta created with no leg to reap) is invisible to the
+    /// isAnimating() test and is forgetOutput's responsibility — which
+    /// screenRemoved calls unconditionally before this, so nothing leaks.
     int reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock);
 
     void advanceAnimations();

@@ -134,7 +134,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // re-resolves for every window this batch touches. Each call coalesces into
     // a single end-of-turn flush, so this is cheap and is a no-op when no
     // appearance/animation rules are loaded.
+    // Screens whose batch is a heartbeat view tick: every entry there is the
+    // same tiled window at a translated position — Mode and IsTiled cannot
+    // have changed (the engine's owned scroll runs no structural mutator),
+    // so invalidating would wipe the global rule-match cache and re-resolve
+    // every strip window's decoration ~60 times a second for the length of
+    // an edge hold. A structural change mid-hold gives ownership back first,
+    // so its batch arrives without the flag and invalidates as before.
+    QSet<QString> immediateTickScreens;
     for (const auto& req : validatedRequests) {
+        if (req.viewImmediate) {
+            immediateTickScreens.insert(req.screenId);
+        }
+    }
+    for (const auto& req : validatedRequests) {
+        if (req.viewImmediate || immediateTickScreens.contains(req.screenId)) {
+            continue;
+        }
         // Re-key to the window's LIVE id: the rule-match cache keys on
         // getWindowId, and after a cross-session restore the daemon can still
         // send the pre-restore UUID (slotWindowStateChanged spells out why).
@@ -554,6 +570,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QVariantMap stripEffectParams;
         QSet<QString> seededScreens;
         QSet<KWin::LogicalOutput*> seededOutputs;
+        // Outputs whose FIRST spelling took the immediate (no-leg) path.
+        // The duplicate-spelling arm classifies from this, never from its
+        // own entry's flags: a mixed-flag batch (one spelling immediate, the
+        // other not) would otherwise put a spring-live output into
+        // immediateViewScreens — whose apply arm takes the outright
+        // placement origin against a non-zero paint offset — or drop the
+        // second spelling's entries from both sets.
+        QSet<KWin::LogicalOutput*> immediateOutputs;
         for (const TileSnap& s : toApply) {
             if (s.viewDelta == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
                 continue;
@@ -572,7 +596,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // (and startedViewScreens below) so ITS entries take the
                 // residual-origin path against the one shared spring.
                 if (seededOutputs.contains(out)) {
-                    if (s.viewImmediate) {
+                    if (immediateOutputs.contains(out)) {
                         immediateViewScreens.insert(s.screenId);
                     } else if (m_effect->m_stripViewAnimator->isAnimatingOn(out)) {
                         startedViewScreens.insert(s.screenId);
@@ -589,6 +613,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->m_stripTransition.notifyLeg(out, QString(), QVariantMap(), 0, immediateAxis);
                     m_effect->m_stripViewAnimator->applyImmediateDelta(out, s.viewDelta, immediateAxis);
                     immediateViewScreens.insert(s.screenId);
+                    immediateOutputs.insert(out);
                     continue;
                 }
                 if (!resolved) {
@@ -660,9 +685,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // there is no cascade left to order. A scroll batch that moved no columns
     // in or out of view (a park with no view travel) still cascades and still
     // wants the direction sort, which is why the two predicates differ.
-    // Immediate-view batches skip it too — they force one-pass application
-    // below, so sorting them would be pure cost on a ~60 Hz path.
-    const bool isScrollBatch = !startedViewLegs && immediateViewScreens.isEmpty()
+    // Immediate-view batches and tab-swap batches skip it too — all three
+    // force one-pass application below (the forceImmediate disjunction at
+    // the dispatch), so sorting them would be pure cost, on a ~60 Hz path
+    // for the immediate case. The predicates are batch-wide: a batch mixing
+    // one-pass screens with cascade screens conservatively loses the sort
+    // for all of them, which today's per-screen emitters never produce.
+    const bool isScrollBatch = !startedViewLegs && !anyTabSwap && immediateViewScreens.isEmpty()
         && std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
                return !s.scrollEdge.isEmpty();
            });
@@ -872,7 +901,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     }
     auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen, hasApplies,
-                       scrollOnlyBatch]() {
+                       scrollOnlyBatch, immediateViewScreens]() {
         if (m_tileStaggerGeneration != gen) {
             return;
         }
@@ -889,6 +918,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // be current, so skip per-screen rather than aborting the whole
             // onComplete.)
             if (m_tileStaggerGenByScreen.value(screenId) != genByScreen.value(screenId)) {
+                continue;
+            }
+            // A heartbeat view tick cannot change tiled membership — the
+            // strip is structurally frozen for the whole hold (detach-once),
+            // and any mutation that could untile (a close, a float) gives
+            // the auto-scroll's ownership back first, so ITS batch arrives
+            // without the immediate flag and runs this diff. Skipping saves
+            // a per-screen set build + difference at ~60 Hz per hold.
+            if (immediateViewScreens.contains(screenId)) {
                 continue;
             }
             const QSet<QString>& newSet = screenIt.value();
@@ -1154,8 +1192,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // Wayland centering is handled reactively by slotWindowFrameGeometryChanged
         // as soon as the client commits its constrained size — no deferred timer needed.
 
-        // Refresh the active border for the focused window (tiledWindows may have changed)
-        m_effect->updateAllDecorations();
+        // Refresh the active border for the focused window (tiledWindows may
+        // have changed). Skipped on a pure heartbeat batch: the walk resyncs
+        // and re-decorates the ENTIRE stacking order, and a view tick
+        // changes no decoration input (membership frozen, focus unchanged) —
+        // running it synchronously ~60 times a second for the length of an
+        // edge hold was the epilogue's dominant cost.
+        if (immediateViewScreens.isEmpty()) {
+            m_effect->updateAllDecorations();
+        }
 
         // The compositor-drawn tab pills need a strip member to anchor on,
         // and this batch is what makes the screen's windows scroll-managed
@@ -1166,6 +1211,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // ordinary relayout path, where the strips' own push damaged them.
         if (KWin::effects) {
             for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+                // Heartbeat ticks skip this: their per-tick strip payload
+                // push already damages the band, so this handover repaint
+                // would be a redundant boundsFor + addRepaint per tick.
+                if (immediateViewScreens.contains(screenIt.key())) {
+                    continue;
+                }
                 if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenIt.key())) {
                     const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(out);
                     if (bounds.isValid()) {
@@ -1277,6 +1328,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // last presented frame keeps drawing the column at the old
             // strip position. The gate keeps the steady state (same visual
             // pos every batch) at zero repaint cost.
+            // Computed here, above the visual-delta write, because that write
+            // must take the remove arm for it: the apply below commits
+            // nothing for a self-fullscreened non-member (the fullscreen
+            // bail), so an inserted relocation would only be removed again at
+            // the tail of this same lambda — insert-repaint-remove-repaint,
+            // two addRepaintFull calls per batch forever, since the change
+            // gate can never latch on an entry that never survives the
+            // lambda. Selecting the remove arm converges on a stable ABSENT
+            // entry: one honest repaint on the transition batch, then zero.
+            // Also read by the commanded-rect disarm at the tail.
+            KWin::Window* kwcForBail = snap.window->window();
+            const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
+                && (!kwcForBail || kwcForBail->isRequestedFullScreen())
+                && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
             {
                 // Stored as the TRANSLATION from the batch's park rect to the
                 // strip position, not as the strip position itself. The paint
@@ -1290,7 +1355,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // unconstrained window the committed rect IS the park rect and
                 // the two forms are identical.
                 bool visualDeltaChanged = false;
-                if (snap.hasVisualPos) {
+                if (snap.hasVisualPos && !fullscreenBailSkippedCommit) {
                     // Bounded on the way in, for the same reason viewDelta is
                     // and with the same constant: the wire deliberately does
                     // not validate visualX/visualY, on the stated grounds that
@@ -1316,12 +1381,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 } else {
                     visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }
-                // The KWin::effects term matches the sibling remover at the
-                // tail of this same lambda and the four others across the
-                // handler — one rule for every m_scrollVisualDelta damage
-                // pair, rather than site by site.
+                // The KWin::effects term matches the sibling removers across
+                // the handler — one rule for every m_scrollVisualDelta damage
+                // pair. Unlike those removers (rare events: window close,
+                // screen change), this site is driven per batch and the edge
+                // auto-scroll heartbeat re-derives every parked column's
+                // relocation from the moving strip each tick, so this fires
+                // at ~60 Hz for the length of a drag hold — full-canvas
+                // damage there recomposites every unrelated monitor. Scoped
+                // to the window's own output; the relocation cannot paint
+                // beyond it (the paint path clips parked columns to their
+                // output), and Full stays as the unresolvable fallback.
                 if (visualDeltaChanged && KWin::effects) {
-                    KWin::effects->addRepaintFull();
+                    if (KWin::LogicalOutput* vout = m_effect->outputForScreenId(snap.screenId)) {
+                        KWin::effects->addRepaint(KWin::Rect(vout->geometry()));
+                    } else {
+                        KWin::effects->addRepaintFull();
+                    }
                 }
             }
             // Re-report the declared minimum size when it changed since the
@@ -1992,17 +2068,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // park rect afterwards, so the entry is still correct when it is
             // next read. Dropping it there would lose the park with nothing
             // guaranteed to restore it.
-            KWin::Window* kwc = snap.window->window();
-            const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
-                && (!kwc || kwc->isRequestedFullScreen())
-                && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
-            if (fullscreenBailSkippedCommit && m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0
-                && KWin::effects) {
-                // Pairs with damage like every other remover: the entry moves
-                // where the paint path draws the window, and the bail means no
-                // commit damaged anything either.
-                KWin::effects->addRepaintFull();
-            }
+            // The fullscreen-bail visual-delta removal now happens in the
+            // visual-delta block itself (fullscreenBailSkippedCommit selects
+            // the remove arm there, computed above it), so the entry
+            // converges on stable absence with one damage on the transition
+            // batch instead of an insert/remove repaint pair per batch.
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
                 // windowedFullscreen is excluded like monocle: KWin owns the
@@ -2126,7 +2196,8 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     if (!w->isWaylandClient() && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
-            && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
+            && !(m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
+                 && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
             {
                 // Budget arithmetic is pure and unit-tested
@@ -2179,8 +2250,8 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         // (callDragStopped / autotile drag end) owns state transitions.
         // Detecting mid-drag would transfer the window before the user drops it.
         // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
-        const bool isDraggedWindow =
-            m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId();
+        const bool isDraggedWindow = m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()
+            && windowId == m_effect->m_dragTracker->draggedWindowId();
         if (!isDraggedWindow) {
             const QString newScreenId = m_effect->getWindowScreenId(w);
             const QString oldScreenId = m_notifiedWindowScreens.value(windowId);

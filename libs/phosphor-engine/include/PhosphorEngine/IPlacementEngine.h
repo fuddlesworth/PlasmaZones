@@ -1,6 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): one interface, one header. The whole
+// file is a single abstract class — the placement-engine contract every
+// engine implements and the daemon dispatches against — and C++ cannot
+// split one class's members across headers. Extracting groups of virtuals
+// into secondary bases would change the contract's shape (and every
+// implementer and mock) purely to satisfy a line count.
+
 #pragma once
 
 #include <phosphorengine_export.h>
@@ -9,7 +16,6 @@
 #include <PhosphorEngine/NavigationContext.h>
 #include <PhosphorEngine/WindowPlacement.h>
 
-#include <QJsonObject>
 #include <QPoint>
 #include <QRect>
 #include <QSize>
@@ -1118,19 +1124,6 @@ public:
     }
     virtual void swapFocusedWithMaster()
     {
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Engine state serialization
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    virtual QJsonObject serializeEngineState() const
-    {
-        return {};
-    }
-    virtual void deserializeEngineState(const QJsonObject& state)
-    {
-        Q_UNUSED(state)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

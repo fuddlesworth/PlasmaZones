@@ -81,10 +81,23 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     auto it = m_active.find(output);
     if (!runnable) {
         if (it != m_active.end()) {
+            // Damage BEFORE the erase when the pass was still presenting:
+            // paintOutput replaces the whole output with the decorated
+            // capture while a pass holds, and holdsAfterSettle keeps it
+            // holding after the spring settles — an erase with no repaint
+            // then leaves that capture on the un-damaged regions of the last
+            // presented frame until unrelated damage arrives. The immediate
+            // (heartbeat) path hits this arm on every tick with no live
+            // spring, which is exactly the settled-spring-open-fade shape.
+            const bool wasPresenting = m_effect->m_stripViewAnimator->isAnimatingOn(output)
+                || it->second.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
             // notifyLeg fires from the D-Bus batch path, off the paint
             // thread; the erase frees the entry's capture texture.
             ensureGlContextCurrent();
             m_active.erase(it);
+            if (wasPresenting && KWin::effects) {
+                KWin::effects->addRepaint(output->geometry());
+            }
         }
         return;
     }

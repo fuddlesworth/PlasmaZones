@@ -747,11 +747,35 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
     // reached" instead, so a pill under the grab point could light. Lighting
     // it latches startMouseInterception, which KWin orders AHEAD of its own
     // move/resize filter: the interactive move stops receiving motion and
-    // its release lands here, stranding the drag mid-air. The press latch is
-    // exempt for the pairing invariant (its release must land where the
-    // press did), and a pill press cannot start a window drag anyway — the
-    // interception consumes it.
-    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging() && !m_scrollTabPressHeld) {
+    // its release lands here, stranding the drag mid-air. A held press keeps
+    // its latch (the pairing invariant: the release must land where the
+    // press did — a pointer drag cannot start under one anyway, the
+    // interception consumes the press, but a keyboard Move or a touch
+    // sequence can begin with one held) yet must NOT keep re-evaluating
+    // hover, which could light new pills and re-take the interception
+    // against the drag.
+    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging() && m_scrollTabPressHeld) {
+        return;
+    }
+    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
+        // Clear the PAINTER's hover too, not just the model's: a pill lit
+        // when a non-pointer drag begins (a keyboard Move, a touch-initiated
+        // move — a pointer drag cannot start under a lit pill, the
+        // interception consumes the press) would otherwise stay rasterised
+        // in its hover state for the whole drag, because every later motion
+        // takes this same early return. Same sentinel-and-damage shape as
+        // the cross-output branch below.
+        if (!m_scrollTabHoverScreen.isEmpty()) {
+            if (KWin::LogicalOutput* prev = m_effect->outputForScreenId(m_scrollTabHoverScreen)) {
+                if (ScrollTabIndicatorPainter* p = m_effect->m_scrollTabPainter.get();
+                    p && p->setHover(prev, QPointF(-1.0e9, -1.0e9))) {
+                    const QRect bounds = p->boundsFor(prev);
+                    if (bounds.isValid()) {
+                        KWin::effects->addRepaint(KWin::Rect(bounds));
+                    }
+                }
+            }
+        }
         m_scrollTabHoverScreen.clear();
         setScrollTabHoverCursor(false);
         return;
@@ -779,7 +803,20 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
         // overdrawn (see scrollTabPillAt); hover must not light it or take
         // the pointer. The test runs once here and feeds both the hover and
         // the interception decision below.
-        const QPointF hoverPos = scrollTabPillOccludedAt(pos, out) ? QPointF(-1.0e9, -1.0e9) : pos;
+        //
+        // Pre-gated on the band bounds: the occlusion probe walks the whole
+        // stacking order with per-window uncached resolves (input runs
+        // outside any paint pass, so scrollManagedOutputFor memoises
+        // nothing), and this is called at device motion rate anywhere on a
+        // pill-bearing output. Every hit rect is a subset of boundsFor (the
+        // raster intersects each hit with its own indicator rect), and
+        // setHover resolves no pill for a position outside them either way,
+        // so skipping the probe off-band is behaviour-preserving. boundsFor
+        // is offset-free while the pointer is in view space, hence the
+        // translate.
+        const QRect band = painter->boundsFor(out).translated(viewOffset.toPoint());
+        const bool nearBand = band.isValid() && band.contains(pos.toPoint());
+        const QPointF hoverPos = (nearBand && scrollTabPillOccludedAt(pos, out)) ? QPointF(-1.0e9, -1.0e9) : pos;
         // One hit scan answers both the hover update and "is the pointer over
         // a pill": setHover reports the pill it resolved.
         QString hit;
@@ -790,6 +827,18 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
             }
         }
         overPill = !hit.isEmpty();
+    } else if (out) {
+        // Not painted last pass (columns parked, anchor gone): the painter
+        // still remembers its last hoveredWindowId for this output, and when
+        // the band resumes painting it would rasterise that stale pill lit
+        // until the next motion. Clear it now; setHover on an output with no
+        // entry returns false, so this is free in the common case.
+        if (painter->setHover(out, QPointF(-1.0e9, -1.0e9))) {
+            const QRect bounds = painter->boundsFor(out);
+            if (bounds.isValid()) {
+                KWin::effects->addRepaint(KWin::Rect(bounds));
+            }
+        }
     }
     m_scrollTabHoverScreen = overPill ? screenId : QString();
     // The pills are painted over the column's own edge, so KWin would show
@@ -979,7 +1028,11 @@ bool TilingHandler::activateScrollTabAt(const QPointF& pos)
     // Mid-drag, a press over a pill belongs to the drag (a second button
     // during an interactive move), not to tab activation: activating swaps
     // the column's visible tab and restructures the strip under the very
-    // preview the drag is aiming, so fall through to the drop machinery.
+    // preview the drag is aiming, so decline and let whatever owns the press
+    // take it. In practice KWin's move/resize filter (ordered above Popup)
+    // consumes a mid-move press first; on the filter path that does reach
+    // here, the false return continues to the overhang/focus handlers, not
+    // to the drop machinery.
     if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
         return false;
     }
