@@ -15,6 +15,7 @@
 
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorRules/MatchTypes.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -144,12 +145,21 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
                 }
             }
         } else if (PhosphorLayout::LayoutId::isAutotile(value)) {
-            if (tilingAlgorithmLookup) {
+            // The explicit opt-out stamp ("autotile:none"): no algorithm to
+            // look up, so name the state instead of round-tripping the raw
+            // token. Wording mirrors the assignment tile's.
+            if (PhosphorLayout::LayoutId::extractAlgorithmId(value) == PhosphorZones::NoTilingAlgorithm) {
+                label = PhosphorI18n::tr("Tiling (no algorithm)");
+            } else if (tilingAlgorithmLookup) {
                 const QString resolved = tilingAlgorithmLookup(PhosphorLayout::LayoutId::extractAlgorithmId(value));
                 if (!resolved.isEmpty()) {
                     label = resolved;
                 }
             }
+        } else if (value == PhosphorZones::NoSnappingLayout) {
+            // The snapping opt-out is the bare reserved word — a lookup miss
+            // would print it verbatim as a layout named "none".
+            label = PhosphorI18n::tr("Snapping (no layout)");
         } else if (layoutLookup) {
             const QString resolved = layoutLookup(value);
             if (!resolved.isEmpty()) {

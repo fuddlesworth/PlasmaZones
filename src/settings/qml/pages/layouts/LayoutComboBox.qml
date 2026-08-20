@@ -42,10 +42,11 @@ ComboBox {
     property bool showNoneOption: true
     // An optional SECOND leading entry, directly under the Default one, whose
     // value is a caller-supplied token rather than the empty string. It exists
-    // for the scrolling-template pickers, where "inherit the configured
-    // default" and "explicitly no template at all" are different answers and
-    // the empty string can only spell the first. Off by default, so the two
-    // layout families keep their two-state pickers.
+    // for the three-state pickers (scrolling templates first, and now the
+    // Monitors page's snapping/tiling selectors too), where "inherit the
+    // configured default" and "explicitly none at all" are different answers
+    // and the empty string can only spell the first. Off by default, so a
+    // caller that wants a two-state picker keeps one.
     //
     // Placed after Default rather than before it so row 0 keeps meaning what
     // updateSelection and clearSelection assume it means.
@@ -670,11 +671,16 @@ ComboBox {
                             // "Default"/"None" with no resolution (e.g., quick layout slots)
                             return i18n("No layout assigned");
                         } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {
-                            // The explicit-none row means "deliberately no
-                            // template", not an unresolved default — without
+                            // The explicit-none row means "deliberately
+                            // none", not an unresolved default — without
                             // this branch it fell into the wording below and
-                            // read as a configuration warning.
-                            return i18n("No template");
+                            // read as a configuration warning. Worded per
+                            // family now that all three carry the row.
+                            if (root.layoutFilter === 2)
+                                return i18n("No template");
+                            if (root.layoutFilter === 1)
+                                return i18n("No algorithm");
+                            return i18n("No layout");
                         } else if (!hasLayout) {
                             return i18n("No default configured");
                         }

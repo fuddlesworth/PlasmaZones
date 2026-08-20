@@ -312,11 +312,24 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             const auto mode = PhosphorZones::modeFromWireString(summary.engineMode)
                                   .value_or(PhosphorZones::AssignmentEntry::Snapping);
             if (mode == PhosphorZones::AssignmentEntry::Snapping) {
-                layoutLabel = summary.snappingLayout;
-                labelLookup = &m_snappingLayoutLookup;
+                // The reserved "explicitly none" word gets the same
+                // substitution the scrolling arm below documents, for the
+                // same reason: no lookup resolves it and the fallback showed
+                // a layout apparently named "none". Bare-name wording for the
+                // tile's "%1 · %2" composition, like its scrolling twin.
+                if (summary.snappingLayout == PhosphorZones::NoSnappingLayout) {
+                    layoutLabel = PhosphorI18n::tr("Snapping (no layout)");
+                } else {
+                    layoutLabel = summary.snappingLayout;
+                    labelLookup = &m_snappingLayoutLookup;
+                }
             } else if (mode == PhosphorZones::AssignmentEntry::Autotile) {
-                layoutLabel = summary.tilingAlgorithm;
-                labelLookup = &m_tilingAlgorithmLookup;
+                if (summary.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
+                    layoutLabel = PhosphorI18n::tr("Tiling (no algorithm)");
+                } else {
+                    layoutLabel = summary.tilingAlgorithm;
+                    labelLookup = &m_tilingAlgorithmLookup;
+                }
             } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
                 // The reserved "explicitly none" word is not an id any lookup
                 // can resolve, and the resolve below renders an unresolvable

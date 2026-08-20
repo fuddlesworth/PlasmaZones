@@ -50,6 +50,16 @@ ColumnLayout {
                 if (fallback)
                     return fallback;
             }
+            // The explicit opt-out: no layout at all, on purpose. Its own
+            // branch because the daemon reports an empty layoutName for
+            // it, and the literal below would then caption the card
+            // "Default", which is the state the user just opted out of.
+            if (previews.view.localLayoutId === previews.page._noLayoutToken) {
+                return {
+                    "displayName": i18n("None"),
+                    "zones": []
+                };
+            }
             // The local list does not carry this layout, so there are
             // no zones to draw. The daemon still reports the resolved
             // name, so show that rather than nothing.
@@ -97,6 +107,17 @@ ColumnLayout {
                 var fallback = previews.page._findLayout(previews.page._autotilePrefix + previews.page._layoutBridge.defaultAutotileAlgorithm);
                 if (fallback)
                     return fallback;
+            }
+            // The explicit opt-out: autotile mode with nothing tiling, on
+            // purpose. Its own branch because the daemon reports an empty
+            // algorithmName for the reserved word, and the literal below
+            // would fall through to the raw id and caption the card "none".
+            if (previews.view.localAlgorithmId === previews.page._noLayoutToken) {
+                return {
+                    "displayName": i18n("None"),
+                    "category": 1,
+                    "zones": []
+                };
             }
             // getScreenStates reports the algorithm's display name, so
             // prefer it over the raw id ("bsp") the local list missed.

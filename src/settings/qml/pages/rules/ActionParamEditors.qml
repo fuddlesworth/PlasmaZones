@@ -442,8 +442,12 @@ QtObject {
     // streams: 0 = manual / snapping layouts, 1 = autotile algorithms.
     // `showNoneOption: false` because the action either targets a layout or
     // has no value (no implicit "Default" fallback inside a rule). The
-    // scrolling-template editor below uses a plain combo instead, for the
-    // reason its own comment gives.
+    // explicit-none row is a different thing and both editors carry it: the
+    // reserved word is a real value the action can carry (opt the context
+    // out of layouts entirely), so without the row a stored token had no
+    // entry to match and could not be re-picked. The scrolling-template
+    // editor below uses a plain combo instead, for the reason its own
+    // comment gives.
     property Component _snappingLayoutEditor: Component {
         LayoutComboBox {
             readonly property var _param: parent.modelData
@@ -453,6 +457,11 @@ QtObject {
             currentLayoutId: row.action[_param.key] || ""
             layoutFilter: 0
             showNoneOption: false
+            // The reserved "explicitly no layout" word
+            // (PhosphorZones::NoSnappingLayout, whose spelling checklist
+            // names this site).
+            showExplicitNoneOption: true
+            explicitNoneValue: "none"
             showPreview: true
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
@@ -624,13 +633,21 @@ QtObject {
                 // (which wrote the combo's "autotile:bsp" verbatim) must round-
                 // trip too — and double-prefixing it would leave the combo
                 // blank. Matches the list resolver's already-prefixed handling.
+                // The reserved word stays bare: the explicit-none row is keyed
+                // "none", and prefixing it would leave the combo blank for a
+                // stored opt-out.
                 const stored = row.action[_param.key] || "";
-                if (stored === "" || stored.startsWith("autotile:"))
+                if (stored === "" || stored === "none" || stored.startsWith("autotile:"))
                     return stored;
                 return "autotile:" + stored;
             }
             layoutFilter: 1
             showNoneOption: false
+            // The reserved "explicitly no algorithm" word
+            // (PhosphorZones::NoTilingAlgorithm, whose spelling checklist
+            // names this site). Bare on the wire like the algorithm ids.
+            showExplicitNoneOption: true
+            explicitNoneValue: "none"
             showPreview: true
             onActivated: function (index) {
                 const bareId = currentValue.startsWith("autotile:") ? currentValue.substring(9) : currentValue;

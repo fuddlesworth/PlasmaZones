@@ -117,6 +117,32 @@ LayoutPreview noScrollingTemplatePreview()
     return preview;
 }
 
+/// The synthetic "no layout" row for snapping/autotile picker lists — the
+/// generic twin of noScrollingTemplatePreview above, carrying the same
+/// reserved word (NoSnappingLayout spells it; the controller's apply path
+/// translates the press into the slot of the context's CURRENT mode, so one
+/// row serves both families in a mixed manual+autotile list). Same
+/// deliberate zone-lessness: there is nothing to draw for the absence of a
+/// layout, and zoneCount 0 is the UnlimitedZoneCount sentinel that lets the
+/// row pass LayoutPreview::isValid with an empty zone list.
+///
+/// Its own section, ordered after every real family, so a QML surface that
+/// groups by section never files the opt-out under a family it is an escape
+/// from.
+LayoutPreview noLayoutPreview()
+{
+    LayoutPreview preview;
+    preview.id = QString(PhosphorZones::NoSnappingLayout);
+    preview.displayName = PhosphorI18n::tr("None");
+    preview.description = PhosphorI18n::tr(
+        "Use no layout on this screen, so windows float and nothing "
+        "snaps or tiles them");
+    preview.sectionKey = QStringLiteral("no-layout");
+    preview.sectionLabel = PhosphorI18n::tr("None");
+    preview.sectionOrder = 99;
+    return preview;
+}
+
 /// Append every store template as a preview row (its own section, after the
 /// aspect sections and the autotile family), optionally led by the None row
 /// above. Templates have no hidden/allow-list/aspect axes today, so no context
@@ -226,12 +252,13 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
 // section field can express.
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
-    // The no-template row is an ESCAPE from the list rather than a member of
-    // it, so it sorts to the very end instead of taking its alphabetical
-    // place among the templates. Tested before every other term, including
+    // The None row (template-flavoured or the generic no-layout one — both
+    // spell the same reserved word) is an ESCAPE from the list rather than a
+    // member of it, so it sorts to the very end instead of taking its
+    // alphabetical place. Tested before every other term, including
     // `recommended`, because none of them should be able to pull it back up:
     // a row that means "none of these" reads as an afterthought to the
-    // choices, and landing between two real templates reads as one.
+    // choices, and landing between two real entries reads as one.
     const bool aNone = a.id == PhosphorZones::NoScrollingTemplate;
     const bool bNone = b.id == PhosphorZones::NoScrollingTemplate;
     if (aNone != bNone) {
@@ -281,17 +308,32 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
         // both the order and the preview ids, so they match sortPreviews
         // directly. ("Unprefixed", not "bare": in this repo's QUuid vocabulary
         // bare/braced is the WithoutBraces axis, and these ids keep braces.)
-        order.append(settings->snappingLayoutOrder());
+        // The reserved none word is skipped for the reason the template arm
+        // below documents: the None row must resolve to the INT_MAX bucket so
+        // the sort pins it last, and that must hold for every writer of the
+        // key, hand-edited config included.
+        const QStringList layoutOrder = settings->snappingLayoutOrder();
+        order.reserve(order.size() + layoutOrder.size());
+        for (const QString& id : layoutOrder) {
+            if (id != PhosphorZones::NoSnappingLayout) {
+                order.append(id);
+            }
+        }
     }
     if (includeAutotile) {
         // The order stores BARE algorithm ids ("bsp"), but autotile previews are
         // keyed "autotile:<id>" (LayoutPreview::id). Prefix to the preview
         // namespace, or sortPreviews' id match misses every autotile entry and
-        // the priority order silently no-ops for tiling.
+        // the priority order silently no-ops for tiling. The reserved none
+        // word is skipped like the other two arms (prefixing it would build
+        // "autotile:none", which matches no row anyway, but the invariant is
+        // clearer held uniformly).
         const QStringList algoOrder = settings->tilingAlgorithmOrder();
         order.reserve(order.size() + algoOrder.size());
         for (const QString& algoId : algoOrder) {
-            order.append(PhosphorLayout::LayoutId::makeAutotileId(algoId));
+            if (algoId != PhosphorZones::NoTilingAlgorithm) {
+                order.append(PhosphorLayout::LayoutId::makeAutotileId(algoId));
+            }
         }
     }
     if (includeScrollingTemplates) {
@@ -354,7 +396,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
     const QString& screenId, int virtualDesktop, const QString& activity, bool includeManual, bool includeAutotile,
     qreal screenAspectRatio, bool filterByAspectRatio, const QStringList& customOrder,
     PhosphorLayout::ILayoutSource* autotileSource, QSize autotilePreviewCanvas, bool includeScrollingTemplates,
-    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoTemplateRow, bool stripVerticalAxis)
+    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoneRow, bool stripVerticalAxis)
 {
     QVector<LayoutPreview> list;
 
@@ -467,7 +509,14 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
     }
 
     if (includeScrollingTemplates) {
-        appendScrollingTemplatePreviews(list, templateStore, includeNoTemplateRow, stripVerticalAxis);
+        appendScrollingTemplatePreviews(list, templateStore, includeNoneRow, stripVerticalAxis);
+    } else if (includeNoneRow) {
+        // Snapping/autotile picker: the generic no-layout row instead of the
+        // template-flavoured one. One row regardless of how many families the
+        // list mixes — the opt-out is a property of the context, not of a
+        // family — and the controller's apply path resolves which slot it
+        // clears from the context's current mode.
+        list.append(noLayoutPreview());
     }
 
     sortPreviews(list, customOrder);

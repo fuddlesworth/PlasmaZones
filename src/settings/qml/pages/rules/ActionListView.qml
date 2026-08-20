@@ -156,12 +156,13 @@ ColumnLayout {
             }
             return rawStr;
         }
-        if (kind === "scrollingTemplate" && rawStr === "none") {
-            // The reserved "explicitly no template" token
-            // (PhosphorZones::NoScrollingTemplate) is the common case every
-            // Monitors-page None pick writes, not a layout id; the rules-list
-            // summary and the editor's picker both already show it as None.
-            return i18nc("@item scrolling template rule action, no template at all", "None");
+        if ((kind === "scrollingTemplate" || kind === "snappingLayout" || kind === "tilingAlgorithm") && rawStr === "none") {
+            // The reserved "explicitly none" token (NoScrollingTemplate /
+            // NoSnappingLayout / NoTilingAlgorithm in AssignmentEntry.h,
+            // one spelling for all three) is the value every None pick
+            // writes, not an id; the rules-list summary and the editors'
+            // pickers all show it as None.
+            return i18nc("@item rule action layout value, explicitly none at all", "None");
         }
         if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate") {
             // Layouts are serialised via `toVariantMap(LayoutPreview)` which

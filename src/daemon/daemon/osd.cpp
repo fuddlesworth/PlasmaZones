@@ -1145,6 +1145,15 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                     showNotAssignedOsd(screenId);
                     continue;
                 }
+                // Explicit per-context opt-out ("autotile:none"): nothing
+                // tiles here by the user's own choice, so no card — the
+                // None-pick silent posture. Not the "not assigned" card:
+                // that one prompts for an assignment this context refuses,
+                // and the registry lookup below would print the raw
+                // reserved word as the display name.
+                if (algoId == PhosphorZones::NoTilingAlgorithm) {
+                    continue;
+                }
                 auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
                 const QString displayName = algo ? algo->name() : algoId;
                 showLayoutOsdForAlgorithm(algoId, displayName, screenId);

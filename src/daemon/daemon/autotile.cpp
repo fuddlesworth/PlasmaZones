@@ -180,6 +180,17 @@ void Daemon::updateEngineScreens()
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+            // Explicit per-context opt-out ("autotile:none"): the context is
+            // IN autotile mode but nothing tiles there — windows float, the
+            // same behaviour class as the suppressed bare-autotile skip
+            // below, but unconditional: this is the user's own choice for
+            // the context, not a global default policy. The engine must
+            // never see the word (its setAlgorithm coerces unknown ids to
+            // the registry default, the opposite of an opt-out), so the
+            // screen is simply left out of the autotile set.
+            if (algoId == PhosphorZones::NoTilingAlgorithm) {
+                continue;
+            }
             // Bare autotile (mode set, no concrete algorithm — e.g. a mode-only
             // rule or a plain mode swap) draws its algorithm from the global
             // default, which the suppress setting disables. Don't tile such a

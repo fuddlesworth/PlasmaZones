@@ -278,7 +278,14 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
                 showScrollingModeOsd(osd.screenId, OsdTrigger::LayoutSwitch);
             }
         } else if (osd.mode == PhosphorZones::AssignmentEntry::Autotile) {
-            if (!osd.algoId.isEmpty()) {
+            if (osd.algoId == PhosphorZones::NoTilingAlgorithm) {
+                // Explicit per-context opt-out: the screen is in autotile
+                // mode with no algorithm ON PURPOSE, so nothing tiles and no
+                // card shows — the None-pick silent posture the scrolling
+                // template clear established. Without this gate the registry
+                // lookup below misses and the card would print the raw
+                // reserved word at the user.
+            } else if (!osd.algoId.isEmpty()) {
                 // Resolve the algorithm's human-readable display
                 // name via the registry instead of surfacing the
                 // wire-format id (e.g. "bsp" → "Binary Split").

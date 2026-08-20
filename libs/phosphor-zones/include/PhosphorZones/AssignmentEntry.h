@@ -132,6 +132,47 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 /// third state, not only of who would break.
 inline constexpr QLatin1String NoScrollingTemplate{"none"};
 
+/// Reserved value of @ref AssignmentEntry::snappingLayout meaning "this
+/// context explicitly uses NO snapping layout", as opposed to an empty field,
+/// which means "not chosen here" and falls back to the registry-wide default
+/// layout. The same third state @ref NoScrollingTemplate carved out for
+/// templates, for the same reason: with only empty and a UUID, a context
+/// could never opt out of the default layout every cascade miss resolves to.
+///
+/// The same deliberately non-UUID word, with the same safety argument: every
+/// consumer that RESOLVES the field parses it with QUuid::fromString, so an
+/// untaught resolver degrades it to a null id — the no-layout answer anyway.
+/// Only two places TRANSLATE it: the resolver (LayoutRegistry::layoutForScreen,
+/// which short-circuits to nullptr BEFORE its defaultLayout() fallback) and
+/// the classification choke point (@ref fromLayoutId below, whose non-UUID
+/// arm passes the word through untouched — deliberate, and load-bearing:
+/// normalizing it would flatten "explicitly none" back to "inherit").
+/// Pass-through sites to check on a respelling: the D-Bus setAssignmentEntry
+/// validator and canonicalizer skip it, the purge writes it when a Snapping
+/// context's layout is deleted, the unified layout list builds the picker's
+/// None row around the word and sorts on it, UnifiedLayoutController's apply
+/// and display-id paths carry it, the rules label/pill renderers translate it
+/// for display, and the Monitors page and rule param editors hardcode the
+/// literal in QML against this declaration.
+inline constexpr QLatin1String NoSnappingLayout{"none"};
+
+/// Reserved value of @ref AssignmentEntry::tilingAlgorithm meaning "this
+/// context explicitly uses NO tiling algorithm": the context stays in
+/// Autotile mode but nothing tiles there — windows float. An empty field
+/// still means "not chosen here", which inherits the configured default
+/// algorithm. The wire id for the state is @c "autotile:none"
+/// (makeAutotileId over this word), so it rides every existing string path.
+///
+/// Unlike the two UUID fields there is no parse-degrade safety net — bare
+/// algorithm ids are words already — so the consumers that resolve an
+/// algorithm gate on the token explicitly: the daemon's updateEngineScreens
+/// skips the screen (the tile engine itself never sees the word; its
+/// setAlgorithm coerces unknown ids to the registry default, which is the
+/// exact opposite of what the opt-out means). The D-Bus setAssignmentEntry
+/// validator exempts it from the registry existence check, and the same
+/// display surfaces listed on @ref NoSnappingLayout translate it.
+inline constexpr QLatin1String NoTilingAlgorithm{"none"};
+
 /**
  * @brief Explicit per-context assignment entry storing every mode's payload
  *
@@ -269,7 +310,10 @@ struct AssignmentEntry
             // layout delete, and the byte-wise action compare in
             // upsertAssignmentRule's no-op guard. Anything that is not a UUID
             // passes through untouched — the snapping slot is not required to
-            // hold one.
+            // hold one, and @ref NoSnappingLayout DEPENDS on this arm staying
+            // verbatim: parsing the reserved word yields a null QUuid, and
+            // storing that null's toString would silently turn "explicitly
+            // none" into a dangling id.
             const QUuid parsed = QUuid::fromString(layoutId);
             entry.snappingLayout = parsed.isNull() ? layoutId : parsed.toString();
         }

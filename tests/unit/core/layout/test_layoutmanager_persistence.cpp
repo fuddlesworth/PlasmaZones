@@ -176,7 +176,19 @@ private Q_SLOTS:
 
         mgr->removeLayout(layout);
 
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("screen1")));
+        // The context rule SURVIVES the delete since the explicit no-layout
+        // state exists: the purge rewrites the dead reference to the reserved
+        // word rather than dropping the rule, so the screen keeps NO layout
+        // instead of silently inheriting the registry-wide default (the same
+        // verdict deleting a scrolling screen's template reaches — see the
+        // delete-scrubs tests in test_layoutmanager_assignment.cpp). The
+        // quick slot still sweeps: a stale binding must not resurrect the
+        // deleted layout on a shortcut press.
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("screen1")));
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("screen1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("screen1"), 0, QString()), nullptr);
         QVERIFY(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).contains(1));
     }
 

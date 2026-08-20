@@ -294,6 +294,13 @@ Q_SIGNALS:
     /// autotileApplied above).
     void scrollingTemplateApplied(const QString& templateId, const QString& screenId);
 
+    /// Emitted when the picker's generic None row was applied to a
+    /// snapping/autotile context (the explicit no-layout opt-out). No OSD
+    /// card follows — the None-pick silent posture — but the daemon still
+    /// needs the press to dismiss snap assist and refresh the cheatsheet,
+    /// which the three apply signals above trigger for their families.
+    void noLayoutApplied(const QString& screenId);
+
     /**
      * @brief Emitted when the current layout ID changes.
      *

@@ -799,6 +799,20 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            // The explicit opt-out stamp: the picker's None card is keyed by
+            // the bare reserved word, so "autotile:none" has to translate or
+            // the highlight lands on no card. Same string mapping as
+            // UnifiedLayoutController::displayIdForAssignment.
+            if (PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) == PhosphorZones::NoTilingAlgorithm) {
+                return QString(PhosphorZones::NoSnappingLayout);
+            }
+            return assignmentId;
+        }
+        // The snapping opt-out IS the bare reserved word, which already
+        // matches the None card — and it must not fall through to the manual
+        // resolution below, whose defaultLayout() fallback would highlight
+        // the default layout the context just opted out of.
+        if (assignmentId == PhosphorZones::NoSnappingLayout) {
             return assignmentId;
         }
         if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
@@ -1070,10 +1084,12 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile, inc.templates),
         m_autotileLayoutSource, autotilePreviewCanvas, inc.templates,
         m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
-        // The None row: this list is a PICKER of the context's template, so it
-        // carries the opt-out alongside the templates themselves. Mirrored in
-        // visibleLayoutCount below, which must agree with this row for row.
-        inc.templates,
+        // The None row: this list is a PICKER of the context's layout (or
+        // template), so it carries the opt-out alongside the real choices —
+        // template-flavoured on a Templates screen, the generic no-layout row
+        // everywhere else. Mirrored in visibleLayoutCount below, which must
+        // agree with this row for row.
+        true,
         // Template cards depict the columns this screen's strip will hold, so
         // they follow the screen's strip axis. Count-neutral, which is why
         // visibleLayoutCount does not pay for the same resolve.
@@ -1159,7 +1175,7 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         // the row-for-row agreement the header of that function calls out: a
         // count short by one here would size the popup for fewer cards than
         // it draws.
-        inc.templates
+        true
         // No strip axis: this function is asked per cursor tick by the
         // trigger-edge probe, and the axis only transposes each card's bands.
         // It cannot add or drop a row, so taking the default here leaves the

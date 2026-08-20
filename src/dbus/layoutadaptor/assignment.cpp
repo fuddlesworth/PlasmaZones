@@ -498,6 +498,13 @@ QString LayoutAdaptor::getScreenStates()
             obj[QLatin1String("layoutId")] = QString();
             obj[QLatin1String("layoutName")] = QString();
         }
+        // The RAW cascade field beside the resolved pair above, the same
+        // shape scrollingTemplateId takes below and for the same reason: the
+        // resolved layoutId cannot distinguish "explicitly none" (the
+        // reserved word, which resolves to no layout) from "nothing assigned
+        // and no default in force" (both answer empty), and the Monitors
+        // page needs the raw value to seat its selector on the None row.
+        obj[QLatin1String("snappingLayoutId")] = entry.snappingLayout;
 
         // Per-slot explicit markers: whether THIS exact context tuple pins
         // the field, as opposed to the resolved value arriving through the
@@ -542,14 +549,19 @@ QString LayoutAdaptor::getScreenStates()
         }
         obj[QLatin1String("scrollingTemplateExplicit")] = !exactEntry.scrollingTemplateLayout.isEmpty();
 
-        // Tiling algorithm — use resolved algorithm (includes fallback)
+        // Tiling algorithm — use resolved algorithm (includes fallback).
+        // The reserved word rides through verbatim (the resolver never
+        // translates it), so the id field can carry "none" — the page's
+        // selector needs exactly that — while the name stays empty below:
+        // the registry lookup would miss and print the raw word as a
+        // display name.
         const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
         obj[QLatin1String("algorithmId")] = algoId;
         // Null-tolerant: D-Bus clients can hit getScreenStates before the
         // composition root finishes wiring setAlgorithmRegistry. Mirror the
         // null-fallback the layoutId branch above does (algoId without a
         // registry yields an empty algorithmName rather than a crash).
-        if (!algoId.isEmpty() && m_algorithmRegistry) {
+        if (!algoId.isEmpty() && algoId != PhosphorZones::NoTilingAlgorithm && m_algorithmRegistry) {
             PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algoId);
             obj[QLatin1String("algorithmName")] = algo ? algo->name() : algoId;
         } else {
@@ -1225,8 +1237,11 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         return;
     }
 
-    // Validate snapping layout UUID if non-empty
-    if (!snappingLayout.isEmpty()) {
+    // Validate snapping layout UUID if non-empty. The reserved no-layout
+    // word is the documented third form (empty = inherit the default,
+    // UUID = that layout, "none" = explicitly no layout) and skips the UUID
+    // validation — a skip, not a rewrite, mirroring setScrollingTemplateLayout.
+    if (!snappingLayout.isEmpty() && snappingLayout != PhosphorZones::NoSnappingLayout) {
         QUuid uuid = QUuid::fromString(snappingLayout);
         if (uuid.isNull()) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: invalid snapping layout UUID:" << snappingLayout;
@@ -1234,8 +1249,10 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         }
     }
 
-    // Validate tiling algorithm if non-empty
-    if (!tilingAlgorithm.isEmpty()) {
+    // Validate tiling algorithm if non-empty — with the same reserved-word
+    // exemption: "none" names the explicit opt-out, not an algorithm, so the
+    // registry existence check must not refuse it.
+    if (!tilingAlgorithm.isEmpty() && tilingAlgorithm != PhosphorZones::NoTilingAlgorithm) {
         if (!m_algorithmRegistry || !m_algorithmRegistry->algorithm(tilingAlgorithm)) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: unknown tiling algorithm:" << tilingAlgorithm;
             return;
@@ -1270,7 +1287,12 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
     entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
     // Canonicalize to the braced spelling: the purge sweep and the upsert
     // no-op guard both compare exact strings against QUuid::toString().
-    entry.snappingLayout = snappingLayout.isEmpty() ? QString() : QUuid::fromString(snappingLayout).toString();
+    // The reserved word must NOT pass through the normalization — it parses
+    // to a null QUuid whose toString is the null-uuid literal, which would
+    // silently turn "explicitly none" into a dangling id.
+    entry.snappingLayout = snappingLayout.isEmpty() || snappingLayout == PhosphorZones::NoSnappingLayout
+        ? snappingLayout
+        : QUuid::fromString(snappingLayout).toString();
     entry.tilingAlgorithm = tilingAlgorithm;
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);

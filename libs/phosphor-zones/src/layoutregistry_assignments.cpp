@@ -260,7 +260,15 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             // deleted layout survives.
             AssignmentEntry entry = entryFromRuleMatchActions(rule);
             if (entry.snappingLayout == layoutId) {
-                entry.snappingLayout.clear();
+                // Same verdict as the template arm below, for the same
+                // reason: a Snapping context whose layout was just deleted
+                // must not silently adopt the registry-wide default layout
+                // (which is what an empty slot resolves to), so it takes the
+                // explicit no-layout word. A non-Snapping context keeps the
+                // plain clear — the slot is dormant data there, and the
+                // sentinel would defeat the drop-if-nothing-remains test
+                // below.
+                entry.snappingLayout = entry.mode == AssignmentEntry::Snapping ? QString(NoSnappingLayout) : QString();
             }
             if (entry.scrollingTemplateLayout == layoutId) {
                 // The reserved word rather than empty, but ONLY where the
@@ -345,11 +353,28 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // the context is not in or not a context slot at all, the user asked
         // for no opt-out, and the sentinel would keep a rule alive that the
         // empty-actions drop below should have taken.
-        if (contextRule && entryFromRuleMatchActions(rule).mode == AssignmentEntry::Scrolling) {
-            for (PWR::RuleAction& action : trimmed.actions) {
-                if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)
-                    && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
-                    action.params.insert(PWR::ActionParam::LayoutId, QString(NoScrollingTemplate));
+        if (contextRule) {
+            const AssignmentEntry::Mode ruleMode = entryFromRuleMatchActions(rule).mode;
+            if (ruleMode == AssignmentEntry::Scrolling) {
+                for (PWR::RuleAction& action : trimmed.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)
+                        && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
+                        action.params.insert(PWR::ActionParam::LayoutId, QString(NoScrollingTemplate));
+                    }
+                }
+            }
+            // The snapping twin, gated the same way: only a context that is
+            // IN Snapping mode takes the opt-out word when its layout is
+            // deleted — erasing the action would hand the screen to the
+            // registry-wide default layout the user never picked. A dormant
+            // SetSnappingLayout on a non-Snapping context keeps the plain
+            // erase.
+            if (ruleMode == AssignmentEntry::Snapping) {
+                for (PWR::RuleAction& action : trimmed.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                        && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
+                        action.params.insert(PWR::ActionParam::LayoutId, QString(NoSnappingLayout));
+                    }
                 }
             }
         }
@@ -378,8 +403,9 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // not the no-op a per-context bare mode would be.
         kept.append(trimmed);
         qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: trimmed rule" << rule.id.toString()
-                            << "— cleared the deleted id (a Scrolling context's template slot is rewritten to the "
-                               "no-template word rather than removed), kept all other actions";
+                            << "— cleared the deleted id (a Scrolling context's template slot and a Snapping "
+                               "context's layout slot are rewritten to the reserved none word rather than removed), "
+                               "kept all other actions";
     }
     if (changed) {
         m_ruleStore->setAllRules(kept);
@@ -484,7 +510,16 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
     // A hand-rolled isAutotile-only branch here once made a D-Bus
     // assign("scrolling:") fall into the null-Layout arm of assignLayout,
     // which CLEARS the assignment.
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+    //
+    // The reserved no-layout word routes through the same entry-upsert path,
+    // for the same reason: it names no Layout*, so the else-arm below would
+    // parse it to a null id and CLEAR the assignment — turning "explicitly
+    // none" into "inherit the default", the exact state the caller opted out
+    // of. fromLayoutId's non-UUID arm stores the word verbatim under Snapping
+    // mode (its autotile arm handles "autotile:none" with no help). This is
+    // the snapping/autotile write choke point the token's doc names.
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)
+        || layoutId == NoSnappingLayout) {
         AssignmentEntry existing;
         if (const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity)) {
             existing = entryFromRuleMatchActions(*rule);
@@ -663,7 +698,17 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
     //                  layout id) — the cascade is settled, fall through to
     //                  defaultLayout().
     //   - {layout}  -> resolved snap layout.
-    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
+    //
+    // The explicit no-layout state cannot be expressed in that triple —
+    // "settled with no Layout*" already means "fall through to
+    // defaultLayout()" — so it rides a side flag: a Snapping entry carrying
+    // the reserved NoSnappingLayout word settles the chain AND suppresses the
+    // default fallback below. Mode-gated like the template resolver's None
+    // arm: a "none" preserved on a non-Snapping entry (the lossless
+    // mode-toggle contract) is dormant data, not an opt-out in force.
+    bool explicitlyNone = false;
+    auto tryResolve = [this, virtualDesktop, &activity,
+                       &explicitlyNone](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
         if (!entry) {
             return std::nullopt; // genuine miss — the caller may retry
@@ -678,15 +723,31 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
         if (entry->mode != AssignmentEntry::Snapping || entry->snappingLayout.isEmpty()) {
             return std::optional<PhosphorZones::Layout*>(nullptr);
         }
+        // "Explicitly none" short-circuits BEFORE the default fallback, and
+        // that ordering is the whole feature (the exact shape
+        // scrollingTemplateForContext gives templates): this context opted
+        // out of layouts, so the registry-wide default must not creep back
+        // in. Every hop that sets the flag also settles the chain, so the
+        // flag cannot go stale across fallback retries.
+        if (entry->snappingLayout == NoSnappingLayout) {
+            explicitlyNone = true;
+            return std::optional<PhosphorZones::Layout*>(nullptr);
+        }
         return std::optional<PhosphorZones::Layout*>(layoutById(QUuid::fromString(entry->snappingLayout)));
     };
 
     // Connector-name then virtual-screen fallback (the physical screen's
     // assignment is inherited). A settled {nullptr} stops the chain; a genuine
-    // miss (nullopt) and a {nullptr} both defer to the registry-wide default.
+    // miss (nullopt) and a {nullptr} both defer to the registry-wide default —
+    // unless the settle was the explicit opt-out above, which answers no
+    // layout at all. Every snap-engine consumer already tolerates a null here
+    // (SnapResult::noSnap and friends), so "no zones" is a safe engine state.
     // layoutForScreen returns a snap Layout* and has no autotile counterpart;
     // autotile-mode resolution is the autotile engine's job.
     const auto result = resolveWithScreenFallback(screenId, tryResolve);
+    if (explicitlyNone) {
+        return nullptr;
+    }
     return (result && *result) ? *result : defaultLayout();
 }
 

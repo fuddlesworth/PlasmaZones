@@ -209,8 +209,10 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             // The None row has to be in THIS list too, not just the popup's:
             // applyLayoutById resolves the picked id against this cache, so a
             // row the picker draws but this list omits would be refused as
-            // "layout not found" and the press would do nothing.
-            m_includeScrollingTemplates, stripVertical);
+            // "layout not found" and the press would do nothing. Every picker
+            // list carries it now — template-flavoured on a Templates screen,
+            // the generic no-layout row for snapping/autotile.
+            true, stripVertical);
 
         m_cachedScreenDesktop = desktop;
         m_cachedStripVertical = stripVertical;
@@ -267,11 +269,12 @@ void UnifiedLayoutController::cycle(bool forward)
 
     int currentIndex = findCurrentIndex();
     if (currentIndex < 0) {
-        // No current selection (a fresh Templates screen with no template,
-        // or an unmatched id): the first FORWARD press applies the first
-        // entry rather than skipping past it to the second — unless the only
-        // row is the None sentinel, where "apply" would stamp an explicit
-        // opt-out the press did not mean (mirrors the backward arm below).
+        // No current selection (a fresh screen with nothing assigned, or an
+        // unmatched id): the first FORWARD press applies the first entry
+        // rather than skipping past it to the second — unless the only row
+        // is the None sentinel (template-flavoured or generic; same id),
+        // where "apply" would stamp an explicit opt-out the press did not
+        // mean (mirrors the backward arm below).
         if (forward) {
             if (list.size() == 1 && list.first().id == PhosphorZones::NoScrollingTemplate) {
                 return;
@@ -279,9 +282,9 @@ void UnifiedLayoutController::cycle(bool forward)
             applyLayoutByIndex(0);
             return;
         }
-        // Backward wraps to the last row. On a Templates screen the None row
-        // is pinned last, and a screen with no current selection is already
-        // in the no-template state, so applying it would read as a dead
+        // Backward wraps to the last row. The None row is pinned last on
+        // every picker list, and a screen with no current selection is
+        // already in a no-layout state, so applying it would read as a dead
         // press — land on the last real row instead, and when the None row
         // is the ONLY row there is nothing to cycle to at all.
         int last = static_cast<int>(list.size()) - 1;
@@ -325,6 +328,16 @@ QString UnifiedLayoutController::displayIdForAssignment(const QString& screenId,
         // established — so on a downgraded screen the two can disagree.
         return m_layoutManager->scrollingDisplayIdForContext(
             screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity);
+    }
+    // The autotile opt-out's wire id is "autotile:none", but the picker's
+    // generic None card is keyed by the bare reserved word — translate so
+    // the highlight and cycle anchor land on the card. The snapping opt-out
+    // needs no translation: its stored id IS the bare word. Pure string
+    // mapping, deliberately: no registry query can disagree with the id the
+    // caller already resolved.
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+        && PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) == PhosphorZones::NoTilingAlgorithm) {
+        return QString(PhosphorZones::NoSnappingLayout);
     }
     return assignmentId;
 }
@@ -524,6 +537,44 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
         setCurrentLayoutId(preview.id);
         qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName << "screen=" << m_currentScreenName;
         Q_EMIT scrollingTemplateApplied(preview.id, m_currentScreenName);
+        return true;
+    }
+
+    // The generic None row (snapping/autotile picker): the explicit
+    // no-layout opt-out for the context's CURRENT mode. One row serves both
+    // families — the isScrollingTemplate flag above already routed a
+    // Templates screen's None press, so this branch only ever sees
+    // snapping/autotile contexts. The mode decides which slot takes the
+    // reserved word: assignLayoutById("none") stores it under Snapping,
+    // "autotile:none" under Autotile (fromLayoutId's two arms), and either
+    // way the mode is preserved — a None press opts the context out of
+    // layouts, it does not flip engines.
+    if (preview.id == PhosphorZones::NoSnappingLayout && !preview.isScrollingTemplate) {
+        if (!m_layoutManager || m_currentScreenName.isEmpty()) {
+            return false;
+        }
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
+        const PhosphorZones::AssignmentEntry::Mode mode =
+            m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity);
+        // A Templates screen's None is the template-flavoured row handled
+        // above; the generic row reaching one means a filter slipped, and
+        // writing the snapping slot there would flip the screen's mode.
+        if (mode == PhosphorZones::AssignmentEntry::Scrolling
+            || m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates) {
+            qCWarning(lcDaemon) << "applyEntry: refusing the generic None row on a scrolling screen";
+            return false;
+        }
+        const QString assignedId = mode == PhosphorZones::AssignmentEntry::Autotile
+            ? PhosphorLayout::LayoutId::makeAutotileId(QString(PhosphorZones::NoTilingAlgorithm))
+            : QString(PhosphorZones::NoSnappingLayout);
+        m_layoutManager->assignLayoutById(m_currentScreenName, desktop, m_currentActivity, assignedId);
+        // The CURRENT id is the row's own id, not the stored wire id: the
+        // picker highlight compares against the None card, and
+        // displayIdForAssignment performs the same translation for ids read
+        // back off the registry.
+        setCurrentLayoutId(QString(PhosphorZones::NoSnappingLayout));
+        qCInfo(lcDaemon) << "Applied no-layout opt-out screen=" << m_currentScreenName << "mode=" << mode;
+        Q_EMIT noLayoutApplied(m_currentScreenName);
         return true;
     }
 

@@ -305,7 +305,25 @@ void Daemon::handleTilingModeToggle()
         if (layoutId.isEmpty() && !activity.isEmpty()) {
             layoutId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
         }
-        if (!layoutId.isEmpty()) {
+        if (layoutId == PhosphorZones::NoSnappingLayout) {
+            // The preserved snapping choice was the explicit opt-out:
+            // restore it verbatim rather than routing through
+            // applyLayoutById, whose None card resolves against the
+            // context's CURRENT (still pre-toggle) mode and would write the
+            // wrong slot. Direct entry write, like the bare-autotile and
+            // scrolling arms below, seeded so the sibling slots survive.
+            // Silent on purpose — the None-pick posture — but the surfaces
+            // the apply signals normally refresh still need their nudges.
+            PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(screenId, desktop, activity);
+            entry.mode = Mode::Snapping;
+            entry.snappingLayout = QString(PhosphorZones::NoSnappingLayout);
+            m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
+            refreshCheatsheetIfVisible();
+            if (m_overlayService) {
+                m_overlayService->hideSnapAssist();
+            }
+            applied = true;
+        } else if (!layoutId.isEmpty()) {
             applied = m_unifiedLayoutController->applyLayoutById(layoutId);
         }
         // Fallback when snappingLayout is empty (fresh install) or stale
@@ -353,7 +371,26 @@ void Daemon::handleTilingModeToggle()
                 algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
             }
         }
-        if (!algoId.isEmpty()) {
+        if (algoId == PhosphorZones::NoTilingAlgorithm) {
+            // The preserved algorithm choice was the explicit opt-out:
+            // restore it verbatim with a direct entry write — there is no
+            // "autotile:none" card for applyLayoutById to find, and the
+            // engine must never see the word (setAlgorithm coerces unknown
+            // ids to the registry default). updateEngineScreens skips the
+            // context off the emitted layoutAssigned, so nothing tiles.
+            // Silent (the None-pick posture): unlike the suppressed bare arm
+            // below, this state is the user's own choice, not a prompt to
+            // assign something.
+            PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(screenId, desktop, activity);
+            entry.mode = PhosphorZones::AssignmentEntry::Autotile;
+            entry.tilingAlgorithm = QString(PhosphorZones::NoTilingAlgorithm);
+            m_layoutManager->setAssignmentEntryDirect(screenId, desktop, activity, entry);
+            refreshCheatsheetIfVisible();
+            if (m_overlayService) {
+                m_overlayService->hideSnapAssist();
+            }
+            applied = true;
+        } else if (!algoId.isEmpty()) {
             applied = m_unifiedLayoutController->applyLayoutById(PhosphorLayout::LayoutId::makeAutotileId(algoId));
         } else {
             // Suppressed with no explicitly-assigned algorithm: switch the

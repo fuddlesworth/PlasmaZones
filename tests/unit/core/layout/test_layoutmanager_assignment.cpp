@@ -744,6 +744,100 @@ private Q_SLOTS:
         QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).isValid());
     }
 
+    void testAssignmentEntry_snappingLayout_explicitNoneBeatsTheDefault()
+    {
+        // The snapping twin of the template three-state test above: a UUID
+        // names a layout, empty inherits the registry-wide default, and the
+        // reserved word is the only spelling that survives that default —
+        // layoutForScreen answers nullptr instead of falling through to
+        // defaultLayout().
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* fallback = createTestLayout(QStringLiteral("Fallback"));
+        mgr->addLayout(fallback);
+
+        // Unassigned: the default fallback applies (first layout here).
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), fallback);
+
+        // The reserved word: no layout at all, default notwithstanding. The
+        // mode stays Snapping and the word is stored verbatim, so the
+        // settings UI can seat its None row on the read-back.
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QString(PhosphorZones::NoSnappingLayout));
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), nullptr);
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        // The picker highlight id is the bare word (the None card's own id).
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QString(PhosphorZones::NoSnappingLayout));
+
+        // Reversible: a real assignment resolves again, and a clear inherits
+        // the default again, so the opt-out is a per-context choice rather
+        // than a one-way door.
+        auto* chosen = createTestLayout(QStringLiteral("Chosen"));
+        mgr->addLayout(chosen);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), chosen);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), chosen);
+        mgr->clearAssignment(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), fallback);
+    }
+
+    void testAssignmentEntry_snappingLayout_deleteScrubsToNone()
+    {
+        // Deleting the layout a Snapping context uses scrubs its reference to
+        // the reserved word rather than to empty: empty inherits the
+        // registry-wide default, so a plain clear silently reshaped the
+        // screen with a layout the user never picked for it. Same verdict
+        // the template delete reaches.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* fallback = createTestLayout(QStringLiteral("Fallback"));
+        mgr->addLayout(fallback);
+        auto* doomed = createTestLayout(QStringLiteral("Doomed"));
+        mgr->addLayout(doomed);
+
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), doomed);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), doomed);
+
+        // removeLayout drives the purge itself (the D-Bus delete verb's path).
+        mgr->removeLayout(doomed);
+
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        // The degrade check, and the reason the fixture carries a second
+        // layout: the screen resolves to NO layout rather than adopting
+        // Fallback.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 0, QString()), nullptr);
+    }
+
+    void testAssignmentEntry_tilingAlgorithm_explicitNone()
+    {
+        // The autotile opt-out rides the existing autotile id namespace:
+        // "autotile:none" stores the reserved word in the algorithm slot,
+        // the mode stays Autotile, and the raw resolver hands the word
+        // through untranslated (the daemon's updateEngineScreens is the
+        // consumer that skips the screen on it).
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* layout = createTestLayout(QStringLiteral("Manual"));
+        mgr->addLayout(layout);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
+
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(),
+                              PhosphorLayout::LayoutId::makeAutotileId(QString(PhosphorZones::NoTilingAlgorithm)));
+
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+        // Lossless toggle: the snapping choice survives the opt-out.
+        QCOMPARE(entry.snappingLayout, layout->id().toString());
+        QCOMPARE(entry.activeLayoutId(), QStringLiteral("autotile:none"));
+        QCOMPARE(mgr->tilingAlgorithmForScreen(QStringLiteral("DP-1"), 0), QString(PhosphorZones::NoTilingAlgorithm));
+        // The id cascade reports the stored wire id verbatim; translating it
+        // to the picker's bare word is the display layer's job.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("autotile:none"));
+    }
+
     void testAssignmentEntry_scrollingTemplate_deleteScrubOnSnappingContext()
     {
         // The template survives a toggle back to Snapping (stored-but-dormant

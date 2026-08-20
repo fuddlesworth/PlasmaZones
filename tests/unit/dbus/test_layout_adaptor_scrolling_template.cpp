@@ -82,6 +82,45 @@ private Q_SLOTS:
         m_guard.reset();
     }
 
+    void testSetAssignmentEntry_acceptsTheReservedNoneWords()
+    {
+        // The snapping slot: the reserved word must skip BOTH halves of the
+        // UUID handling — the validator (which would refuse it) and the
+        // canonicalizer (which would parse it to a null QUuid and store the
+        // null-uuid literal, silently turning "explicitly none" into a
+        // dangling id).
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Snapping),
+                                      QString(PhosphorZones::NoSnappingLayout), QString());
+        auto entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+
+        // The algorithm slot: this fixture wires NO algorithm registry, so
+        // the existence check refuses every real algorithm id — which is
+        // exactly what makes the acceptance below prove the reserved-word
+        // exemption rather than a lookup that happened to succeed. The
+        // snapping sibling is carried on the wire, as the Monitors page's
+        // sibling-carry does — setAssignmentEntry overwrites both slots from
+        // its arguments and seeds only the template — which also proves the
+        // word rides the sibling position untouched by the canonicalizer.
+        m_adaptor->setAssignmentEntry(
+            QStringLiteral("DP-1"), 0, QString(), static_cast<int>(PhosphorZones::AssignmentEntry::Autotile),
+            QString(PhosphorZones::NoSnappingLayout), QString(PhosphorZones::NoTilingAlgorithm));
+        entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+
+        // And a real algorithm id is still refused without a registry: the
+        // exemption is for the reserved word alone.
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Autotile), QString(),
+                                      QStringLiteral("bsp"));
+        entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+    }
+
     void testSetGet_roundTripFlipsModeToScrolling()
     {
         m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-1"), 0, QString(), m_templateId);
