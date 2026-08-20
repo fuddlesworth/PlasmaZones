@@ -35,6 +35,8 @@
 #include <QScopedPointer>
 #include <QTest>
 
+#include <algorithm>
+
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
@@ -114,6 +116,14 @@ private Q_SLOTS:
         const auto listed = controller.layouts();
         QVERIFY(PhosphorZones::LayoutUtils::findLayout(listed, noneId) != nullptr);
         QCOMPARE(listed.last().id, noneId);
+        // Exactly one None row. findLayout plus a pinned-last check both pass
+        // when a regression appends a SECOND copy in alphabetical position,
+        // so count the row rather than just locating one.
+        QCOMPARE(std::count_if(listed.cbegin(), listed.cend(),
+                               [&noneId](const auto& p) {
+                                   return p.id == noneId;
+                               }),
+                 1);
 
         QVERIFY(controller.applyLayoutById(noneId));
         // The controller's live id property is the card's own bare id — the
@@ -149,6 +159,45 @@ private Q_SLOTS:
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), desktop, QString()), zulu);
     }
 
+    void cycle_fromTheLastRealLayout_landsOnTheNoneCard()
+    {
+        // Cycling ONTO the opt-out, the direction the suite did not pin. The
+        // None row is a list member pinned last, and a forward cycle from a
+        // matched current index takes the plain modular step, so a press from
+        // the last real layout applies the opt-out. That is deliberate — it
+        // matches the shipped scrolling None precedent, and it is SILENT by
+        // design — but nothing asserted it, so a skip arm added to the
+        // matched-index path (the shape the two unmatched arms already use)
+        // would change keyboard behaviour with no test failing.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        Settings settings(nullptr);
+        auto* alpha = createTestLayout(QStringLiteral("Alpha"));
+        mgr->addLayout(alpha);
+        auto* zulu = createTestLayout(QStringLiteral("Zulu"));
+        mgr->addLayout(zulu);
+
+        UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
+        controller.setCurrentScreenName(QStringLiteral("DP-1"));
+        controller.setCurrentLayoutSupport(LayoutSupport::Placement);
+        controller.setLayoutFilter(/*manual=*/true, /*autotile=*/false, /*templates=*/false);
+
+        const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
+        const QString noneId = QString(PhosphorZones::NoSnappingLayout);
+
+        // Sit on the last REAL row, so the next forward step is the pinned
+        // None card rather than a wrap to the first layout.
+        const auto listed = controller.layouts();
+        QCOMPARE(listed.last().id, noneId);
+        const QString lastReal = listed.at(listed.size() - 2).id;
+        QVERIFY(controller.applyLayoutById(lastReal));
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), desktop), lastReal);
+
+        controller.cycleNext();
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), desktop).snappingLayout, noneId);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), desktop, QString()), nullptr);
+        QCOMPARE(controller.currentLayoutId(), noneId);
+    }
+
     void applyEntry_noneCard_optsAnAutotileContextOut()
     {
         // The same press on an autotile context writes the ALGORITHM slot:
@@ -162,19 +211,32 @@ private Q_SLOTS:
         UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
         controller.setCurrentScreenName(QStringLiteral("DP-1"));
         controller.setCurrentLayoutSupport(LayoutSupport::Placement);
-        controller.setLayoutFilter(/*manual=*/true, /*autotile=*/true, /*templates=*/false);
+        // The filter the daemon actually computes for an autotile-active
+        // screen: manual OFF. updateLayoutFilterForScreen derives
+        // includeManual as "not scrolling and (manual or not autotile)", which
+        // is false once autotile is the only active family, and the quick-slot
+        // path builds the same pair. Passing manual=true here tested a
+        // combination no screen ever runs under.
+        controller.setLayoutFilter(/*manual=*/false, /*autotile=*/true, /*templates=*/false);
 
         const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
         mgr->assignLayout(QStringLiteral("DP-1"), desktop, QString(), layout);
         mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(), QStringLiteral("autotile:bsp"));
 
-        // Mirror the snapping test's list assertions under THIS filter (the
-        // mixed manual+autotile view): the one generic card is present and
-        // keeps its pinned-last seat.
+        // The None row is appended outside both the manual and autotile
+        // blocks, so it survives this filter too, still pinned last. Note the
+        // fixture wires no algorithm registry, so the list carries no autotile
+        // rows to sit in front of it — what is pinned here is the row's seat
+        // relative to whatever real rows exist, not a mixed-family ordering.
         const QString noneId = QString(PhosphorZones::NoSnappingLayout);
         const auto listed = controller.layouts();
         QVERIFY(PhosphorZones::LayoutUtils::findLayout(listed, noneId) != nullptr);
         QCOMPARE(listed.last().id, noneId);
+        QCOMPARE(std::count_if(listed.cbegin(), listed.cend(),
+                               [&noneId](const auto& p) {
+                                   return p.id == noneId;
+                               }),
+                 1);
 
         QVERIFY(controller.applyLayoutById(QString(PhosphorZones::NoSnappingLayout)));
         QCOMPARE(controller.currentLayoutId(), noneId);

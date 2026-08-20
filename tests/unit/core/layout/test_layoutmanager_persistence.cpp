@@ -22,6 +22,8 @@
 
 #include <unistd.h> // geteuid — the read-only-directory test is a no-op as root
 
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -556,6 +558,35 @@ private Q_SLOTS:
         QCOMPARE(afterReload.value(1), templId.toString());
         QCOMPARE(afterReload.value(2), templId.toString());
         QCOMPARE(afterReload.size(), 2);
+    }
+
+    // The AUTOTILE arm of the same batch setter. It is hand-duplicated beside
+    // the scrolling and snapping arms, so a rule enforced in one can silently
+    // go missing from another: the reserved opt-out id is refused (a slot
+    // bound to it resolves nothing on press — a silent dead press), while a
+    // real algorithm id is stored verbatim, having no canonical UUID form.
+    void testLayoutManager_setAllQuickLayoutSlots_autotileArmRefusesTheOptOut()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        QHash<int, QString> batch;
+        batch.insert(1, QStringLiteral("autotile:bsp"));
+        batch.insert(2, PhosphorLayout::LayoutId::makeAutotileId(QString(PhosphorZones::NoTilingAlgorithm)));
+        mgr->setAllQuickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile, batch);
+
+        const QHash<int, QString> stored = mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(stored.value(1), QStringLiteral("autotile:bsp"));
+        QVERIFY2(!stored.contains(2), "the batch arm must refuse the reserved opt-out id, like the single setter");
+        QCOMPARE(stored.size(), 1);
+
+        // And the refusal holds across the sidecar: the loader drops the word
+        // too, so a hand-edited file cannot resurrect the dead press.
+        QScopedPointer<PhosphorZones::LayoutRegistry> reloaded(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        reloaded->loadAssignments();
+        const QHash<int, QString> afterReload = reloaded->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(afterReload.value(1), QStringLiteral("autotile:bsp"));
+        QVERIFY(!afterReload.contains(2));
     }
 
     // The batch setter CLEARS the mode's array before applying, and only that

@@ -11,6 +11,8 @@
 #include <QUuid>
 #include <memory>
 
+#include <PhosphorLayoutApi/LayoutId.h>
+
 #include "LayoutManagerAssignmentFixture.h"
 
 using namespace PlasmaZones;
@@ -402,6 +404,36 @@ private Q_SLOTS:
         QVERIFY(mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
         // A per-context allow override flips it back on.
         addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), /*allow=*/true);
+        QVERIFY(!mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
+    }
+
+    void testBareAutotileModeRule_clearedDefaultAlgorithm_isNotSuppressedAndKeepsTheBareId()
+    {
+        // The SENTINEL sibling of the primitive above, and the pair the
+        // daemon's activation gate reads. Suppression and a cleared default
+        // are two independent ways for a bare autotile context to have no
+        // algorithm, and only the first was pinned.
+        //
+        // The trap this documents: a bare "autotile:" id's algorithm part is
+        // EMPTY, not the reserved word, so the daemon's explicit-opt-out arm
+        // does not recognise it, and suppression is false here because the
+        // suppress feature is untouched. A gate reading only those two answers
+        // therefore admits the screen and tiles it with whatever stale global
+        // algorithm the engine still holds — silently ignoring the user's
+        // Clear Default. The gate must consult the default ALGORITHM as well.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAutotileAlgorithmProvider([]() {
+            return QString(PhosphorZones::NoTilingAlgorithm);
+        });
+        addEngineModeRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile"));
+
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 2), PhosphorZones::AssignmentEntry::Autotile);
+        // Bare id: the algorithm part is empty, NOT the reserved word.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 2), QStringLiteral("autotile:"));
+        QVERIFY(PhosphorLayout::LayoutId::extractAlgorithmId(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 2))
+                    .isEmpty());
+        // Clearing the default algorithm is NOT the suppress feature, so this
+        // stays false — which is exactly why it cannot be the only gate.
         QVERIFY(!mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
     }
 

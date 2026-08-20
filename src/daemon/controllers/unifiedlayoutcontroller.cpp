@@ -20,6 +20,26 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// True for either synthetic "no selection" picker row — the generic
+/// snapping/autotile one (stamped with NoSnappingLayout) and the
+/// template-flavoured one (NoScrollingTemplate).
+///
+/// Both constants independently spell the same reserved word today, so a
+/// single-constant test happens to match both rows. That coincidence is the
+/// hazard: renaming ONE of them would silently stop the cycle guards below
+/// recognising a row they must never apply, with no compile error to catch it
+/// — the first backward press would then stamp an opt-out the user did not
+/// ask for. Naming the intent once, against both constants, removes the
+/// dependency on them staying identical.
+bool isNoSelectionRow(const QString& id)
+{
+    return id == PhosphorZones::NoSnappingLayout || id == PhosphorZones::NoScrollingTemplate;
+}
+
+} // namespace
+
 UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
                                                  PhosphorScreens::ScreenManager* screenManager,
                                                  PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
@@ -276,7 +296,7 @@ void UnifiedLayoutController::cycle(bool forward)
         // where "apply" would stamp an explicit opt-out the press did not
         // mean (mirrors the backward arm below).
         if (forward) {
-            if (list.size() == 1 && list.first().id == PhosphorZones::NoScrollingTemplate) {
+            if (list.size() == 1 && isNoSelectionRow(list.first().id)) {
                 return;
             }
             applyLayoutByIndex(0);
@@ -288,7 +308,7 @@ void UnifiedLayoutController::cycle(bool forward)
         // press — land on the last real row instead, and when the None row
         // is the ONLY row there is nothing to cycle to at all.
         int last = static_cast<int>(list.size()) - 1;
-        if (list[last].id == PhosphorZones::NoScrollingTemplate) {
+        if (isNoSelectionRow(list[last].id)) {
             if (list.size() == 1) {
                 return;
             }
@@ -549,18 +569,29 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
     // "autotile:none" under Autotile (fromLayoutId's two arms), and either
     // way the mode is preserved — a None press opts the context out of
     // layouts, it does not flip engines.
-    if (preview.id == PhosphorZones::NoSnappingLayout && !preview.isScrollingTemplate) {
+    if (preview.id == PhosphorZones::NoSnappingLayout) {
         if (!m_layoutManager || m_currentScreenName.isEmpty()) {
             return false;
         }
         const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
         const PhosphorZones::AssignmentEntry::Mode mode =
             m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity);
-        // A Templates screen's None is the template-flavoured row handled
-        // above; the generic row reaching one means a filter slipped, and
-        // writing the snapping slot there would flip the screen's mode.
+        // Same resolver-first-then-cascade double check the manual branch
+        // below uses, and for the same reason: refuse only a LIVE Templates
+        // screen whose cascade still reads Scrolling. A Templates screen's
+        // None is the template-flavoured row handled above, so the generic row
+        // reaching one means a filter slipped.
+        //
+        // Refusing on EITHER condition made this a permanent dead press on a
+        // router-downgraded screen (a scrolling assignment the master switch
+        // or a context disable knocked down to live snapping): the picker
+        // draws the manual cards AND the generic None row there, the manual
+        // cards apply as ordinary snapping assignments, and only None was
+        // rejected — a visible card that could never do anything. It now
+        // writes the snapping opt-out exactly as a manual card writes a
+        // snapping layout on that same screen.
         if (mode == PhosphorZones::AssignmentEntry::Scrolling
-            || m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates) {
+            && m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates) {
             qCWarning(lcDaemon) << "applyEntry: refusing the generic None row on a scrolling screen";
             return false;
         }
