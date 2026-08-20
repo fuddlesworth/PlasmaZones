@@ -17,6 +17,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/ScreenContextTracker.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngineTypes.h>
 #include <PhosphorScrollEngine/ScrollStashTypes.h>
 #include <PhosphorScrollEngine/ScrollState.h>
@@ -546,6 +547,22 @@ public:
     /// screen's current one.
     DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
     void updateDragInsertPreview(const DragInsertTarget& target) override;
+    /// Edge auto-scroll (drag_autoscroll.cpp). Moves the VIEW only, which
+    /// is compatible with DETACH-ONCE: the invariant is that structure and
+    /// the hit-tested answer hold still under a stationary cursor, not that
+    /// pixels do. It keeps that answer still by owning the target while it
+    /// scrolls — see dragAutoScrollActive.
+    bool dragAutoScrollTick(const QString& screenId, const QPoint& cursorPos, qreal dtSeconds) override;
+    bool dragAutoScrollActive() const override;
+    /// The ONE disarm: hands the drop target back to the ordinary hit-test
+    /// and restarts the start delay. Every caller must either re-aim
+    /// (repairDragAutoScrollTarget), clear lastTarget itself, or accept the
+    /// stale target deliberately the way the tick's no-geometry exits do
+    /// (foreign screen, dead state, dead work area — where a hit-test is
+    /// impossible and the daemon's own screen-mismatch teardown follows).
+    /// A thoughtless bare cancel leaves the auto-scroll's last edge slot
+    /// standing for a release to commit.
+    void cancelDragAutoScroll() override;
     /// The rect the dragged window would occupy if it were dropped at the
     /// currently remembered target — the drop indicator the daemon paints.
     /// Absolute screen pixels, the same basis as visibleTiles.
@@ -816,6 +833,25 @@ private:
         return m_perScreenOverrides.value(currentKeyForScreen(screenId));
     }
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
+    /// Point the live preview's drop target at the view's leading (@p
+    /// direction < 0) or trailing new-column slot, the two shapes the band
+    /// hit-test already produces at the view's extremes. Called on every
+    /// auto-scroll tick INSTEAD of the hit-test, so the target cannot churn
+    /// as columns slide under a stationary cursor (drag_autoscroll.cpp).
+    /// Returns true when the stored target actually changed. @p cursorPos
+    /// feeds the defensive empty-viewport arm's re-aim only.
+    ///
+    /// PRECONDITION: m_dragInsertPreview must be live (asserted, with a
+    /// release-build refusal, since the signature reads preview-independent).
+    bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
+                                   const QPoint& cursorPos);
+    /// Re-aim the live preview's drop target at @p cursorPos with the
+    /// ordinary hit-test, undoing an edge slot the auto-scroll wrote. Called
+    /// wherever ownership ends with a usable cursor on the preview's own
+    /// screen. Returns true when the stored target actually changed.
+    ///
+    /// PRECONDITION: m_dragInsertPreview must be live.
+    bool repairDragAutoScrollTarget(const QPoint& cursorPos);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
@@ -1090,6 +1126,17 @@ private:
     /// overhang. When false (default) the emit loop clamps the rect at the
     /// screen edge instead, which no present path can bypass.
     bool m_cropStraddlers = false;
+    /// Edge auto-scroll cache (refreshConfigFromSettings). Seeded from the
+    /// IScrollSettings defaults rather than from repeated literals: those
+    /// bodies are already pinned to ConfigDefaults by static_asserts in
+    /// src/config/settings/scrolling.cpp, so taking them here makes one
+    /// source of truth instead of a third uncoordinated copy. They govern
+    /// behaviour until the first refresh, and for any settings object that
+    /// is not an IScrollSettings they govern for good.
+    bool m_dragScrollEnabled = PhosphorEngine::IScrollSettings::kDragScrollEnabledDefault;
+    int m_dragScrollTriggerWidth = PhosphorEngine::IScrollSettings::kDragScrollTriggerWidthDefault;
+    int m_dragScrollDelayMs = PhosphorEngine::IScrollSettings::kDragScrollDelayMsDefault;
+    int m_dragScrollMaxSpeed = PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedDefault;
     ColumnWidth m_defaultColumnWidth = ColumnWidth::makeProportion(0.5);
     /// "Client decides" default width: open at the client's initial size.
     /// This is the GLOBAL verdict only — a per-screen kind override answers

@@ -424,6 +424,31 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
     };
+
+    // ─── Edge auto-scroll (Scrolling.Behavior.DragScroll) ────────────────
+    // niri's dnd-edge-view-scroll. The three figures are clamped rather
+    // than validated against a list: they are continuous quantities, and
+    // the engine's own floors (a trigger width of at least one pixel, a
+    // positive speed) are a second line of defence for a hand-edited file
+    // that predates a range change.
+    schema.groups[CD::scrollingDragScrollGroup()] = {
+        {CD::enabledKey(), CD::scrollingDragScrollEnabled(), QMetaType::Bool},
+        {CD::triggerWidthKey(),
+         CD::scrollingDragScrollTriggerWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDragScrollTriggerWidthMin(), CD::scrollingDragScrollTriggerWidthMax())},
+        {CD::delayMsKey(),
+         CD::scrollingDragScrollDelayMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDragScrollDelayMsMin(), CD::scrollingDragScrollDelayMsMax())},
+        {CD::maxSpeedKey(),
+         CD::scrollingDragScrollMaxSpeed(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingDragScrollMaxSpeedMin(), CD::scrollingDragScrollMaxSpeedMax())},
+    };
 }
 
 // ─── Strip-mode selector (Scrolling.ZoneSelector) ───────────────────────────

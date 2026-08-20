@@ -128,6 +128,15 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
             return true;
         }
     }
+    // Deliberately NO clause for m_scrollVisualDelta (parked columns
+    // relocated with no spring live, the edge auto-scroll's immediate path).
+    // A relocated parked column cannot be lost to scanout: for scanout the
+    // opaque candidate must be the output's TOP item, so a relocation
+    // stacked above it un-tops the candidate and scanout is refused anyway,
+    // while a relocation stacked below it is occluded and correct to drop.
+    // Adding a clause keyed on the map would instead block scanout for as
+    // long as any column stays parked, which is the steady state of every
+    // overflowing strip.
     return m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
 }
 

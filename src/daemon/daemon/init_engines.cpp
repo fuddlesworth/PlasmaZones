@@ -1103,12 +1103,33 @@ void Daemon::initEnginesAndWiring()
     // this cannot fight the preview. Without it, a window closing on the
     // strip mid-popup left the cards stale and the popup-only drop arm
     // committed indices against a renumbered strip.
-    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
-            [this](const QString& screenId) {
-                if (m_overlayService) {
-                    m_overlayService->refreshStripSelector(screenId);
-                }
-            });
+    connect(
+        scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
+        [this, scrollEngine](const QString& screenId) {
+            if (!m_overlayService) {
+                return;
+            }
+            // The edge auto-scroll emits this on EVERY moving tick, up to
+            // ~60 Hz for the length of an edge hold, and a refresh clears
+            // the popup's stored pick plus re-pushes the whole card model.
+            // The self-healing assumption above does not survive that: it
+            // relies on a following cursor tick re-selecting, and the
+            // gesture this fires for is a PARKED cursor, which delivers
+            // none. Skipping is safe for the same reason the comment gives
+            // — the strip is frozen under a preview, so an anchor-only
+            // move has nothing for the cards to catch up with.
+            // Screen-matched, because dragAutoScrollActive() is a property
+            // of the single live preview and carries no screen: skipping
+            // on the flag alone would also swallow a genuine structural
+            // change on a DIFFERENT monitor, which is the stale-cards bug
+            // this connect exists to fix. Only the preview's own screen is
+            // frozen, so only its refresh is safe to drop.
+            if (scrollEngine->dragAutoScrollActive()
+                && PhosphorScreens::ScreenIdentity::screensMatch(scrollEngine->dragInsertPreviewScreenId(), screenId)) {
+                return;
+            }
+            m_overlayService->refreshStripSelector(screenId);
+        });
 
     // Live-mode resolver for snap's capture gate: the router's
     // live-set-first answer lets a presave capture a screen the cascade
@@ -1213,8 +1234,22 @@ void Daemon::initEnginesAndWiring()
             &TilingAdaptor::relayTileRequestsJson);
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
             &TilingAdaptor::focusWindowRequested);
-    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_tilingAdaptor,
-            &TilingAdaptor::tilingChanged);
+    // Gated, not a direct signal->signal forward: the edge auto-scroll emits
+    // placementChanged on every moving tick (~60 Hz for the length of an edge
+    // hold), and tilingChanged is an ungated session-bus broadcast with no
+    // in-tree subscriber to damp it. Same screen-matched skip as the
+    // strip-selector refresh above; the drop is lossless for external
+    // listeners because the commit or cancel that ends the hold emits a
+    // final placementChanged with the auto-scroll no longer owning.
+    connect(
+        scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_tilingAdaptor,
+        [this, scrollEngine](const QString& screenId) {
+            if (scrollEngine->dragAutoScrollActive()
+                && PhosphorScreens::ScreenIdentity::screensMatch(scrollEngine->dragInsertPreviewScreenId(), screenId)) {
+                return;
+            }
+            Q_EMIT m_tilingAdaptor->tilingChanged(screenId);
+        });
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, m_tilingAdaptor,
             &TilingAdaptor::relayWindowFloatingChanged);
     // The scroll engine manages its float STATE itself, but only the daemon can

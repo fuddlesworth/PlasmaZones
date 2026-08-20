@@ -119,6 +119,16 @@ public:
     bool applyBatchDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis,
                          const PhosphorAnimation::Profile& profile);
 
+    /// Fold one batch's view delta into @p output's accumulator WITHOUT a leg
+    /// — for user-driven continuous view motion (the drag edge auto-scroll
+    /// heartbeat), where the ~60 Hz commits are the motion and a leg
+    /// retargeted every tick never progresses on a stateless curve. Any leg
+    /// in flight is cancelled (with a repaint, since its offset vanishes and
+    /// nothing else repaints it away), so the strip lands exactly on the
+    /// committed geometry. The accumulator still moves so a later discrete
+    /// scroll's leg starts from the true committed view.
+    void applyImmediateDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis);
+
     /// Paint translation for a window carried by @p output's view, in logical
     /// pixels, already resolved onto that output's own strip axis so a caller
     /// cannot put it in the wrong component. A null point when nothing is in
@@ -154,6 +164,11 @@ public:
     /// repaints for the dropped legs first, since nothing else will paint
     /// their offsets away.
     void reset();
+    /// Drop every LIVE leg driven by @p clock (a dying output's clock).
+    /// NOT a complete teardown on its own: an accumulator-only entry (one
+    /// applyImmediateDelta created with no leg to reap) is invisible to the
+    /// isAnimating() test and is forgetOutput's responsibility — which
+    /// screenRemoved calls unconditionally before this, so nothing leaks.
     int reapAnimationsForClock(const PhosphorAnimation::IMotionClock* clock);
 
     void advanceAnimations();

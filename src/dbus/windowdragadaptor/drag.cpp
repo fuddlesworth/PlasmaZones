@@ -453,6 +453,11 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
             }
 
             m_currentZoneId = zonesToSnap.first()->id().toString();
+            // The screen the geometry below is absolute on. This is the
+            // co-key of handleMultiZoneModifier's change gate: leaving it
+            // stale lets a later same-zone-id tick on another screen skip
+            // the refresh and keep this screen's absolute rect.
+            m_currentZoneScreenId = screenId;
             m_currentAdjacentZoneIds = zoneIds;
             m_isMultiZoneMode = (zonesToSnap.size() > 1);
             m_currentMultiZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
@@ -689,8 +694,16 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             // Cursor crossed between two engine-owned screens (same engine
             // or autotile↔scrolling) while the trigger is held: cancel the
             // old preview before starting a fresh one on the new screen.
+            // screensMatch, not raw !=: an id spelling change (connector name
+            // vs EDID form) for the SAME screen must not read as a crossing —
+            // it would cancel the preview and reset the auto-scroll's
+            // start-delay clock every tick. Distinct virtual screens still
+            // compare unequal through screensMatch, so a genuine VS crossing
+            // cancels as before.
             if (previewEngine
-                && (previewEngine != insertEngine || previewEngine->dragInsertPreviewScreenId() != insertScreenId)) {
+                && (previewEngine != insertEngine
+                    || !PhosphorScreens::ScreenIdentity::screensMatch(previewEngine->dragInsertPreviewScreenId(),
+                                                                      insertScreenId))) {
                 previewEngine->cancelDragInsertPreview();
                 // The departed screen's indicator goes with the preview it
                 // described. pushScrollDropIndicator would clear it anyway on
@@ -698,6 +711,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // a begin that fails, or a new screen with no valid target
                 // yet, would leave it lit in the meantime.
                 clearScrollDropIndicator();
+                // The heartbeat was armed against the departed preview, and
+                // its elapsed clock has been running across the crossing.
+                // Stopping here makes the re-arm below take the fresh-drag
+                // branch, so the first tick on the new screen integrates from
+                // zero instead of from a gap that spans the screen change.
+                stopDragScrollTimer();
             }
             if (!insertEngine->hasDragInsertPreview()) {
                 const bool began = insertEngine->beginDragInsertPreview(windowId, insertScreenId);
@@ -712,6 +731,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // outer branch was taken. A rect pushed on an earlier tick
                     // would stay painted for the rest of the drag.
                     clearScrollDropIndicator();
+                    stopDragScrollTimer();
                 } else if (insertEngine->providesDragInsertSelector() && m_overlayService) {
                     // The begin detached the drag window. The popup's
                     // exclusion emulated that detach, so the column set
@@ -722,7 +742,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     m_overlayService->refreshStripSelector(insertScreenId);
                 }
             }
-            if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
+            if (insertEngine->hasDragInsertPreview()
+                && PhosphorScreens::ScreenIdentity::screensMatch(insertEngine->dragInsertPreviewScreenId(),
+                                                                 insertScreenId)) {
                 // Strip popup keep-alive: the early return below starves the
                 // per-tick selector check for the whole preview, which is
                 // fine on autotile screens (no popup there) but would freeze
@@ -730,7 +752,13 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // begins. Runs BEFORE the target resolve so a hit stored
                 // this tick feeds this tick's preview.
                 const bool stripSelector = insertEngine->providesDragInsertSelector();
-                if (stripSelector) {
+                // Skipped while the auto-scroll owns the target: this is what
+                // STORES the popup's pick, and a pick stored now is a pick the
+                // drop would commit even though the branch below has stopped
+                // consuming it. Suppressing only the consumer would leave the
+                // producer quietly overwriting the target behind the edge slot
+                // the user is actually watching.
+                if (stripSelector && !insertEngine->dragAutoScrollActive()) {
                     checkZoneSelectorTrigger(cursorX, cursorY);
                 }
                 // Per-tick preview ownership: while the popup holds a valid
@@ -738,30 +766,83 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // preview (and the in-strip indicator paints its slot); the
                 // popup clears its target the moment the cursor leaves the
                 // cards, handing ownership straight back to the bands.
-                PhosphorEngine::IPlacementEngine::DragInsertTarget target;
-                if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
-                    && PhosphorScreens::ScreenIdentity::screensMatch(m_overlayService->selectedStripTargetScreenId(),
-                                                                     insertScreenId)) {
-                    const auto strip = m_overlayService->selectedStripTarget();
-                    target.primary = strip.columnIndex;
-                    target.secondary = strip.tileIndex;
-                    target.newSlot = strip.newColumn;
+                //
+                // Edge auto-scroll gets the cursor and a heartbeat here; the
+                // strip's own view motion runs off the timer, because motion
+                // ticks stop the instant the hand does and a PARKED cursor in
+                // the band is the whole gesture. Armed unconditionally for a
+                // live preview: the engine answers "not me" for free when it
+                // cannot scroll (autotile's interface default) or when the
+                // strip already fits the viewport.
+                m_lastDragCursorPos = QPoint(cursorX, cursorY);
+                // The strip popup and the edge bands are alternative ways to
+                // aim, and while the popup is up it is the one the user is
+                // using. They also physically overlap: the popup's bar spans
+                // most of the work area and can be anchored left or right, so
+                // its OUTERMOST cards sit inside the edge band. Arming there
+                // would take the target away from the card under the cursor
+                // and scroll the strip out from under it. Not armed while the
+                // popup is shown on this screen, and stopped if it came up
+                // after the arm. The two states cannot both hold: the popup's
+                // own trigger check is skipped while the scroll owns the
+                // target, so it cannot appear mid-scroll, and this gate stops
+                // the scroll arming under an already-visible popup. That is
+                // what makes the stop below safe — there is never an owned
+                // target here to strand.
+                const bool selectorOwnsAiming = m_zoneSelectorShown
+                    && PhosphorScreens::ScreenIdentity::screensMatch(m_zoneSelectorShownOn, insertScreenId);
+                if (selectorOwnsAiming) {
+                    // The engine is disarmed as well as the timer stopped.
+                    // stopDragScrollTimer touches only daemon state, so an
+                    // armed band would keep its start-delay clock running
+                    // behind the popup and the first tick after the popup
+                    // hides would find the delay long since elapsed and lurch
+                    // the strip with no dwell at all.
+                    insertEngine->cancelDragAutoScroll();
+                    stopDragScrollTimer();
                 } else {
-                    target = insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
+                    ensureDragScrollTimerRunning(windowId);
                 }
-                if (target.isValid()) {
-                    insertEngine->updateDragInsertPreview(target);
+
+                PhosphorEngine::IPlacementEngine::DragInsertTarget target;
+                // While the auto-scroll is running it OWNS the target — it
+                // writes the view's leading/trailing new-column slot itself.
+                // Re-hit-testing here would undo that on the next cursor
+                // twitch and bring back the churn the first version of this
+                // feature was reverted for: columns sliding under a nearly
+                // stationary cursor re-answer on every boundary they cross,
+                // flipping the indicator between a new column and a join.
+                if (!insertEngine->dragAutoScrollActive()) {
+                    if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
+                        && PhosphorScreens::ScreenIdentity::screensMatch(
+                            m_overlayService->selectedStripTargetScreenId(), insertScreenId)) {
+                        const auto strip = m_overlayService->selectedStripTarget();
+                        target.primary = strip.columnIndex;
+                        target.secondary = strip.tileIndex;
+                        target.newSlot = strip.newColumn;
+                    } else {
+                        target = insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
+                    }
+                    if (target.isValid()) {
+                        insertEngine->updateDragInsertPreview(target);
+                    }
                 }
                 // Paint the drop target. Pushed AFTER the update above so the
                 // rect reflects this tick's target, and pushed unconditionally
                 // because the overlay change-gates on the rect itself, so a
                 // repeat costs a compare. Empty for autotile by interface
                 // default, which is correct — its live restructure already
-                // shows the target. The push is always animated: it follows a
-                // CURSOR MOVE, so any rect change here is the user aiming
-                // somewhere new, which is exactly what the transitions exist
-                // to make legible.
-                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId));
+                // shows the target. Animated, because it follows a CURSOR
+                // MOVE and any rect change here is the user aiming somewhere
+                // new, which is exactly what the transitions exist to make
+                // legible — EXCEPT while the auto-scroll is running. There the
+                // heartbeat is already pushing un-animated rects at ~60 Hz
+                // against a rect that is moving on its own, and interleaving
+                // an animated push retargets a transition that has not
+                // settled, which stretches the indicator instead of sliding
+                // it. That is the case the animate flag was added for.
+                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId),
+                                        /*animate=*/!insertEngine->dragAutoScrollActive());
                 // The early return below starves the activation and
                 // zone-span rising-edge latches for as long as the preview
                 // lives; keep them fed here so a release→press performed
@@ -797,6 +878,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             const bool cancelledStripSelector = previewEngine->providesDragInsertSelector();
             previewEngine->cancelDragInsertPreview();
             clearScrollDropIndicator();
+            stopDragScrollTimer();
             if (cancelledStripSelector && m_overlayService && !cancelledScreenId.isEmpty()) {
                 m_overlayService->refreshStripSelector(cancelledScreenId);
             }

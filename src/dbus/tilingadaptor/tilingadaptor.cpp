@@ -146,8 +146,27 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
         // for a window the view does not carry — both mean zero, which is what
-        // the default gives.
-        entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
+        // the default gives. Dropped on a floating entry like the other paint
+        // hints: the engine only ever writes it inside the tiled emit loop,
+        // and a garbled floating delta could seed a view spring for a screen
+        // whose strip never moved.
+        if (!entry.floating) {
+            entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
+        } else if (obj.contains(QLatin1String("viewDelta"))) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping viewDelta on floating entry" << entry.windowId;
+        }
+        // Set only by the scroll engine's drag edge auto-scroll batches;
+        // absent everywhere else, which is what the default gives. Dropped
+        // on a floating entry like its sibling paint hints below (visual
+        // position, tabFrom): a floating entry carries no view membership,
+        // and the effect additionally gates the flag on viewDelta != 0, so
+        // a garbled floating viewImmediate must not survive the boundary.
+        if (!entry.floating) {
+            entry.viewImmediate = obj.value(QLatin1String("viewImmediate")).toBool(false);
+        } else if (obj.contains(QLatin1String("viewImmediate"))) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping viewImmediate on floating entry"
+                                  << entry.windowId;
+        }
         // Present only for a parked scrolling column; absent means the
         // committed rect IS the paint position.
         //
@@ -942,8 +961,14 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
     // dedup entry and any parked open go with the tracking — but NO capture:
     // the window is live and mid-drag, and its frame is not a placement.
     m_lastFloatBroadcast.remove(windowId);
+    // The tab-colour relay memo goes too, matching windowClosed and
+    // onTrackedWindowDestroyed. It would self-heal on the next relay for
+    // this id, but only via a retitle while the window is off-strip; the
+    // symmetric eviction closes the verdict-moved-and-moved-back residue.
+    m_lastScrollTabColorsRelay.remove(windowId);
     if (m_windowTrackingAdaptor) {
         m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
+        m_lastScrollTabColorsRelay.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);

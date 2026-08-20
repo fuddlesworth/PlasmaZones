@@ -7,15 +7,19 @@
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
+#include <QElapsedTimer>
 #include <QObject>
+#include <QPoint>
 #include <QString>
 #include <QRect>
+#include <QSize>
 #include <QUuid>
 #include <QSet>
 #include <QVector>
 #include <memory>
 
 class QScreen;
+class QTimer;
 
 namespace PhosphorScreens {
 class ScreenManager;
@@ -504,6 +508,18 @@ private:
     /// across both engines by construction), or nullptr.
     PhosphorEngine::IPlacementEngine* dragInsertPreviewEngine() const;
 
+    /// The window's client-reported minimum size as known by ANY engine
+    /// (scroll and autotile today; snap answers 0x0 until it grows a
+    /// min-size model, its slot is future-proofing), or 0x0 when none
+    /// tracks it. Queried
+    /// BEFORE a drag-insert commit: a cross-engine adoption releases the
+    /// source's tracking (windowFloatingStateSynced -> handoffRelease), so
+    /// the value must be read while the source still holds it, then pushed
+    /// into the committing engine via windowMinSizeUpdated. Without that
+    /// push a fresh adoption seats the tile with min 0x0 and every
+    /// respect-minimum-size clamp is inert for it.
+    QSize dragInsertAdoptedMinSize(const QString& windowId) const;
+
     /// Reorder-mode resolve for whichever engine owns @p screenId: autotile
     /// keeps the SetDragBehavior-rule/global-setting cascade; scrolling has
     /// no DragBehavior enum, so "always re-insert" IS the AlwaysActive
@@ -741,6 +757,54 @@ private:
     /// journal without it). Reset by beginDrag.
     bool m_dragInsertTickLogged = false;
 
+    // ── Edge auto-scroll driver (niri's dnd-edge-view-scroll) ───────────
+    //
+    // A repeating timer, not the cursor ticks: dragMoved only fires on
+    // pointer MOTION (DragTracker emits on slotMouseChanged, throttled to
+    // 32 ms), and the whole point of the feature is that a cursor PARKED in
+    // the edge band keeps scrolling. The engine does the ramp; this side
+    // only supplies a heartbeat, the last known cursor and the real elapsed
+    // time between ticks.
+
+    /// ~60 Hz while a drag-insert preview is live on the CURSOR's own engine
+    /// screen (the arm site sits inside dragMoved's same-screen branch), on
+    /// any engine including one that cannot auto-scroll — the arm does not
+    /// test the engine, because the tick's own interface default answers
+    /// "not me" for free. The one exception is the strip selector popup:
+    /// while it is up on the preview's screen it owns aiming, so the arm is
+    /// skipped and the engine disarmed. Created lazily. Most preview-end
+    /// paths stop it explicitly; the per-output cancel stops it only once no
+    /// preview is left anywhere, since it must not disturb a scroll running
+    /// on another monitor. The tick itself is the backstop and stops when it
+    /// finds no preview.
+    QTimer* m_dragScrollTimer = nullptr;
+    /// Wall time since the previous tick, so the engine's speed ramp is
+    /// frame-rate independent and a late timer cannot lurch the strip.
+    QElapsedTimer m_dragScrollElapsed;
+    /// Cursor position from the last dragMoved that had a live drag-insert
+    /// preview on the cursor's own engine screen, in screen pixels. NOT every
+    /// pointer move: the single write sits inside that branch, immediately
+    /// before the only site that arms the timer. That ordering is what makes
+    /// it safe to leave uncleared — no tick can read a previous drag's parked
+    /// cursor, because arming always re-writes it first. Do not "fix" it with
+    /// a clear: a default QPoint is (0, 0), which is inside the leading band
+    /// on most work areas, and the timer reads this.
+    QPoint m_lastDragCursorPos;
+    /// The drag the timer was armed for. A tick is at most 16 ms from
+    /// firing when a drag ends, which is long enough for the next drag's
+    /// eager preview to begin — and that tick would then nudge the NEW
+    /// strip with the OLD drag's parked cursor.
+    QString m_dragScrollWindowId;
+    void ensureDragScrollTimerRunning(const QString& windowId);
+    void stopDragScrollTimer();
+    /// One heartbeat. Named as a verb rather than `onDragScrollTick`: the
+    /// `on*` prefix in this class marks a Qt slot (onLayoutChanged,
+    /// onSnapAssistDismissed, both under `private Q_SLOTS:`), and this is a
+    /// plain member reached through the pointer-to-member connect overload,
+    /// which needs no slot marking. Keeping it off the slot surface also
+    /// keeps it off the adaptor's introspected bus interface.
+    void advanceDragScroll();
+
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();
 
@@ -751,19 +815,25 @@ private:
     QString m_dropIndicatorScreenId;
     /// Push the drop-target indicator for a live preview on @p screenId,
     /// hiding the previous screen's indicator first when the drag crossed
-    /// screens so a cross-screen drag cannot strand one behind it. Always
-    /// animated: the only caller follows a cursor move, so a rect change is
-    /// the user aiming somewhere new (the overlay change-gates, so an
-    /// unchanged rect animates nothing). Hides ride the overlay's
-    /// animate=false path directly — see clearScrollDropIndicator.
-    void pushScrollDropIndicator(const QString& screenId, const QRect& rect);
+    /// screens so a cross-screen drag cannot strand one behind it. Hides
+    /// ride the overlay's animate=false path directly — see
+    /// clearScrollDropIndicator.
+    ///
+    /// Animated by default: the cursor-tick caller follows a cursor move, so
+    /// a rect change there is the user aiming somewhere new (the overlay
+    /// change-gates, so an unchanged rect animates nothing). Pass
+    /// @p animate false for the edge auto-scroll's own pushes: those land
+    /// every ~16 ms against a ~100 ms transition, so animating them
+    /// retargets the rect six times before it can settle and it stretches
+    /// instead of sliding.
+    void pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate = true);
     /// Preview-end teardown for the drop indicator. Safe to call with none
     /// showing.
     ///
     /// A stranded indicator sits on the desktop with no drag left to dismiss
     /// it, so every preview-end path calls this. The list is longer than it
     /// looks, because an engine can drop its own preview WITHOUT telling the
-    /// adaptor — five engine-side self-cancel sites do exactly that — so the
+    /// adaptor — several engine-side self-cancel sites do exactly that — so the
     /// daemon cannot rely on being notified and repairs wherever it notices:
     ///   - settleDragInsertPreviewAt, on all three arms including the one
     ///     that finds no engine at all (a drag is still ending there);

@@ -258,8 +258,17 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       knows and never hears a strip, and a v13 effect against a v12 daemon
 //       queries three methods that do not exist — either way the pills are
 //       silently absent rather than wrong.
-inline constexpr int ApiVersion = 13;
-inline constexpr int MinPeerApiVersion = 13;
+//   v14: TileRequestEntry gained a trailing viewImmediate bool, widening
+//       windowsTileRequested from a(siiiissbbbssiiibs) to a(siiiissbbbssiiibsb).
+//       It marks a batch whose view travel is user-driven continuous motion
+//       (the drag edge auto-scroll heartbeat): the effect applies the delta
+//       outright instead of animating it, because a view leg retargeted every
+//       16 ms never progresses on a stateless curve — the painted strip
+//       stalls behind the committed geometry and glides once when the ticks
+//       stop. Same signature-matched failure mode as v6 through v11 (v12 and
+//       v13 widened none).
+inline constexpr int ApiVersion = 14;
+inline constexpr int MinPeerApiVersion = 14;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

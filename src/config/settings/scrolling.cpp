@@ -6,6 +6,10 @@
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
+// For the bidirectional default asserts below: the interface names the four
+// edge auto-scroll defaults, so both sides are compared rather than copied.
+#include <PhosphorScrollEngine/IScrollSettings.h>
+
 namespace PlasmaZones {
 
 // ── Scrolling (PhosphorConfig::Store-backed) ────────────────────────────────
@@ -44,6 +48,29 @@ static_assert(!ConfigDefaults::scrollingCropStraddlers(),
 // of the option must resolve the axis from its work area, never force one.
 static_assert(ConfigDefaults::scrollingStripAxis() == ConfigDefaults::scrollingStripAxisAuto(),
               "IScrollSettings::scrollingStripAxis defaults to 0 (Auto) — update it with this default");
+// The edge auto-scroll block, same class but BIDIRECTIONAL, unlike the
+// literal-compare asserts above and below: IScrollSettings names its four
+// defaults as constants, so these compare the two sides directly and an edit
+// to EITHER file breaks the build. That is the property the surrounding
+// asserts only approximate.
+static_assert(ConfigDefaults::scrollingDragScrollEnabled()
+                  == PhosphorEngine::IScrollSettings::kDragScrollEnabledDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll master switch default");
+static_assert(ConfigDefaults::scrollingDragScrollTriggerWidth()
+                  == PhosphorEngine::IScrollSettings::kDragScrollTriggerWidthDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll trigger width default");
+static_assert(ConfigDefaults::scrollingDragScrollDelayMs()
+                  == PhosphorEngine::IScrollSettings::kDragScrollDelayMsDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll start delay default");
+static_assert(ConfigDefaults::scrollingDragScrollMaxSpeed()
+                  == PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll maximum speed default");
+// The schema's ceiling and the engine's own ceiling have to be the same
+// number, or a value the settings UI accepts would be silently re-clamped a
+// second time on the way into the engine.
+static_assert(ConfigDefaults::scrollingDragScrollMaxSpeedMax()
+                  == PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedCeiling,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll maximum speed ceiling");
 // The tab indicator's paint half carries the same interface-side defaults, for
 // the same reason: the overlay service reads them through ISettings.
 static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,
@@ -445,6 +472,22 @@ P_STORE_SET_INT(setScrollingDropIndicatorBorderRadius, scrollingDropIndicatorGro
 // validators own enum validation (validIntOr snaps a bad sticky value back
 // to the default on read, like every other stored enum) and range clamping
 // (clampInt on the step percents).
+
+// ── Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll) ──
+
+P_STORE_GET(bool, scrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, scrollingDragScrollEnabledChanged)
+
+P_STORE_GET(int, scrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey, int)
+P_STORE_SET_INT(setScrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey,
+                scrollingDragScrollTriggerWidthChanged)
+
+P_STORE_GET(int, scrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, int)
+P_STORE_SET_INT(setScrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, scrollingDragScrollDelayMsChanged)
+
+P_STORE_GET(int, scrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey, int)
+P_STORE_SET_INT(setScrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey,
+                scrollingDragScrollMaxSpeedChanged)
 
 // ── Scrolling drag-insert triggers (PhosphorConfig::Store-backed) ───────────
 // Hand-written like the autotile pair in triggers.cpp: trigger lists are

@@ -82,6 +82,57 @@ public:
     virtual int scrollingInsertPosition() const = 0;
     /// ColumnDisplay new columns open in (0 = normal, 1 = tabbed).
     virtual int scrollingDefaultColumnDisplay() const = 0;
+
+    // ── Drag-insert edge auto-scroll (Scrolling.Behavior.DragScroll) ─────
+    //
+    // niri's dnd-edge-view-scroll: holding a dragged window near either
+    // screen edge scrolls the strip so an off-screen column can be reached.
+    // DEFAULTED, not pure, like scrollingCropStraddlers — niri's own
+    // defaults are the right answer for every implementor that has not
+    // heard of the option, the test stubs included.
+
+    // niri's four figures, named so the defaulted bodies below and
+    // ScrollEngine's pre-refresh member cache read the SAME constants rather
+    // than three hand-copied sets. src/config/settings/scrolling.cpp
+    // static_asserts ConfigDefaults against these, which is what keeps the
+    // config layer and the engine layer agreeing.
+    static constexpr bool kDragScrollEnabledDefault = true;
+    static constexpr int kDragScrollTriggerWidthDefault = 30;
+    static constexpr int kDragScrollDelayMsDefault = 100;
+    static constexpr int kDragScrollMaxSpeedDefault = 1500;
+    /// Upper bound the engine enforces on the speed. The config schema clamps
+    /// there too, but the schema only governs the daemon's own settings
+    /// object, and an unbounded speed teleports the strip in a single tick.
+    static constexpr int kDragScrollMaxSpeedCeiling = 10000;
+
+    /// Master switch. Off, the edge bands are inert and the drag behaves
+    /// exactly as it did before the feature existed.
+    virtual bool scrollingDragScrollEnabled() const
+    {
+        return kDragScrollEnabledDefault;
+    }
+    /// Width of the band inside each work-area edge that arms the scroll,
+    /// in logical pixels. Speed ramps linearly from zero at the band's
+    /// inner edge to the maximum at the work area's edge. The engine
+    /// additionally clamps the value to a third of the work area's MAIN
+    /// extent, so the two bands always leave a neutral zone to aim from —
+    /// a configured width past that is silently narrowed.
+    virtual int scrollingDragScrollTriggerWidth() const
+    {
+        return kDragScrollTriggerWidthDefault;
+    }
+    /// How long the cursor must sit inside the band before the strip starts
+    /// moving. Stops a drag that merely passes near an edge from scrolling.
+    virtual int scrollingDragScrollDelayMs() const
+    {
+        return kDragScrollDelayMsDefault;
+    }
+    /// Scroll speed at the very edge of the work area, in logical pixels
+    /// per second.
+    virtual int scrollingDragScrollMaxSpeed() const
+    {
+        return kDragScrollMaxSpeedDefault;
+    }
     /// Preset proportion lists, serialized as decimal strings. These are the
     /// FALLBACK vocabulary: a screen whose context resolves a template layout
     /// gets a per-screen replacement list pushed through the TEMPLATE channel

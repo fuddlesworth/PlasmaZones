@@ -255,7 +255,12 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     // focused column fully visible, pinning it to the edge it entered from.
     int pos = activeMainPos - oldViewOffset;
     if (colMain >= viewMain) {
-        // Longer than the viewport along the strip: pin the entering edge.
+        // Exactly the viewport's length along the strip, never longer:
+        // columnWidthPx caps every column at the work area, so this is the
+        // equality case and both arms resolve to the same zero offset. Kept
+        // as a branch because the cap lives in another function and a future
+        // width kind that opted out of it would land here needing the
+        // entering-edge pin.
         pos = (prevIdx >= 0 && m_activeColumnIdx < prevIdx) ? viewMain - colMain : 0;
     } else if (pos < 0) {
         pos = 0;
@@ -365,10 +370,74 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     return true;
 }
 
+bool ScrollStrip::scrollViewBy(int delta, const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0 || delta == 0) {
+        return false;
+    }
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there). Checked here too because this mutator runs from a timer: a
+    // screen dying mid-drag must not walk the persisted anchor.
+    if (mainExtent(params) <= 0) {
+        return false;
+    }
+    // viewOffset = columnStripPos(active) - anchor, so moving the view
+    // forward along the strip by delta means shrinking the anchor by delta.
+    // Clamped, unlike the centering mutators: this one scrolls to a place the
+    // user pointed at rather than to a computed position, so running past
+    // either end must simply stop.
+    //
+    // The clamp is on the DELTA, not on the absolute position, and that
+    // distinction is load-bearing. centerActiveColumn and centerVisibleColumns
+    // deliberately store an anchor whose derived viewOffset is out of range
+    // (their comments say so), and applyLayout skips updateViewForFocus for
+    // the whole drag, so such an anchor survives untouched into the first
+    // tick. Running it through clampedAnchor would snap the view the entire
+    // way back into range in one tick — hundreds of pixels, in the direction
+    // OPPOSITE to the requested scroll on the leading band. Clamping the delta
+    // instead lets an out-of-range view walk back one tick's worth at a time
+    // and never snaps.
+    const int viewMain = mainExtent(params);
+    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+    const int maxViewOffset = qMax(0, stripExtentPx(params) - viewMain);
+    const int viewOffset = activeMainPos - m_viewAnchor;
+    // qMax/qMin against viewOffset itself so an already-out-of-range view is
+    // never pushed FURTHER out, but is free to travel back towards the range.
+    const int target = delta > 0 ? qMin(viewOffset + delta, qMax(viewOffset, maxViewOffset))
+                                 : qMax(viewOffset + delta, qMin(viewOffset, 0));
+    const int anchor = activeMainPos - target;
+    if (anchor == m_viewAnchor) {
+        return false;
+    }
+    m_viewAnchor = anchor;
+    return true;
+}
+
+bool ScrollStrip::stripFitsViewport(const ScrollLayoutParams& params) const
+{
+    if (mainExtent(params) <= 0) {
+        return true;
+    }
+    return stripExtentPx(params) <= mainExtent(params);
+}
+
+bool ScrollStrip::stripSettledInViewport(const ScrollLayoutParams& params) const
+{
+    if (!stripFitsViewport(params)) {
+        return false;
+    }
+    // Degenerate area or empty strip: nothing a scroll could reveal, and
+    // viewOffsetFor needs a live active column to derive from.
+    if (mainExtent(params) <= 0 || m_activeColumnIdx < 0) {
+        return true;
+    }
+    const int viewOffset = viewOffsetFor(params);
+    return viewOffset >= 0 && viewOffset <= qMax(0, stripExtentPx(params) - mainExtent(params));
+}
+
 ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
 {
     ResolvedStrip out;
-    out.stripExtent = stripExtentPx(params);
     out.viewOffset = viewOffsetFor(params);
 
     const QRect area = params.workArea;
@@ -377,7 +446,8 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
     // Walks ALONG the strip. The view offset only ever slides on this axis,
     // which is what makes one spring per output enough to carry the whole
     // strip rigidly.
-    int mainCursor = axis.mainLow(area) - out.viewOffset;
+    const int stripStart = axis.mainLow(area) - out.viewOffset;
+    int mainCursor = stripStart;
 
     for (int ci = 0; ci < m_columns.size(); ++ci) {
         const Column& col = m_columns.at(ci);
@@ -575,6 +645,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         out.columns.append(rc);
         mainCursor += colW + gap;
     }
+    // Derived from this walk's own accumulation rather than a second
+    // stripExtentPx pass: the cursor advanced colW + gap per contributing
+    // column, so dropping the trailing gap reproduces stripExtentPx exactly
+    // — this runs per tick on the auto-scroll and indicator paths, and the
+    // duplicate O(columns x tiles) walk was pure cost.
+    out.stripExtent = (mainCursor > stripStart) ? mainCursor - stripStart - gap : 0;
     return out;
 }
 

@@ -352,11 +352,42 @@ public:
     /// center-visible-columns). Falls back to centerActiveColumn when no
     /// column is fully visible. Returns true when the anchor actually moved.
     bool centerVisibleColumns(const ScrollLayoutParams& params);
+    /// Scroll the view @p delta pixels forward ALONG THE STRIP (negative
+    /// scrolls back towards its start) WITHOUT changing focus, clamped to the
+    /// strip's ends. Forward is rightward on a horizontal strip and downward
+    /// on a vertical one. The anchor is stored relative to the active column,
+    /// so a forward view move shrinks it by the same amount. Returns true when
+    /// the anchor actually moved — a caller sitting at either end gets false
+    /// and can stop. This is the only mutator that moves the view without a
+    /// focus, structure or policy change behind it; the drag-insert edge
+    /// auto-scroll is its one caller.
+    bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against
     /// @p params. Pure function of the current model state; does not mutate.
     ResolvedStrip relayout(const ScrollLayoutParams& params) const;
+
+    /// True when the whole strip already fits the viewport, i.e. there is
+    /// nothing off screen to scroll to. A degenerate work area counts as
+    /// fitting, so a caller cannot scroll a screen that is going away.
+    ///
+    /// Exists so a per-frame caller can ask the question without paying for a
+    /// full relayout: relayout() allocates a ResolvedColumn (with a nested
+    /// tile vector) per column, and the edge auto-scroll's disarm gate needs
+    /// only a predicate.
+    bool stripFitsViewport(const ScrollLayoutParams& params) const;
+
+    /// stripFitsViewport AND the derived view offset is settled inside
+    /// [0, stripExtent - viewport] — i.e. genuinely nothing to reveal. The
+    /// distinction matters because the centering mutators deliberately store
+    /// an anchor whose derived viewOffset is out of range (their comments say
+    /// so), which can leave a column hanging off one edge even though the
+    /// strip FITS; the edge auto-scroll's clamped-delta walk is the one
+    /// motion that brings it back, so its disarm gate must ask this, not the
+    /// fits-only question. Degenerate work areas and empty strips answer
+    /// true, same fail-closed reading as stripFitsViewport.
+    bool stripSettledInViewport(const ScrollLayoutParams& params) const;
 
     // ── Pixel resolution helpers (shared with the engine/tests) ─────────────
     /// The pixel MAIN extent @p width resolves to under @p params (gap-aware

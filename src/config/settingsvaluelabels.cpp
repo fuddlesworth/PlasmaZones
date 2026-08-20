@@ -245,6 +245,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         QHash<QString, ValueDescriptor> t;
 
         const QString px = QStringLiteral("px");
+        const QString pxPerSec = QStringLiteral("px/s");
         const QString ms = QStringLiteral("ms");
         const QString pct = QStringLiteral("%");
 
@@ -316,6 +317,12 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightValueKey()), number(px));
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()), number(pct));
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()), number(pct));
+        // Edge auto-scroll: a band width in pixels, a delay in milliseconds
+        // and a speed in pixels per second. The speed gets its own unit
+        // rather than borrowing px, which would render 1500 as a distance.
+        t.insert(pairKey(CD::scrollingDragScrollGroup(), CD::triggerWidthKey()), number(px));
+        t.insert(pairKey(CD::scrollingDragScrollGroup(), CD::delayMsKey()), number(ms));
+        t.insert(pairKey(CD::scrollingDragScrollGroup(), CD::maxSpeedKey()), number(pxPerSec));
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthPresetIndexKey()), oneBasedIndex());
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()), oneBasedIndex());
         // Tab indicator numerics: pixels for the geometry knobs (same

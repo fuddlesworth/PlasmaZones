@@ -134,6 +134,39 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaIn
     return true;
 }
 
+void StripViewAnimator::applyImmediateDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis)
+{
+    if (!output || deltaIn == 0) {
+        return;
+    }
+    ViewMotion& motion = m_motions[output];
+    if (motion.axis != axis) {
+        // Same axis-flip handling as applyBatchDelta, for the same reasons:
+        // the accumulator is a coordinate ALONG an axis and a live leg
+        // describes travel along one this output no longer has. Damage
+        // first so the vanishing offset is repainted away.
+        if (motion.animation.isAnimating() && m_repaintRequest) {
+            m_repaintRequest(output);
+        }
+        motion.animation.cancel();
+        motion.committed = 0.0;
+        motion.axis = axis;
+    }
+    // Same clamp as applyBatchDelta: the two entry points feed one
+    // accumulator, and an unbounded delta here would poison the origin of
+    // the next discrete leg just the same.
+    motion.committed += qBound(-kMaxViewDeltaPx, deltaIn, kMaxViewDeltaPx);
+    if (motion.animation.isAnimating()) {
+        // A discrete leg was mid-flight when the heartbeat took over. Its
+        // offset vanishes with the cancel and nothing else repaints it away
+        // — same reasoning as the no-clock bail in applyBatchDelta.
+        if (m_repaintRequest) {
+            m_repaintRequest(output);
+        }
+        motion.animation.cancel();
+    }
+}
+
 qreal StripViewAnimator::offsetAlongAxis(KWin::LogicalOutput* output) const
 {
     if (!output) {

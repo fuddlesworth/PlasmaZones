@@ -732,14 +732,15 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("urgent"), PhosphorI18n::tr("attention"), PhosphorI18n::tr("theme"),
                 PhosphorI18n::tr("scheme")});
 
-    // Triggers card first, matching visual order on the page, then the drop
-    // indicator. The ANCHOR string is what must match the QML searchAnchor
-    // VERBATIM — that is what the deep-link reveal resolves; the title is
-    // only the search-result label, and a handful of catalog titles
-    // deliberately disambiguate rows that share a QML title (the three
-    // "Apply to" scopes, for instance). Keeping titles identical to the QML
-    // — here ScrollingDragInsertCard.qml and ScrollingDropIndicatorCard.qml
-    // — is still the default, so the result reads like the row it opens. No
+    // Triggers card first, matching visual order on the page, then Edge
+    // auto-scroll, then the drop indicator. The ANCHOR string is what must
+    // match the QML searchAnchor VERBATIM — that is what the deep-link reveal
+    // resolves; the title is only the search-result label, and a handful of
+    // catalog titles deliberately disambiguate rows that share a QML title
+    // (the three "Apply to" scopes, for instance). Keeping titles identical
+    // to the QML — here ScrollingDragInsertCard.qml,
+    // ScrollingEdgeScrollCard.qml and ScrollingDropIndicatorCard.qml — is
+    // still the default, so the result reads like the row it opens. No
     // advancedOnly flag: the whole scrolling-window page is AdvancedOnly,
     // same as the unflagged tiling-behavior twins.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggers"),
@@ -752,7 +753,35 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
 
-    // Drop indicator card, directly after Triggers on the page. The master
+    // Edge auto-scroll card, between Triggers and the drop indicator. Its
+    // master switch is in the card header too, so the section carries the
+    // "auto scroll" match and the three rows carry the numbers.
+    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScroll"),
+               PhosphorI18n::tr("Edge auto-scroll"));
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollTriggerWidth"),
+               PhosphorI18n::tr("Trigger width"),
+               // The two-word phrases matter: the ranker folds the whole
+               // query into ONE needle and never splits on whitespace, so
+               // "drag scroll" and "edge scroll" score zero against the
+               // single-word keywords alone.
+               {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("auto scroll"),
+                PhosphorI18n::tr("drag scroll"), PhosphorI18n::tr("edge scroll"), PhosphorI18n::tr("drag"),
+                PhosphorI18n::tr("strip"), PhosphorI18n::tr("pixels"),
+                // Untranslated proper noun, like this page's own keyword list
+                // above: the upstream name is what a user searches.
+                QStringLiteral("niri")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollDelayMs"),
+               PhosphorI18n::tr("Start delay"),
+               {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("auto scroll"),
+                PhosphorI18n::tr("drag scroll"), PhosphorI18n::tr("edge scroll"), PhosphorI18n::tr("delay"),
+                PhosphorI18n::tr("drag"), PhosphorI18n::tr("milliseconds"), QStringLiteral("niri")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollMaxSpeed"),
+               PhosphorI18n::tr("Maximum speed"),
+               {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("auto scroll"),
+                PhosphorI18n::tr("drag scroll"), PhosphorI18n::tr("edge scroll"), PhosphorI18n::tr("speed"),
+                PhosphorI18n::tr("drag"), PhosphorI18n::tr("fast"), QStringLiteral("niri")});
+
+    // Drop indicator card, after the Edge auto-scroll card on the page. The master
     // switch lives in the card HEADER (no body row of its own), so this is
     // the section-only shape the Borders and Opacity-and-tint cards use —
     // the section title is what a "drop indicator" search matches.

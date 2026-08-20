@@ -11,9 +11,20 @@
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
+#include <algorithm>
+
 #include <QMetaObject>
 
 namespace PhosphorScrollEngine {
+
+namespace {
+
+/// Upper bound on the edge auto-scroll speed the engine will honour. Taken
+/// from the interface rather than spelled again here, so the config schema's
+/// matching maximum has a single thing to be pinned against.
+constexpr int kDragScrollMaxSpeedCeiling = PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedCeiling;
+
+} // namespace
 
 ScrollEngine::ScrollEngine(PhosphorEngine::IWindowTrackingService* windowTracker,
                            PhosphorScreens::ScreenManager* screenManager, QObject* parent)
@@ -872,6 +883,20 @@ void ScrollEngine::refreshConfigFromSettings()
     // freeze one screen's verdict for every screen.
     const int axisIntent = settings->scrollingStripAxis();
     m_stripAxis = (axisIntent >= 0 && axisIntent <= 2) ? axisIntent : 0;
+
+    // Edge auto-scroll. Bounded rather than raw: a zero or negative trigger
+    // width would divide by zero in the ramp, and a non-positive speed would
+    // arm a scroll that can never move (the delay would latch and the drop
+    // target would stay locked to the edge slot forever). The upper bound
+    // matters for the same reason the lower one does — the config schema
+    // clamps these, but an IScrollSettings that is not the daemon's Settings
+    // does not, and an unbounded speed teleports the strip in one tick. The
+    // trigger width needs no ceiling here because the ramp re-clamps it to a
+    // third of the work area, which is the only bound that means anything.
+    m_dragScrollEnabled = settings->scrollingDragScrollEnabled();
+    m_dragScrollTriggerWidth = qMax(1, settings->scrollingDragScrollTriggerWidth());
+    m_dragScrollDelayMs = qMax(0, settings->scrollingDragScrollDelayMs());
+    m_dragScrollMaxSpeed = std::clamp(settings->scrollingDragScrollMaxSpeed(), 1, kDragScrollMaxSpeedCeiling);
 
     // Guarded cast, matching every sibling enum in this function (center,
     // insertPos, sticky, indicator position): the shared value key can hold

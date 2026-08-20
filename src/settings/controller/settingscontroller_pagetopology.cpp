@@ -501,6 +501,13 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // Drag re-insert triggers (the Triggers card on this page).
              {CD::scrollingBehaviorGroup(), CD::triggersKey()},
              {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},
+             // Scrolling.Behavior.DragScroll — the Edge auto-scroll card,
+             // between the two for the same reason: it runs only during that
+             // drag, and the drop indicator is what follows it.
+             {CD::scrollingDragScrollGroup(), CD::enabledKey()},
+             {CD::scrollingDragScrollGroup(), CD::triggerWidthKey()},
+             {CD::scrollingDragScrollGroup(), CD::delayMsKey()},
+             {CD::scrollingDragScrollGroup(), CD::maxSpeedKey()},
              // Scrolling.DropIndicator — the Drop indicator card on this page.
              // It lives beside the Triggers card because it only appears
              // during the drag those triggers arm.

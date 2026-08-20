@@ -393,6 +393,14 @@ public:
                    setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
     Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
                    scrollingCropStraddlersChanged)
+    Q_PROPERTY(bool scrollingDragScrollEnabled READ scrollingDragScrollEnabled WRITE setScrollingDragScrollEnabled
+                   NOTIFY scrollingDragScrollEnabledChanged)
+    Q_PROPERTY(int scrollingDragScrollTriggerWidth READ scrollingDragScrollTriggerWidth WRITE
+                   setScrollingDragScrollTriggerWidth NOTIFY scrollingDragScrollTriggerWidthChanged)
+    Q_PROPERTY(int scrollingDragScrollDelayMs READ scrollingDragScrollDelayMs WRITE setScrollingDragScrollDelayMs NOTIFY
+                   scrollingDragScrollDelayMsChanged)
+    Q_PROPERTY(int scrollingDragScrollMaxSpeed READ scrollingDragScrollMaxSpeed WRITE setScrollingDragScrollMaxSpeed
+                   NOTIFY scrollingDragScrollMaxSpeedChanged)
     Q_PROPERTY(int scrollingDefaultColumnWidthKind READ scrollingDefaultColumnWidthKind WRITE
                    setScrollingDefaultColumnWidthKind NOTIFY scrollingDefaultColumnWidthKindChanged)
     Q_PROPERTY(qreal scrollingDefaultColumnWidthValue READ scrollingDefaultColumnWidthValue WRITE
@@ -1307,6 +1315,14 @@ public:
     void setScrollingAlwaysCenterSingleColumn(bool center);
     bool scrollingCropStraddlers() const override;
     void setScrollingCropStraddlers(bool crop);
+    bool scrollingDragScrollEnabled() const override;
+    void setScrollingDragScrollEnabled(bool enabled);
+    int scrollingDragScrollTriggerWidth() const override;
+    void setScrollingDragScrollTriggerWidth(int px);
+    int scrollingDragScrollDelayMs() const override;
+    void setScrollingDragScrollDelayMs(int ms);
+    int scrollingDragScrollMaxSpeed() const override;
+    void setScrollingDragScrollMaxSpeed(int pxPerSecond);
     int scrollingDefaultColumnWidthKind() const override;
     void setScrollingDefaultColumnWidthKind(int value);
     qreal scrollingDefaultColumnWidthValue() const override;

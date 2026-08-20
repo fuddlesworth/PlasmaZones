@@ -458,6 +458,17 @@ void SettingsAdaptor::initializeRegistryScrolling()
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
         REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)
+        // Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll).
+        // Concrete-only for the same reason as scrollingStripAxis above: the
+        // getters are IScrollSettings virtuals, only the setters are
+        // concrete. Same hoist backlog — once ISettings grows the setter
+        // virtuals, these four move up to the ISettings-level block.
+        REGISTER_CONCRETE_BOOL("scrollingDragScrollEnabled", scrollingDragScrollEnabled, setScrollingDragScrollEnabled)
+        REGISTER_CONCRETE_INT("scrollingDragScrollTriggerWidth", scrollingDragScrollTriggerWidth,
+                              setScrollingDragScrollTriggerWidth)
+        REGISTER_CONCRETE_INT("scrollingDragScrollDelayMs", scrollingDragScrollDelayMs, setScrollingDragScrollDelayMs)
+        REGISTER_CONCRETE_INT("scrollingDragScrollMaxSpeed", scrollingDragScrollMaxSpeed,
+                              setScrollingDragScrollMaxSpeed)
         // scrollingDefaultColumnWidthKind: enum (0=Proportion, 1=Fixed, 2=ClientDecides, 3=Preset)
         m_getters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete]() {
             return concrete->scrollingDefaultColumnWidthKind();
