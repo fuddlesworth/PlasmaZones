@@ -73,9 +73,12 @@ ColumnLayout {
             }
             // The local list does not carry this layout, so there are
             // no zones to draw. The daemon still reports the resolved
-            // name, so show that rather than nothing.
+            // name, so show that rather than nothing — and if it reports
+            // none either, the raw id beats captioning a missing layout
+            // "Default", which is a different state entirely. Same ladder
+            // as the tiling preview below.
             return {
-                "displayName": (previews.view.screenState && previews.view.screenState.layoutName) || i18n("Default"),
+                "displayName": (previews.view.screenState && previews.view.screenState.layoutName) || previews.view.localLayoutId || i18n("Default"),
                 "zones": []
             };
         }

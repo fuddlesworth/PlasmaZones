@@ -432,9 +432,18 @@ SettingsFlickable {
                                 model: modelData.enumOptions || []
                                 currentIndex: {
                                     let opts = modelData.enumOptions || [];
-                                    let idx = opts.indexOf(paramValue);
-                                    return idx >= 0 ? idx : 0;
+                                    // -1, never 0, for a value the script's
+                                    // current options no longer offer. Falling
+                                    // back to the FIRST option displayed a
+                                    // value the algorithm will not actually
+                                    // run with — a stale or hand-edited enum
+                                    // silently misreported itself as the
+                                    // default. The repo convention for an
+                                    // unmatched selection is -1 plus a
+                                    // verbatim displayText.
+                                    return opts.indexOf(paramValue);
                                 }
+                                displayText: currentIndex >= 0 ? currentText : (paramValue || "")
                                 onActivated: {
                                     root.setLiveCustomParam(modelData.name, currentText);
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);

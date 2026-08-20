@@ -131,7 +131,11 @@ ExpandableRowDelegate {
             visible: text.length > 0
             text: {
                 const base = row.isRoot ? i18n("Based on defaults") : i18n("Inherits from “%1”", row.parentName);
-                return row.profileDescription.length > 0 ? (base + " · " + row.profileDescription) : base;
+                // Composed through i18nc rather than concatenated, so the
+                // separator and the order are the translator's to choose —
+                // the same treatment the other two-part subtitles in this
+                // settings tree already get.
+                return row.profileDescription.length > 0 ? i18nc("inheritance note, then the profile description", "%1 · %2", base, row.profileDescription) : base;
             }
             elide: Text.ElideRight
             color: Kirigami.Theme.disabledTextColor

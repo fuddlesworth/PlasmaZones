@@ -295,18 +295,26 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             // context needs to refresh, whether the rule was dropped or just
             // rebuilt.
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
-            if (entry.mode == AssignmentEntry::Snapping && entry.snappingLayout.isEmpty()
-                && entry.tilingAlgorithm.isEmpty() && entry.scrollingTemplateLayout.isEmpty()) {
-                // Nothing meaningful remains — a bare Snapping engine-mode is
-                // the default. Drop the whole rule. The snappingLayout guard
-                // is load-bearing: the clear above only empties the field
-                // that MATCHED the deleted id, so a rule whose template was
-                // deleted can still carry a live snapping assignment, and
-                // dropping it would destroy that assignment.
-                qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: dropped context rule" << rule.id.toString()
-                                    << "— only a default Snapping mode remained after clearing the deleted layout";
-                continue;
-            }
+            // No drop-if-nothing-remains test here, deliberately. It used to
+            // delete a rule left with mode Snapping and three empty payloads,
+            // on the reasoning that a bare Snapping engine-mode is just the
+            // default. That reasoning predates the explicit no-layout state:
+            // a bare Snapping mode on an EXACT context rule is now a
+            // first-class pin (hasExplicitSnappingModePin reads exactly this
+            // shape, and resolveStoredAssignmentId answers engaged-empty for
+            // it rather than falling through to default synthesis), and the
+            // Monitors page stages it whenever a context leaves Scrolling
+            // under a suppressed default.
+            //
+            // Every rule reaching this point is that pin: Shape 1 is gated on
+            // isContextAssignmentRule, which already requires both an exact
+            // context match and a SetEngineMode action. So the only way to
+            // arrive with all payloads empty is a pin whose one dormant
+            // template slot the purge just cleared — dropping it silently
+            // changed the context's mode resolution once suppression lifted
+            // or the level-1 default resolved to something other than
+            // Snapping. A rule whose SNAPPING layout was deleted never
+            // arrives empty: it takes the reserved word above.
             PWR::Rule rebuilt = rule;
             rebuilt.actions =
                 PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), entry.snappingLayout,
@@ -334,7 +342,22 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // window-negating rules), so there is no engine state to re-derive —
         // the store write's rulesChanged still reaches every projection
         // consumer.
-        const bool contextRule = isContextAssignmentRule(rule);
+        // Context-shaped for this purpose means "pins one exact context AND
+        // fills at least one assignment slot" — deliberately WIDER than
+        // isContextAssignmentRule, which additionally demands a SetEngineMode.
+        // A LAYOUT-ONLY exact-context rule (a SetSnappingLayout or
+        // SetScrollingTemplate with no mode action) is a first-class supported
+        // shape: findExactContextRule claims it through the same
+        // hasAnyAssignmentSlotAction test, and the batch rebuild spares it.
+        // Gating on the narrower predicate meant such a rule got neither the
+        // sentinel rewrite nor an `affected` entry, so deleting its layout
+        // erased the action outright, dropped the rule, and handed the context
+        // to the registry-wide default — the exact silent reshape the reserved
+        // word exists to prevent, and a contract this method publishes.
+        const bool contextShape = rule.match.isContextOnly()
+            && (matchIsExactContextBase(rule.match) || matchIsExactContextDesktop(rule.match)
+                || matchIsExactContextActivity(rule.match));
+        const bool contextRule = contextShape && (hasEngineModeAction(rule) || hasAnyAssignmentSlotAction(rule));
         if (contextRule) {
             const ContextDims dims = decodeDims(rule.match);
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
@@ -355,7 +378,19 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // empty-actions drop below should have taken.
         if (contextRule) {
             const AssignmentEntry::Mode ruleMode = entryFromRuleMatchActions(rule).mode;
-            if (ruleMode == AssignmentEntry::Scrolling) {
+            // A rule that declares NO engine mode puts none of its slots out
+            // of force — the slot it carries IS its assignment, which is why
+            // the exact-context lookup admits the shape at all. Keying the
+            // rewrite on the mode would be wrong there:
+            // entryFromRuleMatchActions defaults a mode-less rule to Snapping,
+            // so a template-only rule would take the snapping arm, miss the
+            // template rewrite, and have its action erased instead. Key on
+            // whether the rule declares a mode, and fall back to rewriting
+            // whichever slot actually names the deleted id.
+            const bool declaresMode = hasEngineModeAction(rule);
+            const bool scrollingSlotInForce = declaresMode ? ruleMode == AssignmentEntry::Scrolling : true;
+            const bool snappingSlotInForce = declaresMode ? ruleMode == AssignmentEntry::Snapping : true;
+            if (scrollingSlotInForce) {
                 for (PWR::RuleAction& action : trimmed.actions) {
                     if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)
                         && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
@@ -369,7 +404,7 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             // registry-wide default layout the user never picked. A dormant
             // SetSnappingLayout on a non-Snapping context keeps the plain
             // erase.
-            if (ruleMode == AssignmentEntry::Snapping) {
+            if (snappingSlotInForce) {
                 for (PWR::RuleAction& action : trimmed.actions) {
                     if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
                         && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {

@@ -469,6 +469,13 @@ QtObject {
             showExplicitNoneOption: true
             explicitNoneValue: editors.noLayoutToken
             showPreview: true
+            // Surface an unresolvable stored id verbatim, matching every
+            // sibling wire-value editor in this file: a rule pinned to a
+            // layout that has since been deleted matches no row, so the combo
+            // sits at currentIndex -1 and would otherwise render blank —
+            // hiding what the rule actually points at, with no "not in your
+            // list" message here to compensate.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
@@ -664,6 +671,10 @@ QtObject {
             showExplicitNoneOption: row.action.type !== "setAlgorithmParam"
             explicitNoneValue: editors.noLayoutToken
             showPreview: true
+            // Same verbatim fallback as the snapping editor above: an
+            // algorithm that is no longer installed matches no row, and a
+            // blank combo hides what the rule pins.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             onActivated: function (index) {
                 const bareId = currentValue.startsWith("autotile:") ? currentValue.substring(9) : currentValue;
                 row.actionEdited(row._withParam(_param.key, bareId));

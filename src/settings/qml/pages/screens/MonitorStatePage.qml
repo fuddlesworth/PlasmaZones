@@ -816,7 +816,9 @@ SettingsFlickable {
                     // that state, and seeding empty would seat the selector
                     // on "Default" while the daemon holds the opt-out. The
                     // algorithm slot needs no such split — algorithmId is the
-                    // raw entry field and already carries the word.
+                    // RESOLVED value, and the resolver passes the reserved
+                    // word through verbatim rather than flattening it the way
+                    // the snapping resolver does.
                     localMode = screenState.mode || 0;
                     localLayoutId = screenState.snappingLayoutId === root._noLayoutToken ? root._noLayoutToken : (screenState.layoutId || "");
                     localAlgorithmId = screenState.algorithmId || "";

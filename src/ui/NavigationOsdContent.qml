@@ -326,6 +326,14 @@ Item {
             if (reason === "no_templates")
                 return i18n("No column templates available");
 
+            // A quick slot whose bound layout the picker no longer offers on
+            // this screen (hidden from the selector, excluded by an
+            // allow-list or the aspect filter, or an algorithm that is no
+            // longer installed). Distinct from the capability cases above:
+            // the mode is fine, the binding is not.
+            if (reason === "slot_unavailable")
+                return i18n("That layout is not available on this screen");
+
             return i18n("Layouts are not available in this mode");
         } else if (action === "resize") {
             // Scrolling width AND height verbs share this token, so the

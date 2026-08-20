@@ -147,6 +147,20 @@ void Daemon::connectShortcutSignals()
         const bool scrolling = (mode == PhosphorZones::AssignmentEntry::Scrolling);
         m_unifiedLayoutController->setLayoutFilter(!autotile && !scrolling, autotile, scrolling);
         if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
+            // The slot IS bound, so this is not the deliberate unset no-op
+            // above — the bound id simply is not in the filtered list the
+            // press resolves against. That happens whenever the picker would
+            // not offer it either: a layout hidden from the selector, one
+            // excluded by an allow-list or the aspect filter, or an algorithm
+            // that is no longer installed. Nothing re-validates a slot when
+            // those axes change, so the binding silently stopped working;
+            // say so rather than leaving the key looking broken.
+            qCWarning(lcDaemon) << "QuickLayout shortcut: slot" << number << "is bound to" << slotId
+                                << "which is not available on screen" << screenId;
+            if (navigationOsdAllowed(screenId)) {
+                m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("slot_unavailable"),
+                                                    QString(), QString(), screenId);
+            }
             return;
         }
         resnapIfManualMode();

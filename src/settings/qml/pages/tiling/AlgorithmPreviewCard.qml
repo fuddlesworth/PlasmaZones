@@ -155,6 +155,15 @@ ColumnLayout {
             layoutFilter: 1 // Autotile algorithms only
             showNoneOption: false
             currentLayoutId: "autotile:" + card.currentAlgorithmId
+            // The library card's Clear Default stores the reserved
+            // no-algorithm word, and both tiling pages seed their working
+            // algorithm from that setting. No model row carries the word, so
+            // the combo lands on currentIndex -1 and, with no displayText of
+            // its own, renders EMPTY — a blank picker with an empty preview
+            // beside it and no explanation. Name the state instead. The
+            // preview staying empty is accurate: no algorithm is selected, so
+            // there is nothing to draw.
+            displayText: card.currentAlgorithmId === "none" ? i18nc("no tiling algorithm is set", "None") : (currentIndex >= 0 ? currentText : "")
             onActivated: {
                 // Strip the "autotile:" prefix the combo's ids carry. An empty
                 // value passes straight through, so each page applies its own

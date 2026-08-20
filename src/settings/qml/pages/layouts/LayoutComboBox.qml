@@ -560,11 +560,23 @@ ComboBox {
                 // The configured default IS the explicit opt-out — caption it
                 // with the same per-family wording as the explicit None row,
                 // not the unresolved-default warning below.
+                if (root.layoutFilter === 2)
+                    return i18n("No template");
                 if (root.layoutFilter === 1)
                     return i18n("No algorithm");
                 return i18n("No layout");
             } else if (isDefaultOption && !hasLayout) {
-                // "Default"/"None" with no resolution (e.g., quick layout slots)
+                // "Default" with nothing to resolve to. Worded per family like
+                // the branches around it: the template family clears its
+                // default to an EMPTY value rather than the reserved word, so
+                // this branch — not the opt-out branch above — is what the
+                // Monitors page's template selector shows in its ordinary
+                // cleared state, and a flat "No layout assigned" named the
+                // wrong family there.
+                if (root.layoutFilter === 2)
+                    return i18n("No template assigned");
+                if (root.layoutFilter === 1)
+                    return i18n("No algorithm assigned");
                 return i18n("No layout assigned");
             } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {
                 // The explicit-none row means "deliberately none", not an

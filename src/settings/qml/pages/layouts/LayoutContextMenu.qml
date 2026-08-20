@@ -323,9 +323,10 @@ Menu {
     MenuItem {
         id: defaultItem
 
-        // Whether THIS entry is already its family's default. Drives the
-        // enabled state for the two layout families, and for templates it
-        // flips the item into its clearing form instead.
+        // Whether THIS entry is already its family's default. It selects the
+        // item's CLEARING form, for every family alike (see the block below);
+        // it no longer gates the item's enabled state, which now depends only
+        // on there being a layout to act on.
         readonly property bool isFamilyDefault: {
             if (!layoutContextMenu.layout)
                 return false;
