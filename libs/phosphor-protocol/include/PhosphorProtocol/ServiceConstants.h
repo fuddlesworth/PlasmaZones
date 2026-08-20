@@ -117,7 +117,7 @@ inline constexpr QLatin1String VirtualDesktops("virtualDesktops");
 /// Keys of the two scrolling tab-indicator maps that cross the daemon → KWin
 /// effect boundary on org.plasmazones.Tiling: the per-screen context-rule
 /// PAINT override map (scrollTabPaintOverridesChanged / scrollTabPaintOverrides,
-/// all six keys) and the per-window rule COLOUR map (scrollTabColors /
+/// all eleven paint keys) and the per-window rule COLOUR map (scrollTabColors /
 /// scrollTabColorsChanged, the three colour keys). The daemon produces them
 /// (src/dbus/windowtrackingadaptor/internal.h's WindowPaintKeys / WindowColorKeys
 /// forward to these) and the effect's TilingHandler reads them; this is the
@@ -132,6 +132,15 @@ inline constexpr QLatin1String CornerRadius("cornerRadius");
 inline constexpr QLatin1String ActiveColor("activeColor");
 inline constexpr QLatin1String InactiveColor("inactiveColor");
 inline constexpr QLatin1String UrgentColor("urgentColor");
+// The tab label's font. Paint keys like the three above them, carried on the
+// per-screen override map only — a window rule cannot restyle one tab's text,
+// only recolour it, so these have no counterpart on the colour map. There is
+// no size key: the effect's painter fits the label to the pill thickness.
+inline constexpr QLatin1String FontFamily("fontFamily");
+inline constexpr QLatin1String FontWeight("fontWeight");
+inline constexpr QLatin1String FontItalic("fontItalic");
+inline constexpr QLatin1String FontUnderline("fontUnderline");
+inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 }
 
 /// Single-instance app identities. Each Phosphor sub-process (settings,

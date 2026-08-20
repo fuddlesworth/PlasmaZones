@@ -413,6 +413,25 @@ QString actionDescription(const QString& type)
     if (type == ActionType::SetTabIndicatorUrgentColor) {
         return PhosphorI18n::tr("Sets the color of a tab whose window asks for attention, for the matched context.");
     }
+    if (type == ActionType::SetTabIndicatorFontFamily) {
+        return PhosphorI18n::tr(
+            "Sets the font the tab labels are drawn in for the matched context. Leave it empty to "
+            "use the system font.");
+    }
+    if (type == ActionType::SetTabIndicatorFontWeight) {
+        return PhosphorI18n::tr(
+            "Sets how heavy the tab label text is for the matched context, from 100 for the "
+            "thinnest weight up to 900 for the boldest.");
+    }
+    if (type == ActionType::SetTabIndicatorFontItalic) {
+        return PhosphorI18n::tr("Draws the tab labels in italic for the matched context.");
+    }
+    if (type == ActionType::SetTabIndicatorFontUnderline) {
+        return PhosphorI18n::tr("Underlines the tab labels for the matched context.");
+    }
+    if (type == ActionType::SetTabIndicatorFontStrikeout) {
+        return PhosphorI18n::tr("Draws a line through the tab labels for the matched context.");
+    }
     if (type == ActionType::TabColorActive) {
         return PhosphorI18n::tr("Recolors a matching window's own tab while it is the active one.");
     }

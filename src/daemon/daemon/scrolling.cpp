@@ -332,7 +332,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             }
         }
         // The tab indicator's GEOMETRY overrides. Only these seven reach the
-        // engine: the six paint fields alongside them in ContextScrollingParams
+        // engine: the eleven paint fields alongside them in ContextScrollingParams
         // cannot change a resolved rect, so they are collected separately below
         // and handed to the KWin effect through the Tiling adaptor instead
         // (see IScrollSettings for the split).
@@ -370,8 +370,9 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // reads identically to an absent one at every effective* reader, so
         // the fallback behaviour is unchanged.
         m_scrollEngine->applyPerScreenConfig(screenId, overrides);
-        // The tab indicator's PAINT params (style, gaps, corner radius and the
-        // three colours) go to the KWin effect, which draws the pills: it
+        // The tab indicator's PAINT params (style, gaps, corner radius, the
+        // three colours and the five label-font fields) go to the KWin effect,
+        // which draws the pills: it
         // layers them over its global Scrolling.TabIndicator settings for this
         // screen alone. Keyed by the same WindowPaintKeys / WindowColorKeys
         // spellings the effect reads, so producer and consumer share one home
@@ -398,6 +399,27 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             }
             if (params.tabIndicatorUrgentColor) {
                 paint.insert(WindowColorKeys::urgentColor(), *params.tabIndicatorUrgentColor);
+            }
+            // The label font, per key like everything else on this map so a
+            // rule that only italicises leaves the family, weight and the
+            // other two flags at their global values. An empty family is
+            // inserted rather than skipped: it is the user asking for the
+            // system font, which the effect cannot distinguish from "no
+            // override" if the key is absent.
+            if (params.tabIndicatorFontFamily) {
+                paint.insert(WindowPaintKeys::tabFontFamily(), *params.tabIndicatorFontFamily);
+            }
+            if (params.tabIndicatorFontWeight) {
+                paint.insert(WindowPaintKeys::tabFontWeight(), *params.tabIndicatorFontWeight);
+            }
+            if (params.tabIndicatorFontItalic) {
+                paint.insert(WindowPaintKeys::tabFontItalic(), *params.tabIndicatorFontItalic);
+            }
+            if (params.tabIndicatorFontUnderline) {
+                paint.insert(WindowPaintKeys::tabFontUnderline(), *params.tabIndicatorFontUnderline);
+            }
+            if (params.tabIndicatorFontStrikeout) {
+                paint.insert(WindowPaintKeys::tabFontStrikeout(), *params.tabIndicatorFontStrikeout);
             }
             m_tilingAdaptor->setScrollTabPaintOverrides(screenId, paint);
         }
