@@ -113,57 +113,6 @@ public:
     {
         return false;
     }
-    // ── Edge auto-scroll during a drag re-insert (niri parity) ───────────
-    //
-    // niri's dnd-edge-view-scroll defaults, verbatim. Holding a dragged
-    // window near either edge of the work area scrolls the strip, so the
-    // drop can reach a column that is off screen. Speed ramps linearly from
-    // zero at the band's inner edge to the maximum at the work area's edge.
-    // The engine holds the same four figures as the IScrollSettings
-    // defaults, so a stub that never heard of this schema still scrolls the
-    // way niri does. The static_asserts in settings/scrolling.cpp compare the
-    // two sides directly rather than against copied literals, so an edit to
-    // EITHER file fails the build and there is no manual sync to remember.
-    static constexpr bool scrollingDragScrollEnabled()
-    {
-        return true;
-    }
-    static constexpr int scrollingDragScrollTriggerWidth()
-    {
-        return 30;
-    }
-    static constexpr int scrollingDragScrollTriggerWidthMin()
-    {
-        return 1;
-    }
-    static constexpr int scrollingDragScrollTriggerWidthMax()
-    {
-        return 300;
-    }
-    static constexpr int scrollingDragScrollDelayMs()
-    {
-        return 100;
-    }
-    static constexpr int scrollingDragScrollDelayMsMin()
-    {
-        return 0;
-    }
-    static constexpr int scrollingDragScrollDelayMsMax()
-    {
-        return 2000;
-    }
-    static constexpr int scrollingDragScrollMaxSpeed()
-    {
-        return 1500;
-    }
-    static constexpr int scrollingDragScrollMaxSpeedMin()
-    {
-        return 50;
-    }
-    static constexpr int scrollingDragScrollMaxSpeedMax()
-    {
-        return 10000;
-    }
     /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
     /// decides, 3 = preset index). Named so the settings layer's
     /// kind-aware branches read against the vocabulary instead of raw ints;
@@ -745,6 +694,65 @@ public:
     static constexpr bool scrollingFocusNewWindows()
     {
         return true;
+    }
+
+    // ── Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll) ──
+    //
+    // niri's dnd-edge-view-scroll defaults, verbatim. Holding a dragged
+    // window near either edge of the work area scrolls the strip, so the
+    // drop can reach a column that is off screen. Speed ramps linearly from
+    // zero at the band's inner edge to the maximum at the work area's edge.
+    // The engine holds the same four figures as the IScrollSettings
+    // defaults, so a stub that never heard of this schema still scrolls the
+    // way niri does. The static_asserts in settings/scrolling.cpp compare the
+    // two sides directly rather than against copied literals, so an edit to
+    // EITHER file fails the build and there is no manual sync to remember.
+    static constexpr bool scrollingDragScrollEnabled()
+    {
+        return true;
+    }
+    static constexpr int scrollingDragScrollTriggerWidth()
+    {
+        return 30;
+    }
+    static constexpr int scrollingDragScrollTriggerWidthMin()
+    {
+        return 1;
+    }
+    /// UI range ceiling, not an engine limit: the engine re-clamps the width
+    /// to a third of the work area's main extent at tick time, so values
+    /// past that are silently narrowed on small screens either way.
+    static constexpr int scrollingDragScrollTriggerWidthMax()
+    {
+        return 300;
+    }
+    static constexpr int scrollingDragScrollDelayMs()
+    {
+        return 100;
+    }
+    static constexpr int scrollingDragScrollDelayMsMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDragScrollDelayMsMax()
+    {
+        return 2000;
+    }
+    static constexpr int scrollingDragScrollMaxSpeed()
+    {
+        return 1500;
+    }
+    /// UI usability floor, not the engine's: the engine floors the speed at
+    /// 1 px/s (engine_core clamps independently), but a slider that can
+    /// offer a sub-perceptible crawl reads as broken, so the settings range
+    /// starts where the motion is visible.
+    static constexpr int scrollingDragScrollMaxSpeedMin()
+    {
+        return 50;
+    }
+    static constexpr int scrollingDragScrollMaxSpeedMax()
+    {
+        return 10000;
     }
     /// ScrollInsertPosition wire values (0 = right of active, 1 = left of
     /// active, 2 = first, 3 = last, 4 = into active column); the schema

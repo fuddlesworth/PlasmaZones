@@ -66,6 +66,15 @@ public:
     int outerGap = 0;
     int innerGap = 0;
 
+    // Edge auto-scroll (DragScroll). Seeded to the interface defaults so a
+    // suite that never touches them behaves exactly like the no-settings
+    // fixtures; a case driving one must call refreshConfigFromSettings()
+    // afterwards, same as stripAxis.
+    bool dragScrollEnabled = PhosphorEngine::IScrollSettings::kDragScrollEnabledDefault;
+    int dragScrollTriggerWidth = PhosphorEngine::IScrollSettings::kDragScrollTriggerWidthDefault;
+    int dragScrollDelayMs = PhosphorEngine::IScrollSettings::kDragScrollDelayMsDefault;
+    int dragScrollMaxSpeed = PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedDefault;
+
     int scrollingInnerGap() const override
     {
         return innerGap;
@@ -125,6 +134,22 @@ public:
     bool scrollingCropStraddlers() const override
     {
         return cropStraddlers;
+    }
+    bool scrollingDragScrollEnabled() const override
+    {
+        return dragScrollEnabled;
+    }
+    int scrollingDragScrollTriggerWidth() const override
+    {
+        return dragScrollTriggerWidth;
+    }
+    int scrollingDragScrollDelayMs() const override
+    {
+        return dragScrollDelayMs;
+    }
+    int scrollingDragScrollMaxSpeed() const override
+    {
+        return dragScrollMaxSpeed;
     }
     int scrollingDefaultColumnWidthKind() const override
     {

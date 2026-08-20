@@ -20,15 +20,19 @@ import org.kde.kirigami as Kirigami
  * throttle.
  *
  * The engine measures the POINTER against the WORKING AREA, not the dragged
- * window against the screen, so the row descriptions must say so: a drag grab
- * can hold the window far from the pointer, and a panel insets the working
- * area from the screen edge.
+ * window against the screen — a drag grab can hold the window far from the
+ * pointer, and a panel insets the working area from the screen edge. The
+ * Trigger width row's description carries that wording for the card; the
+ * other two rows say "the edge" and lean on it.
  */
 SettingsCard {
     id: root
 
     /// Bounds, read through the controller so C++ stays the single home for
-    /// these numbers (the same accessor the other scrolling cards use).
+    /// the RANGES (the same accessor the other scrolling cards use). The
+    /// step sizes are this card's own editing granularity, deliberately not
+    /// exported — the controller's stated policy for these blocks is bounds
+    /// only.
     readonly property var _scrollConsts: settingsController.scrollingConstants()
 
     headerText: i18n("Edge auto-scroll")
@@ -49,7 +53,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Trigger width")
             searchAnchor: "scrollingDragScrollTriggerWidth"
-            description: i18n("How close to the edge of the working area the pointer has to be before the strip starts scrolling.")
+            description: i18n("How close to the edge of the working area the pointer has to be before the strip can start scrolling.")
 
             SettingsSpinBox {
                 id: triggerWidthSpin
@@ -58,6 +62,7 @@ SettingsCard {
                 from: root._scrollConsts.dragScrollTriggerWidthMin
                 to: root._scrollConsts.dragScrollTriggerWidthMax
                 stepSize: 5
+                editable: true
                 onValueModified: value => {
                     appSettings.scrollingDragScrollTriggerWidth = value;
                 }
@@ -87,6 +92,7 @@ SettingsCard {
                 from: root._scrollConsts.dragScrollDelayMsMin
                 to: root._scrollConsts.dragScrollDelayMsMax
                 stepSize: 10
+                editable: true
                 onValueModified: value => {
                     appSettings.scrollingDragScrollDelayMs = value;
                 }
@@ -113,6 +119,10 @@ SettingsCard {
                 from: root._scrollConsts.dragScrollMaxSpeedMin
                 to: root._scrollConsts.dragScrollMaxSpeedMax
                 stepSize: 50
+                // Typing enabled on all three spins: this range is ~200
+                // arrow steps end to end, and the default textFromValue is
+                // the plain number the default parser round-trips.
+                editable: true
                 onValueModified: value => {
                     appSettings.scrollingDragScrollMaxSpeed = value;
                 }

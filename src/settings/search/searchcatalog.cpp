@@ -760,20 +760,26 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Edge auto-scroll"));
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollTriggerWidth"),
                PhosphorI18n::tr("Trigger width"),
+               // The two-word phrases matter: the ranker folds the whole
+               // query into ONE needle and never splits on whitespace, so
+               // "drag scroll" and "edge scroll" score zero against the
+               // single-word keywords alone.
                {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("auto scroll"),
-                PhosphorI18n::tr("drag"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("pixels"),
+                PhosphorI18n::tr("drag scroll"), PhosphorI18n::tr("edge scroll"), PhosphorI18n::tr("drag"),
+                PhosphorI18n::tr("strip"), PhosphorI18n::tr("pixels"),
                 // Untranslated proper noun, like this page's own keyword list
                 // above: the upstream name is what a user searches.
                 QStringLiteral("niri")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollDelayMs"),
                PhosphorI18n::tr("Start delay"),
                {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("auto scroll"),
-                PhosphorI18n::tr("delay"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("milliseconds"),
-                QStringLiteral("niri")});
+                PhosphorI18n::tr("drag scroll"), PhosphorI18n::tr("edge scroll"), PhosphorI18n::tr("delay"),
+                PhosphorI18n::tr("drag"), PhosphorI18n::tr("milliseconds"), QStringLiteral("niri")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollMaxSpeed"),
                PhosphorI18n::tr("Maximum speed"),
                {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("auto scroll"),
-                PhosphorI18n::tr("speed"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("fast"), QStringLiteral("niri")});
+                PhosphorI18n::tr("drag scroll"), PhosphorI18n::tr("edge scroll"), PhosphorI18n::tr("speed"),
+                PhosphorI18n::tr("drag"), PhosphorI18n::tr("fast"), QStringLiteral("niri")});
 
     // Drop indicator card, after the Edge auto-scroll card on the page. The master
     // switch lives in the card HEADER (no body row of its own), so this is

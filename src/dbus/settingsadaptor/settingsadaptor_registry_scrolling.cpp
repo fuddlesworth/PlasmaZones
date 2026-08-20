@@ -459,6 +459,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                setScrollingAlwaysCenterSingleColumn)
         REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)
         // Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll).
+        // Concrete-only for the same reason as scrollingStripAxis above: the
+        // getters are IScrollSettings virtuals, only the setters are
+        // concrete. Same hoist backlog — once ISettings grows the setter
+        // virtuals, these four move up to the ISettings-level block.
         REGISTER_CONCRETE_BOOL("scrollingDragScrollEnabled", scrollingDragScrollEnabled, setScrollingDragScrollEnabled)
         REGISTER_CONCRETE_INT("scrollingDragScrollTriggerWidth", scrollingDragScrollTriggerWidth,
                               setScrollingDragScrollTriggerWidth)

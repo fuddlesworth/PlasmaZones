@@ -210,7 +210,8 @@ private Q_SLOTS:
                                                  4000,
                                                  120,
                                                  true,
-                                                 QStringLiteral("konsole|9")};
+                                                 QStringLiteral("konsole|9"),
+                                                 true};
 
         // FIELD-ORDER PROBE, not a legal payload: monocle and
         // windowedFullscreen both true is rejected by validationError()
@@ -249,6 +250,7 @@ private Q_SLOTS:
         QCOMPARE(entry.visualY, 120);
         QCOMPARE(entry.hasVisualPos, true);
         QCOMPARE(entry.tabFrom, QStringLiteral("konsole|9"));
+        QCOMPARE(entry.viewImmediate, true);
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
@@ -266,6 +268,7 @@ private Q_SLOTS:
         QCOMPARE(defaultEntry.visualX, 0);
         QCOMPARE(defaultEntry.visualY, 0);
         QVERIFY(defaultEntry.tabFrom.isEmpty());
+        QCOMPARE(defaultEntry.viewImmediate, false);
     }
 
     // A real bus round-trip so operator>> is exercised too — the signature
@@ -312,6 +315,7 @@ private Q_SLOTS:
             QCOMPARE(got.visualY, sent.visualY);
             QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
             QCOMPARE(got.tabFrom, sent.tabFrom);
+            QCOMPARE(got.viewImmediate, sent.viewImmediate);
         };
 
         // TWO legal payloads, because no single legal payload can cover the
@@ -328,26 +332,20 @@ private Q_SLOTS:
         // (The signature probe above pins struct DECLARATION order via its
         // aggregate init; only these bus trips pin the two marshallers
         // agreeing.)
-        PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"),
-                                                50,
-                                                100,
-                                                640,
-                                                480,
-                                                QStringLiteral("{zone-uuid}"),
-                                                QStringLiteral("screen-0"),
-                                                false,
-                                                false,
-                                                true,
-                                                QStringLiteral("lastOnTop"),
-                                                QStringLiteral("left"),
-                                                512,
-                                                -900,
-                                                64,
-                                                true,
-                                                QStringLiteral("konsole|9")};
+        PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"), 50, 100, 640, 480,
+                                                QStringLiteral("{zone-uuid}"), QStringLiteral("screen-0"), false, false,
+                                                true, QStringLiteral("lastOnTop"), QStringLiteral("left"), 512, -900,
+                                                64, true, QStringLiteral("konsole|9"),
+                                                // viewImmediate true on payload A and false on payload B,
+                                                // so BOTH values cross the bus: the trailing bool is the
+                                                // one field the signature probe cannot pin (a dropped
+                                                // operator>> read leaves the signature intact and
+                                                // false == false green).
+                                                true};
         roundTrip(sent);
         sent.monocle = true;
         sent.windowedFullscreen = false;
+        sent.viewImmediate = false;
         roundTrip(sent);
 
         bus.unregisterObject(path);
@@ -480,9 +478,12 @@ private Q_SLOTS:
 
     void testTileRequestToRect()
     {
-        // Trailing members spelled out rather than left to aggregate
-        // zero-init: the struct grows a field per wire widening, and
-        // -Wmissing-field-initializers fires on the new one every time.
+        // Trailing members spelled out BY CONVENTION, not by compiler
+        // enforcement: every field of this struct carries a default member
+        // initializer, and GCC suppresses -Wmissing-field-initializers for
+        // NSDMI'd members, so a wire widening does NOT warn here — each new
+        // field has to be added to these fixtures by hand (the viewImmediate
+        // widening shipped past exactly this gap before the audit caught it).
         PhosphorProtocol::TileRequestEntry entry{QStringLiteral("app|5"),
                                                  15,
                                                  25,
@@ -499,7 +500,8 @@ private Q_SLOTS:
                                                  0,
                                                  0,
                                                  false,
-                                                 QString()};
+                                                 QString(),
+                                                 false};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 
@@ -915,23 +917,29 @@ private Q_SLOTS:
     void testSwapTargetResultRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
+        // Every value DISTINCT, deliberately: an aggregate init pins struct
+        // declaration order, and a declaration-order swap between two
+        // members holding the same value ships green. The earlier fixture
+        // reused {zone-left}/{zone-right} for sourceZoneId/targetZoneId and
+        // shared y/w/h across the two windows, so exactly those swaps were
+        // invisible.
         PhosphorProtocol::SwapTargetResult entry{true,
                                                  QString(),
                                                  QStringLiteral("firefox|1"),
                                                  0,
-                                                 0,
-                                                 960,
-                                                 1080,
+                                                 1,
+                                                 961,
+                                                 1081,
                                                  QStringLiteral("{zone-left}"),
                                                  QStringLiteral("konsole|2"),
                                                  960,
-                                                 0,
-                                                 960,
-                                                 1080,
+                                                 2,
+                                                 962,
+                                                 1082,
                                                  QStringLiteral("{zone-right}"),
                                                  QStringLiteral("screen-0"),
-                                                 QStringLiteral("{zone-left}"),
-                                                 QStringLiteral("{zone-right}"),
+                                                 QStringLiteral("{zone-src}"),
+                                                 QStringLiteral("{zone-dst}"),
                                                  QStringLiteral("screen-1")};
 
         const QString sig = dbusSignature(entry);
@@ -943,19 +951,19 @@ private Q_SLOTS:
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowId1, QStringLiteral("firefox|1"));
         QCOMPARE(entry.x1, 0);
-        QCOMPARE(entry.y1, 0);
-        QCOMPARE(entry.w1, 960);
-        QCOMPARE(entry.h1, 1080);
+        QCOMPARE(entry.y1, 1);
+        QCOMPARE(entry.w1, 961);
+        QCOMPARE(entry.h1, 1081);
         QCOMPARE(entry.zoneId1, QStringLiteral("{zone-left}"));
         QCOMPARE(entry.windowId2, QStringLiteral("konsole|2"));
         QCOMPARE(entry.x2, 960);
-        QCOMPARE(entry.y2, 0);
-        QCOMPARE(entry.w2, 960);
-        QCOMPARE(entry.h2, 1080);
+        QCOMPARE(entry.y2, 2);
+        QCOMPARE(entry.w2, 962);
+        QCOMPARE(entry.h2, 1082);
         QCOMPARE(entry.zoneId2, QStringLiteral("{zone-right}"));
         QCOMPARE(entry.screenName, QStringLiteral("screen-0"));
-        QCOMPARE(entry.sourceZoneId, QStringLiteral("{zone-left}"));
-        QCOMPARE(entry.targetZoneId, QStringLiteral("{zone-right}"));
+        QCOMPARE(entry.sourceZoneId, QStringLiteral("{zone-src}"));
+        QCOMPARE(entry.targetZoneId, QStringLiteral("{zone-dst}"));
         QCOMPARE(entry.screenName2, QStringLiteral("screen-1")); // cross-output: window2's target screen
     }
 
@@ -998,8 +1006,12 @@ private Q_SLOTS:
 
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowOpenedEntry>();
         QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
+        // typeToSignature, not an UnknownType compare: qMetaTypeId
+        // self-registers on the spot and can never fail (this file's own
+        // rule near the top), so only the D-Bus signature probe proves
+        // registerWireTypes actually registered the LIST type's a(ssii).
         const int listTypeId = qMetaTypeId<PhosphorProtocol::WindowOpenedList>();
-        QVERIFY(listTypeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(listTypeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
@@ -1028,8 +1040,10 @@ private Q_SLOTS:
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationEntry>();
         QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
+        // Same typeToSignature probe as the WindowOpenedList above; the
+        // UnknownType compare is a tautology for Q_DECLARE_METATYPE'd types.
         const int listTypeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationList>();
-        QVERIFY(listTypeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(listTypeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("kate|7"));
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-1}"));

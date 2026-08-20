@@ -1398,9 +1398,19 @@ void TestScrollStripOps::scrollViewByClampsTheDeltaNotThePosition()
     const int before = viewX();
     QVERIFY(!strip.scrollViewBy(0, params));
     QCOMPARE(viewX(), before);
+    // A fully null rect, matching degenerateWorkAreaNeverAsserts: the guard
+    // under test is `mainExtent(params) <= 0`, and zeroing only the WIDTH
+    // left the vertical arm's main extent (the height) intact — the refusal
+    // there came from the ordinary end-of-range clamp instead, a different
+    // code path wearing the same green tick. BOTH directions probed, because
+    // one of them is always refusable by the ordinary clamp (whichever end
+    // the post-insert view happens to sit at) — the other can only be
+    // refused by the degenerate guard, whichever that is.
     ScrollLayoutParams degenerate = params;
-    degenerate.workArea.setWidth(0);
+    degenerate.workArea = QRect();
     QVERIFY(!strip.scrollViewBy(10, degenerate));
+    QCOMPARE(viewX(), before);
+    QVERIFY(!strip.scrollViewBy(-10, degenerate));
     QCOMPARE(viewX(), before);
 
     // A step moves the view by exactly the delta, in the requested direction.
@@ -1432,12 +1442,31 @@ void TestScrollStripOps::scrollViewByClampsTheDeltaNotThePosition()
     QVERIFY(strip.focusColumn(0, params));
     QVERIFY(strip.centerActiveColumn(params));
     const int centered = viewX();
-    QVERIFY2(centered < 0, qPrintable(QStringLiteral("expected an out-of-range viewX, got %1").arg(centered)));
+    // Strictly below -1: at exactly -1 the delta clamp and a position clamp
+    // give the identical answer (centered + 1 == 0), so the assertions
+    // below could not tell the implementations apart.
+    QVERIFY2(centered < -1, qPrintable(QStringLiteral("expected an out-of-range viewX, got %1").arg(centered)));
     QVERIFY(strip.scrollViewBy(1, params));
     QCOMPARE(viewX(), centered + 1); // one step, not a snap to 0
     // ...and it cannot be pushed further out of range.
     QVERIFY(!strip.scrollViewBy(-1, params));
     QCOMPARE(viewX(), centered + 1);
+
+    // The MIRROR arm: an anchor parked past the TRAILING end. Centering the
+    // LAST column overshoots maxViewOffset by design; the delta clamp must
+    // let the view walk back one step at a time and never push it further
+    // out — this is the arm where replacing `qMax(viewOffset, maxViewOffset)`
+    // with a bare maxViewOffset would snap the whole way back in one tick,
+    // which the below-range block cannot see.
+    QVERIFY(strip.focusColumn(2, params));
+    QVERIFY(strip.centerActiveColumn(params));
+    const int overshot = viewX();
+    QVERIFY2(overshot > maxViewX + 1,
+             qPrintable(QStringLiteral("expected a past-max viewX, got %1 (max %2)").arg(overshot).arg(maxViewX)));
+    QVERIFY(strip.scrollViewBy(-1, params));
+    QCOMPARE(viewX(), overshot - 1); // one step back, not a snap to maxViewX
+    QVERIFY(!strip.scrollViewBy(1, params));
+    QCOMPARE(viewX(), overshot - 1);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

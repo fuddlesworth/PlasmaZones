@@ -117,20 +117,6 @@ P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCen
 P_STORE_GET(bool, scrollingCropStraddlers, scrollingGroup, cropStraddlersKey, bool)
 P_STORE_SET_BOOL(setScrollingCropStraddlers, scrollingGroup, cropStraddlersKey, scrollingCropStraddlersChanged)
 
-P_STORE_GET(bool, scrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, bool)
-P_STORE_SET_BOOL(setScrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, scrollingDragScrollEnabledChanged)
-
-P_STORE_GET(int, scrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey, int)
-P_STORE_SET_INT(setScrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey,
-                scrollingDragScrollTriggerWidthChanged)
-
-P_STORE_GET(int, scrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, int)
-P_STORE_SET_INT(setScrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, scrollingDragScrollDelayMsChanged)
-
-P_STORE_GET(int, scrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey, int)
-P_STORE_SET_INT(setScrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey,
-                scrollingDragScrollMaxSpeedChanged)
-
 P_STORE_GET(int, scrollingDefaultColumnWidthKind, scrollingGroup, defaultColumnWidthKindKey, int)
 
 // Hand-written kind setter: the shared value key serves two kinds under one
@@ -486,6 +472,22 @@ P_STORE_SET_INT(setScrollingDropIndicatorBorderRadius, scrollingDropIndicatorGro
 // validators own enum validation (validIntOr snaps a bad sticky value back
 // to the default on read, like every other stored enum) and range clamping
 // (clampInt on the step percents).
+
+// ── Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll) ──
+
+P_STORE_GET(bool, scrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, scrollingDragScrollEnabledChanged)
+
+P_STORE_GET(int, scrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey, int)
+P_STORE_SET_INT(setScrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey,
+                scrollingDragScrollTriggerWidthChanged)
+
+P_STORE_GET(int, scrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, int)
+P_STORE_SET_INT(setScrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, scrollingDragScrollDelayMsChanged)
+
+P_STORE_GET(int, scrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey, int)
+P_STORE_SET_INT(setScrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey,
+                scrollingDragScrollMaxSpeedChanged)
 
 // ── Scrolling drag-insert triggers (PhosphorConfig::Store-backed) ───────────
 // Hand-written like the autotile pair in triggers.cpp: trigger lists are

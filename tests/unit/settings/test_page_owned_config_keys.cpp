@@ -190,7 +190,12 @@ private Q_SLOTS:
               ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
               ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup()}) {
             const auto it = schema.groups.constFind(group);
-            QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
+            if (it == schema.groups.constEnd()) {
+                // Collect-then-assert, like the rest of this file: an abort
+                // here would hide every group after the first missing one.
+                unowned.append(QStringLiteral("[missing schema group] ") + group);
+                continue;
+            }
             for (const PhosphorConfig::KeyDef& def : *it) {
                 const QString qualified = qualify(group, def.key);
                 if (deliberatelyUnowned().contains(qualified)) {

@@ -127,7 +127,7 @@ pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstu
 # sticky gate and the client-decides width both short-circuit on a null
 # tracker, so their per-screen resolution is unobservable without one.
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
-pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
+pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)

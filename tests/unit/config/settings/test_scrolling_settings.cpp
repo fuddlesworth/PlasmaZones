@@ -215,6 +215,17 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+D"));
         QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+Shift+D"));
         QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
+        // The rest of the CHANGELOG's advertised-by-value chords: the
+        // consume/expel pair, the column-width and window-height pairs and
+        // windowed fullscreen. A retune of any of these ships a doc that
+        // names the old chord unless it fails here.
+        QCOMPARE(ConfigDefaults::scrollingConsumeWindowShortcut(), QStringLiteral("Meta+Alt+I"));
+        QCOMPARE(ConfigDefaults::scrollingExpelWindowShortcut(), QStringLiteral("Meta+Alt+Shift+I"));
+        QCOMPARE(ConfigDefaults::scrollingIncreaseColumnWidthShortcut(), QStringLiteral("Meta+Alt+W"));
+        QCOMPARE(ConfigDefaults::scrollingDecreaseColumnWidthShortcut(), QStringLiteral("Meta+Alt+Shift+W"));
+        QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightShortcut(), QStringLiteral("Meta+Alt+H"));
+        QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+H"));
+        QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
 
         // Ships unbound, per the same docs: the edge-stop/wrap focus
         // variants and the one-way float verbs.
@@ -530,6 +541,13 @@ private Q_SLOTS:
         QCOMPARE(maxSpeed->defaultValue.toInt(), ConfigDefaults::scrollingDragScrollMaxSpeed());
         QCOMPARE(maxSpeed->validator(0).toInt(), ConfigDefaults::scrollingDragScrollMaxSpeedMin());
         QCOMPARE(maxSpeed->validator(999999).toInt(), ConfigDefaults::scrollingDragScrollMaxSpeedMax());
+        // ABSOLUTE floor, not the accessor compared against itself: lowering
+        // MaxSpeedMin to 0 would keep the line above green while the UI
+        // offered a top speed of zero — a band that arms, owns the target
+        // and never moves. (The engine independently clamps to >= 1 px/s in
+        // engine_core, so the blast radius is a misleading settings range,
+        // not a stuck engine; the floor still belongs pinned.)
+        QVERIFY(ConfigDefaults::scrollingDragScrollMaxSpeedMin() >= 1);
     }
 
     /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
