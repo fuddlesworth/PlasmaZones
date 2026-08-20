@@ -157,8 +157,8 @@ QString TileRequestEntry::validationError() const
     // origin, the JSON hop requires the visual pair to be present, numeric
     // and paired with a tiled placement before it sets the flag, and
     // viewImmediate is inert without a non-zero viewDelta (the effect's seed
-    // loop skips delta-less entries) and is dropped on a floating entry at
-    // the same hop.
+    // loop skips delta-less entries); viewDelta and viewImmediate are both
+    // dropped on a floating entry at the same hop.
     return {};
 }
 
