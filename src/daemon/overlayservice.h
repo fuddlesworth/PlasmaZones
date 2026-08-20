@@ -240,7 +240,35 @@ public:
     {
         m_layoutSupportResolver = std::move(resolver);
     }
-    /// Int codes of the resolver's answer — hand-mirrored values of
+
+    /// LIVE "is the autotile engine what actually owns this screen".
+    ///
+    /// The autotile twin of the layout-support resolver above, and needed as a
+    /// SEPARATE hook because that one cannot answer this: both the snap engine
+    /// and the autotile engine report Placement, so a Placement answer does not
+    /// say which of the two owns the screen. The router downgrades an autotile
+    /// assignment to snapping when the engine does not own the screen (master
+    /// switch off, Autotile axis context-disabled), and on such a screen the
+    /// drag pipeline runs the full snap path.
+    ///
+    /// Consulted by the three arms whose answer decides what the user SEES for
+    /// that screen: resolvePerScreenLayoutInclude (which family of cards the
+    /// picker offers), activeLayoutIdForScreen (which card is highlighted) and
+    /// isSnappingContextInactive (whether the snap overlay is drawn) — the
+    /// exact trio their scrolling siblings gate on the Templates answer. Other
+    /// readers of an autotile id are deliberately NOT gated: snap-assist's
+    /// staleness check treats autotile and scrolling alike as engine-owned and
+    /// keeps that symmetry.
+    ///
+    /// Unset falls back to trusting the assignment id, which is what the
+    /// shutdown window wants. Same clear-before-destroy contract as the other
+    /// injected closures.
+    using AutotileActiveResolver = std::function<bool(const QString& screenId)>;
+    void setAutotileActiveResolver(AutotileActiveResolver resolver)
+    {
+        m_autotileActiveResolver = std::move(resolver);
+    }
+    /// Int codes of the LAYOUT-SUPPORT resolver's answer — hand-mirrored values of
     /// IPlacementEngine::LayoutSupport (this header does not include the
     /// engine interface). Placement currently has no in-file reader; it is
     /// kept so the mirror stays a complete transcription of the enum rather
@@ -986,6 +1014,7 @@ private:
     QPointer<ISettings> m_settings;
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
+    AutotileActiveResolver m_autotileActiveResolver;
     DragInsertSelectorResolver m_dragInsertSelectorResolver;
     StripCardsProvider m_stripCardsProvider;
     StripAxisProvider m_stripAxisProvider;

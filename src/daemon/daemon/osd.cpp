@@ -831,27 +831,26 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
     if (m_layoutManager && m_screenManager) {
         const QString activity = currentActivity();
         // Both engine arms resolve through the ROUTER, never through a master
-        // switch. The switch gates whether autotile is OFFERED and DEFAULTED
-        // (setDefaultAutotileAlgorithmProvider in init_services.cpp returns an
-        // empty algorithm when off, and the mode cycle skips a disabled mode);
-        // it does not un-claim a screen carrying an EXPLICIT autotile
-        // assignment, which updateEngineScreens still admits and the engine
-        // still tiles. Reading the switch here made this filter disagree with
-        // the live engine: the picker and visibleLayoutCount both resolve the
-        // autotile family through resolvePerScreenLayoutInclude, so a screen
-        // with autotile off but an explicit assignment drew ALGORITHM cards
-        // while the controller held a manual-only list — every visible card a
-        // silent dead press, and the cycle gate counting rows the controller
-        // never cycles. The quick-slot sibling (shortcuts_wiring.cpp) already
-        // derives its filter from currentModeFor for exactly this reason.
+        // switch directly. The router already folds the switch in — with
+        // tiling disabled updateEngineScreens does not claim the screen and
+        // the router downgrades it to Snapping — so asking the router is both
+        // switch-aware AND transition-aware, and it cannot drift from what the
+        // overlay resolves. Reading the switch here instead was how this
+        // filter came to disagree with the picker: the picker and
+        // visibleLayoutCount both resolve the autotile family through
+        // resolvePerScreenLayoutInclude, so the two answered differently and
+        // every visible card became a silent dead press. The quick-slot
+        // sibling (shortcuts_wiring.cpp) derives its filter from
+        // currentModeFor for exactly this reason.
 
         // Templates needs BOTH conjuncts, the same pair
-        // resolvePerScreenLayoutInclude in overlayservice.cpp requires. Not
-        // literally the same test: that one reads an injected resolver and
-        // treats an unwired one as Templates, while this one asks the router
-        // directly and has no such escape.
-        // a scrolling assignment id AND a live engine still reporting
-        // Templates. The live capability alone is not enough (an engine can
+        // resolvePerScreenLayoutInclude in overlayservice.cpp requires: a
+        // scrolling assignment id AND a live engine still reporting
+        // Templates. Not literally the same test — that one reads an injected
+        // resolver and treats an unwired one as Templates, while this one asks
+        // the router directly and has no such escape.
+        //
+        // The live capability alone is not enough (an engine can
         // report Templates for a screen whose assignment is not scrolling),
         // and the assignment id alone is not enough (a scrolling assignment
         // the router downgraded — master switch off, Scrolling axis
@@ -862,7 +861,8 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         const auto classify = [&](const QString& screenId) {
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+                && currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Autotile) {
                 autotileActive = true;
             } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)
                        && layoutSupportForScreen(screenId) == LayoutSupport::Templates) {

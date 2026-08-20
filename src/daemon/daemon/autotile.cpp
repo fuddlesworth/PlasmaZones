@@ -62,13 +62,17 @@ bool Daemon::isAnyScreenAutotile() const
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-        // An explicitly opted-out screen is in Autotile MODE but nothing tiles
-        // there, and this predicate gates announcements about the algorithm in
-        // use (the algorithm-changed OSD). Counting it meant a setup whose
-        // every tiling screen was opted out still showed an algorithm card for
-        // a change that rearranged nothing.
+        // Two screens are in Autotile MODE but tile nothing, and this
+        // predicate gates announcements about the algorithm in USE (the
+        // algorithm-changed OSD): the explicit opt-out, and a screen the
+        // router has downgraded because the tiling engine does not own it
+        // (master switch off, Autotile axis context-disabled). Counting
+        // either meant showing an algorithm card for a change that rearranged
+        // nothing. The router answer already folds in the downgrade, so it is
+        // the same question osd.cpp's filter asks.
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
-            && PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) != PhosphorZones::NoTilingAlgorithm) {
+            && PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) != PhosphorZones::NoTilingAlgorithm
+            && currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Autotile) {
             return true;
         }
     }
@@ -184,7 +188,26 @@ void Daemon::updateEngineScreens()
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        // The master switch gates here, the exact peer of the scrolling branch
+        // above: with tiling disabled the branch is skipped entirely, the
+        // "autotile:<algo>" assignment falls through, and the screen is
+        // treated as snapping — the same downgrade the router then applies for
+        // an unclaimed autotile cascade.
+        //
+        // This gate is NOT the toggle-off path. Switching the feature off at
+        // runtime fires handleAutotileDisabled, which flips every Autotile
+        // assignment's MODE to Snapping (keeping tilingAlgorithm as dormant
+        // data for restoreAutotileAssignments to flip back), so by the time
+        // this loop runs there is no autotile id left to gate. What this
+        // covers is the switch being off WITHOUT that transition: a config
+        // that starts with tiling disabled and an autotile assignment already
+        // stored, and a user assigning Tiling on the Monitors page while it is
+        // off, which that page deliberately still allows.
+        //
+        // A null settings pointer disables the branch, matching what the
+        // scrolling peer does with its own switch: during the teardown window
+        // no engine should be claiming screens.
+        if (m_settings && m_settings->autotileEnabled() && PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
             // Explicit per-context opt-out ("autotile:none"): the context is
             // IN autotile mode but nothing tiles there — windows float, the
@@ -217,9 +240,11 @@ void Daemon::updateEngineScreens()
             // its comment there states this exclusion as a guarantee.
             //
             // A concrete assigned algorithm is explicit and always tiles.
+            // m_settings is non-null here: the branch condition already
+            // required it before reading the master switch.
             if (algoId.isEmpty()
                 && (m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)
-                    || (m_settings && m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm))) {
+                    || m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm)) {
                 continue;
             }
             autotileScreens.insert(screenId);

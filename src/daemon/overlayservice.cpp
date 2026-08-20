@@ -762,7 +762,15 @@ bool OverlayService::isSnappingContextInactive(const QString& screenId) const
     // suppressed side.
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-        return true;
+        // The AUTOTILE half consults its own live resolver for exactly the
+        // reason the scrolling half consults the capability one: a downgraded
+        // tiling assignment (master switch off, Autotile axis
+        // context-disabled) leaves a screen the snap engine really owns, where
+        // the drag pipeline runs the full snap path and windows do snap into
+        // zones. Suppressing the overlay there is the same drag-vs-overlay
+        // disagreement as #724. With no resolver wired (the shutdown window)
+        // the raw read stands, erring on the suppressed side.
+        return !m_autotileActiveResolver || m_autotileActiveResolver(screenId);
     }
     // The explicit snapping opt-out: no layout is in force, every snap and
     // detection consumer answers null for this screen (layoutForScreen's
@@ -806,7 +814,15 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
         const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+            && (!m_autotileActiveResolver || m_autotileActiveResolver(screenId))) {
+            // Live-gated like the Templates arm below, and for the same
+            // reason: on a downgraded tiling assignment the picker offers
+            // MANUAL cards, so highlighting the algorithm id would mark a card
+            // that is not in the list. Such a screen falls through to the
+            // manual resolution instead, which is what its live snapping path
+            // uses. An unwired resolver trusts the assignment id.
+            //
             // The explicit opt-out stamp: the picker's None card is keyed by
             // the bare reserved word, so "autotile:none" has to translate or
             // the highlight lands on no card. Same string mapping as
@@ -1034,7 +1050,16 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     }
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(
         resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+        && (!m_autotileActiveResolver || m_autotileActiveResolver(resolvedId))) {
+        // Gated on the LIVE resolver for the same reason the Templates arm
+        // below is: the router downgrades an autotile assignment to snapping
+        // when the tiling engine does not own the screen (master switch off,
+        // Autotile axis context-disabled), and such a screen falls through to
+        // the manual arm — the list its live snapping path actually uses.
+        // Without the gate the picker drew ALGORITHM cards on a screen whose
+        // controller list held manual layouts, so every visible card was a
+        // dead press. An unwired resolver trusts the assignment id.
         flags.manual = false;
         flags.autotile = true;
         flags.templates = false;

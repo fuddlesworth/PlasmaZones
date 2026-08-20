@@ -301,6 +301,17 @@ void Daemon::initEnginesAndWiring()
         return static_cast<int>(layoutSupportForScreen(screenId));
     });
 
+    // Live autotile ownership, the twin of the capability resolver above and
+    // separate from it because both Placement engines answer Placement: only
+    // the router can say WHICH one owns the screen. Every overlay arm that
+    // keys on an "autotile:<algo>" assignment id consults this, so a tiling
+    // assignment the router has downgraded (master switch off, Autotile axis
+    // context-disabled) keeps the snapping surfaces its live path uses.
+    // Cleared alongside the others in stop().
+    m_overlayService->setAutotileActiveResolver([this](const QString& screenId) {
+        return isAutotileScreen(screenId);
+    });
+
     // Drag-insert selector capability resolver: same router-based liveness
     // rule as the layout-support resolver above (a disabled scrolling
     // assignment downgrades and the popup reverts to zone layouts). Cleared

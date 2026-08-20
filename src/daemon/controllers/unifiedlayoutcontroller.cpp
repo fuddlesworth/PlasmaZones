@@ -355,6 +355,15 @@ QString UnifiedLayoutController::displayIdForAssignment(const QString& screenId,
     // needs no translation: its stored id IS the bare word. Pure string
     // mapping, deliberately: no registry query can disagree with the id the
     // caller already resolved.
+    //
+    // The same downgrade caveat the scrolling arm above states applies to
+    // AUTOTILE too, now that the tiling master switch can un-claim a screen:
+    // the overlay gates its autotile arm on a live resolver and falls through
+    // to the manual resolution for a router-downgraded screen, while this path
+    // answers on the assignment id alone. So on such a screen the picker
+    // highlight (overlay) and the cycle anchor (this) can disagree. Gating
+    // here needs the same provably-fresh m_currentLayoutSupport the scrolling
+    // arm lacks, so it is documented rather than half-fixed.
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
         && PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) == PhosphorZones::NoTilingAlgorithm) {
         return QString(PhosphorZones::NoSnappingLayout);
