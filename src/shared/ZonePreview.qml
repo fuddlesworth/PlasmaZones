@@ -81,6 +81,14 @@ Item {
     property bool showMasterDot: false
     /// Number of master zones to mark with indicator dots
     property int masterCount: 1
+    /// Whether a zone carrying scrolling tab data draws its column's tab
+    /// indicator. Inert for every host that renders a LAYOUT: layout zones
+    /// carry no tab keys, so the model below comes out empty for them. The
+    /// two hosts that do feed tab data are the strip previews — the Monitors
+    /// page thumbnail (over visibleStripJson) and the daemon's OSD strip card
+    /// (in-process, same keys) — and a tabbed column is indistinguishable from
+    /// a plain one without it, since the strip walk lists only the shown tab.
+    property bool showTabIndicators: true
 
     Repeater {
         model: root.zones || []
@@ -274,6 +282,105 @@ Item {
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing
             color: Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1)
+        }
+    }
+
+    // Tab indicators for the scrolling strip previews: one pill per tab of a
+    // tabbed column, on the edge the real indicator runs along, with the shown
+    // tab lit. The strip walk lists only a column's SHOWN tab, so without this
+    // a column holding five tabbed windows draws exactly like a column holding
+    // one, and the preview quietly under-reports the strip.
+    //
+    // Two deliberate departures from the indicator on screen, both because
+    // this is a thumbnail of a whole output:
+    //   * THICKNESS is floored rather than scaled. The configured width is a
+    //     handful of pixels, which is a fraction of one here, so a faithful
+    //     scale draws nothing at all. The payload carries no thickness for
+    //     that reason (PhosphorProtocol StripPreviewKey).
+    //   * The band is drawn INSIDE the tile's edge whatever placeWithinColumn
+    //     says. Outside the column it would land on the neighbouring tile at
+    //     this scale and read as that tile's indicator.
+    // Position and length ARE the resolved ones, so which edge it runs along
+    // and how far it reaches match the screen.
+    Repeater {
+        model: root.showTabIndicators ? (root.zones || []) : []
+
+        Item {
+            id: tabBand
+
+            // Read by test_zone_preview_highlight to find the bands among the
+            // preview's children, the same way the zone delegate's objectName
+            // is read by the selector's hit-test.
+            objectName: "zonePreviewTabIndicator"
+
+            required property var modelData
+            // Absent key, 0, or a malformed value all mean "this column draws
+            // no indicator" — the single gate, matching the null indicator
+            // rect that gates the compositor's own tab payload.
+            readonly property int tabCount: modelData.tabCount || 0
+            readonly property int activeTab: modelData.activeTab || 0
+            // 0 Left, 1 Right, 2 Top, 3 Bottom (TabIndicatorPosition).
+            readonly property int tabPosition: modelData.tabPosition || 0
+            readonly property bool vertical: tabPosition === 0 || tabPosition === 1
+            readonly property real lengthProportion: Math.max(0, Math.min(modelData.tabLength !== undefined ? modelData.tabLength : 1, 1))
+
+            // Mirror of the zone delegate's geometry, the same way the master
+            // dots mirror it: the band has to track the tile as DRAWN, gaps
+            // and minimum size included, or it drifts off the tile it labels.
+            readonly property var relGeo: modelData.relativeGeometry || ({})
+            readonly property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
+            readonly property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
+            readonly property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
+            readonly property real relHeight: Math.max(0, Math.min((modelData.height !== undefined ? modelData.height : (relGeo.height || 1)), 1 - relY))
+            readonly property real leftGap: root.producesOverlappingZones ? 0 : (relX < 0.01 ? root.edgeGap : root.zonePadding / 2)
+            readonly property real topGap: root.producesOverlappingZones ? 0 : (relY < 0.01 ? root.edgeGap : root.zonePadding / 2)
+            readonly property real rightGap: root.producesOverlappingZones ? 0 : ((relX + relWidth) > 0.99 ? root.edgeGap : root.zonePadding / 2)
+            readonly property real bottomGap: root.producesOverlappingZones ? 0 : ((relY + relHeight) > 0.99 ? root.edgeGap : root.zonePadding / 2)
+            readonly property real tileX: relX * root.width + leftGap
+            readonly property real tileY: relY * root.height + topGap
+            readonly property real tileWidth: Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+            readonly property real tileHeight: Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+
+            // Thick enough to see, and never more than a quarter of the tile's
+            // short side — a clipped edge column of the strip can be a few
+            // pixels wide, and a fixed thickness would bury it.
+            readonly property real thickness: Math.max(2, Math.min(Kirigami.Units.smallSpacing / 2, Math.min(tileWidth, tileHeight) / 4))
+            readonly property real bandLength: Math.max(2, (vertical ? tileHeight : tileWidth) * lengthProportion)
+            // One pixel between pills, dropped once the pills themselves are
+            // down to about that: below it the gaps eat the indicator and a
+            // five-tab column reads as an empty band.
+            readonly property real pillSpacing: (bandLength / Math.max(1, tabCount)) > 3 ? 1 : 0
+            readonly property real pillLength: Math.max(1, (bandLength - pillSpacing * (tabCount - 1)) / Math.max(1, tabCount))
+
+            visible: tabCount > 0
+            Accessible.ignored: true
+
+            // Centered on the long axis, matching indicatorRectFor, and flush
+            // with the tile's edge on the short one.
+            x: vertical ? (tabPosition === 0 ? tileX : tileX + tileWidth - thickness) : tileX + (tileWidth - bandLength) / 2
+            y: vertical ? tileY + (tileHeight - bandLength) / 2 : (tabPosition === 2 ? tileY : tileY + tileHeight - thickness)
+            width: vertical ? thickness : bandLength
+            height: vertical ? bandLength : thickness
+
+            Repeater {
+                model: tabBand.visible ? tabBand.tabCount : 0
+
+                Rectangle {
+                    required property int index
+
+                    x: tabBand.vertical ? 0 : index * (tabBand.pillLength + tabBand.pillSpacing)
+                    y: tabBand.vertical ? index * (tabBand.pillLength + tabBand.pillSpacing) : 0
+                    width: tabBand.vertical ? tabBand.thickness : tabBand.pillLength
+                    height: tabBand.vertical ? tabBand.pillLength : tabBand.thickness
+                    radius: tabBand.thickness / 2
+                    // Theme roles, like every other colour here. The real
+                    // indicator's own colours are configurable and can follow
+                    // the theme themselves, so a preview that read them would
+                    // have to carry three more keys to end up in the same
+                    // place for the default configuration.
+                    color: index === tabBand.activeTab ? Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.7)
+                }
+            }
         }
     }
 }

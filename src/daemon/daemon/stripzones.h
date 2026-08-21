@@ -11,6 +11,7 @@
 // empty-strip sketch in step by comment alone; here they share one
 // definition of each.
 
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <QLatin1String>
@@ -129,6 +130,17 @@ inline QVariantList zoneMapsForTiles(const QString& screenId, const QVector<Visi
         zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(tile.zoneNumber);
         zoneMap[QLatin1String("name")] = QString();
         zoneMap[QLatin1String("useCustomColors")] = false;
+        // The column's tab indicator, so the card draws a tabbed column as
+        // tabbed. Written only for a tile whose column resolves one, matching
+        // the wire twin: on this side the renderer reads the same absent-or-
+        // zero gate, so the two paths reach ZonePreview identically shaped.
+        if (tile.tabCount > 0) {
+            zoneMap[PhosphorProtocol::Service::StripPreviewKey::TabCount] = tile.tabCount;
+            zoneMap[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = tile.activeTabIndex;
+            zoneMap[PhosphorProtocol::Service::StripPreviewKey::TabPosition] =
+                static_cast<int>(tile.tabIndicatorPosition);
+            zoneMap[PhosphorProtocol::Service::StripPreviewKey::TabLength] = tile.tabLengthProportion;
+        }
         zones.append(zoneMap);
     }
     return zones;

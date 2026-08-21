@@ -112,6 +112,14 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     subscribeDaemonSignal(layoutIface, QStringLiteral("activitiesChanged"), SLOT(onActivitiesChanged()));
     subscribeDaemonSignal(layoutIface, QStringLiteral("currentActivityChanged"), SLOT(onActivitiesChanged()));
 
+    // Strip wake-ups for the Monitors page's live thumbnail. Relayed straight
+    // to the QML-facing signal rather than through a slot: this side adds no
+    // state, and the page that draws the strip owns both the coalescing and
+    // the decision to re-read (its timer owns EVERY strip read, so a read
+    // started here would be a second one in the same frame).
+    const QString scrollingIface = QString(PhosphorProtocol::Service::Interface::Scrolling);
+    subscribeDaemonSignal(scrollingIface, QStringLiteral("stripChanged"), SIGNAL(scrollingStripChanged(QString)));
+
     // Window-rules → settings-side mirror store. The daemon owns
     // rules.json; when it persists a change via setAllRules() the
     // adaptor emits `rulesChanged(persisted)`. Without this hook the

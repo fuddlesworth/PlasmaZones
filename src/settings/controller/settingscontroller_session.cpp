@@ -32,6 +32,7 @@
 #include "core/interfaces/settings_interfaces.h"
 #include "settings/utils/dbusutils.h"
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
@@ -742,6 +743,30 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         // shape as a real one, so the thumbnail delegate takes one path.
         zone[PhosphorZones::ZoneJsonKeys::Name] = QString();
         zone[PhosphorZones::ZoneJsonKeys::UseCustomColors] = false;
+        // The tab indicator the tile's column draws, carried through to the
+        // thumbnail so a tabbed column reads as tabbed rather than as a plain
+        // window. Copied only when the daemon sent a count: an absent key and
+        // a zero both mean "this column draws no indicator" (a daemon from
+        // before this payload sends neither), and forwarding the absence keeps
+        // the renderer's one gate rather than inventing a zeroed triple here.
+        const int tabCount = rect.value(PhosphorProtocol::Service::StripPreviewKey::TabCount).toInt();
+        if (tabCount > 0) {
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabCount] = tabCount;
+            // Defaulted to the first tab rather than -1: the count says an
+            // indicator is drawn, so some tab of it is this tile's, and a
+            // malformed or absent index must still name one of the pills the
+            // renderer draws.
+            zone[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] =
+                rect.value(PhosphorProtocol::Service::StripPreviewKey::ActiveTab).toInt(0);
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabPosition] =
+                rect.value(PhosphorProtocol::Service::StripPreviewKey::TabPosition).toInt(0);
+            // Full length is the safe read for a missing or malformed value:
+            // the renderer clamps it into 0..1, and an indicator drawn too
+            // long still says "this column is tabbed", where a zero would
+            // silently drop it for a column that draws one.
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabLength] =
+                rect.value(PhosphorProtocol::Service::StripPreviewKey::TabLength).toDouble(1.0);
+        }
         zones.append(zone);
     }
     return zones;

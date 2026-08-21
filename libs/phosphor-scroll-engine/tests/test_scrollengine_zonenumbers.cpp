@@ -88,6 +88,7 @@ private Q_SLOTS:
     void digitNamingTheOperatedWindowIsANoOp();
     void tabbedStackMateDigitRefocusesWithoutReordering();
     void hiddenTabLosesItsNumberAndGetsItBack();
+    void visibleTileCarriesItsColumnsTabIndicator();
     void clippedEdgeTilesKeepTheirNumbers();
     void crossOutputMoveKeepsHeightAndAnnouncesOnDestination();
     void crossOutputSwapTradesSlotsWithStackedSource();
@@ -524,6 +525,51 @@ void TestScrollEngineZoneNumbers::hiddenTabLosesItsNumberAndGetsItBack()
     QCOMPARE(engine->visibleTiles(QStringLiteral("S1")).size(), 2);
     QCOMPARE(numberOf(engine, "a"), 1);
     QCOMPARE(numberOf(engine, "x"), 2);
+}
+
+void TestScrollEngineZoneNumbers::visibleTileCarriesItsColumnsTabIndicator()
+{
+    // The walk drops a column's hidden tabs, so the tile it DOES emit is the
+    // only place a consumer can learn that the tile stands for a stack. These
+    // are the fields the strip previews draw their tab pills from.
+    QObject owner;
+    ScrollEngine* engine = oneScreenEngine(&owner);
+    engine->windowOpened(wid("a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(wid("x"), QStringLiteral("S1"), 0, 0);
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1")); // x joins a's column
+    engine->windowFocused(wid("a"), QStringLiteral("S1"));
+
+    // A normal column carries no indicator, whatever it holds: two stacked
+    // tiles are two tiles, not two tabs.
+    for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(QStringLiteral("S1"))) {
+        QCOMPARE(tile.tabCount, 0);
+        QCOMPARE(tile.activeTabIndex, -1);
+        QCOMPARE(tile.tabLengthProportion, 0.0);
+    }
+
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+
+    const QVector<ScrollEngine::VisibleTile> tabbed = engine->visibleTiles(QStringLiteral("S1"));
+    QCOMPARE(tabbed.size(), 1);
+    // Both tabs are counted, hidden one included — those are the pills the
+    // indicator shows — and the shown tab names its own slot among them.
+    QCOMPARE(tabbed.first().windowId, wid("a"));
+    QCOMPARE(tabbed.first().tabCount, 2);
+    QCOMPARE(tabbed.first().activeTabIndex, 0);
+    // Resolved off the two rects, so it is the proportion the column really
+    // drew, and a bare 0 would silently give every preview an empty band.
+    QVERIFY(tabbed.first().tabLengthProportion > 0.0);
+    QVERIFY(tabbed.first().tabLengthProportion <= 1.0);
+
+    // Switching tabs moves the index with the shown tile. Nothing about the
+    // strip's GEOMETRY changes here, which is exactly why a preview cannot
+    // decide it is up to date from the rects alone.
+    engine->windowFocused(wid("x"), QStringLiteral("S1"));
+    const QVector<ScrollEngine::VisibleTile> switched = engine->visibleTiles(QStringLiteral("S1"));
+    QCOMPARE(switched.size(), 1);
+    QCOMPARE(switched.first().windowId, wid("x"));
+    QCOMPARE(switched.first().tabCount, 2);
+    QCOMPARE(switched.first().activeTabIndex, 1);
 }
 
 void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()

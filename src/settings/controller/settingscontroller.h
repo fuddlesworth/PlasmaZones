@@ -816,6 +816,18 @@ Q_SIGNALS:
     void screenLayoutChanged();
     void quickLayoutSlotsChanged();
 
+    /// @p screenId's scrolling strip changed shape: re-read
+    /// getScrollingStripPreview if you are drawing it.
+    ///
+    /// A relay of the daemon's Scrolling.stripChanged, and it carries that
+    /// signal's contract with it: a wake-up, not a difference. It fires per
+    /// step of a drag and can fire without a visible tile moving, so a
+    /// receiver coalesces and compares rather than repainting on every hit.
+    /// The 2-second poll behind the Monitors page's strip thumbnail stays as
+    /// the backstop for anything this misses (an emission while the daemon
+    /// was down, a placement change on a context that later becomes current).
+    void scrollingStripChanged(const QString& screenId);
+
     /**
      * @brief Fresh running-windows list has arrived from the daemon.
      *

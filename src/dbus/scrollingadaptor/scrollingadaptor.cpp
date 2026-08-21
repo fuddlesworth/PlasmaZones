@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
@@ -77,6 +78,21 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
                 m_lastBroadcastScreens = screenIds;
                 Q_EMIT scrollingScreensChanged(screenIds);
             });
+    // Strip wake-ups for anyone rendering the strip (the settings app's
+    // Monitors thumbnail today). Relayed straight through: placementChanged
+    // IS the engine's change gate, and the reasons this adaptor does not add
+    // a second, payload-level one are on the signal's declaration.
+    connect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
+        // A placement change for a screen this engine no longer owns
+        // describes a strip no reader can fetch: visibleStripJson
+        // answers "[]" for it through the same gate. Waking a reader
+        // to be told nothing is the one wake-up worth suppressing,
+        // and unlike a payload gate this one is a set lookup.
+        if (screenId.isEmpty() || !m_engine || !m_engine->isActiveOnScreen(screenId)) {
+            return;
+        }
+        Q_EMIT stripChanged(screenId);
+    });
 }
 
 QStringList ScrollingAdaptor::scrollingScreens() const
@@ -281,6 +297,18 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
         obj[PhosphorZones::ZoneJsonKeys::Width] = r.width();
         obj[PhosphorZones::ZoneJsonKeys::Height] = r.height();
         obj[PhosphorZones::ZoneJsonKeys::ZoneNumber] = entry.tile.zoneNumber;
+        // Tab keys only for a tile whose column actually draws an indicator.
+        // Emitting a zeroed triple for every ordinary tile would put three
+        // dead keys on every element of a payload the settings app polls on a
+        // live timer, and "no tabCount key" and "tabCount 0" have to mean the
+        // same thing at the far end anyway (an older daemon sends neither).
+        if (entry.tile.tabCount > 0) {
+            obj[PhosphorProtocol::Service::StripPreviewKey::TabCount] = entry.tile.tabCount;
+            obj[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = entry.tile.activeTabIndex;
+            obj[PhosphorProtocol::Service::StripPreviewKey::TabPosition] =
+                static_cast<int>(entry.tile.tabIndicatorPosition);
+            obj[PhosphorProtocol::Service::StripPreviewKey::TabLength] = entry.tile.tabLengthProportion;
+        }
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
@@ -326,6 +354,11 @@ void ScrollingAdaptor::clearEngine()
 {
     if (m_engine) {
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
+        // The strip wake-up relay dies with it, for the same reason: a
+        // detached adaptor must not keep putting a dead engine's screen ids
+        // on the bus. Its lambda also dereferences m_engine, which the null
+        // below would make a crash rather than a stale emit.
+        disconnect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, nullptr);
         m_engine = nullptr;
     }
     // Object-state consistency, NOT gate correctness. clearEngine is terminal

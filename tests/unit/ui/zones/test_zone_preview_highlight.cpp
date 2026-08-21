@@ -98,6 +98,65 @@ private:
         return states;
     }
 
+    /// Instantiate a ZonePreview over fourZones() with the zone at
+    /// @p tabbedIndex carrying strip tab data, and return the tab-indicator
+    /// bands in zone order. The preview OWNS the returned items; it is parented
+    /// to the QML engine so they outlive the call.
+    QList<QQuickItem*> tabBands(int tabCount, int tabbedIndex, int position, qreal lengthProportion)
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.ZonePreview { width: 180; height: 101 }\n",
+            QUrl(QStringLiteral("qrc:/test_zone_preview_tabs.qml")));
+        QList<QQuickItem*> bands;
+        if (!component.isReady()) {
+            qWarning() << "component not ready:" << component.errorString();
+            return bands;
+        }
+
+        QVariantList zones = fourZones();
+        QVariantMap tabbed = zones.at(tabbedIndex).toMap();
+        tabbed[QLatin1String("tabCount")] = tabCount;
+        tabbed[QLatin1String("activeTab")] = 0;
+        tabbed[QLatin1String("tabPosition")] = position;
+        tabbed[QLatin1String("tabLength")] = lengthProportion;
+        zones[tabbedIndex] = tabbed;
+
+        QVariantMap initial;
+        initial[QStringLiteral("zones")] = zones;
+        // Parented to the engine so the items survive the return; the whole
+        // tree dies with the fixture.
+        auto* preview =
+            qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial, m_engine.rootContext()));
+        if (!preview) {
+            qWarning() << "create failed:" << component.errorString();
+            return bands;
+        }
+        preview->setParent(&m_engine);
+        // Model order, and no zone delegate answers to this name.
+        for (QQuickItem* kid : preview->childItems()) {
+            if (kid->objectName() == QLatin1String("zonePreviewTabIndicator")) {
+                bands.append(kid);
+            }
+        }
+        return bands;
+    }
+
+    /// The pills of one tab band: its Rectangle children, told apart from the
+    /// band's own Repeater by the `radius` only a Rectangle carries.
+    static int pillCount(QQuickItem* band)
+    {
+        int pills = 0;
+        for (QQuickItem* kid : band->childItems()) {
+            if (kid->property("radius").isValid()) {
+                ++pills;
+            }
+        }
+        return pills;
+    }
+
 private Q_SLOTS:
     /// The zone selector's active layout card. Before the fix `isActive` lit
     /// every zone, so the hit-tested zone was indistinguishable and picking a
@@ -156,6 +215,45 @@ private Q_SLOTS:
     {
         const QList<bool> states = highlightStates(QVariantMap());
         QCOMPARE(states, QList<bool>({false, false, false, false}));
+    }
+
+    /// The scrolling strip previews' tab indicators. A strip walk emits only
+    /// a tabbed column's SHOWN tab, so the pills are the whole of what tells
+    /// the viewer the tile stands for a stack — and a zone carrying no tab
+    /// data (every LAYOUT zone) must draw none, or the layout picker sprouts
+    /// indicators for windows that do not exist.
+    void testTabIndicatorDrawsOnePillPerTabOnTheResolvedEdge()
+    {
+        const QList<QQuickItem*> bands = tabBands(2, 1, 3, 0.5);
+        // One band per zone, but only the tabbed zone's is visible.
+        QCOMPARE(bands.size(), 4);
+        QCOMPARE(bands.at(0)->isVisible(), false);
+        QCOMPARE(bands.at(2)->isVisible(), false);
+
+        QQuickItem* band = bands.at(1);
+        QVERIFY(band->isVisible());
+        // One pill per tab, hidden tabs included. Counted by the property the
+        // pills carry: the band's Repeater is a child item of its own, and a
+        // raw child count would fold it in.
+        QCOMPARE(pillCount(band), 2);
+
+        // Bottom (3) runs along the tile's width, so the band is horizontal,
+        // sits at the tile's bottom edge, and covers half of it — the
+        // resolved length proportion, centered.
+        const qreal tileWidth = 180.0 * 0.25;
+        QCOMPARE(band->height() < band->width(), true);
+        QVERIFY(qAbs(band->width() - tileWidth * 0.5) < tileWidth * 0.15);
+        QVERIFY(band->y() + band->height() <= 101.0);
+        QVERIFY(band->y() > 101.0 / 2);
+
+        // Left (0) transposes it: a vertical band on the tile's near edge,
+        // covering half the tile's HEIGHT. Same zone, so a band that ignored
+        // the position key would not move at all.
+        QQuickItem* sideBand = tabBands(2, 1, 0, 0.5).at(1);
+        QVERIFY(sideBand->isVisible());
+        QCOMPARE(sideBand->width() < sideBand->height(), true);
+        QVERIFY(qAbs(sideBand->height() - 101.0 * 0.5) < 101.0 * 0.15);
+        QVERIFY(qAbs(sideBand->x() - 0.25 * 180.0) < tileWidth / 2);
     }
 };
 

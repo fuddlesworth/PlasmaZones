@@ -678,10 +678,12 @@ SettingsFlickable {
 
             // True when two strip replies would render identically. Compares
             // what the thumbnail actually draws: the tile count, each tile's
-            // number, and its geometry rounded to three decimals (relative
-            // 0–1 values, so that survives D-Bus float round-trips). Same
-            // fingerprint-before-assign shape LayoutComboBox uses for its zone
-            // previews.
+            // number, its geometry rounded to three decimals (relative
+            // 0–1 values, so that survives D-Bus float round-trips), and the
+            // tab indicator its column draws. Same fingerprint-before-assign
+            // shape LayoutComboBox uses for its zone previews. The tab fields
+            // count because switching tabs moves no rect at all, so a
+            // geometry-only compare would hold the stale pills up forever.
             function _stripMatches(a, b) {
                 if (!a || !b || a.length !== b.length)
                     return false;
@@ -697,6 +699,9 @@ SettingsFlickable {
 
                     if (Math.round((ga.width || 0) * 1000) !== Math.round((gb.width || 0) * 1000) || Math.round((ga.height || 0) * 1000) !== Math.round((gb.height || 0) * 1000))
                         return false;
+
+                    if ((a[i].tabCount || 0) !== (b[i].tabCount || 0) || (a[i].activeTab || 0) !== (b[i].activeTab || 0) || (a[i].tabPosition || 0) !== (b[i].tabPosition || 0) || Math.round((a[i].tabLength || 0) * 1000) !== Math.round((b[i].tabLength || 0) * 1000))
+                        return false;
                 }
                 return true;
             }
@@ -708,12 +713,55 @@ SettingsFlickable {
                 onTriggered: stateView.refreshScrollingStrip(false)
             }
 
+            // The daemon's strip wake-up, coalesced. Scrolling.stripChanged
+            // relays placement changes, so a drag fires it per step and each
+            // hit taken straight to the read would be a blocking D-Bus call on
+            // the GUI thread. One shot once the burst settles is all a
+            // thumbnail needs, on the settle retry's interval: both mean "wait
+            // for the strip to stop moving, then read once".
+            Timer {
+                id: stripEdgeCoalesce
+                interval: stateView._stripSettleIntervalMs
+                repeat: false
+                // Through the live timer, never a direct read: it owns EVERY
+                // strip read, and restart() gives one immediate shot via
+                // triggeredOnStart while pushing the periodic beat out.
+                //
+                // Guarded exactly like the context nudge in
+                // onScreenStateChanged. restart() on a STOPPED timer would
+                // START it, and the `running` binding below does not re-assert
+                // until a dependency changes, so a wake-up arriving on a hidden
+                // page would leave it beating against its own gate; a pending
+                // start shot already covers this context, so restarting on top
+                // of one just queues a second blocking read. Dropping the
+                // wake-up costs nothing — a stopped timer re-reads through
+                // triggeredOnStart when its gate lets it run again.
+                onTriggered: {
+                    if (stripLiveRefresh.running && !stripLiveRefresh._startShotPending)
+                        stripLiveRefresh.restart();
+                }
+            }
+
+            Connections {
+                target: settingsController
+
+                // Only the screen on show: the daemon wakes every screen whose
+                // strip moves, and reading for a monitor nobody is looking at
+                // is the blocking call this page's gating exists to prevent.
+                function onScrollingStripChanged(screenId) {
+                    if (!stateView.screenState || screenId !== (stateView.screenState.screenId || ""))
+                        return;
+                    stripEdgeCoalesce.restart();
+                }
+            }
+
             // The strip is live state: the user can open a window, widen a
-            // column, or tab two together while this page is up, and the
-            // daemon publishes no per-strip-change signal to subscribe to.
-            // So the preview re-reads on a slow beat, and only while it is
-            // actually on screen showing a scrolling monitor. The read is a
-            // single cheap D-Bus call that returns [] for any other screen.
+            // column, or tab two together while this page is up. The wake-up
+            // above turns that into a prompt re-read; this beat is the backstop
+            // under it, for what the signal misses (an emission while the
+            // daemon was down, a daemon too old to send one) and it runs only
+            // while the page is on screen showing a scrolling monitor. The read
+            // is a single cheap D-Bus call that returns [] for any other screen.
             Timer {
                 id: stripLiveRefresh
                 interval: stateView._stripLiveIntervalMs

@@ -295,6 +295,25 @@ Q_SIGNALS:
     /// merge a delta against a copy it might have missed an update to.
     void scrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
+    /// @p screenId's strip changed shape: a wake-up for anyone rendering it,
+    /// not a payload. A receiver re-reads @ref visibleStripJson if it cares.
+    ///
+    /// Carries no payload and is NOT gated against the strip payload, which
+    /// is the deliberate half. Payload-gating it would mean resolving the
+    /// strip on every placement change — a full relayout, paid on the daemon
+    /// whether or not anything is listening — to suppress wake-ups whose only
+    /// cost on the other side is one D-Bus read that the reader already
+    /// discards when it fingerprints identical. The gate that DOES apply is
+    /// the engine's own: this relays placementChanged, which the engine emits
+    /// only when placement actually changed.
+    ///
+    /// So a receiver must treat this as "re-read soon", never as "the strip
+    /// differs": a placement change that moves a floating window, or one on a
+    /// context this screen is not currently showing, fires it without
+    /// changing a single visible tile. Receivers should also coalesce — a
+    /// drag or a burst of opens emits per step.
+    void stripChanged(const QString& screenId);
+
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
     /// Last set broadcast on the bus (the change gate's memory; the engine
