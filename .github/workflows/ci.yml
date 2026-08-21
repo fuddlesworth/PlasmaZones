@@ -10,6 +10,11 @@ name: CI
 on:
   push:
     branches: [main, develop, v3, v3.1, v3.2, v3.3, v3.4]
+    # Release tags too. Every build job in release.yml configures with
+    # -DBUILD_TESTING=OFF and release.yml has no test job, so without this a
+    # tag pushed at a commit that never landed on one of the branches above
+    # shipped to GitHub Releases, the AUR and OBS with no test evidence at all.
+    tags: ["v*"]
   pull_request:
     branches: [main, v3, v3.1, v3.2, v3.3, v3.4]
     # `labeled` is opt-in for the draft-PKGBUILD job below — it gates

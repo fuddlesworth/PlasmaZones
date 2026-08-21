@@ -26,12 +26,12 @@ let
 in
 {
   options.programs.plasmazones = {
-    enable = lib.mkEnableOption "PlasmaZones window snapping, tiling and scrolling for KDE Plasma 6.6+";
+    enable = lib.mkEnableOption "PlasmaZones window snapping, tiling and scrolling for KDE Plasma 6.7+";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { inherit src version; };
-      defaultText = lib.literalExpression "pkgs.callPackage ./package.nix { }";
+      defaultText = lib.literalExpression "pkgs.callPackage ./package.nix { inherit src version; }";
       description = ''
         The PlasmaZones package to use. Built against the host's pkgs so the
         KWin effect plugin IID matches the running KWin.
@@ -44,6 +44,11 @@ in
       description = ''
         Whether to start the PlasmaZones daemon automatically with the
         graphical session. Disable to install the unit without enabling it.
+
+        Defaults to true here, unlike the NixOS module, which defaults to
+        false. A Home Manager configuration already describes exactly one
+        user, so enabling the unit affects only that user; the NixOS module
+        would otherwise autostart the daemon for everyone on the machine.
       '';
     };
   };
@@ -55,7 +60,7 @@ in
     # during `home-manager switch`.
     systemd.user.services.plasmazones = {
       Unit = {
-        Description = "PlasmaZones Window Tiling Daemon";
+        Description = "PlasmaZones Window Placement Daemon";
         # Start after the Wayland/graphical session is up (set by plasma-session).
         PartOf = [ "graphical-session.target" ];
         After = [ "graphical-session.target" ];
@@ -70,5 +75,18 @@ in
         WantedBy = [ "graphical-session.target" ];
       };
     };
+
+    # Refresh the KDE service cache after activation so the KCM (System
+    # Settings -> Apps -> PlasmaZones) appears without a logout. The NixOS
+    # module does this from system.userActivationScripts; without the same step
+    # here, a Home Manager install on a non-NixOS host puts the KCM plugin and
+    # its .desktop file in place but System Settings does not list them until
+    # the user runs kbuildsycoca6 by hand. Best-effort: only fires where KDE is
+    # installed, and never fails the activation.
+    home.activation.plasmazones-sycoca = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      if command -v kbuildsycoca6 >/dev/null 2>&1; then
+        $DRY_RUN_CMD kbuildsycoca6 --noincremental 2>/dev/null || true
+      fi
+    '';
   };
 }

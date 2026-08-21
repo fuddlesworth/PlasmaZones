@@ -17,7 +17,7 @@
       PlasmaZones window placement system for KDE Plasma. Use it to author
       named zone layouts, drag zone boundaries on a live canvas, assign
       shaders, configure per-zone appearance, and pick the layout that
-      should activate on each monitor. It also edits the scrolling-mode
+      should activate on each monitor. It also edits the scrolling
       templates that set the starting columns of a strip.
     </p>
     <p>Features:</p>
@@ -27,7 +27,7 @@
       <li>Per-zone shader effects with live previews</li>
       <li>Per-monitor and per-activity layout assignments</li>
       <li>Import / export layout JSON for sharing</li>
-      <li>Starting columns and size presets for scrolling-mode templates</li>
+      <li>Starting columns and size presets for scrolling templates</li>
     </ul>
   </description>
 

@@ -8,18 +8,22 @@ import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
 
 KCMUtils.SimpleKCM {
-    // URL scheme launch handles the common case. For non-KDE desktops,
-    // users can run plasmazones-settings from the terminal.
-
     id: root
 
     ColumnLayout {
-        width: parent.width
+        // Guarded because `parent` is null for one event loop while
+        // SimpleKCM (a Kirigami.ScrollablePage) instantiates its content item.
+        // Unguarded, the binding computes NaN for that frame and the NaN
+        // propagates into every Layout.fillWidth child. AboutPageShell carries
+        // the same guard for the same reason.
+        width: parent ? parent.width : 0
         spacing: Kirigami.Units.largeSpacing
 
         // App header
         RowLayout {
-            Layout.fillWidth: true
+            // No Layout.fillWidth here: a filling item ignores the horizontal
+            // half of Layout.alignment, which left-aligned the icon, heading and
+            // version under a page whose every other element centres itself.
             Layout.topMargin: Kirigami.Units.largeSpacing * 2
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing
@@ -58,6 +62,10 @@ KCMUtils.SimpleKCM {
         Button {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: Kirigami.Units.largeSpacing * 2
+            // The implicitWidth below is a floor with no ceiling, and button
+            // text never wraps, so a long translation or a large font scale
+            // would push the button past the viewport. Cap it at the column.
+            Layout.maximumWidth: parent ? parent.width : 0
             text: i18n("Open PlasmaZones Settings")
             icon.name: "configure"
             font.bold: true
@@ -70,6 +78,10 @@ KCMUtils.SimpleKCM {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             text: i18n("Configure zones, tiling, scrolling, appearance, shortcuts, and more")
+            // This PR lengthened the string. Without wrapMode it overflows the
+            // column at a narrow KCM width instead of wrapping, and a German or
+            // Russian translation makes that worse. Matches the tagline Label above.
+            wrapMode: Text.WordWrap
             opacity: 0.5
             font: Kirigami.Theme.smallFont
         }

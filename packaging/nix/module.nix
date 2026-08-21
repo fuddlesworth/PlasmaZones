@@ -25,12 +25,12 @@ let
 in
 {
   options.programs.plasmazones = {
-    enable = lib.mkEnableOption "PlasmaZones window snapping, tiling and scrolling for KDE Plasma 6.6+";
+    enable = lib.mkEnableOption "PlasmaZones window snapping, tiling and scrolling for KDE Plasma 6.7+";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.callPackage ./package.nix { inherit src version; };
-      defaultText = lib.literalExpression "pkgs.callPackage ./package.nix { }";
+      defaultText = lib.literalExpression "pkgs.callPackage ./package.nix { inherit src version; }";
       description = ''
         The PlasmaZones package to use. The default builds against the host
         system's pkgs so the KWin effect plugin's IID matches the running KWin
@@ -49,7 +49,10 @@ in
           systemctl --user enable --now plasmazones
 
         PlasmaZones is a per-user tool, so autostart is opt-in rather than
-        enabled for every user on the system.
+        enabled for every user on the system. Note this differs deliberately
+        from the Home Manager module, where the same option defaults to true:
+        that module already configures exactly one user, so there is no
+        every-user-on-the-box concern to guard against.
       '';
     };
   };
@@ -64,7 +67,7 @@ in
     # GC-rooted, rather than relying solely on the copy shipped inside the
     # package. Autostart stays opt-in (see the `autostart` option).
     systemd.user.services.plasmazones = {
-      description = "PlasmaZones Window Tiling Daemon";
+      description = "PlasmaZones Window Placement Daemon";
       partOf = [ "graphical-session.target" ];
       after = [ "graphical-session.target" ];
       wantedBy = lib.mkIf cfg.autostart [ "graphical-session.target" ];

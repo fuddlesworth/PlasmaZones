@@ -15,8 +15,9 @@
     <p>
       The PlasmaZones Settings app is the standalone configuration
       surface for the PlasmaZones window placement system on KDE Plasma.
-      PlasmaZones gives every monitor one of three placement modes.
-      Snapping drops windows into zones you drew, tiling places them
+      PlasmaZones gives every screen one of three placement modes, chosen
+      per desktop and activity.
+      Snapping drops windows into zones you draw, tiling places them
       automatically with a scripted algorithm, and scrolling arranges
       them as columns on an endless strip.
     </p>
@@ -28,9 +29,9 @@
     </p>
     <p>What it configures:</p>
     <ul>
-      <li>Snap behaviour (modifiers, drag delays, zone span, overlay timing)</li>
-      <li>Autotile algorithms and per-layout defaults</li>
-      <li>Scrolling columns, tabs, tab indicators, and strip templates</li>
+      <li>Snapping behavior (modifiers, drag delays, zone span, overlay timing)</li>
+      <li>Tiling algorithms and their per-screen defaults</li>
+      <li>Scrolling columns, tabs, tab indicators, and scrolling templates</li>
       <li>Which mode each monitor, desktop, and activity uses</li>
       <li>Animations, shader effects, and per-event motion profiles</li>
       <li>Window decoration packs and zone overlay appearance</li>

@@ -15,16 +15,20 @@ on:
         description: 'Tag to release (e.g. v3.0.0). Must already exist.'
         required: true
 
-# Default scope is read-only. Only the `release` job and the AUR publish
-# need writes — they opt in via per-job permissions blocks.
+# Default scope is read-only. Only the `release` job needs write, and it opts
+# in via its own permissions block. The AUR publish needs no GitHub token at
+# all: it pushes over SSH with the AUR_SSH_PRIVATE_KEY secret.
 permissions:
   contents: read
 
 # Two tag pushes (or a re-run of the same tag dispatch) must not race
-# the delete-and-recreate dance in the `release` job. Serialising per
-# ref keeps multiple in-flight releases out of each other's way.
+# the delete-and-recreate dance in the `release` job. Keyed on the tag
+# being released rather than github.ref: on workflow_dispatch github.ref
+# is the branch the run was dispatched FROM, so a dispatch naming v3.4.0
+# and a push of v3.4.0 would land in different groups and race each other,
+# which is exactly what this is meant to prevent.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -103,6 +107,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install build dependencies
         run: |
@@ -177,6 +183,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install build dependencies
         run: |
@@ -288,6 +296,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install build dependencies
         # Reuse the install-with-retry shape from the prerequisites step.
@@ -379,6 +389,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install build dependencies
         run: |
@@ -467,6 +479,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install build dependencies
         run: |
@@ -535,6 +549,16 @@ jobs:
                   "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
               install -Dm755 packaging/arch/plasmazones-refresh-sycoca \
                   "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
+
+              # License files, matching packaging/arch/PKGBUILD. The license=()
+              # array above declares GPL-3.0-or-later and LGPL-2.1-or-later, so
+              # both files have to ship under /usr/share/licenses. Without them
+              # this package claimed two licences and carried neither, and the
+              # namcap run below cannot catch it because it is `|| true`.
+              install -Dm644 LICENSE \
+                  "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+              install -Dm644 COPYING.LESSER \
+                  "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
           }
           PKGBUILD_EOF
 
@@ -572,6 +596,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install Nix
         # SHA-pinned to match ci.yml; bump together when verifying a new release.
@@ -609,6 +635,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Download all artifacts
@@ -760,6 +787,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Download generic tarball artifact
         uses: actions/download-artifact@v8
@@ -989,6 +1018,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install osc (OBS command-line client)
         run: |
@@ -1010,15 +1041,21 @@ jobs:
           # which hangs the runner. The file is chmod 600 and lives only
           # on the ephemeral CI VM; GitHub masks the secret values in logs.
           mkdir -p ~/.config/osc
-          cat > ~/.config/osc/oscrc << EOF
+          # Quoted heredoc delimiter: the static block must NOT be expanded.
+          # An unquoted EOF here would run the shell's expansions over the
+          # credential lines, so a password containing a backtick or $( would
+          # execute as a command on the runner with the OBS token in scope, and
+          # one containing $ or \ would be silently corrupted into an
+          # authentication failure. The two secret lines are appended with
+          # printf instead, which does not re-expand its arguments.
+          cat > ~/.config/osc/oscrc << 'EOF'
           [general]
           apiurl = https://api.opensuse.org
 
           [https://api.opensuse.org]
           credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
-          user = $OBS_USERNAME
-          pass = $OBS_PASSWORD
           EOF
+          printf 'user = %s\npass = %s\n' "$OBS_USERNAME" "$OBS_PASSWORD" >> ~/.config/osc/oscrc
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec
