@@ -423,7 +423,19 @@ void Daemon::handleIncreaseMasterRatio()
     // HANDLE_AUTOTILE_ONLY macro sets this hint for every other autotile
     // shortcut; these two handlers exist out-of-line only to thread the
     // per-screen `effectiveSplitRatioStep`, so they must replicate the
-    // hint-setting the macro does.
+    // hint-setting the macro does — and, for the same reason, the
+    // membership gate below it.
+    //
+    // isAutotileScreen above is the ROUTER's answer, which is Autotile for an
+    // explicit algorithm opt-out too — but updateEngineScreens leaves such a
+    // screen out of the engine set, the hint is only honored for a member, and
+    // NavigationController would otherwise fall back to the first
+    // (hash-ordered) entry of that set and move an unrelated screen's ratio.
+    // Membership, not "has a TilingState": a member with no tiled windows yet
+    // still gets the engine's own feedback instead of silence.
+    if (!m_autotileEngine->isActiveOnScreen(screenId)) {
+        return;
+    }
     m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
@@ -438,7 +450,11 @@ void Daemon::handleDecreaseMasterRatio()
         return;
     if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
-    // See handleIncreaseMasterRatio for the active-screen-hint rationale.
+    // See handleIncreaseMasterRatio for the active-screen-hint and
+    // membership rationale.
+    if (!m_autotileEngine->isActiveOnScreen(screenId)) {
+        return;
+    }
     m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
@@ -476,6 +492,14 @@ void Daemon::handleRetile()
         return;
     }
     if (isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile)) {
+        return;
+    }
+    // An autotile-classified screen the engine holds no state for (the
+    // explicit algorithm opt-out, or a transient window) has nothing to
+    // retile: the engine-global retile() iterates active screens and would
+    // no-op for it, and the success card below would claim a retile that
+    // never happened on the screen the user fired from.
+    if (!m_autotileEngine->stateForScreen(focusedScreen)) {
         return;
     }
     m_autotileEngine->retile();

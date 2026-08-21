@@ -170,6 +170,11 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // per-screen count either under-armed (all-scrolling apply: 0,
     // letting the no-op resnap OSD fire over the mode card) or
     // over-armed (multi-screen: surplus parked until the watchdog).
+    // An opted-out screen among changedScreenIds needs no filtering here,
+    // unlike the single-screen mode-toggle path which gates the whole call.
+    // This one covers every changed screen at once, so it has to run
+    // regardless, and an opted-out screen simply contributes no entries: its
+    // layout resolves null downstream, so no window is moved on its account.
     armResnapOsdSuppression(1);
     m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, changedScreenIds,
                                                                           currentDesktop());
@@ -278,7 +283,14 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
                 showScrollingModeOsd(osd.screenId, OsdTrigger::LayoutSwitch);
             }
         } else if (osd.mode == PhosphorZones::AssignmentEntry::Autotile) {
-            if (!osd.algoId.isEmpty()) {
+            if (osd.algoId == PhosphorZones::NoTilingAlgorithm) {
+                // Explicit per-context opt-out: the screen is in autotile
+                // mode with no algorithm ON PURPOSE, so nothing tiles and no
+                // card shows — the None-pick silent posture the scrolling
+                // template clear established. Without this gate the registry
+                // lookup below misses and the card would print the raw
+                // reserved word at the user.
+            } else if (!osd.algoId.isEmpty()) {
                 // Resolve the algorithm's human-readable display
                 // name via the registry instead of surfacing the
                 // wire-format id (e.g. "bsp" → "Binary Split").

@@ -11,6 +11,8 @@
 #include <QUuid>
 #include <memory>
 
+#include <PhosphorLayoutApi/LayoutId.h>
+
 #include "LayoutManagerAssignmentFixture.h"
 
 using namespace PlasmaZones;
@@ -109,6 +111,82 @@ private Q_SLOTS:
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, layoutId);
         QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), layoutId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Cleared defaults — the reserved no-layout word as the level-1 value.
+    //
+    // The library card's Clear Default stores the sentinel in the default keys:
+    // "no default at all", distinct from empty (which falls back — the snap arm
+    // to the first registered layout, the level-1 cascade to the autotile arm).
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testLevel1Default_snapSentinel_answersNoLayout()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        mgr->setDefaultLayoutIdProvider([]() {
+            return QString(PhosphorZones::NoSnappingLayout);
+        });
+        mgr->setDefaultAutotileAlgorithmProvider([]() {
+            return QStringLiteral("bsp");
+        });
+
+        // The sentinel claims the snap arm (it is non-empty), so the autotile
+        // default must NOT creep in behind the cleared snap default…
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QString(PhosphorZones::NoSnappingLayout));
+
+        // …and defaultLayout() must answer null rather than degrade to the
+        // first registered layout (that net exists for STALE ids, not the
+        // opt-out), which keeps layoutForScreen's cascade-miss tail at null.
+        QCOMPARE(mgr->defaultLayout(), nullptr);
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 4), nullptr);
+    }
+
+    void testLevel1Default_autotileSentinel_synthesizesAutotileNone()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultLayoutIdProvider([]() {
+            return QString();
+        });
+        mgr->setDefaultAutotileAlgorithmProvider([]() {
+            return QString(PhosphorZones::NoTilingAlgorithm);
+        });
+
+        // The synthesized entry carries the word raw — updateEngineScreens'
+        // existing opt-out arm consumes it and leaves the screen untiled.
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 4);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+        QCOMPARE(mgr->tilingAlgorithmForScreen(QStringLiteral("DP-1"), 4), QString(PhosphorZones::NoTilingAlgorithm));
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 4), QStringLiteral("autotile:none"));
+    }
+
+    void testDefaultLayout_sentinelNull_realIdStillResolves()
+    {
+        // Mutation guard on the defaultLayout() sentinel arm: it must be
+        // scoped strictly to the reserved word — a REAL configured id keeps
+        // resolving, and a stale/unparseable id keeps the first-layout net.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Snap"));
+        mgr->addLayout(layout);
+
+        QString providerValue = layout->id().toString();
+        mgr->setDefaultLayoutIdProvider([&providerValue]() {
+            return providerValue;
+        });
+        QCOMPARE(mgr->defaultLayout(), layout);
+
+        providerValue = QStringLiteral("not-a-uuid");
+        QCOMPARE(mgr->defaultLayout(), layout); // first-layout net
+
+        providerValue = QString(PhosphorZones::NoSnappingLayout);
+        QCOMPARE(mgr->defaultLayout(), nullptr);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -326,6 +404,36 @@ private Q_SLOTS:
         QVERIFY(mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
         // A per-context allow override flips it back on.
         addDefaultAssignmentRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), /*allow=*/true);
+        QVERIFY(!mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
+    }
+
+    void testBareAutotileModeRule_clearedDefaultAlgorithm_isNotSuppressedAndKeepsTheBareId()
+    {
+        // The SENTINEL sibling of the primitive above, and the pair the
+        // daemon's activation gate reads. Suppression and a cleared default
+        // are two independent ways for a bare autotile context to have no
+        // algorithm, and only the first was pinned.
+        //
+        // The trap this documents: a bare "autotile:" id's algorithm part is
+        // EMPTY, not the reserved word, so the daemon's explicit-opt-out arm
+        // does not recognise it, and suppression is false here because the
+        // suppress feature is untouched. A gate reading only those two answers
+        // therefore admits the screen and tiles it with whatever stale global
+        // algorithm the engine still holds — silently ignoring the user's
+        // Clear Default. The gate must consult the default ALGORITHM as well.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        mgr->setDefaultAutotileAlgorithmProvider([]() {
+            return QString(PhosphorZones::NoTilingAlgorithm);
+        });
+        addEngineModeRule(mgr.data(), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile"));
+
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 2), PhosphorZones::AssignmentEntry::Autotile);
+        // Bare id: the algorithm part is empty, NOT the reserved word.
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 2), QStringLiteral("autotile:"));
+        QVERIFY(PhosphorLayout::LayoutId::extractAlgorithmId(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 2))
+                    .isEmpty());
+        // Clearing the default algorithm is NOT the suppress feature, so this
+        // stays false — which is exactly why it cannot be the only gate.
         QVERIFY(!mgr->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 2));
     }
 

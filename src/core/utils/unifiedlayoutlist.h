@@ -105,10 +105,14 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
  * them (a column vocabulary is not a placement, so screen shape says nothing
  * about its fit).
  *
- * @p includeNoTemplateRow adds the synthetic "None" picker row (prepended
- * ahead of the template rows in the raw list; the sort pins it last). The row
- * is store-independent — it appears even when the store is empty or null —
- * see appendScrollingTemplatePreviews in the .cpp for the contract.
+ * @p includeNoneRow adds the synthetic "None" picker row (the sort pins it
+ * last). On a template list (@p includeScrollingTemplates true) it is the
+ * template-flavoured opt-out, store-independent — it appears even when the
+ * store is empty or null (see appendScrollingTemplatePreviews in the .cpp).
+ * On every other list it is the generic no-layout row: one row however many
+ * families the list mixes, because the opt-out belongs to the context, not
+ * to a family — the apply path resolves which slot it clears from the
+ * context's current mode.
  *
  * @p stripVerticalAxis is this screen's strip axis. Template cards are a
  * picture of the columns the strip will hold, so on a screen whose strip runs
@@ -126,8 +130,8 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                        bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
                        const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
                        QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
-                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr,
-                       bool includeNoTemplateRow = false, bool stripVerticalAxis = false);
+                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr, bool includeNoneRow = false,
+                       bool stripVerticalAxis = false);
 
 /**
  * @brief Build a combined custom order list from settings

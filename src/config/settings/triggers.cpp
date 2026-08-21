@@ -8,11 +8,12 @@
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <iterator> // std::size, in setQuickLayoutShortcut's dispatch check
+#include <iterator> // std::size, in the quick-layout and snap-to-zone dispatch checks
 
 namespace PlasmaZones {
 
@@ -306,7 +307,12 @@ QString Settings::defaultLayoutId() const
 }
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
-    const QString normalized = normalizeUuidString(layoutId);
+    // The reserved no-layout word is a legal stored value ("no default at
+    // all", the library card's Clear Default) and is not a UUID, so it must
+    // bypass the normalizer below — which would degrade it to empty and then
+    // hit the malformed-input no-op guard, making the sentinel unwritable.
+    // Same exemption class as setAssignmentEntry's canonicalizer bypass.
+    const QString normalized = layoutId == PhosphorZones::NoSnappingLayout ? layoutId : normalizeUuidString(layoutId);
     // A non-empty input that normalised to empty is a malformed UUID
     // (the normaliser logs a warning at that point). Treat as a no-op
     // rather than silently clearing a previously-valid stored value —
@@ -342,9 +348,12 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
-// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle. defaultAutotileAlgorithm passes through
-// PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
-// JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
+// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle.
+// defaultAutotileAlgorithm is stored as-is with no registry lookup in this
+// layer — validation is the engine's on consumption, which is what lets the
+// reserved no-algorithm word be stored at all (see its setter). Per-algorithm
+// settings round-trip as a JSON string and sanitize via
+// AutotileConfig::perAlgoFromVariantMap.
 
 P_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)
@@ -511,6 +520,16 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 }
 
 // snapToZone1..9 — same dispatch pattern as quickLayout.
+//
+// The count is named once here rather than spelled as three independent 9s
+// (two bounds checks and a signal-array extent). There is no protocol constant
+// to derive it from the way the quick-layout twin uses QuickLayoutSlotCount —
+// these slots are settings-only — but the static_assert below still ties the
+// array to this constant, so raising the count without adding the matching
+// NOTIFY emitters fails the build instead of dispatching through a garbage
+// member pointer.
+inline constexpr int SnapToZoneSlotCount = 9;
+
 #define P_SNAP_TO_ZONE(N)                                                                                              \
     QString Settings::snapToZone##N##Shortcut() const                                                                  \
     {                                                                                                                  \
@@ -534,7 +553,7 @@ P_SNAP_TO_ZONE(9)
 
 QString Settings::snapToZoneShortcut(int index) const
 {
-    if (index < 0 || index >= 9) {
+    if (index < 0 || index >= SnapToZoneSlotCount) {
         return {};
     }
     return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::snapToZoneKey(index + 1));
@@ -542,7 +561,7 @@ QString Settings::snapToZoneShortcut(int index) const
 
 void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
 {
-    if (index < 0 || index >= 9) {
+    if (index < 0 || index >= SnapToZoneSlotCount) {
         return;
     }
     const QString key = ConfigDefaults::snapToZoneKey(index + 1);
@@ -550,13 +569,14 @@ void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
         return;
     }
     m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
-    static constexpr ShortcutSignalFn signals[9] = {
+    static constexpr ShortcutSignalFn signals[] = {
         &Settings::snapToZone1ShortcutChanged, &Settings::snapToZone2ShortcutChanged,
         &Settings::snapToZone3ShortcutChanged, &Settings::snapToZone4ShortcutChanged,
         &Settings::snapToZone5ShortcutChanged, &Settings::snapToZone6ShortcutChanged,
         &Settings::snapToZone7ShortcutChanged, &Settings::snapToZone8ShortcutChanged,
         &Settings::snapToZone9ShortcutChanged,
     };
+    static_assert(std::size(signals) == SnapToZoneSlotCount, "add a NOTIFY emitter for each new snap-to-zone slot");
     Q_EMIT(this->*signals[index])();
     Q_EMIT settingsChanged();
 }

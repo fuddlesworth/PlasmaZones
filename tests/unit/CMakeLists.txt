@@ -634,6 +634,25 @@ target_link_libraries(test_unified_layout_controller_scrolling
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_unified_layout_controller_scrolling COMMAND test_unified_layout_controller_scrolling)
 
+# The generic None card on snapping/autotile contexts: presence + pinned-last
+# in the picker list, the mode-preserving opt-out writes ("none" /
+# "autotile:none"), and the display-id translation back to the card. Same
+# daemon-source compilation and null-dependency construction as the
+# scrolling suite above.
+add_executable(test_unified_layout_controller_none
+    daemon/test_unified_layout_controller_none.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/controllers/unifiedlayoutcontroller.cpp
+)
+target_include_directories(test_unified_layout_controller_none PRIVATE ${CMAKE_SOURCE_DIR}/src)
+# PhosphorZones and PhosphorLayoutApi named explicitly: the suite constructs
+# LayoutRegistry / Layout / Zone and calls LayoutId directly, and this file's
+# convention is that a target names what it uses rather than riding another
+# target's PUBLIC link interface.
+target_link_libraries(test_unified_layout_controller_none
+    PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+            PhosphorZones::PhosphorZones PhosphorLayoutApi::PhosphorLayoutApi)
+add_test(NAME test_unified_layout_controller_none COMMAND test_unified_layout_controller_none)
+
 # Shortcut teardown contract (discussion #851): unregisterShortcuts() must not
 # purge persistent bindings from the backend. Same daemon-source compilation
 # as test_cheatsheet_compression, plus a backend injected via

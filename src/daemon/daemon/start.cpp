@@ -721,7 +721,13 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
         const int visibleCount = m_overlayService->visibleLayoutCount(screenId);
         const bool templateStoreEmpty = m_overlayService->screenResolvesToTemplates(screenId)
             && (!m_scrollingTemplateStore || m_scrollingTemplateStore->count() == 0);
-        if (templateStoreEmpty || visibleCount == 0) {
+        // <= 1, not == 0: the synthetic None row is store-independent and
+        // keeps the count at >= 1 for every family (the same reason the
+        // Templates arm asks the store directly), so a manual/autotile
+        // vocabulary that is actually empty counts exactly 1 — the lone None
+        // card, which cycling among is a silent no-op. The picker gate in
+        // shortcuts_wiring.cpp uses the same threshold; the two must agree.
+        if (templateStoreEmpty || visibleCount <= 1) {
             if (templateStoreEmpty) {
                 qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
                 if (navigationOsdAllowed(screenId)) {

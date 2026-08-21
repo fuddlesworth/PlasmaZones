@@ -261,12 +261,15 @@ bool LayoutRegistry::shouldSkipLayoutAssignment(const QString& layoutId, const Q
     if (layoutId.isEmpty()) {
         return true;
     }
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
-        // Autotile ids and the bare scrolling sentinel are valid without a
-        // PhosphorZones::Layout* lookup. Skipping the sentinel here would be
-        // DATA LOSS in the batch path: applyBatchAssignments drops the
-        // addressed rule family before this validation re-adds entries, so
-        // a rejected Scrolling context would lose its assignment for good.
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)
+        || layoutId == PhosphorZones::NoSnappingLayout) {
+        // Autotile ids, the bare scrolling sentinel, and the snapping opt-out
+        // word are valid without a PhosphorZones::Layout* lookup. Skipping any
+        // of them here would be DATA LOSS in the batch path:
+        // applyBatchAssignments drops the addressed rule family before this
+        // validation re-adds entries, so a rejected Scrolling context — or a
+        // snapping context explicitly set to no layout — would lose its
+        // assignment for good on a get->set round trip.
         return false;
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
@@ -280,6 +283,16 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
 {
     if (m_defaultLayoutIdProvider) {
         const QString configuredId = m_defaultLayoutIdProvider();
+        // The explicit opt-out answers "no default at all", so it must NOT
+        // fall through to the first-registered-layout net below — that
+        // fallback exists to degrade a stale/unparseable UUID gracefully,
+        // and degrading the sentinel to a real layout would hand every
+        // defaultLayout() consumer (overlay seed, zone selector, D-Bus
+        // getActiveLayout, the cascade-miss tail of layoutForScreen) zones
+        // the user opted out of.
+        if (configuredId == PhosphorZones::NoSnappingLayout) {
+            return nullptr;
+        }
         if (!configuredId.isEmpty()) {
             if (PhosphorZones::Layout* layout = layoutById(QUuid::fromString(configuredId))) {
                 return layout;
@@ -394,17 +407,27 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // independently. (Scrolling screens never reach here — the template
     // branch above returns.)
     PhosphorZones::Layout* currentLayout = nullptr;
+    // An explicitly opted-out context has NO current layout, and that is a
+    // resolved answer rather than a failure to resolve. Distinguishing the two
+    // matters here: the fallbacks below exist for "could not work out what is
+    // in force", and letting an opt-out reach them adopted the default (or the
+    // first visible row) as if the screen were using it, so the first press
+    // stepped from that layout's index and skipped the row it should have
+    // landed on. Leaving currentLayout null takes the not-in-the-list arm,
+    // which starts the walk from either end.
+    const bool explicitlyNoLayout = !resolvedScreenId.isEmpty()
+        && snappingLayoutForScreen(resolvedScreenId, desktop, m_currentActivity) == NoSnappingLayout;
     if (!resolvedScreenId.isEmpty()) {
         currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
     }
-    if (!currentLayout) {
+    if (!currentLayout && !explicitlyNoLayout) {
         currentLayout = defaultLayout();
     }
-    if (!currentLayout) {
+    if (!currentLayout && !explicitlyNoLayout) {
         currentLayout = visible.first();
     }
 
-    int currentIndex = visible.indexOf(currentLayout);
+    int currentIndex = currentLayout ? visible.indexOf(currentLayout) : -1;
     if (currentIndex < 0) {
         // Current layout is not in the visible list (e.g. hidden).
         // For forward cycling, start before the first so we land on visible[0].
@@ -543,10 +566,10 @@ void LayoutRegistry::addLayout(PhosphorZones::Layout* layout)
     }
 }
 
-void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
+bool LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
 {
     if (!layout || layout->isSystemLayout() || !m_layouts.contains(layout)) {
-        return;
+        return false;
     }
 
     // Store state BEFORE any operations that might invalidate the pointer
@@ -582,7 +605,7 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
             m_layoutSettings.setSettingsFor(layoutIdStr, removedSettings);
             qCWarning(lcZonesLib) << "Failed to persist the layout settings sidecar — keeping layout" << layoutIdStr
                                   << "rather than leaving its settings orphaned on disk";
-            return;
+            return false;
         }
     }
 
@@ -604,7 +627,7 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
                                       << "after its layout file could not be deleted";
             }
         }
-        return;
+        return false;
     }
 
     // Remove from layouts list
@@ -650,7 +673,9 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         // so dropping the whole rule would lose its SetEngineMode +
         // SetTilingAlgorithm autotile intent. purgeLayoutIdFromAssignments
         // rebuilds each affected rule with only the referencing layout slots
-        // cleared, dropping a rule only when nothing meaningful remains. It
+        // cleared. A rule pinned to an exact context is never dropped; only a
+        // rule with no context shape — a window-property or catch-all rule —
+        // whose sole action was the dead reference is. It
         // also sweeps the quick-slot arrays for the same id, so a stale
         // binding can never resurrect the deleted layout on a shortcut press.
         purgeLayoutIdFromAssignments(layoutIdStr);
@@ -661,11 +686,12 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     }
 
     Q_EMIT layoutsChanged();
+    return true;
 }
 
-void LayoutRegistry::removeLayoutById(const QUuid& id)
+bool LayoutRegistry::removeLayoutById(const QUuid& id)
 {
-    removeLayout(layoutById(id));
+    return removeLayout(layoutById(id));
 }
 
 PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* source)
@@ -806,6 +832,17 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
         slots[number] = parsed.toString();
         qCInfo(lcZonesLib) << "Assigned template" << layoutId << "to quick slot" << number;
     } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        // The explicit opt-out is not a bindable slot value: a quick slot is
+        // an "apply this layout" binding, the opt-out has its own picker
+        // card, and a press on such a slot was a silent dead press (the
+        // controller's list keys the opt-out by the bare word, so
+        // applyLayoutById("autotile:none") resolves nothing). The snapping
+        // arm below already rejects the bare word through its UUID parse —
+        // this keeps the two families symmetric.
+        if (PhosphorLayout::LayoutId::extractAlgorithmId(layoutId) == NoTilingAlgorithm) {
+            qCWarning(lcZonesLib) << "Rejecting the reserved opt-out id for quick slot:" << layoutId;
+            return;
+        }
         // Autotile IDs have no corresponding Layout* — accept as-is.
         slots[number] = layoutId;
         qCInfo(lcZonesLib) << "Assigned autotile layout" << layoutId << "to quick slot" << number;
@@ -878,7 +915,20 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
                 continue;
             }
             stored = parsed.toString();
-        } else if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+            // Mirror setQuickLayoutSlot's refusal of the reserved opt-out id.
+            // A quick slot is an "apply this layout" binding; the opt-out has
+            // its own picker card, and a press on such a slot resolves nothing
+            // (a silent dead press). Accepting it here while the single setter
+            // refuses it let a bus batch write land the exact value the single
+            // setter exists to keep out.
+            if (PhosphorLayout::LayoutId::extractAlgorithmId(layoutId) == NoTilingAlgorithm) {
+                qCWarning(lcZonesLib) << "Batch: skipping the reserved opt-out id for quick slot" << number << ":"
+                                      << layoutId;
+                continue;
+            }
+            // Autotile IDs have no corresponding Layout* — accept as-is.
+        } else {
             // See setQuickLayoutSlot for the two-step parse/lookup
             // rationale — catches malformed UUID strings separately
             // from lookup-miss for clearer diagnostics.

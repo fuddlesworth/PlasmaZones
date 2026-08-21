@@ -82,6 +82,130 @@ private Q_SLOTS:
         m_guard.reset();
     }
 
+    void testSetAssignmentEntry_acceptsTheReservedNoneWords()
+    {
+        // The snapping slot: the reserved word must skip BOTH halves of the
+        // UUID handling — the validator (which would refuse it) and the
+        // canonicalizer (which would parse it to a null QUuid and store the
+        // null-uuid literal, silently turning "explicitly none" into a
+        // dangling id).
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Snapping),
+                                      QString(PhosphorZones::NoSnappingLayout), QString());
+        auto entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+
+        // The algorithm slot: this fixture wires NO algorithm registry, so
+        // the existence check refuses every real algorithm id — which is
+        // exactly what makes the acceptance below prove the reserved-word
+        // exemption rather than a lookup that happened to succeed. The
+        // snapping sibling is carried on the wire, as the Monitors page's
+        // sibling-carry does — setAssignmentEntry overwrites both slots from
+        // its arguments and seeds only the template — which also proves the
+        // word rides the sibling position untouched by the canonicalizer.
+        m_adaptor->setAssignmentEntry(
+            QStringLiteral("DP-1"), 0, QString(), static_cast<int>(PhosphorZones::AssignmentEntry::Autotile),
+            QString(PhosphorZones::NoSnappingLayout), QString(PhosphorZones::NoTilingAlgorithm));
+        entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+
+        // And a real algorithm id is still refused without a registry: the
+        // exemption is for the reserved word alone.
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Autotile), QString(),
+                                      QStringLiteral("bsp"));
+        entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.tilingAlgorithm, QString(PhosphorZones::NoTilingAlgorithm));
+
+        // The snapping slot's negative leg: the reserved-word exemption must
+        // not widen the vocabulary. A non-UUID, non-reserved word is still
+        // refused, leaving the stored entry untouched — a mutation deleting
+        // the snapping validation outright would pass every positive test
+        // above while accepting any garbage id.
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Snapping),
+                                      QStringLiteral("banana"), QString());
+        entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+    }
+
+    void testSetAssignmentEntry_sentinelWriteReachesTheChangeNotification()
+    {
+        // Two DIFFERENT notifications carry a sentinel write, and this pins
+        // both. screenLayoutChanged is relayed from the registry's
+        // layoutAssigned the moment setAssignmentEntry writes the entry — it
+        // is NOT produced by applyAssignmentChanges, which emits
+        // assignmentChangesApplied instead. Asserting the first one after
+        // calling the second made the apply look load-bearing when the test
+        // passed with that call deleted, and left the staging it actually
+        // drives (the changed-screen set behind the resnap / OSD fan-out)
+        // unpinned.
+        QSignalSpy changedSpy(m_adaptor, &LayoutAdaptor::screenLayoutChanged);
+        QSignalSpy appliedSpy(m_adaptor, &LayoutAdaptor::assignmentChangesApplied);
+
+        m_adaptor->setAssignmentEntry(QStringLiteral("DP-1"), 0, QString(),
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Snapping),
+                                      QString(PhosphorZones::NoSnappingLayout), QString());
+
+        // The write itself announces the screen, before any apply.
+        QVERIFY2(changedSpy.count() >= 1, "the write must announce the opted-out screen");
+        bool sawScreen = false;
+        for (const auto& emission : changedSpy) {
+            if (emission.at(0).toString() != QStringLiteral("DP-1")) {
+                continue;
+            }
+            sawScreen = true;
+            // The payload must carry the reserved word, not a stale or
+            // resolved id: a relay announcing the right screen with the wrong
+            // layout would satisfy a screen-only assertion.
+            QCOMPARE(emission.at(1).toString(), QString(PhosphorZones::NoSnappingLayout));
+        }
+        QVERIFY2(sawScreen, "the notification must carry the screen whose opt-out was written");
+
+        // The apply is what drives the staged changed-screen set; deleting the
+        // m_changedScreenIds insert breaks the resnap / OSD fan-out and must
+        // fail here rather than silently.
+        m_adaptor->applyAssignmentChanges();
+        QCOMPARE(appliedSpy.count(), 1);
+        QVERIFY2(appliedSpy.constFirst().at(0).toStringList().contains(QStringLiteral("DP-1")),
+                 "the apply must report the opted-out screen as changed");
+    }
+
+    void testSetAllScreenAssignments_adaptorExemptsTheReservedWord()
+    {
+        // The adaptor's own sentinel exemption, distinct from the registry's:
+        // the batch setters validate each id as a UUID before forwarding, so
+        // without the exemption a get->set round trip through the KCM would
+        // drop every opted-out screen — the data loss the in-code comment
+        // warns about. Four hand-duplicated copies carry this predicate and
+        // none of them had a test, so a revert of any one was invisible.
+        QVariantMap assignments;
+        assignments[QStringLiteral("DP-1")] = QString(PhosphorZones::NoSnappingLayout);
+        m_adaptor->setAllScreenAssignments(assignments);
+
+        const auto entry = m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        // The opt-out beats the configured default: no layout resolves.
+        QVERIFY(m_layoutManager->layoutForScreen(QStringLiteral("DP-1"), 0) == nullptr);
+
+        // Negative leg, so the exemption cannot widen into "accept anything":
+        // a non-UUID that is not the reserved word is refused rather than
+        // stored. Note what this does NOT assert — these setters are
+        // drop-then-rebuild, so the refused screen ends up with no assignment
+        // at all rather than keeping its previous one. The invariant that
+        // matters is that the garbage id never becomes a stored layout.
+        QVariantMap garbage;
+        garbage[QStringLiteral("DP-1")] = QStringLiteral("banana");
+        m_adaptor->setAllScreenAssignments(garbage);
+        QVERIFY(m_layoutManager->assignmentEntryForScreen(QStringLiteral("DP-1"), 0).snappingLayout
+                != QStringLiteral("banana"));
+    }
+
     void testSetGet_roundTripFlipsModeToScrolling()
     {
         m_adaptor->setScrollingTemplateLayout(QStringLiteral("DP-1"), 0, QString(), m_templateId);

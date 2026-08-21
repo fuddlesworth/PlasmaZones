@@ -136,6 +136,7 @@ set(plasmazones_core_SRCS
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
+    dbus/layoutadaptor/assignment_batch.cpp
     dbus/layoutadaptor/editor.cpp
     dbus/layoutadaptor/layoutadaptor.h
     dbus/settingsadaptor/settingsadaptor.cpp

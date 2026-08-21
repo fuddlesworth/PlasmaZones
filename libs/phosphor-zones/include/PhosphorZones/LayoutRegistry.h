@@ -154,8 +154,8 @@ public:
     Layout* layoutByName(const QString& name) const override;
 
     Q_INVOKABLE void addLayout(Layout* layout) override;
-    Q_INVOKABLE void removeLayout(Layout* layout) override;
-    Q_INVOKABLE void removeLayoutById(const QUuid& id) override;
+    Q_INVOKABLE bool removeLayout(Layout* layout) override;
+    Q_INVOKABLE bool removeLayoutById(const QUuid& id) override;
     Q_INVOKABLE Layout* duplicateLayout(Layout* source) override;
 
     /// The literal suffix @ref duplicateLayout appends to the source layout's
@@ -744,6 +744,19 @@ public:
     /// fields through a mode toggle). Like @ref hasExplicitAssignment it is
     /// blind to the rule's @c enabled flag; see its definition comment.
     AssignmentEntry exactContextEntry(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
+    /// Whether the exact-context rule for this tuple DECLARES an engine mode,
+    /// rather than merely being defaulted into one.
+    ///
+    /// Needed because @ref exactContextEntry cannot express "no mode stated":
+    /// it decodes through entryFromRuleMatchActions, which starts every entry
+    /// at Snapping, so a layout-only pin (a SetSnappingLayout or
+    /// SetScrollingTemplate with no SetEngineMode — a shape the exact-context
+    /// lookup deliberately admits) is indistinguishable from one that chose
+    /// Snapping. A readback that publishes the entry's mode as stored state
+    /// must ask this first, or it asserts a choice the user never made.
+    /// Enabled-blind, like its two siblings.
+    bool exactContextDeclaresEngineMode(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// Raw assignment id for a (screen, desktop, activity) context.
     /// Returns the stored string (manual-layout UUID,

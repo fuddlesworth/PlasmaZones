@@ -78,7 +78,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="deleteLayout">
-            <annotation name="org.gtk.GDBus.DocString" value="Permanently delete the layout with the given ID."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Permanently delete the layout with the given ID. The deletion is REFUSED, and no layoutDeleted is emitted, when the registry cannot keep the layout, its file and its settings sidecar mutually consistent (an unwritable sidecar, an undeletable layout file) — the layout is then still registered, and since this method has no return value the absence of layoutDeleted is the only signal of that. A context whose assignment referenced the deleted layout is rewritten to the reserved word &quot;none&quot; (explicitly no layout) rather than cleared, wherever that slot is the one in force: an empty slot would inherit the configured default layout, silently reshaping a screen whose layout was just deleted. A dormant reference — a slot belonging to a mode the context is not in — is plainly cleared."/>
             <arg name="id" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to delete."/>
             </arg>
@@ -228,18 +228,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getScreenStates">
-            <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, algorithm, and scrolling template for all screens as a JSON array: one object per screen with screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile, 2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId, algorithmName, algorithmIdExplicit, scrollingTemplateId, scrollingTemplateName, scrollingTemplateExplicit. layoutId and algorithmId are the RESOLVED values (cascade and default fallbacks included; layoutId is empty for a Scrolling context); the *Explicit booleans say whether this exact screen/desktop/activity tuple pins the field itself, so a caller can tell an inherited value from an assigned one. scrollingTemplateId reads the stored entry field, so a template preserved across a mode toggle is reported even while another mode runs. That raw read also means it does NOT include the configured default-template fallback that getScrollingTemplateLayout applies, which is deliberate: this method reports what the context stores, not what the strip would resolve."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, algorithm, and scrolling template for all screens as a JSON array: one object per screen with screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile, 2=Scrolling), layoutId, layoutName, layoutIdExplicit, snappingLayoutId, algorithmId, algorithmName, algorithmIdExplicit, scrollingTemplateId, scrollingTemplateName, scrollingTemplateExplicit. layoutId and algorithmId are the RESOLVED values (cascade and default fallbacks included; layoutId is empty for a Scrolling context); the *Explicit booleans say whether this exact screen/desktop/activity tuple pins the field itself, so a caller can tell an inherited value from an assigned one. scrollingTemplateId reads the stored entry field, so a template preserved across a mode toggle is reported even while another mode runs. That raw read also means it does NOT include the configured default-template fallback that getScrollingTemplateLayout applies, which is deliberate: this method reports what the context stores, not what the strip would resolve. snappingLayoutId is the same raw read for the snapping slot, carried because the resolved layoutId cannot distinguish the explicit no-layout opt-out (the reserved word &quot;none&quot;, which resolves to no layout) from an unassigned context with no default in force. algorithmId can likewise carry the reserved word &quot;none&quot; (the explicit no-algorithm opt-out); algorithmName is empty for it."/>
             <arg name="statesJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array of per-screen state objects."/>
             </arg>
         </method>
         <method name="getLayoutForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the layout currently in use on a screen (resolves with current virtual desktop and activity context). Falls through to the global default layout when the screen has no assignment, INCLUDING when the default is suppressed for that context — so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout currently in use on a screen (resolves with current virtual desktop and activity context). Falls through to the global default layout when the screen has no assignment, INCLUDING when the default is suppressed for that context — so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead. A Snapping context explicitly set to no layout (the reserved word &quot;none&quot; in its assignment) answers empty rather than the default: the opt-out beats the fallback."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Stable screen id in manufacturer:model:serial form, as returned by getAvailableScreenIds. A connector name (e.g. DP-1) is also accepted and resolved to the stable id."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile (including the literal &quot;autotile:none&quot; for an Autotile context explicitly set to no algorithm, where &quot;none&quot; is the reserved word, not an algorithm id), or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="getAssignedLayoutForScreen">
@@ -248,7 +248,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Stable screen id in manufacturer:model:serial form, as returned by getAvailableScreenIds. A connector name (e.g. DP-1) is also accepted and resolved to the stable id."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt;, or empty string when unassigned."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt;, the reserved word &quot;none&quot; for a Snapping context explicitly set to no layout, &quot;autotile:none&quot; for an Autotile context explicitly set to no algorithm, or empty string when unassigned. Parsing this directly as a UUID yields a null UUID for the reserved forms."/>
             </arg>
         </method>
         <method name="assignLayoutToScreen">
@@ -257,7 +257,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
             </arg>
             <arg name="layoutId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign, or the reserved word &quot;none&quot; to set the context to explicitly use no layout (the opt-out beats the configured default). Like a layout UUID, the reserved word also sets the context's mode to Snapping — it is the SNAPPING family's opt-out. To opt a context out within the other families use &quot;autotile:none&quot; here, or setScrollingTemplateLayout's own reserved word."/>
             </arg>
         </method>
         <method name="clearAssignment">
@@ -269,12 +269,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllScreenAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all base screen assignments (saves once). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of screenId to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel). Only that string is read here. The matching getter, getAllScreenAssignments, answers a wider and differently keyed shape (a JSON string of connector-keyed per-screen objects), so the two are not a round-trip pair. The scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of screenId to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel; the reserved words &quot;none&quot; and &quot;autotile:none&quot; are accepted and store the explicit opt-out, so the values the matching getter emits round-trip). Only that string is read here. The matching getter, getAllScreenAssignments, answers a wider and differently keyed shape (a JSON string of connector-keyed per-screen objects), so the two are not a round-trip pair. The scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <!-- Per-virtual-desktop layout assignment methods -->
         <method name="getLayoutForScreenDesktop">
-            <annotation name="org.gtk.GDBus.DocString" value="Get layout for a specific screen and virtual desktop (1-based). Falls through to the global default layout when that context has no assignment, INCLUDING when the default is suppressed for it, so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get layout for a specific screen and virtual desktop (1-based). Falls through to the global default layout when that context has no assignment, INCLUDING when the default is suppressed for it, so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead. A Snapping context explicitly set to no layout (the reserved word &quot;none&quot; in its assignment) answers empty rather than the default: the opt-out beats the fallback."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Stable screen id in manufacturer:model:serial form, as returned by getAvailableScreenIds. A connector name (e.g. DP-1) is also accepted and resolved to the stable id."/>
             </arg>
@@ -282,7 +282,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile (including the literal &quot;autotile:none&quot; for an Autotile context explicitly set to no algorithm, where &quot;none&quot; is the reserved word, not an algorithm id), or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="assignLayoutToScreenDesktop">
@@ -294,7 +294,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
             </arg>
             <arg name="layoutId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign, or the reserved word &quot;none&quot; to set the context to explicitly use no layout (the opt-out beats the configured default). Like a layout UUID, the reserved word also sets the context's mode to Snapping — it is the SNAPPING family's opt-out. To opt a context out within the other families use &quot;autotile:none&quot; here, or setScrollingTemplateLayout's own reserved word."/>
             </arg>
         </method>
         <method name="clearAssignmentForScreenDesktop">
@@ -325,13 +325,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="mode" type="i" direction="out"/>
         </method>
         <method name="getSnappingLayoutForScreenDesktop">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the snapping layout UUID for a screen/desktop (regardless of current mode)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the snapping layout UUID for a screen/desktop (regardless of current mode). A raw slot read: a context explicitly set to no layout answers the reserved word &quot;none&quot;, including when that opt-out is dormant, preserved across a mode toggle."/>
             <arg name="screenId" type="s" direction="in"/>
             <arg name="virtualDesktop" type="i" direction="in"/>
             <arg name="layoutId" type="s" direction="out"/>
         </method>
         <method name="getTilingAlgorithmForScreenDesktop">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the tiling algorithm ID for a screen/desktop (regardless of current mode)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the tiling algorithm ID for a screen/desktop (regardless of current mode). A raw slot read: a context explicitly set to no algorithm answers the reserved word &quot;none&quot;, including when that opt-out is dormant, preserved across a mode toggle."/>
             <arg name="screenId" type="s" direction="in"/>
             <arg name="virtualDesktop" type="i" direction="in"/>
             <arg name="algorithm" type="s" direction="out"/>
@@ -339,13 +339,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Canonical key format: 'screenId|desktopNumber' ('screenId:desktopNumber' is accepted as a legacy fallback but misparses virtual-screen ids — do not emit it). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel; the reserved words &quot;none&quot; and &quot;autotile:none&quot; are accepted and store the explicit opt-out, so the values the matching getter emits round-trip). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getAllDesktopAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-desktop assignments."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's scrolling-template UUID, or empty when the context pins none of its own, or the literal &quot;none&quot; when it explicitly uses no template at all. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel; a Snapping context that explicitly uses no layout carries the literal &quot;none&quot;, and an Autotile context that explicitly uses no algorithm carries &quot;autotile:none&quot;), scrollingTemplate the context's scrolling-template UUID, or empty when the context pins none of its own, or the literal &quot;none&quot; when it explicitly uses no template at all. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getVirtualDesktopCount">
@@ -367,15 +367,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getAllScreenAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. This is a READBACK of *stored* assignment state, not a payload the batch setter accepts: setAllScreenAssignments takes a flat screenId-to-layoutId string map, while this answers a JSON string of connector-keyed per-screen objects, so the pair does not round-trip. Synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead. Only screens with at least one stored entry (base or per-desktop) appear; for screen enumeration use getAvailableScreenIds."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. This is a READBACK of *stored* assignment state, not a payload the batch setter accepts: setAllScreenAssignments takes a flat screenId-to-layoutId string map, while this answers a JSON string of connector-keyed per-screen objects, so the pair does not round-trip. Synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead. Only screens with at least one stored entry (base or per-desktop) appear; for screen enumeration use getAvailableScreenIds. Values come from the enabled-blind exact-context read, matching the explicit-vs-resolved discriminator getScreenStates uses, so a DISABLED pin reports its own stored payload rather than the default it currently resolves to. One shape is not representable: a per-desktop entry pinning only the MODE to Snapping carries no id (Snapping has no bare sentinel, unlike &quot;autotile:&quot; and &quot;scrolling:&quot;), so no desktop row is emitted for it, though the screen itself still appears."/>
             <arg name="assignmentsJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include &quot;mode&quot; plus whichever of {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;scrollingTemplate&quot;} the entry actually stores (an empty field is omitted, so a missing key means unset, not empty-string; &quot;scrollingTemplate&quot; carries the literal &quot;none&quot; for a context that explicitly uses no template, which is a stored value and so is NOT omitted); screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead. Per-desktop keys are enumerated up to the compositor&apos;s CURRENT desktop count, so a stored entry for a desktop above that count (the user reduced their desktop count) is not serialized and the round trip is lossy for it. When the desktop count is unavailable the count falls back to 1, so desktop 1 is still serialized and only desktops 2 and up are dropped."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include &quot;mode&quot; — but ONLY when the stored rule actually declares an engine mode, so a missing &quot;mode&quot; means no mode was stated rather than Snapping (a layout-only pin, which carries an assignment slot and no engine mode, omits it) — plus whichever of {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;scrollingTemplate&quot;} the entry actually stores (an empty field is omitted, so a missing key means unset, not empty-string; the reserved opt-out words are stored values and so are NOT omitted — &quot;scrollingTemplate&quot; carries the literal &quot;none&quot; for a context that explicitly uses no template, &quot;snappingLayout&quot; carries &quot;none&quot; for an explicit no-layout opt-out, &quot;tilingAlgorithm&quot; carries &quot;none&quot; for an explicit no-algorithm opt-out, and &quot;default&quot; plus the numeric per-desktop keys carry &quot;none&quot; or &quot;autotile:none&quot; for such contexts); screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead. Per-desktop keys are enumerated up to the compositor&apos;s CURRENT desktop count, so a stored entry for a desktop above that count (the user reduced their desktop count) is not serialized and the round trip is lossy for it. When the desktop count is unavailable the count falls back to 1, so desktop 1 is still serialized and only desktops 2 and up are dropped."/>
             </arg>
         </method>
         <method name="getActiveLayoutsForScreens">
             <annotation name="org.gtk.GDBus.DocString" value="Returns each effective screen&apos;s RESOLVED active layout id, as the daemon last computed it for that screen&apos;s current virtual desktop and activity. Unlike getAllScreenAssignments this is the resolved value (including synthesized global-default fallbacks), which is what the ActiveLayout rule field matches against. Pair with activeLayoutForScreenChanged: fetch once on daemon-ready, then track the signal."/>
             <arg name="activeLayouts" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of stable screen id to active layout id (a layout UUID in braces, or &apos;autotile:&lt;algo&gt;&apos; for a tiling assignment). A screen with no resolvable layout is omitted."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of stable screen id to active layout id (a layout UUID in braces, &apos;autotile:&lt;algo&gt;&apos; for a tiling assignment, the reserved word &apos;none&apos; for a Snapping context explicitly set to no layout, or &apos;autotile:none&apos; for an Autotile context explicitly set to no algorithm). A screen whose active id resolves EMPTY is omitted; the explicit opt-out is a stored value, resolves to no layout, and is still reported as the reserved word."/>
             </arg>
         </method>
         <!-- Quick Layout Slots (1-9) -->
@@ -392,7 +392,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setQuickLayoutSlot">
-            <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a quick slot (1-9) for the given mode."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a quick slot (1-9) for the given mode. The reserved opt-out id &quot;autotile:none&quot; is refused: a quick slot is an apply-this-layout binding, the opt-out has its own picker card, and a press on such a slot would resolve nothing. The snapping family's bare &quot;none&quot; is refused by the same UUID validation that rejects any non-layout string."/>
             <arg name="mode" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Each mode owns a separate slot array. Scrolling slots hold native scrolling-template UUIDs (the ids getScrollingTemplates reports), never layout ids, and a template the store does not know is rejected on write."/>
             </arg>
@@ -404,7 +404,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAllQuickLayoutSlots">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all quick layout slots for the given mode (saves once). Clears every existing slot for the mode first: a slot absent from the map is DELETED, so a partial map silently drops every slot it omits. Slots of the other mode are untouched."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all quick layout slots for the given mode (saves once). Clears every existing slot for the mode first: a slot absent from the map is DELETED, so a partial map silently drops every slot it omits. Slots of the other modes are untouched. Like setQuickLayoutSlot, the reserved opt-out id &quot;autotile:none&quot; is refused: a quick slot is an apply-this-layout binding, and the opt-out resolves nothing on a press."/>
             <arg name="mode" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Tiling mode (0 = snapping, 1 = autotile, 2 = scrolling). Each mode owns a separate slot array. Scrolling slots hold native scrolling-template UUIDs (the ids getScrollingTemplates reports), never layout ids, and a template the store does not know is rejected on write."/>
             </arg>
@@ -463,7 +463,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
         <!-- Per-activity layout assignments (screen + activity, any desktop) -->
         <method name="getLayoutForScreenActivity">
-            <annotation name="org.gtk.GDBus.DocString" value="Get layout for a screen and activity (any desktop). Falls through to the global default layout when that context has no assignment, INCLUDING when the default is suppressed for it, so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get layout for a screen and activity (any desktop). Falls through to the global default layout when that context has no assignment, INCLUDING when the default is suppressed for it, so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead. A Snapping context explicitly set to no layout (the reserved word &quot;none&quot; in its assignment) answers empty rather than the default: the opt-out beats the fallback."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Stable screen id in manufacturer:model:serial form, as returned by getAvailableScreenIds. A connector name (e.g. DP-1) is also accepted and resolved to the stable id."/>
             </arg>
@@ -471,7 +471,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile (including the literal &quot;autotile:none&quot; for an Autotile context explicitly set to no algorithm, where &quot;none&quot; is the reserved word, not an algorithm id), or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="assignLayoutToScreenActivity">
@@ -483,7 +483,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
             </arg>
             <arg name="layoutId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign, or the reserved word &quot;none&quot; to set the context to explicitly use no layout (the opt-out beats the configured default). Like a layout UUID, the reserved word also sets the context's mode to Snapping — it is the SNAPPING family's opt-out. To opt a context out within the other families use &quot;autotile:none&quot; here, or setScrollingTemplateLayout's own reserved word."/>
             </arg>
         </method>
         <method name="clearAssignmentForScreenActivity">
@@ -510,30 +510,30 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="setAllActivityAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: 'screenId|activityId' (legacy ':' fallback accepted). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel; the reserved words &quot;none&quot; and &quot;autotile:none&quot; are accepted and store the explicit opt-out, so the values the matching getter emits round-trip). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getAllActivityAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-activity assignments."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's scrolling-template UUID, or empty when the context pins none of its own, or the literal &quot;none&quot; when it explicitly uses no template at all. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel; a Snapping context that explicitly uses no layout carries the literal &quot;none&quot;, and an Autotile context that explicitly uses no algorithm carries &quot;autotile:none&quot;), scrollingTemplate the context's scrolling-template UUID, or empty when the context pins none of its own, or the literal &quot;none&quot; when it explicitly uses no template at all. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="setAllCombinedAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenId|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched. Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' keys to a plain layoutId string (a Scrolling context stays the bare 'scrolling:' sentinel; the reserved words &quot;none&quot; and &quot;autotile:none&quot; are accepted and store the explicit opt-out, so the values the matching getter emits round-trip). Only that string is read here. The matching getter's value is a wider {layoutId, scrollingTemplate} map, and the scrolling template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <method name="getAllCombinedAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-(screen,desktop,activity) Combined assignments. Returns ONLY rules with all three dimensions pinned."/>
             <arg name="assignments" type="a{sv}" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel), scrollingTemplate the context's scrolling-template UUID, or empty when the context pins none of its own, or the literal &quot;none&quot; when it explicitly uses no template at all. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' keys to a map {layoutId, scrollingTemplate}: layoutId is the assignment id the matching batch setter accepts (a Scrolling context stays the bare 'scrolling:' sentinel; a Snapping context that explicitly uses no layout carries the literal &quot;none&quot;, and an Autotile context that explicitly uses no algorithm carries &quot;autotile:none&quot;), scrollingTemplate the context's scrolling-template UUID, or empty when the context pins none of its own, or the literal &quot;none&quot; when it explicitly uses no template at all. The getter value is deliberately wider than the setter's plain layoutId string; the template is written through setScrollingTemplateLayout, never through the batch setters."/>
             </arg>
         </method>
         <!-- Full assignment (screen + desktop + activity) -->
         <method name="getLayoutForScreenDesktopActivity">
-            <annotation name="org.gtk.GDBus.DocString" value="Get layout for screen, virtual desktop, and activity. Falls through to the global default layout when that context has no assignment, INCLUDING when the default is suppressed for it, so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get layout for screen, virtual desktop, and activity. Falls through to the global default layout when that context has no assignment, INCLUDING when the default is suppressed for it, so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead. A Snapping context explicitly set to no layout (the reserved word &quot;none&quot; in its assignment) answers empty rather than the default: the opt-out beats the fallback."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Stable screen id in manufacturer:model:serial form, as returned by getAvailableScreenIds. A connector name (e.g. DP-1) is also accepted and resolved to the stable id."/>
             </arg>
@@ -544,7 +544,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile (including the literal &quot;autotile:none&quot; for an Autotile context explicitly set to no algorithm, where &quot;none&quot; is the reserved word, not an algorithm id), or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="assignLayoutToScreenDesktopActivity">
@@ -559,7 +559,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
             </arg>
             <arg name="layoutId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign, or the reserved word &quot;none&quot; to set the context to explicitly use no layout (the opt-out beats the configured default). Like a layout UUID, the reserved word also sets the context's mode to Snapping — it is the SNAPPING family's opt-out. To opt a context out within the other families use &quot;autotile:none&quot; here, or setScrollingTemplateLayout's own reserved word."/>
             </arg>
         </method>
         <method name="clearAssignmentForScreenDesktopActivity">
@@ -619,10 +619,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Mode (0=Snapping, 1=Autotile, 2=Scrolling). Out-of-range values are rejected, never clamped."/>
             </arg>
             <arg name="snappingLayout" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Snapping layout UUID (empty = unset)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Snapping layout UUID, the reserved word &quot;none&quot; for the explicit no-layout opt-out (the context uses no layout at all, even while a default is configured), or empty = unset (the context inherits the default layout)."/>
             </arg>
             <arg name="tilingAlgorithm" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Tiling algorithm ID (empty = unset)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Tiling algorithm ID, the reserved word &quot;none&quot; for the explicit no-algorithm opt-out (the context stays in autotile mode but nothing tiles there), or empty = unset (the context inherits the default algorithm)."/>
             </arg>
         </method>
         <method name="setSaveBatchMode">
@@ -715,7 +715,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose assignment changed."/>
             </arg>
             <arg name="layoutId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Assigned layout UUID."/>
+                <annotation name="org.gtk.GDBus.DocString" value="The assignment id: a layout UUID, autotile:&lt;algorithmId&gt;, a scrolling id, or the reserved opt-out words &quot;none&quot; / &quot;autotile:none&quot; for a context explicitly set to use no layout or algorithm."/>
             </arg>
             <arg name="virtualDesktop" type="i">
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop number (0 = display default)."/>
@@ -727,7 +727,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Stable screen id whose active layout changed."/>
             </arg>
             <arg name="layoutId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="The screen&apos;s new active layout id (a layout UUID in braces, or &apos;autotile:&lt;algo&gt;&apos;). Empty when the screen no longer resolves to any layout."/>
+                <annotation name="org.gtk.GDBus.DocString" value="The screen&apos;s new active layout id (a layout UUID in braces, &apos;autotile:&lt;algo&gt;&apos;, the reserved word &apos;none&apos; for an explicit no-layout opt-out, or &apos;autotile:none&apos; for an explicit no-algorithm opt-out). Empty when the screen no longer resolves to any layout; setting a screen to None emits the reserved word, not empty."/>
             </arg>
         </signal>
     </interface>

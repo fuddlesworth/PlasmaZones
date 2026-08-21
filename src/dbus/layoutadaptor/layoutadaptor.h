@@ -619,6 +619,23 @@ private:
     std::optional<QUuid> parseAndValidateUuid(const QString& id, const QString& operation) const;
 
     /**
+     * @brief Whether @p layoutId is an id the manual-layout validation applies to.
+     *
+     * False for every id that names something other than a zone layout: an
+     * autotile id, a scrolling id, and the reserved snapping opt-out word.
+     * Those must skip the UUID parse and the registry existence check, or the
+     * assign verbs would refuse to write back the very values their own
+     * getters emit — and the batch setters, which drop and rebuild, would
+     * DELETE an opted-out screen on a get-then-set round trip.
+     *
+     * Named because the test is spelled at eight call sites across this
+     * class's two translation units, plus a ninth in the registry. A future
+     * fourth non-manual id form would otherwise need every one of them found
+     * and edited in lockstep.
+     */
+    static bool requiresManualLayoutValidation(const QString& layoutId);
+
+    /**
      * @brief Get layout by ID string with full validation
      * @param id UUID string
      * @param operation Description for error logging

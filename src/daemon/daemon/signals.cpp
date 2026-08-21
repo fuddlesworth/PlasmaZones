@@ -345,6 +345,19 @@ void Daemon::connectLayoutSignals()
                 refreshCheatsheetIfVisible();
             });
 
+    // The generic None press (explicit no-layout opt-out on a
+    // snapping/autotile context). No OSD card — the None-pick silent posture
+    // the template clear established — but placement just changed under any
+    // open snap assist, and the cheatsheet's mode-derived rows may differ
+    // with no layout in force, so both get the nudge the three apply signals
+    // above deliver for their families.
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::noLayoutApplied, this, [this](const QString&) {
+        if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+            m_overlayService->hideSnapAssist();
+        }
+        refreshCheatsheetIfVisible();
+    });
+
     // Record manual layout only when user explicitly selects one via zone selector
     // or unified layout controller — NOT on every internal layout change.
 
