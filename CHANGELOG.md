@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.3.9] - 2026-08-20
+
+### Fixed
+
+- **The daemon crashed on startup after the Qt 6.11.2 update**: window tiling stopped working entirely, and the daemon restarted and crashed in a loop rather than coming up. PlasmaZones reads part of Qt's internal Wayland state directly, and the update moved that state, so the daemon read from the wrong place and crashed on whatever happened to be there. This release is built against the new Qt. Anyone who installed from a distribution package needs the rebuilt package from their distribution, not just a restart ([#936](https://github.com/fuddlesworth/PlasmaZones/discussions/936)).
+
 ## [3.3.8] - 2026-08-15
 
 ### Added

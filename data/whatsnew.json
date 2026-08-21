@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.3.9",
+            "date": "2026-08-20",
+            "highlights": [
+                "Fixed: the daemon crashed on startup after the Qt 6.11.2 update and window tiling stopped working. This release is built against the new Qt (#936)"
+            ]
+        },
+        {
             "version": "3.3.8",
             "date": "2026-08-15",
             "highlights": [
