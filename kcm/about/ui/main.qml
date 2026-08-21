@@ -39,11 +39,13 @@ KCMUtils.SimpleKCM {
 
                 Kirigami.Heading {
                     level: 1
-                    text: i18n("PlasmaZones")
+                    text: qsTr("PlasmaZones")
                 }
 
                 Label {
-                    text: kcm.currentVersion.length > 0 ? i18n("Version %1", kcm.currentVersion) : i18n("Version unknown")
+                    // qsTr takes no substitution arguments, so %1 is filled with
+                    // .arg() rather than by the call itself.
+                    text: kcm.currentVersion.length > 0 ? qsTr("Version %1").arg(kcm.currentVersion) : qsTr("Version unknown")
                     opacity: 0.7
                 }
             }
@@ -53,7 +55,7 @@ KCMUtils.SimpleKCM {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
             horizontalAlignment: Text.AlignHCenter
-            text: i18n("Window snapping, tiling and scrolling for Wayland compositors")
+            text: qsTr("Window snapping, tiling and scrolling for Wayland compositors")
             wrapMode: Text.WordWrap
             opacity: 0.7
         }
@@ -66,7 +68,7 @@ KCMUtils.SimpleKCM {
             // text never wraps, so a long translation or a large font scale
             // would push the button past the viewport. Cap it at the column.
             Layout.maximumWidth: parent ? parent.width : 0
-            text: i18n("Open PlasmaZones Settings")
+            text: qsTr("Open PlasmaZones Settings")
             icon.name: "configure"
             font.bold: true
             implicitHeight: Kirigami.Units.gridUnit * 3
@@ -77,7 +79,7 @@ KCMUtils.SimpleKCM {
         Label {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            text: i18n("Configure zones, tiling, scrolling, appearance, shortcuts, and more")
+            text: qsTr("Configure zones, tiling, scrolling, appearance, shortcuts, and more")
             // This PR lengthened the string. Without wrapMode it overflows the
             // column at a narrow KCM width instead of wrapping, and a German or
             // Russian translation makes that worse. Matches the tagline Label above.
@@ -94,21 +96,21 @@ KCMUtils.SimpleKCM {
 
             Button {
                 flat: true
-                text: i18n("GitHub")
+                text: qsTr("GitHub")
                 icon.name: "vcs-branch"
                 onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones")
             }
 
             Button {
                 flat: true
-                text: i18n("Report Bug")
+                text: qsTr("Report Bug")
                 icon.name: "tools-report-bug"
                 onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/issues/new")
             }
 
             Button {
                 flat: true
-                text: i18n("Documentation")
+                text: qsTr("Documentation")
                 icon.name: "documentation"
                 onClicked: Qt.openUrlExternally("https://phosphor-works.github.io/plasmazones/")
             }
