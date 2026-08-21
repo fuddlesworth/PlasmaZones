@@ -119,10 +119,10 @@ QVariantList ruleTemplates()
     // Single-action showcase tiles were removed rather than kept for
     // discoverability — the action picker's Window submenus now surface those
     // actions directly, and a grid long enough to scroll costs more than the
-    // showcase was worth. That
-    // ruled out: the layout lock (the rule form of a shortcut the user
-    // already has), a portrait-orientation showcase, the per-app zone-restore
-    // veto, per-app decoration removal, and the small-window animation skip.
+    // showcase was worth. That ruled out: the layout lock (the rule form of a
+    // shortcut the user already has), a portrait-orientation showcase, the
+    // per-app zone-restore veto, per-app decoration removal, and the
+    // small-window animation skip.
     //
     // There is also deliberately NO smart-gaps (TiledWindowCount + gap actions) template:
     // smart gaps already ships as a plain autotile setting

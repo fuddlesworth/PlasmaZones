@@ -109,8 +109,9 @@ QString fieldDescription(Field f)
     case Field::WindowClass:
         return PhosphorI18n::tr(
             "The window's class as the compositor reports it, which is the WM_CLASS "
-            "pair \"resourceName resourceClass\". That is \"konsole konsole\", not just "
-            "\"konsole\", so use contains or ends with rather than is.");
+            "pair \"resourceName resourceClass\". Konsole, for example, reports "
+            "\"konsole konsole\", not just \"konsole\", so use contains or ends with "
+            "rather than is.");
     case Field::DesktopFile:
         return PhosphorI18n::tr("The application's desktop entry file name.");
     case Field::WindowRole:

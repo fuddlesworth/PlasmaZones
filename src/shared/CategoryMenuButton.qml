@@ -116,7 +116,8 @@ ComboBox {
     readonly property real _dimmedOpacity: 0.45
     // Re-entry guard against rapid press / Space-down events queueing two
     // `showMenu` callbacks before the first one returns. `_opening` is set
-    // when we hand off to `Qt.callLater` and cleared on `aboutToShow`.
+    // when we hand off to `Qt.callLater` and cleared before the popup is
+    // raised, again on `aboutToShow`, and by `markDirty()` on a failed build.
     property bool _opening: false
     /// Split a category string into `{ top, sub }`. The ONE place the `/`
     /// convention is interpreted: `_categoryTree` builds the menu from it and
