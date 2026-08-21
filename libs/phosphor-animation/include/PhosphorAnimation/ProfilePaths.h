@@ -93,6 +93,22 @@ PHOSPHORANIMATION_EXPORT extern const QString Scrolling;
 PHOSPHORANIMATION_EXPORT extern const QString ScrollingView;
 PHOSPHORANIMATION_EXPORT extern const QString ScrollingTabSwitch;
 
+// shell.* — surfaces owned by the desktop shell rather than by an
+// application: today the Plasma applet popups (the launcher, the system tray
+// flyouts, any widget's expanded view). Appearance legs like the window ones,
+// driven by the same kwin-effect lifecycle hooks, but on their OWN root for
+// the reason the decoration tree gives them one: a foreign surface must not
+// inherit what the user chose for their windows. That is enforced in the
+// shader tree, where the whole subtree resolves inside itself
+// (shaderPathIsolationRoot) — engaging a pack HERE is the entire opt-in, and
+// an unconfigured shell surface animates exactly as it did before the root
+// existed. Show / hide rather than open / close: these are ephemeral
+// surfaces, the same family the osd and popup roots name that way.
+PHOSPHORANIMATION_EXPORT extern const QString Shell;
+PHOSPHORANIMATION_EXPORT extern const QString ShellAppletPopup;
+PHOSPHORANIMATION_EXPORT extern const QString ShellAppletPopupShow;
+PHOSPHORANIMATION_EXPORT extern const QString ShellAppletPopupHide;
+
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
 PHOSPHORANIMATION_EXPORT extern const QString OsdShow;

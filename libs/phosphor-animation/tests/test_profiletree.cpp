@@ -115,6 +115,36 @@ private Q_SLOTS:
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::ScrollingTabSwitch).isEmpty());
     }
 
+    // The shell family classifies as APPEARANCE, deliberately sharing the
+    // class with the window legs rather than taking one of its own: a shell
+    // surface materialises and dissolves like any other single surface and
+    // binds the same sampler, so every appearance pack can drive it. What
+    // separates these paths is whose surface it is, and that is answered by
+    // the shader tree isolating the subtree, not by narrowing the vocabulary.
+    // A class of its own here would leave every existing pack unselectable on
+    // the Shell page for no gain, so pin the class.
+    void testEventClassForShellPaths()
+    {
+        QCOMPARE(PP::eventClassForPath(PP::Shell), PP::EventClassAppearance);
+        QCOMPARE(PP::eventClassForPath(PP::ShellAppletPopup), PP::EventClassAppearance);
+        QCOMPARE(PP::eventClassForPath(PP::ShellAppletPopupShow), PP::EventClassAppearance);
+        QCOMPARE(PP::eventClassForPath(PP::ShellAppletPopupHide), PP::EventClassAppearance);
+        // Segment-aware like its siblings: a root that merely shares the
+        // letters is not swept in.
+        QVERIFY(PP::eventClassForPath(QStringLiteral("shellfish")).isEmpty());
+        // The walk-up the cascade rests on.
+        QCOMPARE(PP::parentPath(PP::ShellAppletPopupShow), PP::ShellAppletPopup);
+        QCOMPARE(PP::parentPath(PP::ShellAppletPopup), PP::Shell);
+        QCOMPARE(PP::parentPath(PP::Shell), PP::Global);
+        // No built-in default on either leg, and this one is structural rather
+        // than a taste call: the subtree is isolated in the shader tree so
+        // plasmashell's surfaces animate only when the user says so, and a
+        // default here would reach around that and animate every tray flyout
+        // on a fresh install.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ShellAppletPopupShow).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ShellAppletPopupHide).isEmpty());
+    }
+
     void testAllBuiltInPathsNonEmpty()
     {
         const QStringList paths = PP::allBuiltInPaths();
@@ -122,6 +152,13 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::Global));
         QVERIFY(paths.contains(PP::WindowOpen));
         QVERIFY(paths.contains(PP::EditorSnapIn));
+        // Membership is the motion tree's own filter: a path missing here is
+        // silently dropped from every persisted override, so a page can look
+        // complete while nothing it writes survives a restart.
+        QVERIFY(paths.contains(PP::Shell));
+        QVERIFY(paths.contains(PP::ShellAppletPopup));
+        QVERIFY(paths.contains(PP::ShellAppletPopupShow));
+        QVERIFY(paths.contains(PP::ShellAppletPopupHide));
     }
 
     // Pin the post-rename taxonomy: every new path constant from the

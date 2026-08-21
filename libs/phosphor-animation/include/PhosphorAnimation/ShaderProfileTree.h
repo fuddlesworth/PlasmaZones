@@ -102,6 +102,24 @@ private:
 /// resolver's definition instead of re-deriving it from a path prefix.
 PHOSPHORANIMATION_EXPORT bool shaderPathResolvesInIsolation(const QString& path);
 
+/// The subtree root @p path resolves WITHIN, or an empty string when it
+/// resolves the ordinary way (from the tree baseline, down the whole chain).
+///
+/// The weaker sibling of the predicate above, and the shape a whole FAMILY of
+/// foreign surfaces needs rather than a lone leaf: inheritance still works
+/// normally between the root and the leaf, so a pack set on the root cascades
+/// to its legs, but nothing ABOVE the root reaches in — not the `global` node,
+/// not the baseline. Today that root is ProfilePaths::Shell, whose surfaces
+/// belong to plasmashell rather than to any application: what the user chose
+/// for their own windows must not start playing on the system tray, and
+/// engaging a pack inside the subtree is the whole opt-in. The decoration tree
+/// isolates its own `shell` subtree the same way and for the same reason (see
+/// PhosphorSurface's decorationPathIsBaselineIsolated).
+///
+/// Shared with shadowing-aware consumers for the reason the predicate above is:
+/// a second copy of "where does inheritance start" drifts from the resolver.
+PHOSPHORANIMATION_EXPORT QString shaderPathIsolationRoot(const QString& path);
+
 /// Resolve @p path against @p tree, applying the built-in per-event default
 /// shader (ProfilePaths::defaultShaderEffectIdForPath, e.g. "window-morph" for
 /// window snap events) when the path is TRULY UNSET — i.e. neither it nor any

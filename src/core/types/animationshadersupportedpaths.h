@@ -106,6 +106,17 @@ inline QStringList shaderConsumedLeafEventPaths()
         // two-texture tab class (appliesTo ["tab"]), which resolves in
         // isolation — see shaderPathResolvesInIsolation.
         PP::ScrollingTabSwitch,
+        // Plasma applet popups — the launcher, the tray flyouts, a widget's
+        // expanded view. Per-window legs like the window family above, from
+        // the same windowAdded / windowClosed hooks in window_lifecycle.cpp:
+        // tryBeginShaderForEvent routes a shell surface's open and close onto
+        // these paths instead of window.appearance.{open,close}, so what the
+        // user chose for their windows never plays on plasmashell's surfaces.
+        // The subtree resolves inside itself — see shaderPathIsolationRoot —
+        // which is also why these are appearance-class leaves rather than a
+        // class of their own: the surface is ordinary, its owner is not.
+        PP::ShellAppletPopupShow,
+        PP::ShellAppletPopupHide,
         // Show-desktop peek — DesktopTransitionManager again (the entry two
         // above; the strip block in between has its own manager), resolved in
         // the showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both

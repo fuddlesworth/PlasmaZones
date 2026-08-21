@@ -38,7 +38,19 @@ ShaderProfile ShaderProfileTree::resolve(const QString& path) const
         cursor = PhosphorAnimation::ProfilePaths::parentPath(cursor);
     }
 
-    ShaderProfile effective = m_baseline;
+    // A subtree that inherits from its own root and from nothing above it —
+    // see shaderPathIsolationRoot. Two edits to the ordinary walk, and BOTH
+    // are needed: the baseline is dropped, and the chain is cut back to the
+    // root. Dropping the baseline alone would leave the `global` node in the
+    // chain, which is a node the user can assign a pack to, so the subtree
+    // would still inherit from outside itself through it.
+    const QString isolationRoot = shaderPathIsolationRoot(path);
+    ShaderProfile effective = isolationRoot.isEmpty() ? m_baseline : ShaderProfile{};
+    if (!isolationRoot.isEmpty()) {
+        while (!chain.isEmpty() && chain.constFirst() != isolationRoot) {
+            chain.removeFirst();
+        }
+    }
 
     for (const QString& step : chain) {
         auto it = m_overrides.constFind(step);
@@ -186,6 +198,27 @@ bool shaderPathResolvesInIsolation(const QString& path)
     // duration ARE meaningful for both children).
     return path == PhosphorAnimation::ProfilePaths::WindowMove
         || path == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch;
+}
+
+QString shaderPathIsolationRoot(const QString& path)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // The shell family. Its surfaces belong to plasmashell, so every ancestor
+    // above the root describes something else entirely: `global` and the
+    // baseline are where a user says what THEIR WINDOWS do, and inheriting
+    // that would start playing a window pack on the system tray the moment
+    // anyone set one, with no way to say no short of overriding every shell
+    // leg with an explicit None. Cutting the chain at the root is the same
+    // answer the decoration tree gives the same family, and it is what makes
+    // "engage a pack on the Shell page" the entire opt-in.
+    //
+    // Inside the subtree inheritance is ordinary: a pack on `shell` cascades
+    // to every leg, and a leg overrides it.
+    static const QString shellPrefix = PP::Shell + QLatin1Char('.');
+    if (path == PP::Shell || path.startsWith(shellPrefix)) {
+        return PP::Shell;
+    }
+    return QString();
 }
 
 ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path)

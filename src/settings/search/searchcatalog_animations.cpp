@@ -78,6 +78,17 @@ void seedAnimationEventAnchors(PhosphorControl::SearchController* search)
     // from the label.
     addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.tabSwitch"),
                PhosphorI18n::tr("Tab Switched"), {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("cross-fade")});
+    // Shell page. Keywords carry the names users actually have for these
+    // surfaces: the label says "Applet Popup", which is KWin's word for them,
+    // while what a user types is the launcher or the tray.
+    addSetting(search, QStringLiteral("animations-shell"), QStringLiteral("shell.appletPopup.show"),
+               PhosphorI18n::tr("Applet Popup Shown"),
+               {PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("plasma"),
+                PhosphorI18n::tr("panel")});
+    addSetting(search, QStringLiteral("animations-shell"), QStringLiteral("shell.appletPopup.hide"),
+               PhosphorI18n::tr("Applet Popup Hidden"),
+               {PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("plasma"),
+                PhosphorI18n::tr("panel")});
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),

@@ -494,6 +494,75 @@ private Q_SLOTS:
         QVERIFY(resolved.effectId.has_value());
         QCOMPARE(*resolved.effectId, QStringLiteral("strip-motion-blur"));
     }
+
+    void testShellSubtreeTakesNothingFromAboveItsRoot()
+    {
+        // The whole point of the shell root: the surfaces under it belong to
+        // plasmashell, so what the user chose for their own windows must never
+        // start playing on the system tray. Both routes in are pinned, because
+        // the resolver needs two separate edits to close them and each one
+        // passes every other test on its own — the baseline (the tree's global
+        // default) and the `global` NODE, which is a real chain member the
+        // user can assign a pack to.
+        ShaderProfileTree tree;
+        ShaderProfile baseline;
+        baseline.effectId = QStringLiteral("dissolve");
+        tree.setBaseline(baseline);
+        ShaderProfile globalNode;
+        globalNode.effectId = QStringLiteral("slide");
+        tree.setOverride(PP::Global, globalNode);
+
+        QVERIFY(tree.resolve(PP::Shell).effectiveEffectId().isEmpty());
+        QVERIFY(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId().isEmpty());
+        QVERIFY(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId().isEmpty());
+        // And nothing about the isolation leaks onto the window family, which
+        // still inherits both.
+        QCOMPARE(tree.resolve(PP::WindowOpen).effectiveEffectId(), QStringLiteral("slide"));
+    }
+
+    void testShellRootCascadesWithinItsOwnSubtree()
+    {
+        // Isolation is not the same as no inheritance. Inside the subtree the
+        // ordinary cascade holds, which is what makes the page's "All Shell
+        // Surfaces" row mean anything: set a pack there and both legs take it,
+        // then a leg can override it. shaderPathResolvesInIsolation (the
+        // leaf-only predicate) would have killed exactly this, which is why
+        // the shell family needed the subtree form instead.
+        ShaderProfileTree tree;
+        ShaderProfile root;
+        root.effectId = QStringLiteral("dissolve");
+        tree.setOverride(PP::Shell, root);
+
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId(), QStringLiteral("dissolve"));
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId(), QStringLiteral("dissolve"));
+
+        ShaderProfile leg;
+        leg.effectId = QStringLiteral("pixelate");
+        tree.setOverride(PP::ShellAppletPopupHide, leg);
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId(), QStringLiteral("dissolve"));
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId(), QStringLiteral("pixelate"));
+    }
+
+    void testShellIsolationRootIsTheSharedDefinition()
+    {
+        // The predicate resolve() uses, exposed for the shadowing-aware
+        // consumers so a second copy of "where does inheritance start" cannot
+        // drift from the resolver. Every path in the subtree answers the root
+        // itself, and nothing outside it answers at all — including the
+        // character-prefix near-miss, which is the failure this boundary test
+        // exists for.
+        QCOMPARE(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::Shell), PP::Shell);
+        QCOMPARE(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::ShellAppletPopup), PP::Shell);
+        QCOMPARE(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::ShellAppletPopupShow), PP::Shell);
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::WindowOpen).isEmpty());
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::Global).isEmpty());
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(QString()).isEmpty());
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(QStringLiteral("shellfish")).isEmpty());
+        // The shell paths are NOT leaf-isolated: the two predicates answer
+        // different questions and a "simplification" that folded them would
+        // break the cascade the test above pins.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ShellAppletPopupShow));
+    }
 };
 
 QTEST_MAIN(TestShaderProfileTree)

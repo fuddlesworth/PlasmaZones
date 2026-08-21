@@ -2687,9 +2687,25 @@ private:
     /// endpoint writes) MUST gate on it: findTransition alone hands back
     /// whatever leg is live, and mutating an unrelated event's leg
     /// re-anchors its drawn rect mid-flight.
-    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
+    ///
+    /// @p requestedPath names the EVENT, not necessarily the path that
+    /// resolves: a plasma-shell surface is routed onto its own `shell.*` leg
+    /// (or declines the event outright) by animationEventPathFor below.
+    void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& requestedPath, int durationMs,
                                 bool reverse = false, bool holdCloseGrab = false, bool holdAddedGrab = false,
                                 bool animateMinimized = false, bool* outOwnsResolvedLeg = nullptr);
+    /// The animation event path @p w actually animates on for the lifecycle
+    /// event @p requestedPath, or an EMPTY string when it animates on none.
+    ///
+    /// Identity for an application window — the caller's path is the only
+    /// answer there, and this costs one window-type read. A PLASMA SHELL
+    /// SURFACE is routed onto the matching `shell.*` leg instead, so what the
+    /// user chose for their windows never plays on plasmashell's surfaces, and
+    /// it declines every event with no shell counterpart. That decline is what
+    /// keeps the shell admission narrow: shouldAnimateWindow still rejects
+    /// these surfaces outright, so a leg this function does not name can never
+    /// install one, no matter which call site asks.
+    QString animationEventPathFor(KWin::EffectWindow* w, const QString& requestedPath) const;
     /// Arm the duration teardown for a time-driven transition, generation-guarded.
     ///
     /// Re-arms itself when the transition's own clock says the leg is not finished.

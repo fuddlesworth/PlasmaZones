@@ -645,6 +645,17 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     // that is drawing the animation itself animate. shouldAnimateWindow is
     // the ONLY filter on the tryBeginShaderForEvent path (window_lifecycle),
     // so omitting them here is not covered elsewhere.
+    //
+    // The plasma-shell reject STAYS, and it stays blanket, even though a shell
+    // surface can now animate on its own `shell.*` leg. That leg does not come
+    // through this gate: tryBeginShaderForEvent routes the surface with
+    // animationEventPathFor and skips the filter for the paths that resolver
+    // names — the same shape shouldDecorateWindow's shell arms use, where the
+    // decoration tree rather than the window filter is the opt-in. Keeping the
+    // reject here is what confines shell animation to those two paths, so a
+    // window-family leg (focus, minimize, a geometry morph) cannot reach a
+    // surface plasmashell owns from any call site, present or future. Do NOT
+    // "finish the feature" by admitting the shell kinds here.
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher()
         || isPlasmaShellSurface(windowClass) || isOwnOverlayClass(windowClass)
         || isXdgDesktopPortalSurface(windowClass)) {

@@ -203,6 +203,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("virtual desktop"),
                              PhosphorI18n::tr("workspace"), PhosphorI18n::tr("switch"), PhosphorI18n::tr("peek"),
                              PhosphorI18n::tr("show desktop")});
+    search->setPageKeywords(QStringLiteral("animations-shell"),
+                            {PhosphorI18n::tr("shell"), PhosphorI18n::tr("plasma"), PhosphorI18n::tr("panel"),
+                             PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("applet"),
+                             PhosphorI18n::tr("popup")});
     search->setPageKeywords(QStringLiteral("animations-scrolling"),
                             {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column"),
                              PhosphorI18n::tr("animation"), PhosphorI18n::tr("shader"), PhosphorI18n::tr("blur"),
