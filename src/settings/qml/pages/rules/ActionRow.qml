@@ -333,8 +333,11 @@ ColumnLayout {
 
         // Categorized action-type picker — the shared cascading category-menu
         // button (PZCommon.CategoryMenuButton). Grouped into Gaps / Engine /
-        // Snapping / Tiling / Overlay / Animation / Appearance / Window, with
-        // Tiling nesting Algorithm and Behavior submenus. Context-domain actions
+        // Snapping / Tiling / Scrolling / Overlay / Window. Tiling nests
+        // Algorithm and Behavior; Scrolling nests Tab indicator and Drop
+        // indicator; Window nests Placement, Scrolling, Appearance, Animation,
+        // Behavior, Tab indicator and Drop indicator, and holds no flat items
+        // of its own. Context-domain actions
         // that can't fire against a window-property match render dimmed with a
         // warning tooltip (the picker's `dimmed` item flag); the per-row chip
         // below + the sheet's InlineMessage reinforce it for an action that's
@@ -342,8 +345,10 @@ ColumnLayout {
         PZCommon.CategoryMenuButton {
             id: typeCombo
 
-            // Wide enough for the longest action label ("Override animation
-            // duration") so the closed picker never elides its current value.
+            // Sized for the common labels. The two per-window drop-indicator
+            // labels ("Set the drop indicator border color when dragging this
+            // window" and its fill sibling) are much longer and do elide;
+            // widening the row for them would cost more than it buys.
             Layout.preferredWidth: Kirigami.Units.gridUnit * 13
             // Map the action metadata to the picker's item shape. A context-
             // domain action against a non-context-only match never fires, so

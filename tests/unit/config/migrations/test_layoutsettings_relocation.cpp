@@ -209,6 +209,41 @@ private Q_SLOTS:
         QCOMPARE(sidecar.value(newId).toObject().value(QStringLiteral("zonePadding")).toInt(), 8);
     }
 
+    /// A layout whose file is STILL FAT but whose settings the sidecar already
+    /// carries must NOT be re-imported — the sidecar copy is the live one.
+    ///
+    /// Reachable whenever pass 2 failed on an earlier run (an unwritable
+    /// layouts dir, a crash between the two passes): the file keeps its
+    /// embedded block while the runtime store reads and writes the sidecar. The
+    /// next run used to push that stale embedded block back over the newer
+    /// value and lose the user's edit silently. The file is still slimmed, so
+    /// the skip cannot strand a fat file forever.
+    void testLayoutSettingsRelocation_doesNotReimportOverANewerSidecarEntry()
+    {
+        IsolatedConfigGuard guard;
+        const QString layoutId = QStringLiteral("{abcd0000-0000-0000-0000-000000000000}");
+
+        // The fat file carries the OLD value (8, from the shared fixture)...
+        writeLayoutFileWithSettings(QStringLiteral("layout.json"), layoutId);
+        // ...while the sidecar already holds a newer one for the same layout.
+        QDir().mkpath(QFileInfo(ConfigDefaults::layoutSettingsFilePath()).absolutePath());
+        writeJsonRaw(
+            ConfigDefaults::layoutSettingsFilePath(),
+            QJsonObject{{QStringLiteral("_version"), 1}, {layoutId, QJsonObject{{QStringLiteral("zonePadding"), 42}}}});
+
+        QVERIFY(ConfigMigration::relocateLayoutSettings(layoutsDirPath(), ConfigDefaults::layoutSettingsFilePath()));
+
+        // The newer sidecar value survives.
+        const QJsonObject sidecar = readJsonConfig(ConfigDefaults::layoutSettingsFilePath());
+        QCOMPARE(sidecar.value(layoutId).toObject().value(QStringLiteral("zonePadding")).toInt(), 42);
+
+        // And the fat file was still slimmed, so this converges rather than
+        // repeating the skip on every startup.
+        const QJsonObject layoutFile = readJsonConfig(layoutsDirPath() + QStringLiteral("/layout.json"));
+        QVERIFY2(!layoutFile.contains(QStringLiteral("zonePadding")),
+                 "the layout file must still be slimmed even when its settings were not re-imported");
+    }
+
     void testLayoutSettingsRelocation_multipleLayoutsSelectiveZoneAppearance()
     {
         IsolatedConfigGuard guard;

@@ -99,7 +99,8 @@ QString actionDescription(const QString& type)
     if (type == ActionType::RestorePosition) {
         return PhosphorI18n::tr(
             "Controls whether a matching floated window returns to its remembered position and "
-            "monitor on login, overriding the global setting.");
+            "monitor when it reopens, during the session or after a logout. Overrides the "
+            "restore-previous-position setting of whichever engine owns the screen.");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
         return PhosphorI18n::tr(

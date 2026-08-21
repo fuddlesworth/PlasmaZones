@@ -73,6 +73,11 @@ namespace PlasmaZones {
 /// bump — the gated resolver already ignored the priority-0 catch-all at
 /// runtime, so the stale rule is pruned from rules.json by finalizeV4Conversion's
 /// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
+/// The premade Steam rule's correction rides the same path for the same reason
+/// (see repairSeededSteamRule): both fix a row this code seeded into the
+/// rules.json SIDECAR, which the version chain does not cover. Those two are
+/// the only cleanups that run outside the chain — anything else touching the
+/// config root needs a version bump.
 /// v5: the per-mode Snapping/Tiling appearance and gap settings fold into the
 ///     unified Windows / Gaps groups (see migrateV4ToV5).
 /// v6: the snapping zone colours and the Windows border/tint colours become
@@ -166,7 +171,8 @@ public:
     /// chain, from @ref ensureJsonConfigImpl.
     ///
     /// First, on every path, it adopts a legacy `windowrules.json` as `rules.json`
-    /// when the new file is absent (the rule store was renamed in v5), so an
+    /// when the new file is absent (the rule store was renamed alongside the
+    /// v5 bump, not by the v5 migration step itself, which creates no rules), so an
     /// already-converted store is not rebuilt from the retired assignments.json.
     ///
     /// It then reads assignments.json + the four `_v4*` stashes left in
@@ -188,7 +194,9 @@ public:
     /// ConfigSchemaVersion — that pin is why an already-converted rules.json
     /// survives a config schema bump without a rebuild). It is NOT a strict no-op — it
     /// retries the still-pending tail steps (strip surviving `_v4*Stash`
-    /// keys, retire a still-present assignments.json) so a partial earlier
+    /// keys, retire a still-present assignments.json, and the two rules.json
+    /// fix-ups `pruneRetiredProviderDefaultRule` and `repairSeededSteamRule`,
+    /// which DO write the sidecar) so a partial earlier
     /// run that crashed between rules.json commit and the tail
     /// converges to a clean state on the next startup. The rule-rebuild
     /// path itself NEVER runs from the cleanup branch.
@@ -275,12 +283,41 @@ public:
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool pruneRetiredProviderDefaultRule(const QString& jsonPath);
 
+    /// Narrow the premade Steam rule in an already-converted rules.json to the
+    /// shape `appendSteamDefaultRule` seeds today.
+    ///
+    /// The rule shipped matching `WindowClass Contains "steam"`, which is
+    /// compared against KWin's `"resourceName resourceClass"` pair — so a
+    /// Steam-launched game ("steam_app_2342813033 steam_app_2342813033")
+    /// matched, and the blanket `Exclude` action left every game unmanaged and
+    /// undecorated. Runs from the same cleanup path as
+    /// `pruneRetiredProviderDefaultRule` because the seeder itself only runs on
+    /// the rebuild path, so an already-converted config would never otherwise
+    /// see the correction.
+    ///
+    /// Only rewrites a rule whose match and action are both still the retired
+    /// shape verbatim (see `isRetiredSteamRuleShape`); a rule with either half
+    /// edited is left untouched, as is an already-corrected or deleted one. A
+    /// rule that was only RENAMED is still repaired, and its name is re-stamped
+    /// along with the match and action. The enabled flag and priority are
+    /// carried across. Idempotent: after the rewrite the shape check no longer
+    /// fires.
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool repairSeededSteamRule(const QString& jsonPath);
+
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store
     /// (keyed by layout UUID, in the LayoutSettingsStore format), and rewrite the
     /// layout file stripped of those settings. Merges into an existing sidecar
     /// rather than clobbering it, and skips already-slimmed files, so it is
     /// idempotent and crash-safe — finalizeV4Conversion calls it on every run.
+    /// A layout the sidecar already has an entry for is NOT re-imported: a
+    /// still-fat file on a later run means the strip failed earlier, so the
+    /// sidecar copy is the live one the runtime has been editing since and the
+    /// embedded block is stale. It is still slimmed.
     /// A missing layouts dir is a no-op success. Returns false only on a write
     /// failure. Public for direct testing.
     static bool relocateLayoutSettings(const QString& layoutsDir, const QString& sidecarPath);

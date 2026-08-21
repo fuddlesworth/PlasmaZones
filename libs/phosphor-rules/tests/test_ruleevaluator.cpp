@@ -42,7 +42,7 @@ private Q_SLOTS:
 
     // ExcludeAnimations rules authored over the new IsNotification / IsTransient
     // / Width match fields resolve to isExcluded() through the full evaluator —
-    // e.g. the built-in "Don't animate small windows" template (Width < 300).
+    // e.g. a `Width < 300` leaf, to leave small windows unanimated.
     void testExcludeAnimationsOverNewFields()
     {
         const auto excludeAnimations = []() {

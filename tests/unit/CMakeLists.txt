@@ -475,6 +475,19 @@ target_link_libraries(test_migration_v3_to_v4
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v3_to_v4 COMMAND test_migration_v3_to_v4)
 
+# v3 → v4 premade Steam rule: seeded shape, what it matches, and the repair.
+add_executable(test_migration_v3_to_v4_steam config/migrations/test_migration_v3_to_v4_steam.cpp)
+target_link_libraries(test_migration_v3_to_v4_steam
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_steam COMMAND test_migration_v3_to_v4_steam)
+
+# v3 → v4 failure paths: malformed input values, corrupt files, unwritable
+# sidecars, and the data-loss regressions each of those once caused.
+add_executable(test_migration_v3_to_v4_failures config/migrations/test_migration_v3_to_v4_failures.cpp)
+target_link_libraries(test_migration_v3_to_v4_failures
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v3_to_v4_failures COMMAND test_migration_v3_to_v4_failures)
+
 # v3 → v4 animation app-rule and animation-exclusion folds.
 add_executable(test_migration_v3_to_v4_animations config/migrations/test_migration_v3_to_v4_animations.cpp)
 target_link_libraries(test_migration_v3_to_v4_animations

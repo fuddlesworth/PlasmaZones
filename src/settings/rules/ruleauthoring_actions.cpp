@@ -29,32 +29,75 @@ namespace {
 namespace ActionType = PhosphorRules::ActionType;
 using PhosphorRules::RuleAction;
 
-/// Group an action type into a picker category. Most categories derive
-/// straight from the descriptor's `category` field, so a new action in an
-/// existing category needs no change here. Three categories are exceptions and
-/// carry hand-written per-type dispatch: `tabIndicator` and `dropIndicator`
-/// (whose per-window colours must leave the Scrolling bucket so it stays
-/// single-domain) and `layoutEngine`,
-/// which is split by action type into Engine, Snapping, Tiling (the last
-/// with Algorithm and Behavior submenus via a `/` in the label), a
-/// top-level Scrolling (the context-domain scroll knobs), and a
-/// Window/Scrolling submenu (the per-window open actions, which
-/// deliberately cross into the window-domain order band); a new
-/// layoutEngine action lands in Engine unless added to the dispatch below.
-PickerCategory actionCategory(const QString& type)
+// Picker order for every top-level bucket and every Window submenu.
+//
+// The context-domain buckets come first (0-5), then the ONE window-domain
+// bucket. CategoryMenuButton orders a bucket by the smallest order any of its
+// items carries, so kWindowPlacement (the smallest of the window numbers) is
+// what puts Window last; the rest of the window numbers order the submenus
+// *inside* it. Ties fall back to alphabetical, which is what holds Tiling's
+// Algorithm/Behavior pair and Scrolling's two indicator submenus in the order
+// they have always had.
+//
+// Keep these in lockstep with each category's action domains in
+// RuleAction.cpp: an order that puts a Context action in the window band (or
+// the reverse) lands it on the wrong side of the picker's divider.
+constexpr int kOrderGaps = 0;
+constexpr int kOrderEngine = 1;
+constexpr int kOrderSnapping = 2;
+constexpr int kOrderTiling = 3;
+constexpr int kOrderScrolling = 4;
+constexpr int kOrderOverlay = 5;
+constexpr int kOrderWindowPlacement = 6;
+constexpr int kOrderWindowScrolling = 7;
+constexpr int kOrderWindowAppearance = 8;
+constexpr int kOrderWindowAnimation = 9;
+constexpr int kOrderWindowBehavior = 10;
+constexpr int kOrderWindowTabIndicator = 11;
+constexpr int kOrderWindowDropIndicator = 12;
+constexpr int kOrderOther = 99;
+
+/// Build a `Window/<sub>` category path. EVERY window-domain action goes
+/// through here: the Window bucket holds submenus only, never a flat list with
+/// a few submenus hanging off the end, so the picker's second level means the
+/// same thing everywhere in it.
+///
+/// The path joins TRANSLATED text with a literal `/`, and CategoryMenuButton
+/// splits on the first one to build its tree. A translation containing a slash
+/// would therefore restructure the picker rather than just rename a bucket, so
+/// `/` is effectively reserved in every category string this file produces. No
+/// in-tree locale uses one today.
+QString windowSubcategory(const QString& sub)
 {
-    const auto desc = PhosphorRules::ActionRegistry::instance().descriptor(type);
-    if (!desc.has_value()) {
-        return {PhosphorI18n::tr("Other"), 99};
-    }
-    const QString& cat = desc->category;
-    // Two groups: the context-domain categories (resolved per
-    // screen/desktop/activity/mode) come first (orders 0-5), then the
-    // window-domain categories (orders 6-9). Order within a group is
-    // curated, not alphabetical. Keep these orders in lockstep with each
-    // category's action domains in RuleAction.cpp.
+    return PhosphorI18n::tr("Window") + QStringLiteral("/") + sub;
+}
+
+/// Group an action type into a picker category.
+///
+/// The context side derives mostly from the descriptor's `category` field, so
+/// a new gap/overlay action needs no change here. `layoutEngine` is the one
+/// context category with hand-written per-type dispatch: it splits into
+/// Engine, Snapping, Tiling (with Algorithm and Behavior submenus via a `/` in
+/// the label) and Scrolling, and a new layoutEngine action falls through to
+/// Engine unless it is added to a list below.
+///
+/// The window side is a single `Window` bucket subdivided by what the action
+/// drives — Placement, Scrolling, Appearance, Animation, Behavior, and the two
+/// indicator colour families. Three descriptor categories straddle the two
+/// sides and carry per-type dispatch for it: `layoutEngine` (the per-app Open*
+/// actions are window-domain), `tabIndicator` and `dropIndicator` (their
+/// per-window colours are window-domain while the rest of each family is
+/// context-domain). A bucket takes its divider side from a single item, so a
+/// bucket may never mix domains.
+///
+/// Takes the descriptor's @p cat rather than re-fetching it: `ActionRegistry::
+/// descriptor` returns by value and an ActionDescriptor carries three
+/// std::functions, a QStringList and a QList, so the copy allocates. The sole
+/// caller has already fetched the descriptor to test `userAuthorable`.
+PickerCategory actionCategory(const QString& type, const QString& cat)
+{
     if (cat == QLatin1String("gap")) {
-        return {PhosphorI18n::tr("Gaps"), 0};
+        return {PhosphorI18n::tr("Gaps"), kOrderGaps};
     }
     if (cat == QLatin1String("layoutEngine")) {
         // The old flat "Layout & engine" list is split by what each action
@@ -63,15 +106,15 @@ PickerCategory actionCategory(const QString& type)
         // further split into Algorithm and Behavior submenus (a `/` in the
         // label, which CategoryMenuButton renders as a nested submenu).
         if (type == ActionType::SetSnappingLayout) {
-            return {PhosphorI18n::tr("Snapping"), 2};
+            return {PhosphorI18n::tr("Snapping"), kOrderSnapping};
         }
         if (type == ActionType::SetTilingAlgorithm || type == ActionType::SetAlgorithmParam) {
-            return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Algorithm"), 3};
+            return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Algorithm"), kOrderTiling};
         }
         if (type == ActionType::SetMaxWindows || type == ActionType::SetSplitRatio || type == ActionType::SetMasterCount
             || type == ActionType::SetInsertPosition || type == ActionType::SetOverflowBehavior
             || type == ActionType::SetDragBehavior) {
-            return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
+            return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), kOrderTiling};
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
             || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
@@ -80,82 +123,91 @@ PickerCategory actionCategory(const QString& type)
             || type == ActionType::SetScrollCropStraddlers || type == ActionType::SetScrollFocusNewWindows
             || type == ActionType::SetScrollSmartGaps || type == ActionType::SetScrollFocusFollowsMouse
             || type == ActionType::SetScrollStickyWindowHandling || type == ActionType::SetScrollStripAxis) {
-            return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
+            return {PhosphorI18n::tr("Scrolling", "tiling mode name"), kOrderScrolling};
         }
-        // The per-app open actions are WINDOW-domain: they must sit in the
-        // window block so the picker's context/window divider stays honest
-        // (a mixed top-level category takes its group from the first item
-        // and would render window actions above the divider). Nested under
-        // Window as a Scrolling submenu for discoverability.
+        // The per-app open actions are WINDOW-domain, so they belong to the
+        // Window bucket rather than the context-domain Scrolling one. They
+        // keep the Scrolling name as a Window submenu: they are the scrolling
+        // engine's per-window arm, and the name is what makes them findable.
         if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
             || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight
             || type == ActionType::OpenMaximized || type == ActionType::OpenFocused
             || type == ActionType::OpenFullscreen) {
-            // Order 8, the same as plain Window: CategoryMenuButton buckets by
-            // the TOP-LEVEL segment of the category path and orders the buckets
-            // by the smallest order any item in the bucket carries, so
-            // "Window/Scrolling" lands in the Window bucket either way and a
-            // different number here could only ever pull the whole Window
-            // bucket earlier. Orders are per top-level category, not per path:
-            // the Tiling submenus already share 3 with plain Tiling.
-            return {PhosphorI18n::tr("Window") + QStringLiteral("/")
-                        + PhosphorI18n::tr("Scrolling", "tiling mode name"),
-                    8};
+            return {windowSubcategory(PhosphorI18n::tr("Scrolling", "tiling mode name")), kOrderWindowScrolling};
         }
         // Cross-cutting engine controls: SetEngineMode / DisableEngine /
         // LockContext / DefaultLayoutAssignment. The last two are
         // mode-agnostic — they act on whichever engine owns the context — so
         // they belong here rather than in one engine's bucket.
-        return {PhosphorI18n::tr("Engine"), 1};
+        return {PhosphorI18n::tr("Engine"), kOrderEngine};
     }
     if (cat == QLatin1String("tabIndicator")) {
         // The three per-window tab colours go to the WINDOW bucket, not the
-        // Scrolling one, for the same reason the open-action branch above
-        // exists: CategoryMenuButton takes a top-level bucket's context/window
-        // group from the first item to create it in sorted order, and draws
-        // the divider from that single group. A mixed-domain bucket therefore
-        // renders some of its actions on the wrong side of the divider — and
-        // because the sort is over TRANSLATED labels, which side breaks is
-        // locale-dependent.
+        // context-domain Scrolling one: CategoryMenuButton takes a top-level
+        // bucket's context/window group from the first item to create it in
+        // sorted order, and draws the divider from that single group. A
+        // mixed-domain bucket therefore renders some of its actions on the
+        // wrong side of the divider, and because the sort is over TRANSLATED
+        // labels, which side breaks is locale-dependent.
         //
         // Co-locating the whole tab-indicator family under Scrolling reads
         // better as one idea, but it is not worth silently corrupting the
-        // divider for the context scroll knobs that share the bucket.
+        // divider for the context scroll knobs that share the bucket. The
+        // family is still one hop from its twin: Scrolling/Tab indicator holds
+        // the context properties, Window/Tab indicator the per-window colours.
         if (type == ActionType::TabColorActive || type == ActionType::TabColorInactive
             || type == ActionType::TabColorUrgent) {
-            return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Tab indicator"), 8};
+            return {windowSubcategory(PhosphorI18n::tr("Tab indicator")), kOrderWindowTabIndicator};
         }
-        // Nested under Scrolling, sharing its order 4 so the whole Scrolling
+        // Nested under Scrolling, sharing its order so the whole Scrolling
         // bucket stays put (CategoryMenuButton buckets by the top-level
         // segment and orders buckets by the smallest order in the bucket).
         return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
                     + PhosphorI18n::tr("Tab indicator"),
-                4};
+                kOrderScrolling};
     }
     if (cat == QLatin1String("dropIndicator")) {
         // Same domain split as tabIndicator directly above, and for the same
         // divider reason: the two per-window colours go to the Window bucket,
         // the context properties nest under Scrolling.
         if (type == ActionType::DropIndicatorColor || type == ActionType::DropIndicatorBorderColor) {
-            return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Drop indicator"), 8};
+            return {windowSubcategory(PhosphorI18n::tr("Drop indicator")), kOrderWindowDropIndicator};
         }
         return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
                     + PhosphorI18n::tr("Drop indicator"),
-                4};
+                kOrderScrolling};
     }
     if (cat == QLatin1String("overlay")) {
-        return {PhosphorI18n::tr("Overlay"), 5};
+        return {PhosphorI18n::tr("Overlay"), kOrderOverlay};
     }
     if (cat == QLatin1String("animation")) {
-        return {PhosphorI18n::tr("Animation"), 6};
+        return {windowSubcategory(PhosphorI18n::tr("Animation")), kOrderWindowAnimation};
     }
+    // The border/title-bar family joins the opacity and tint knobs: both are
+    // per-window looks, and splitting them left the user guessing which of two
+    // adjacent top-level buckets held a given colour.
     if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
-        return {PhosphorI18n::tr("Appearance"), 7};
+        return {windowSubcategory(PhosphorI18n::tr("Appearance")), kOrderWindowAppearance};
     }
     if (cat == QLatin1String("windowManagement")) {
-        return {PhosphorI18n::tr("Window"), 8};
+        // Two knobs that override how a window BEHAVES rather than where it
+        // goes or how it looks: its stacking layer, and the pointer
+        // scroll-speed multiplier applied while it is hovered. Neither reads
+        // as placement, and the scroll multiplier has nothing to do with the
+        // scrolling engine, so it must not land in Window/Scrolling.
+        if (type == ActionType::SetWindowLayer || type == ActionType::ScrollFactor) {
+            return {windowSubcategory(PhosphorI18n::tr("Behavior")), kOrderWindowBehavior};
+        }
+        // Everything else in the category decides where a window opens, stays,
+        // or returns to: snap/float, the screen and desktop routing, the four
+        // restore and unfloat policies, and the two exclusions that opt a
+        // window out of placement entirely.
+        return {windowSubcategory(PhosphorI18n::tr("Placement")), kOrderWindowPlacement};
     }
-    return {PhosphorI18n::tr("Other"), 99};
+    // Reachable only for a descriptor category that does not exist yet — every
+    // one the registry currently ships has a branch above. Kept as the
+    // extension point so a new category surfaces somewhere rather than nowhere.
+    return {PhosphorI18n::tr("Other"), kOrderOther};
 }
 
 QString actionTypeLabelImpl(const QString& type)
@@ -173,7 +225,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Set scrolling template");
     }
     if (type == ActionType::SetMaxWindows) {
-        return PhosphorI18n::tr("Set max tiled windows");
+        return PhosphorI18n::tr("Set maximum tiled windows");
     }
     if (type == ActionType::SetSplitRatio) {
         return PhosphorI18n::tr("Set split ratio");
@@ -233,7 +285,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Focus new windows");
     }
     if (type == ActionType::SetScrollSmartGaps) {
-        return PhosphorI18n::tr("Smart gaps");
+        return PhosphorI18n::tr("Drop the outer gaps for a lone column");
     }
     if (type == ActionType::SetScrollFocusFollowsMouse) {
         return PhosphorI18n::tr("Focus follows the mouse");
@@ -253,9 +305,11 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::OpenFullscreen) {
         return PhosphorI18n::tr("Open in fullscreen");
     }
-    // Tab indicator. The labels say "tab indicator" rather than just "tabs" so
-    // they cannot be mistaken for the tabbed-column actions above, which
-    // change how a column BEHAVES rather than how its indicator is drawn.
+    // Tab indicator. The labels that could be confused with the tabbed-column
+    // actions above say "tab indicator" in full; the ones with no ambiguous
+    // counterpart (gap between tabs, corner radius, the three tab colours) say
+    // just "tab". The tabbed-column actions change how a column BEHAVES rather
+    // than how its indicator is drawn.
     if (type == ActionType::SetTabIndicatorEnabled) {
         return PhosphorI18n::tr("Show the tab indicator");
     }
@@ -360,7 +414,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Lock layout");
     }
     if (type == ActionType::DefaultLayoutAssignment) {
-        return PhosphorI18n::tr("Default layout assignment");
+        return PhosphorI18n::tr("Assign default layout");
     }
     if (type == ActionType::Exclude) {
         // The exclusion family shares one shape ("Exclude from <scope>") built
@@ -378,10 +432,10 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Float window");
     }
     if (type == ActionType::SnapToZone) {
-        return PhosphorI18n::tr("Snap to zone(s)");
+        return PhosphorI18n::tr("Snap to zones");
     }
     if (type == ActionType::RestorePosition) {
-        return PhosphorI18n::tr("Restore position on login");
+        return PhosphorI18n::tr("Restore previous position");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
         // Named after the setting it overrides ("Restore windows to their
@@ -431,10 +485,10 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Set opacity");
     }
     if (type == ActionType::OverrideOverlayShader) {
-        return PhosphorI18n::tr("Set overlay shader");
+        return PhosphorI18n::tr("Override overlay shader");
     }
     if (type == ActionType::OverrideOverlayStyle) {
-        return PhosphorI18n::tr("Set overlay style");
+        return PhosphorI18n::tr("Override overlay style");
     }
     if (type == ActionType::SetOverlayHighlightColor) {
         return PhosphorI18n::tr("Set overlay highlight color");
@@ -467,8 +521,8 @@ QString actionTypeLabelImpl(const QString& type)
         // "Decorations" here means the app's own decorations (borders and
         // decoration packs), matching the blanket Exclude label. It does NOT
         // touch the title bar, which KWin's vocabulary also calls the window
-        // decoration; SetHideTitleBar owns that, and the undecorateApp
-        // template description spells out the real scope.
+        // decoration; SetHideTitleBar owns that. The action's own hover help
+        // in ruleauthoring_actiondescriptions.cpp spells out the real scope.
         return PhosphorI18n::tr("Exclude from decorations");
     }
     if (type == ActionType::SetHideTitleBar) {
@@ -537,9 +591,8 @@ QString actionTypeLabelImpl(const QString& type)
 
 QString boolActionStateLabel(const QString& type, bool on)
 {
-    namespace ActionType = PhosphorRules::ActionType;
     if (type == ActionType::RestorePosition) {
-        return on ? PhosphorI18n::tr("Restore position on login") : PhosphorI18n::tr("Don't restore position on login");
+        return on ? PhosphorI18n::tr("Restore previous position") : PhosphorI18n::tr("Don't restore previous position");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
         return on ? PhosphorI18n::tr("Restore to previous zone") : PhosphorI18n::tr("Don't restore to previous zone");
@@ -676,15 +729,22 @@ QVariantList actionTypes()
         QString type;
         QString categoryLabel;
         int categoryOrder;
+        QString domain;
     };
     QList<TypeEntry> entries;
     for (const QString& type : registry.registeredTypes()) {
         const auto desc = registry.descriptor(type);
+        // `userAuthorable` defaults true and no descriptor in the tree sets it
+        // false today; the filter is the declared opt-out, not dead weight.
         if (!desc.has_value() || !desc->userAuthorable) {
             continue;
         }
-        const PickerCategory acat = actionCategory(type);
-        entries.append({type, acat.label, acat.order});
+        // One descriptor fetch per type feeds the category, the label and the
+        // domain below. `descriptor()` returns by value and the copy allocates.
+        const PickerCategory acat = actionCategory(type, desc->category);
+        const QString domainStr =
+            desc->domain == PhosphorRules::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
+        entries.append({type, acat.label, acat.order, domainStr});
     }
     // Sorted only to make this list deterministic across registry iteration
     // orders. The sole consumer, CategoryMenuButton, re-sorts every item
@@ -709,15 +769,10 @@ QVariantList actionTypes()
         entry[QStringLiteral("params")] = paramsForActionType(e.type);
         entry[QStringLiteral("category")] = e.categoryLabel;
         entry[QStringLiteral("categoryOrder")] = e.categoryOrder;
-        RuleAction probe;
-        probe.type = e.type;
-        const auto domain = registry.domainFor(probe);
-        const QString domainStr =
-            domain == PhosphorRules::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
-        entry[QStringLiteral("domain")] = domainStr;
+        entry[QStringLiteral("domain")] = e.domain;
         // The picker draws a divider between top-level categories whose group
         // differs — context-domain categories above, window-domain below.
-        entry[QStringLiteral("categoryGroup")] = domainStr;
+        entry[QStringLiteral("categoryGroup")] = e.domain;
         out.append(entry);
     }
     return out;

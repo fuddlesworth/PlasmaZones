@@ -3,43 +3,26 @@
 
 #include "configmigration.h"
 
-#include "configbackends.h"
-#include "configdefaults.h"
 #include "configkeys.h"
-#include "perscreenresolver.h"
-#include "settings.h"
 #include "configmigration_v4detail.h"
 
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/Profile.h>
-#include <PhosphorConfig/MigrationRunner.h>
-#include <PhosphorConfig/QSettingsBackend.h>
-#include <PhosphorConfig/Schema.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/IdentityKey.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
-#include <PhosphorZones/LayoutRegistry.h>
 
-#include <QColor>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1String>
-#include <QLockFile>
 #include <QSet>
-#include <QStandardPaths>
 #include <QUuid>
 
-#include <array>
-#include <atomic>
 #include <optional>
 #include <string_view>
 
@@ -99,10 +82,12 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
 /// responsible for validating before calling; this function is total on
 /// valid input.
 ///
-/// @param i      zero-based index into the FILTERED (valid-only) source
-///               list — used to derive `priority = count - i`.
-/// @param count  total VALID source entries (priority floors at 1, reserving
-///               0 for the unassigned-marker band that assignBandPrioritiesToZeroRules stamps).
+/// @param i      zero-based index into the FILTERED (valid-only) source list.
+/// @param count  total VALID source entries. Together they give a descending
+///               offset that preserves the legacy array's order, applied on
+///               top of the Animation band base so the rules sit in a band
+///               rather than below every one of them. Never 0, so
+///               assignBandPrioritiesToZeroRules leaves them alone.
 PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int count)
 {
     namespace ActionParam = PhosphorRules::ActionParam;
@@ -170,7 +155,24 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
                                       + PhosphorRules::Detail::encodeSegment(eventPath)
                                       + PhosphorRules::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
     rule.enabled = true;
-    rule.priority = count - i;
+    // Seed INSIDE the Animation band (101..199) rather than at 1..N. The
+    // descending offset preserves the source order the legacy array carried,
+    // but the bare 1..N these used to get sat below every band, so a user
+    // upgrading with animation rules found them reading "Priority 3" under
+    // rules that start at 100. Bands mirror RuleTemplates (duplicated as
+    // literals because that header lives in the settings tree).
+    //
+    // The clamp keeps a pathological source list from spilling into the
+    // Application band at 200. Past 99 entries the LEADING rules tie at 199,
+    // the top of the band — the offset is descending, so it is the head of the
+    // list that saturates, not the tail. (assignBandPrioritiesToZeroRules
+    // saturates the other way, at its band base; these are not the same
+    // mechanism.) Tied rules fall back to list order, which only matters if
+    // two animation rules target the same window and the same slot, and needs
+    // more than 99 legacy entries to reach at all.
+    constexpr int kAnimationBandBase = 100;
+    constexpr int kBandWidth = 100;
+    rule.priority = kAnimationBandBase + qBound(0, count - i, kBandWidth - 1);
     rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
                                                           PhosphorRules::Operator::Contains, classPattern);
     rule.actions.append(action);
@@ -245,28 +247,28 @@ inline const QUuid& snapToZoneMigrationNamespace()
 // zone app-assignment format this fold is the last reader of. Local literals
 // (NOT the live `ZoneJsonKeys::` accessors) so a future rename of those live
 // keys can never retarget this migration away from what v3 wrote to disk.
-constexpr QLatin1String kLayoutAppRulesKey{"appRules"};
-constexpr QLatin1String kLayoutAppRulePattern{"pattern"};
-constexpr QLatin1String kLayoutAppRuleZoneNumber{"zoneNumber"};
-constexpr QLatin1String kLayoutAppRuleTargetScreen{"targetScreen"};
+constexpr QLatin1StringView kLayoutAppRulesKey{"appRules"};
+constexpr QLatin1StringView kLayoutAppRulePattern{"pattern"};
+constexpr QLatin1StringView kLayoutAppRuleZoneNumber{"zoneNumber"};
+constexpr QLatin1StringView kLayoutAppRuleTargetScreen{"targetScreen"};
 
 } // namespace
 
 /// Drain the v4 animation-rule stash into @p rules. Malformed entries are
 /// silently discarded — the legacy runtime loader did the same. The two-pass
-/// shape (filter, then build) matches the legacy bridge byte-for-byte: the
-/// priority `count - i` is computed against the POST-filter size, so dropped
-/// entries don't leave gaps in the descending-by-list-order priority
-/// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
+/// shape (filter, then build) is the legacy bridge's: the descending offset is
+/// computed against the POST-filter size, so dropped entries don't leave gaps
+/// in the descending-by-list-order priority sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
 /// Give every migrated rule the append helpers left at priority 0 (the Exclude,
 /// animation-exclusion, and SnapToZone rules) a sensible band priority, matching what the Settings
 /// renormalizer (RuleTemplates / sectionFor) would stamp. The Settings
 /// controller only renormalizes on edit, not on load, so without this the
 /// migrated rules would all read "Priority 0" and tie on a fresh load. A
-/// composite match (e.g. the Steam exclude) lands in the Advanced band; the
-/// simple window-property rules (AppId/WindowClass exclude, SnapToZone) land in
-/// Application. One descending offset per band keeps them distinct, mirroring
+/// composite match (one that nests a group) lands in the Advanced band; the
+/// simple window-property rules — a bare leaf or a flat conjunction of leaves,
+/// which covers the AppId/WindowClass excludes, SnapToZone, and the premade
+/// Steam rule — land in Application. One descending offset per band keeps them distinct, mirroring
 /// renormalizePriorities. Managed and already-prioritized rules are untouched.
 /// Past 100 zero-priority rules in one band the offset floors at the band base
 /// (the `qMax(0, ...)` below), so the 100th-onward rules tie there — the same
@@ -288,6 +290,12 @@ void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
             return true;
         }
         if (m.kind() != MatchExpression::Kind::All) {
+            return false;
+        }
+        // An empty All{} is the match-everything catch-all, not a plain
+        // per-window rule — file it with the composites so it does not read as
+        // an Application-band window rule.
+        if (m.children().isEmpty()) {
             return false;
         }
         for (const MatchExpression& child : m.children()) {
@@ -382,53 +390,118 @@ void appendExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJso
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString());
 }
 
-/// Seed the premade "Steam" Rule into a freshly-built v4 rule set.
+QUuid steamDefaultRuleId()
+{
+    return QUuid::createUuidV5(exclusionMigrationNamespace(),
+                               PhosphorRules::Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
+}
+
+/// Stamp the CURRENT premade-Steam shape onto @p rule, leaving its id,
+/// enabled flag and priority alone.
 ///
-/// Steam is a CEF/XWayland client that spawns most of its UI — the Friends
-/// List, the self-drawn `notificationtoasts_<N>_desktop` popups, Settings, and
-/// chat windows — as separate top-level windows. They all share the `steam`
-/// window class but report a title other than the main library window's
-/// `Steam`. The transient/popup/menu members are already filtered structurally
-/// by the effect's `shouldHandleWindow()` (see the `transientFor()` /
-/// `isStructurallyUnmanageableWindowType()` net referenced in discussion #461),
-/// but the Normal-type top-levels (Friends List, the notification toasts) slip
-/// that filter and get auto-tiled — the long-standing "Steam breaks tiling"
-/// bug other compositors ship rules for.
+/// Steam draws its own notification toasts as `notificationtoasts_<N>_desktop`
+/// top-level windows. They are Normal-type, so the effect's structural
+/// transient/popup net (`transientFor()` /
+/// `isStructurallyUnmanageableWindowType()`, discussion #461) lets them
+/// through and they get placed like real windows — the "Steam breaks tiling"
+/// bug other compositors ship rules for. This rule is the built-in fix, and
+/// it guards the toasts and nothing else.
 ///
-/// The rule excludes every `steam`-class window whose title is NOT exactly
-/// `Steam`, leaving the main library window tileable (the Hyprland
-/// `title:^(?!Steam$).*` idiom). `Exclude` is enforced at the effect's
-/// `shouldHandleWindow()` gate, which evaluates the FULL WindowQuery
-/// (windowClass + title) — so the composite match resolves there even though
-/// the daemon-side appId-only fast paths (`isAppIdExcluded`, pending-restore
-/// prune) ignore non-AppId leaves; those gate keyboard navigation / state
-/// cleanup, not whether the window is tiled.
+/// `WindowClass EndsWith "steam"` is deliberate, and the earlier
+/// `Contains "steam"` was a bug. The field carries KWin's `windowClass()`,
+/// which is the raw `"resourceName resourceClass"` pair, and a Steam-launched
+/// GAME reports its own app id in both halves — `"steam_app_2342813033
+/// steam_app_2342813033"` for a live World of Warcraft. That string CONTAINS
+/// "steam", so the old rule unmanaged every game launched from Steam.
+/// Anchoring on the suffix pins the class token instead: it holds for the
+/// current Steam client's pair (`"steamwebhelper steam"`, the Chromium-based
+/// steamwebhelper) and for the older `"steam Steam"` spelling, and no
+/// `steam_app_*` id can end in it. Steam is an X11 client, so under a Wayland
+/// session it runs on XWayland and reports WM_CLASS — which is why this field
+/// carries a two-token pair at all. The comparison is case-insensitive, as is
+/// `Contains` (see MatchTypes operator semantics), so `"steam Steam"` resolves.
 ///
-/// `WindowClass Contains "steam"` matches KWin's raw `"resourceName
-/// resourceClass"` string (e.g. `"steam Steam"`, `"steamwebhelper Steam"`)
-/// case-insensitively; the `Title Equals "Steam"` guard is likewise
-/// case-insensitive (see MatchTypes operator semantics). The id is a fixed
-/// deterministic UUIDv5 so a re-run never produces a duplicate.
-void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
+/// The second half is an `Any` over the SAME token on two different fields,
+/// and that is not belt-and-braces. Steam names a toast
+/// `notificationtoasts_<N>_desktop`, but which field carries that name is not
+/// established: classically it is the WM_CLASS resourceName half (giving
+/// `windowClass() == "notificationtoasts_1_desktop steam"`), while the rule
+/// this replaced was written as though it were the window caption. No probe of
+/// a live toast settled it, so the rule accepts either and is correct whichever
+/// side the token lands on. The class arm matters for a second reason: the
+/// caption arrives late and the effect's exclusion verdict is cached per
+/// window WITHOUT a captionChanged invalidation (see
+/// kwin-effect/plasmazoneseffect/window_connections.cpp, where that omission is
+/// deliberate), so a title-only rule can resolve "not excluded" before the
+/// caption exists and stay pinned that way for the window's life. The class is
+/// stamped at first resolve, so the class arm has no such window.
+///
+/// Both halves are POSITIVE WindowClass/Title predicates, and WindowClass sits
+/// in the daemon's `unanswerableWindowFields()`, so this rule only ever bites
+/// on the EFFECT path, where window_query.cpp stamps both fields. That was
+/// equally true of the retired shape, whose class leaf was positive too, so it
+/// is not a change — but it is where to look when checking the rule against a
+/// live session.
+///
+/// The action is `ExcludePlacement`, not the blanket `Exclude`: a toast has no
+/// business being placed, but stripping its decorations too, and cancelling its
+/// animation overrides, was never the point. `Exclude` was the only exclusion action that existed when
+/// this rule was written; the scoped one landed later.
+///
+/// Everything else Steam opens — the library window, Friends List, chat, Big
+/// Picture, Settings — is an ordinary resizable window that places like any
+/// other. The rule used to exclude all of them via a `Title Equals "Steam"`
+/// negative guard (the Hyprland `title:^(?!Steam$).*` idiom), which decided on
+/// the user's behalf that no Steam window except the library was worth tiling.
+void applySteamDefaultRuleShape(PhosphorRules::Rule& rule)
 {
     using namespace PhosphorRules;
-    Rule rule;
-    rule.id = QUuid::createUuidV5(exclusionMigrationNamespace(),
-                                  Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
-    rule.name = QStringLiteral("Steam");
-    rule.enabled = true;
-    // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
-    // priority once the full list is assembled (composite match → Advanced
-    // band). An Exclude rule's precedence is irrelevant to the boolean exclusion
-    // slice the effect evaluates, but a band value displays better than 0.
-    rule.priority = 0;
+    rule.name = QStringLiteral("Steam notifications");
     rule.match = MatchExpression::makeAll(
+        {MatchExpression::makeLeaf(Field::WindowClass, Operator::EndsWith, QStringLiteral("steam")),
+         MatchExpression::makeAny(
+             {MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("notificationtoasts")),
+              MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains,
+                                        QStringLiteral("notificationtoasts"))})});
+    rule.actions.clear();
+    RuleAction action;
+    action.type = QString(ActionType::ExcludePlacement);
+    rule.actions.append(action);
+}
+
+bool isRetiredSteamRuleShape(const PhosphorRules::Rule& rule)
+{
+    using namespace PhosphorRules;
+    // The exact shape seeded between the rule's introduction and this repair:
+    // All{ WindowClass Contains "steam", None{ Title Equals "Steam" } } with a
+    // single blanket Exclude action. Compared structurally rather than by a
+    // stored version stamp, so a user who edited either half keeps their
+    // edit — the repair only reclaims rules that are still verbatim ours.
+    if (rule.actions.size() != 1 || rule.actions.first().type != ActionType::Exclude) {
+        return false;
+    }
+    Rule retired;
+    retired.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
          MatchExpression::makeNone(
              {MatchExpression::makeLeaf(Field::Title, Operator::Equals, QStringLiteral("Steam"))})});
-    RuleAction action;
-    action.type = QString(ActionType::Exclude);
-    rule.actions.append(action);
+    return rule.match.toJson() == retired.match.toJson();
+}
+
+/// Seed the premade Steam Rule into a freshly-built v4 rule set. See
+/// `applySteamDefaultRuleShape` for what it matches and why.
+void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
+{
+    PhosphorRules::Rule rule;
+    rule.id = steamDefaultRuleId();
+    rule.enabled = true;
+    // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
+    // priority once the full list is assembled. The match nests an Any group,
+    // so it is not a flat conjunction and lands in the Advanced band. An
+    // exclusion rule's precedence is irrelevant to the boolean slice the effect
+    // evaluates, but a band value displays better than 0.
+    rule.priority = 0;
+    applySteamDefaultRuleShape(rule);
     rules.append(rule);
 }
 

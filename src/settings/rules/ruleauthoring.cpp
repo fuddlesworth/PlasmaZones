@@ -107,7 +107,11 @@ QString fieldDescription(Field f)
     case Field::AppId:
         return PhosphorI18n::tr("The application's ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.");
     case Field::WindowClass:
-        return PhosphorI18n::tr("The window's class (WM_CLASS resource class), e.g. konsole.");
+        return PhosphorI18n::tr(
+            "The window's class as the compositor reports it, which is the WM_CLASS "
+            "pair \"resourceName resourceClass\". Konsole, for example, reports "
+            "\"konsole konsole\", not just \"konsole\", so use contains or ends with "
+            "rather than is.");
     case Field::DesktopFile:
         return PhosphorI18n::tr("The application's desktop entry file name.");
     case Field::WindowRole:
@@ -521,7 +525,8 @@ QVariantList matchFields()
     // hand-maintained allow-list: a new Field value (e.g. a hypothetical
     // future `MimeType`) auto-surfaces in the picker unless it's
     // explicitly hidden here. Mirrors the `userAuthorable` filter shape
-    // that replaced `kTypes` in actionTypes() below.
+    // that replaced `kTypes` in `actionTypes()`
+    // (ruleauthoring_actions.cpp).
     static const QSet<Field> kHiddenFields = {Field::Pid, Field::WindowRole};
     QVariantList out;
     for (int i = 0; i < PhosphorRules::FieldCount; ++i) {

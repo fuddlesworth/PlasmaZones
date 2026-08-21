@@ -20,9 +20,9 @@ RowLayout {
     /// The leaf JSON object — `{ field: "appId", op: "equals", value: ... }`.
     required property var node
     /// The RuleController (for operatorsForField).
-    required property var controller
+    required property QtObject controller
     /// The SettingsController — populates the screen / activity pickers.
-    required property var appSettings
+    required property QtObject appSettings
     // Each entry carries `{ value, wire, label, valueKind }` — the controller
     // owns the enum↔wire-string table; this component never reconstructs it.
     // Cached once at RuleEditorSheet (matchFields() is a Q_INVOKABLE that
@@ -48,6 +48,13 @@ RowLayout {
     // Operator options depend on the current field's enum value.
     readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
+
+    /// True when this condition may be removed. False at the ROOT of a match,
+    /// where there is no enclosing group to remove it from — `removeRequested`
+    /// has no handler there, so the button would do nothing at all. Every
+    /// guided starting point seeds a bare leaf as the whole match, so the root
+    /// case is the common one rather than an edge.
+    property bool removable: true
 
     signal leafChanged(var updatedLeaf)
     signal removeRequested
@@ -326,6 +333,7 @@ RowLayout {
     }
 
     ToolButton {
+        visible: leaf.removable
         icon.name: "edit-delete"
         Layout.alignment: Qt.AlignTop
         ToolTip.text: i18n("Remove condition")

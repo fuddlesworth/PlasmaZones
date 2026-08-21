@@ -568,7 +568,7 @@ void TestRuleModel::restorePositionRendersValueAwareLabel()
     QVERIFY(labelAt(0) != labelAt(1));
     // Pin BOTH branches' text, not just the false case: true reads as the
     // affirmative "Restore …", false as the negated "Don't restore …".
-    QVERIFY2(labelAt(0).contains(QStringLiteral("Restore position")), qPrintable(labelAt(0)));
+    QVERIFY2(labelAt(0).contains(QStringLiteral("Restore previous position")), qPrintable(labelAt(0)));
     QVERIFY2(labelAt(1).contains(QStringLiteral("Don't")), qPrintable(labelAt(1)));
 }
 
