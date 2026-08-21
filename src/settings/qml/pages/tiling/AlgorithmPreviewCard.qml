@@ -32,6 +32,10 @@ ColumnLayout {
     /// Algorithm id the picker shows as current. Usually algorithmId, but the
     /// advanced page resolves it through its per-monitor scope first.
     required property string currentAlgorithmId
+    /// The reserved "explicitly no algorithm" word
+    /// (PhosphorZones::NoTilingAlgorithm), which both tiling pages can seed
+    /// currentAlgorithmId with once the library card clears the default.
+    readonly property string noAlgorithmToken: "none"
     /// Layout inputs fed to the preview generator.
     property int windowCount: 4
     property real splitRatio: 0.6
@@ -155,6 +159,15 @@ ColumnLayout {
             layoutFilter: 1 // Autotile algorithms only
             showNoneOption: false
             currentLayoutId: "autotile:" + card.currentAlgorithmId
+            // The library card's Clear Default stores the reserved
+            // no-algorithm word, and both tiling pages seed their working
+            // algorithm from that setting. No model row carries the word, so
+            // the combo lands on currentIndex -1 and, with no displayText of
+            // its own, renders EMPTY — a blank picker with an empty preview
+            // beside it and no explanation. Name the state instead. The
+            // preview staying empty is accurate: no algorithm is selected, so
+            // there is nothing to draw.
+            displayText: card.currentAlgorithmId === card.noAlgorithmToken ? i18nc("no tiling algorithm is set", "None") : (currentIndex >= 0 ? currentText : "")
             onActivated: {
                 // Strip the "autotile:" prefix the combo's ids carry. An empty
                 // value passes straight through, so each page applies its own

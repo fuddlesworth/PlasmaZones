@@ -57,9 +57,22 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 /// groups every kbd-None overlay (OSD, zone-selector, main zone overlay,
 /// and post-migration snap-assist + layout picker + cheatsheet) onto one
 /// wl_surface per screen. FullscreenOverlay primitive (AnchorAll, no keyboard,
-/// click-through). Permanently mapped after first show - keepMappedOnHide
-/// is moot since per-content slots toggle visibility within the shared
-/// scene graph rather than the wl_surface itself unmapping.
+/// click-through). Hiding ONE slot never unmaps anything: the per-content
+/// slots toggle visibility within the shared scene graph, and the shell's
+/// own show/hide is driven off the anyVisible aggregate, so the wl_surface
+/// only moves when the LAST visible slot goes.
+///
+/// At that point keepMappedOnHide decides, and it is NOT moot: it is
+/// effects-gated in createWarmedOsdSurface. With shaders or animations
+/// enabled the shell stays mapped and keeps its warmed Vulkan swapchain;
+/// with BOTH disabled it is false and the wl_surface is unmapped
+/// synchronously, so the next slot to show pays a full remap. Repeatedly
+/// arming and releasing a hold-mode trigger during one drag toggles the
+/// drop indicator, which on that configuration means an unmap/remap per
+/// cycle. That is the deliberate trade (an idle daemon should not keep a
+/// composited surface alive when it is drawing nothing), and it applies
+/// equally to every consumer of this shell, but it is a real cost rather
+/// than the no-op the previous wording claimed.
 ///
 /// Layer downgrade from Overlay to Top is deliberate (issue #516). A
 /// fullscreen wlr Overlay-layer surface above the active toplevel masks
@@ -91,8 +104,9 @@ inline const PhosphorLayer::Role PassiveShell = PhosphorShellPatterns::Hud()
 /// overloads resolve per-content motion + shader profiles via this
 /// role's prefix even though the shell's actual surface uses
 /// PassiveShell). Escape-to-dismiss is wired via the daemon's
-/// `cancel_overlay_during_drag` global accelerator (see start.cpp's
-/// snapAssistShown handler) since the shell is kbd-None.
+/// `cancel_overlay_during_drag` global accelerator (see
+/// shortcuts_wiring.cpp's snapAssistShown handler) since the shell is
+/// kbd-None.
 ///
 /// Singleton at the daemon level - m_snapAssistScreenId tracks which
 /// screen's slot is active and re-targets across screens.
@@ -117,6 +131,16 @@ inline const PhosphorLayer::Role LayoutPicker =
 /// level — m_cheatsheetScreenId tracks which screen's slot is active.
 inline const PhosphorLayer::Role Cheatsheet =
     PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-cheatsheet"));
+
+/// Scroll drag drop-indicator config-only role. Paints the slot a dragged
+/// window would land in while a scrolling drag re-insert is armed, so the
+/// drop target is visible the way autotile's live restructure makes it
+/// visible. Per-screen (a drag can cross screens and the indicator follows),
+/// and it registers no per-role config: the taxonomy defines no domain for
+/// it, so both legs use the library default motion. Display-only and click-through — it must never take
+/// input, since it is painted underneath a cursor that is mid-drag.
+inline const PhosphorLayer::Role ScrollDropIndicator =
+    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-drop-indicator"));
 
 /// Shader preview (editor Shader Settings dialog). Floating Overlay
 /// layer, no anchors, no keyboard. Singleton. Positioned programmatically

@@ -121,13 +121,16 @@ Full first-run tour: **[Getting started →](https://phosphor-works.github.io/pl
 | Snap window to zone 1–9 | `Meta+Ctrl+1` … `Meta+Ctrl+9` |
 | Previous / next layout | `Meta+Alt+[` / `Meta+Alt+]` |
 | Open layout picker | `Meta+Alt+Space` |
-| Toggle autotile | `Meta+Shift+T` |
+| Cycle placement mode (snapping / tiling / scrolling) | `Meta+Shift+T` |
 | Toggle floating | `Meta+F` |
 | Restore window size | `Meta+Alt+Escape` |
+| Scrolling: consume / expel window | `Meta+Alt+I` / `Meta+Alt+Shift+I` |
+| Scrolling: cycle column width forward / back | `Meta+Alt+D` / `Meta+Alt+Shift+D` |
+| Open shortcut cheatsheet | `Meta+Alt+/` |
 
-Full reference — around 50 bindings across core actions, zone movement, snap, layouts, autotile, virtual screens, and the editor: **[Keyboard shortcuts →](https://phosphor-works.github.io/plasmazones/shortcuts/)**.
+Full reference — around 100 bindings across core actions, zone movement, snap, layouts, autotile, scrolling, virtual screens, and the editor: **[Keyboard shortcuts →](https://phosphor-works.github.io/plasmazones/shortcuts/)**.
 
-All bindings are rebindable in **System Settings → Shortcuts → PlasmaZones** (KDE) or the PlasmaZones settings app.
+All bindings are rebindable in **System Settings → Shortcuts → PlasmaZones** (KDE). The PlasmaZones settings app rebinds only the layout editor's own shortcuts.
 
 ---
 
@@ -137,7 +140,7 @@ Settings live in `~/.config/plasmazones/config.json`. Layouts live in `~/.local/
 
 ```bash
 plasmazones-settings                           # overview
-plasmazones-settings -p layouts                # jump straight to layouts
+plasmazones-settings -p snapping-layouts       # jump straight to the snapping layout library
 plasmazones-settings --page tiling-behavior
 ```
 
@@ -169,7 +172,7 @@ The archive lands in `/tmp` by default with home paths redacted, so it's safe to
 
 ## D-Bus API
 
-13 interfaces on `org.plasmazones` for scripting and integration. Interface inventory, scripting recipes, and signal watching: **[D-Bus scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)**.
+15 interfaces on `org.plasmazones` for scripting and integration. Interface inventory, scripting recipes, and signal watching: **[D-Bus scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)**.
 
 ---
 

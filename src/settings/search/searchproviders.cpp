@@ -36,7 +36,18 @@ QVector<SearchEntry> LayoutsSearchProvider::searchEntries() const
 
         SearchEntry e;
         e.kind = SearchEntry::Kind::Entity;
-        e.pageId = QStringLiteral("layouts");
+        // Route each entity to the library page that actually shows its card.
+        // Under the old tabbed Layouts page every kind shared one pageId, so
+        // an algorithm/template result opened the page on the snapping view
+        // and its reveal anchor never registered; the per-mode pages make
+        // every result land on a view where the card exists.
+        if (m.value(QStringLiteral("isScrollingTemplate")).toBool()) {
+            e.pageId = QStringLiteral("scrolling-templates");
+        } else if (m.value(QStringLiteral("isAutotile")).toBool()) {
+            e.pageId = QStringLiteral("tiling-library");
+        } else {
+            e.pageId = QStringLiteral("snapping-layouts");
+        }
         e.title = name;
         // Per-layout reveal anchor; LayoutGridDelegate registers "layout:<id>"
         // with the page (id matches the QML modelData.id), so selecting a

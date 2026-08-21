@@ -7,6 +7,7 @@
 #include "window_query.h"
 
 #include "compositor/windowanimator.h"
+#include "tilinghandler/tilinghandler.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -21,6 +22,7 @@
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -29,11 +31,13 @@
 #include <QDBusPendingReply>
 
 #include <QByteArray>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -42,6 +46,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace PlasmaZones {
@@ -49,6 +54,169 @@ namespace PlasmaZones {
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
+
+/// Bounded retry for a failed getAllRules fetch, matching the tiling
+/// handler's bring-up fetch budget: a fresh external trigger resets it,
+/// only the retry chain's own failures consume it.
+constexpr int kRuleFetchRetryMax = 3;
+constexpr int kRuleFetchRetryDelayMs = 1000;
+
+/// Dedicated bound for the getAllRules round-trip. Deliberately NOT
+/// Service::SyncCallTimeoutMs (500 ms), which sizes a single scalar property
+/// Get: this reply carries the whole serialised RuleSet, and the daemon reads
+/// and re-serialises the store to produce it. Qt's unbounded default (25 s) is
+/// the other extreme — multiplied by the retry chain above it leaves
+/// ActiveLayout-referencing rules withheld from the evaluator for over a
+/// minute after a wedged daemon.
+constexpr int kRuleFetchTimeoutMs = 5000;
+
+/// Hard cap on the getAllRules payload before it reaches QJsonDocument::fromJson.
+/// The receive-side QString allocation is bounded by libdbus's own
+/// message-size limit, not by this cap — what it genuinely bounds is the
+/// JSON parse (and, via the call site's pre-check on the QString length,
+/// the UTF-8 conversion copy). Sized far above
+/// any plausible rule store (a rule serialises to a few hundred bytes, so this
+/// admits tens of thousands of them) — the cap is a safety net, not a limit
+/// users can reach by authoring rules.
+constexpr qsizetype kRuleFetchMaxPayloadBytes = 16 * 1024 * 1024;
+
+/// Filter a daemon-published shader search-path array down to the entries the
+/// registry may safely be pointed at.
+///
+/// Boundary validation on a list that crosses D-Bus and then decides where the
+/// compositor reads shader source from. An entry must be a non-empty ABSOLUTE
+/// path with no `..` component: a relative path resolves against the
+/// compositor's cwd (which is neither the daemon's nor a meaningful shader
+/// root), and a traversal component lets a mis-built or hand-edited entry aim
+/// the registry at an arbitrary tree. The count cap bounds the per-lookup cost
+/// the registry pays walking every registered root; it is sized far above any
+/// real pack layout, so reaching it means the list is wrong.
+QStringList validatedShaderSearchPaths(const QJsonArray& arr)
+{
+    constexpr int kMaxShaderSearchPaths = 64;
+    QStringList paths;
+    for (const QJsonValue& entry : arr) {
+        if (!entry.isString()) {
+            continue;
+        }
+        const QString path = entry.toString();
+        if (path.isEmpty()) {
+            continue;
+        }
+        if (!QFileInfo(path).isAbsolute()) {
+            qCWarning(lcEffect) << "loadShaderRegistryFromDbus: rejecting non-absolute search path" << path;
+            continue;
+        }
+        // The RAW components, not QDir::cleanPath's: cleanPath collapses `..`
+        // away, so testing its output would pass every traversal through.
+        // Rejecting the raw form keeps the registered root exactly what the
+        // daemon named.
+        if (path.split(QLatin1Char('/')).contains(QLatin1String(".."))) {
+            qCWarning(lcEffect) << "loadShaderRegistryFromDbus: rejecting search path with a traversal component"
+                                << path;
+            continue;
+        }
+        if (paths.size() >= kMaxShaderSearchPaths) {
+            qCWarning(lcEffect) << "loadShaderRegistryFromDbus: search-path list exceeds" << kMaxShaderSearchPaths
+                                << "entries — dropping the remainder";
+            break;
+        }
+        paths.append(path);
+    }
+    return paths;
+}
+
+/// Context fields NO effect-side resolver stamps onto its WindowQuery —
+/// the effect twin of the daemon open-path's neverStampedFields()
+/// (src/dbus/windowtrackingadaptor/rules.cpp), for the same reason: an
+/// unstamped field is not inert. WindowQuery::valueForField returns an
+/// ENGAGED empty string for string-valued context fields, so a positive
+/// leaf on one correctly never matches, but a NEGATED leaf
+/// (`None{TiledWindowCount ...}`) matches precisely BECAUSE the inner
+/// leaf failed, and the rule fires for EVERY window. Dropping rules that
+/// reference an unstamped field closes both polarities.
+///
+/// ScreenOrientation is deliberately NOT in this set, but the reason is
+/// narrower than "always stamped": ruleQuery (window_filtering.cpp) stamps it
+/// whenever the window's screen id resolves to an output, and falls back to a
+/// centre-derived answer otherwise. A window whose screen resolves to neither
+/// (an output that just disconnected, before the screen-change handling
+/// catches up) keeps the engaged-empty stamp, so a negated orientation leaf
+/// over-matches exactly those windows for that interval. That residual is
+/// known and accepted: it is bounded by a real screen-topology transition
+/// rather than by every session's bring-up, and holding orientation rules out
+/// of the evaluator over it would cost more than it saves.
+///
+/// TiledWindowCount is the one context-cascade field with no effect-side
+/// source at all.
+///
+/// ActiveLayout is CONDITIONAL, which is what @p activeLayoutsSeeded selects.
+/// ruleQuery stamps it from the daemon's per-screen map, but that map does
+/// not exist until the daemon's first push lands, and an unstamped
+/// ActiveLayout reads as an engaged empty string for EVERY window — exactly
+/// the negation hazard above. So while the map is unseeded the field joins
+/// the never-stamped set and its rules are held out of the evaluator; the
+/// seeding edge in TilingHandler::setActiveLayouts re-drives
+/// loadRuleAnimationsFromDbus, which re-runs this filter with the field
+/// admitted again.
+const QSet<PhosphorRules::Field>& effectNeverStampedFields(bool activeLayoutsSeeded)
+{
+    // ColorScheme is never stamped effect-side (the daemon owns the palette
+    // derivation; kwin's own palette is not the authority), so a rule
+    // referencing it must be held out here for the same negated-leaf reason
+    // as the other two — the daemon-side resolvers still honour it.
+    static const QSet<PhosphorRules::Field> seeded = {
+        PhosphorRules::Field::TiledWindowCount,
+        PhosphorRules::Field::ColorScheme,
+    };
+    static const QSet<PhosphorRules::Field> unseeded = {
+        PhosphorRules::Field::TiledWindowCount,
+        PhosphorRules::Field::ColorScheme,
+        PhosphorRules::Field::ActiveLayout,
+    };
+    return activeLayoutsSeeded ? seeded : unseeded;
+}
+
+/// The conditional half of the never-stamped set on its own, for asking
+/// whether a dropped rule was dropped BECAUSE the map is unseeded (as
+/// opposed to referencing TiledWindowCount, which no seeding edge ever
+/// rescues).
+const QSet<PhosphorRules::Field>& activeLayoutField()
+{
+    static const QSet<PhosphorRules::Field> field = {
+        PhosphorRules::Field::ActiveLayout,
+    };
+    return field;
+}
+
+/// Drop the rules referencing a never-stamped field from an exclusion
+/// slice before it reaches an effect-bound rule set (see
+/// effectNeverStampedFields for why).
+///
+/// @p outActiveLayoutWithheld, when given, is set to true (never cleared —
+/// the caller ORs the whole pass together) if any rule was dropped for
+/// referencing ActiveLayout while the map is unseeded. That is the signal
+/// the seeding edge in TilingHandler::setActiveLayouts gates its re-drive
+/// on: with no such rule anywhere in the store, seeding admits nothing new
+/// and the whole getAllRules + parse + updateAllDecorations pass is waste.
+/// The caller's slices are already filtered to real candidates for their
+/// respective rule sets, so a removal here is always a rule the effect
+/// would otherwise have bound.
+QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> rules, bool activeLayoutsSeeded,
+                                                    bool* outActiveLayoutWithheld = nullptr)
+{
+    const QSet<PhosphorRules::Field>& fields = effectNeverStampedFields(activeLayoutsSeeded);
+    rules.removeIf([&fields, activeLayoutsSeeded, outActiveLayoutWithheld](const PhosphorRules::Rule& rule) {
+        if (!rule.match.referencesAnyField(fields)) {
+            return false;
+        }
+        if (!activeLayoutsSeeded && outActiveLayoutWithheld && rule.match.referencesAnyField(activeLayoutField())) {
+            *outActiveLayoutWithheld = true;
+        }
+        return true;
+    });
+    return rules;
+}
 
 /// Parse a D-Bus setting variant containing a JSON-encoded string and
 /// dispatch to one of two callers based on the document's top-level
@@ -62,7 +230,8 @@ namespace {
 /// odd one out — it issues a raw `QDBusMessage::createMethodCall` to
 /// `getAllRules` and parses with `QJsonDocument::fromJson` directly,
 /// because it slices the parsed rules through
-/// `excludeRulesFrom` / `excludeAnimationsRulesFrom` before sinking.
+/// `excludePlacementRulesFrom` / `excludeDecorationsRulesFrom` /
+/// `excludeAnimationsRulesFrom` before sinking.
 ///
 /// The `name` argument feeds the warning so the failure site is
 /// identifiable in journals; pass the same `SettingProperty` constant
@@ -118,8 +287,14 @@ bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, co
 
 void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
                                                bool reverse, bool holdCloseGrab, bool holdAddedGrab,
-                                               bool animateMinimized)
+                                               bool animateMinimized, bool* outOwnsResolvedLeg)
 {
+    // Fail-closed default: every early return below leaves the out-param
+    // false, so a caller that mutates the transition afterwards (the
+    // maximize morph endpoints) cannot touch an unrelated live leg.
+    if (outOwnsResolvedLeg) {
+        *outOwnsResolvedLeg = false;
+    }
     if (!window || durationMs <= 0) {
         // Defensive guard. The current call sites all pass
         // `animationDurationMs()` which the daemon-bringup loader
@@ -145,7 +320,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     }
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
-    // app / class) AND lets a Rule carrying any effect-consumed
+    // app / class) AND lets a Rule carrying any appearance/animation
     // (Tag::Effect) action override the filter when the rule's match
     // expression resolves for the window's full WindowQuery (AppId /
     // WindowClass / Title / WindowRole / DesktopFile / WindowType / Pid /
@@ -153,7 +328,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // the motion-side cascade in `applyWindowGeometry` doing its own check;
     // both call sites gate identically so the filter is a single concept
     // across the two paths.
-    if (!shouldAnimateWindow(window)) {
+    //
+    // Caller-owned memoisation slot, the applyWindowGeometry pattern
+    // (drag_snap.cpp): when the gate builds the WindowQuery for its rule
+    // probes, the resolver pass below reuses it instead of walking the ~30
+    // KWin accessors a second time per animated event.
+    std::optional<PhosphorRules::WindowQuery> sharedQuery;
+    if (!shouldAnimateWindow(window, &sharedQuery)) {
         return;
     }
     // Cascade: per-window animation Rule → ShaderProfileTree
@@ -162,13 +343,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
     //
-    // Build the full per-window query once and reuse it for every
-    // resolver call below — same shape `shouldAnimateWindow` already
-    // uses for the rule-override gate, so a rule that passes the gate
-    // also resolves its slot. Caching across resolver calls is built
-    // into the evaluator's `resolveCached(windowId, …)` path; the query
+    // Reuse the gate's query when it built one (rules present) and build only
+    // when the gate's fast paths never needed it — same shape
+    // `shouldAnimateWindow` uses for the rule-override gate, so a rule that
+    // passes the gate also resolves its slot. Caching across resolver calls is
+    // built into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
-    const PhosphorRules::WindowQuery query = ruleQuery(window);
+    const PhosphorRules::WindowQuery query = sharedQuery ? *sharedQuery : ruleQuery(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event motion profile (curve + duration) in ONE walk, via the shared
@@ -226,22 +407,46 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // stay in lockstep.
     effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
-        // Default-state path: a fresh user with no shader overrides
-        // anywhere in the tree resolves every event to empty effectId,
-        // which is correct ("no shader assigned"). Logging at WARNING
-        // for that floods the journal with bogus failures every time a
-        // window opens, closes, or moves. Only WARN when the tree has
-        // overrides (so an empty resolve here is genuinely surprising —
-        // the documented prune / D-Bus-race scenarios), otherwise
-        // demote to DEBUG.
-        const int ruleCount = m_shaderManager.animationRuleSet().count();
-        if (profileTree.overriddenPaths().isEmpty() && ruleCount == 0) {
+        // An empty resolve is the NORMAL state for any event whose cascade
+        // chain carries no override — not just for an empty tree. The old
+        // demotion keyed on the whole tree being empty, so a user with nine
+        // overrides on open/close/move legs got a WARNING three times per
+        // focus change, forever, because window.appearance.focus had none.
+        // Only an override ON THIS PATH'S CASCADE (exact, or a dotted-path
+        // ancestor like "window.appearance" / "window") makes an empty
+        // resolve genuinely surprising (the documented prune / D-Bus-race
+        // scenarios) — cascade resolution would otherwise have inherited it.
+        // Rules keep a term, but only for the ONE action that can assign a
+        // shader per-window: OverrideAnimationShader (timing/curve overrides
+        // carry no effectId). Gating on the whole rule set restored the
+        // warning for any border/opacity/layer rule — the exact population
+        // the demotion exists to silence.
+        const bool shaderAssigningRules = m_shaderManager.hasAnimationShaderRules();
+        bool cascadeCovered = false;
+        // The by-value QStringList is built ONCE and reused by both the loop
+        // and the warn diagnostic below — the pre-change code paid it twice
+        // (once for the range-for, once for .size() in the warn branch).
+        const QStringList overriddenPaths = profileTree.overriddenPaths();
+        for (const QString& overridden : overriddenPaths) {
+            // The literal "global" root is a genuine chain member of every
+            // path (parentPath terminates every cascade at Global), so an
+            // override stored there covers this resolve too. Ancestry is a
+            // prefix-plus-dot test rather than a per-entry concatenation.
+            if (overridden == PhosphorAnimation::ProfilePaths::Global || profilePath == overridden
+                || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
+                    && profilePath.at(overridden.size()) == QLatin1Char('.'))) {
+                cascadeCovered = true;
+                break;
+            }
+        }
+        if (!cascadeCovered && !shaderAssigningRules) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
-                              << "]: no shader assigned (tree empty — default state)";
+                              << "]: no shader assigned (no override on this path's cascade)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << profileTree.overriddenPaths().size() << " rules=" << ruleCount << ")";
+                                << overriddenPaths.size() << " rules=" << m_shaderManager.animationRuleSet().count()
+                                << " shaderAssigningRules=" << shaderAssigningRules << ")";
         }
         return;
     }
@@ -257,6 +462,29 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // any other window leg.
     if (!resolvedShaderAppliesToEvent(profile.effectiveEffectId(), profilePath)) {
         return;
+    }
+    // The tab swap DEFEATS the same-effect short-circuit on purpose. That
+    // short-circuit exists for KWin's lifecycle-event bursts, where several
+    // signals describe ONE logical event and the first leg should keep
+    // running. A tab swap is never that shape: each swap is a distinct
+    // discrete leg with a DIFFERENT source window, so a live leg running the
+    // same pack — a repeat switch inside the previous leg's duration, or a
+    // focus leg from the very activation this switch caused when the user
+    // binds one pack to both classes — must be SUPERSEDED, not reused.
+    // Reusing it kept the old startTimeMs (the cross-fade began mid-progress
+    // or not at all), kept the old snapshot (the blend ran from the WRONG
+    // tab's pixels), left the teardown timer owned by the earlier event, and
+    // skipped the fresh-install repaint. Ending the same-pack leg first makes
+    // this install take beginShaderTransition's ordinary fresh path, which
+    // restarts the clock, re-seeds, re-arms teardown and repaints. Different-
+    // pack legs already supersede through beginShaderTransition itself.
+    if (profilePath == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch) {
+        if (auto* live = m_shaderManager.findTransition(window)) {
+            const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
+            if (cacheIt != m_shaderManager.m_shaderCache.end() && live->cached == &cacheIt->second) {
+                endShaderTransition(window);
+            }
+        }
     }
     const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
                                                  holdAddedGrab, animateMinimized, progressCurve);
@@ -291,6 +519,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
         ownsResolvedLeg = cacheIt != m_shaderManager.m_shaderCache.end() && cacheIt->second.shader
             && transition->cached == &cacheIt->second;
+    }
+    // Same identity verdict, exported for callers that mutate the transition
+    // after this call (the maximize morph endpoint writes) — see the header
+    // doc for why they must not trust findTransition alone.
+    if (outOwnsResolvedLeg) {
+        *outOwnsResolvedLeg = transition != nullptr && ownsResolvedLeg;
     }
     if (transition && ownsResolvedLeg && profilePath == PhosphorAnimation::ProfilePaths::WindowMove) {
         transition->heldMove = true;
@@ -403,59 +637,117 @@ void PlasmaZonesEffect::slotRulesChanged()
 
 void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
 {
+    // Every external invocation (bring-up, rulesChanged debounce, the
+    // seed-edge re-drive) grants a fresh bounded retry budget. The retry
+    // path calls fetchAllRulesOnce directly, so only its own failures
+    // consume it — a fresh trigger always gets a full set of attempts.
+    m_ruleFetchRetriesLeft = kRuleFetchRetryMax;
+    fetchAllRulesOnce();
+}
+
+void PlasmaZonesEffect::fetchAllRulesOnce()
+{
     // Fetch the unified Rule store via getAllRules (returns a JSON
-    // string of a v4 RuleSet), deserialise, filter to rules whose
-    // action list contains any effect-consumed (Tag::Effect) action, and
-    // hand them to the shader manager. The shader manager mirrors them into
-    // m_animationRuleSet so the per-event slot lookup in shader_resolve.cpp
-    // resolves the cascade against the unified rule store directly.
+    // string of a v4 RuleSet), deserialise, and split it into the two
+    // effect-bound families: rules carrying an appearance/animation action
+    // (Tag::Effect) and rules carrying a one-shot verdict action
+    // (Tag::EffectVerdict). The shader manager mirrors each into its own
+    // rule set, so the per-event slot lookup in shader_resolve.cpp resolves
+    // the cascade against the unified rule store directly while the verdicts
+    // resolve through an evaluator ExcludeAnimations cannot stop.
     const QDBusMessage msg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::Rules), QStringLiteral("getAllRules"));
-    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+    const QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg, kRuleFetchTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    // Per-dispatch guard (see m_ruleFetchQueryGeneration): the debounce, the
+    // bring-up load and the seed-edge re-drive can each dispatch while another
+    // round-trip is outstanding, and this reply must lose to any later one.
+    const quint64 queryGeneration = ++m_ruleFetchQueryGeneration;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, queryGeneration](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        if (queryGeneration != m_ruleFetchQueryGeneration) {
+            return; // a newer fetch superseded this one
+        }
         const QDBusPendingReply<QString> reply = *w;
         if (reply.isError()) {
             // Daemon may not be up yet at startup; the rulesChanged
             // subscription below will deliver the next change. Log at debug
             // so the noise stays out of normal-startup logs.
             qCDebug(lcEffect) << "loadRuleAnimationsFromDbus: getAllRules failed:" << reply.error().message();
+            // Bounded retry. This is what recovers the seed-edge re-drive
+            // when its fetch fails: without it, rules sliced by the unseeded
+            // clear would stay withheld until the next rulesChanged or a
+            // daemon restart. The seed edge CONSUMES m_activeLayoutRulesWithheld
+            // before dispatching (see TilingHandler::setActiveLayouts), so mid
+            // chain the marker sits stale-FALSE; the exhaustion arm below
+            // re-arms it so the NEXT seeding edge re-drives instead of
+            // trusting a fetch that never landed.
+            if (m_ruleFetchRetriesLeft > 0) {
+                --m_ruleFetchRetriesLeft;
+                QTimer::singleShot(kRuleFetchRetryDelayMs, this, [this] {
+                    fetchAllRulesOnce();
+                });
+            } else {
+                qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: retry budget exhausted;"
+                                    << "effect-bound rules refresh on the next rulesChanged or daemon restart";
+                // Re-arm the marker the seed edge consumed before dispatching:
+                // with the budget gone, the withheld rules are still out of
+                // the evaluator, and a stale-FALSE marker would disarm the
+                // NEXT seeding edge's re-drive too. TRUE is the safe polarity
+                // (a spare re-drive is one redundant fetch).
+                m_activeLayoutRulesWithheld = true;
+            }
+            return;
+        }
+        // Pre-check on the QString length before toUtf8() allocates a second
+        // full copy: UTF-8 output is never SHORTER than the UTF-16 unit
+        // count, so a unit count over the byte cap is already over. The
+        // byte-exact check below still runs (UTF-8 can inflate up to 3x).
+        // Same marker re-arm contract as every other early return here.
+        if (reply.value().size() > kRuleFetchMaxPayloadBytes) {
+            qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: getAllRules payload of" << reply.value().size()
+                                << "UTF-16 units exceeds the" << kRuleFetchMaxPayloadBytes
+                                << "byte cap — refusing to convert";
+            m_activeLayoutRulesWithheld = true;
             return;
         }
         const QByteArray payload = reply.value().toUtf8();
+        // Every arm below that returns WITHOUT recomputing the withheld marker
+        // must re-arm it: the seeding edge CONSUMED the marker before
+        // dispatching this fetch (TilingHandler::setActiveLayouts), so leaving
+        // it stale-FALSE disarms the NEXT unseed→seed cycle's re-drive while
+        // the withheld rules are still out of every evaluator. TRUE is the safe
+        // polarity — a spare re-drive costs one redundant fetch. (These arms
+        // slice nothing, so the standing marker still matches the standing rule
+        // sets; it is the CONSUMPTION, not this pass, that made it wrong.)
+        if (payload.size() > kRuleFetchMaxPayloadBytes) {
+            qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: getAllRules payload of" << payload.size()
+                                << "bytes exceeds the" << kRuleFetchMaxPayloadBytes << "byte cap — refusing to parse";
+            m_activeLayoutRulesWithheld = true;
+            return;
+        }
         const QJsonDocument doc = QJsonDocument::fromJson(payload);
         if (!doc.isObject()) {
             qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: getAllRules returned non-object JSON";
+            m_activeLayoutRulesWithheld = true;
             return;
         }
         const auto setOpt = PhosphorRules::RuleSet::fromJson(doc.object());
         if (!setOpt) {
             qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: RuleSet::fromJson refused payload";
+            m_activeLayoutRulesWithheld = true;
             return;
         }
-        // Sample the prior rule set for SetOpacity BEFORE setRuleAnimationRules
-        // overwrites it. Repaint is needed on BOTH bookends — rule appears
-        // (currently-natural-opacity windows need to apply it) AND rule
-        // disappears (currently-dimmed windows need to revert). The earlier
-        // single-bookend form left previously-dimmed windows stuck at their
-        // last-painted opacity when the user removed the last SetOpacity rule.
-        bool hadSetOpacity = false;
-        const auto& priorRules = m_shaderManager.animationRuleSet().rules();
-        for (const PhosphorRules::Rule& rule : priorRules) {
-            for (const PhosphorRules::RuleAction& action : rule.actions) {
-                if (action.type == PhosphorRules::ActionType::SetOpacity) {
-                    hadSetOpacity = true;
-                    break;
-                }
-            }
-            if (hadSetOpacity) {
-                break;
-            }
-        }
+        // Sampled once for the whole admission pass so every slice below
+        // agrees on the same polarity story (see effectNeverStampedFields).
+        const bool layoutsSeeded = m_tilingHandler->activeLayoutsSeeded();
+        // ORed across every slice of this pass; consumed by the seeding edge
+        // (see withoutNeverStampedRules and m_activeLayoutRulesWithheld).
+        bool activeLayoutWithheld = false;
 
         QList<PhosphorRules::Rule> animationRules;
+        QList<PhosphorRules::Rule> verdictRules;
         for (const PhosphorRules::Rule& rule : setOpt->rules()) {
             if (!rule.enabled) {
                 // Skip disabled rules — they exist in the store but must not
@@ -464,24 +756,82 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
-            // Admit the rule to the evaluator if ANY action is effect-consumed,
-            // i.e. carries Tag::Effect (hasTag below). The authoritative
-            // membership list is the descriptor tag assignments in
-            // ruleaction.cpp — animation overrides, SetOpacity, the appearance
-            // family (SetBorder*, SetHideTitleBar, OverrideDecorationChain),
-            // and SetWindowLayer.
+            // Two effect-bound families, admitted in one pass because they
+            // share the never-stamped filter and the withheld marker.
+            //
+            // Tag::Effect — the animation / APPEARANCE family, resolved
+            // through the evaluator whose terminal scope honours
+            // ExcludeAnimations: the three animation overrides, SetOpacity,
+            // the appearance family (SetBorder*, SetHideTitleBar,
+            // OverrideDecorationChain) and SetWindowLayer.
+            //
+            // Tag::EffectVerdict — the two per-window VERDICTS (OpenFullscreen,
+            // ScrollFactor), resolved through an evaluator scoped to the
+            // blanket Exclude alone. They were split out of Tag::Effect
+            // because neither is an animation and neither is an appearance
+            // change: riding the animation evaluator meant an
+            // "exclude this app from animations" rule cancelled the app's
+            // scroll multiplier and its open-fullscreen decision, and a rule
+            // carrying only one of them force-animated its windows past the
+            // min-size and user-exclusion filters (window_filtering.cpp).
+            //
+            // The authoritative membership list for both tags is the
+            // descriptor tag assignments in ruleaction.cpp. A rule can carry
+            // both tags and is then admitted to both sets.
+            //
+            // Computed BEFORE the never-stamped drop so the withheld marker
+            // below can tell a rule the seeding edge would actually rescue
+            // from one this rule set never wanted.
             bool admitted = false;
+            bool admittedVerdict = false;
             for (const PhosphorRules::RuleAction& action : rule.actions) {
+                // Two independent tests, not an else-if chain: no descriptor
+                // carries both tags today (pinned in test_ruleaction), but an
+                // else-if would admit such an action to the appearance set
+                // ONLY, silently contradicting the both-sets rule stated above.
                 if (PhosphorRules::ActionRegistry::instance().hasTag(action.type, PhosphorRules::Tag::Effect)) {
                     admitted = true;
+                }
+                if (PhosphorRules::ActionRegistry::instance().hasTag(action.type, PhosphorRules::Tag::EffectVerdict)) {
+                    admittedVerdict = true;
+                }
+                if (admitted && admittedVerdict) {
                     break;
                 }
+            }
+            if (rule.match.referencesAnyField(effectNeverStampedFields(layoutsSeeded))) {
+                // No effect resolver can stamp the referenced field — admit
+                // neither polarity (see effectNeverStampedFields).
+                if ((admitted || admittedVerdict) && !layoutsSeeded
+                    && rule.match.referencesAnyField(activeLayoutField())) {
+                    activeLayoutWithheld = true;
+                }
+                continue;
             }
             if (admitted) {
                 animationRules.append(rule);
             }
+            if (admittedVerdict) {
+                verdictRules.append(rule);
+            }
         }
+        // Sample the prior SetOpacity presence BEFORE setRuleAnimationRules
+        // overwrites the rule set, through the gate the manager already
+        // maintains (hasOpacityRules, recomputed in rebuildAnimationRuleSet)
+        // rather than a second hand-scan of the same list. Repaint is needed on
+        // BOTH bookends — rule appears (currently-natural-opacity windows need
+        // to apply it) AND rule disappears (currently-dimmed windows need to
+        // revert). The earlier single-bookend form left previously-dimmed
+        // windows stuck at their last-painted opacity when the user removed the
+        // last SetOpacity rule. Same read/overwrite ordering as the slice path
+        // in sliceActiveLayoutRulesForUnseededMap.
+        const bool hadSetOpacity = m_shaderManager.hasOpacityRules();
         m_shaderManager.setRuleAnimationRules(std::move(animationRules));
+        // The verdict set rides the same reply — one rule-store sync point for
+        // the effect, so the two sets can never describe different revisions of
+        // the store. Its setter recomputes the OpenFullscreen / ScrollFactor
+        // presence gates.
+        m_shaderManager.setEffectVerdictRules(std::move(verdictRules));
         // A rule edit can route transitions to (or away from) an audio-reactive
         // animation pack via an EffectId payload — re-evaluate the cava run gate.
         scheduleEffectAudioSync();
@@ -492,33 +842,76 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
         qCDebug(lcEffect) << "loadRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
 
+        // Update the drag-gate exclusion rule set from the same unified
+        // payload — `loadRuleAnimationsFromDbus` is the effect's one
+        // and only rule-store sync point, so the snapping-exclusion gate
+        // refreshes here too rather than chasing a second D-Bus fetch.
+        // (The error-path returns ABOVE deliberately leave all three
+        // exclusion slices at their previous contents rather than blanking
+        // them — the same last-known-rules-stay-authoritative policy the
+        // daemon-loss handler documents.) The
+        // filter keeps only enabled rules with a terminal Exclude or
+        // ExcludePlacement action; setRules bumps the bound rule set's
+        // revision, which makes every stale entry in
+        // m_snappingExclusionEvaluator's PER-WINDOW MATCH CACHE
+        // (window_filtering.cpp resolves through resolveCached) read
+        // as a miss and rebuilds the per-revision sort index. Rule EDITS
+        // are therefore covered by the revision bump alone; PLACEMENT
+        // changes are not, which is why rule_invalidation.cpp clears that
+        // cache explicitly.
+        m_snappingExclusionRuleSet.setRules(
+            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*setOpt).rules(),
+                                     layoutsSeeded, &activeLayoutWithheld));
+
+        // Same refresh for the decoration-exclusion rule set (Exclude ∪
+        // ExcludeDecorations), which shouldDecorateWindow gates on. Must land
+        // BEFORE the updateAllDecorations() sweep below so an added or
+        // removed exclusion applies to every window on this very edit, not on
+        // the next incidental sweep.
+        m_decorationExclusionRuleSet.setRules(
+            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeDecorationsRulesFrom(*setOpt).rules(),
+                                     layoutsSeeded, &activeLayoutWithheld));
+
+        // Recompute the geometry-scoped-rules gate for the frame-geometry
+        // flush (see the member doc). Walked over the full parsed set, once
+        // per rulesChanged — never per geometry tick.
+        {
+            static const QSet<PhosphorRules::Field> kGeometryFields = {
+                PhosphorRules::Field::Width, PhosphorRules::Field::Height, PhosphorRules::Field::PositionX,
+                PhosphorRules::Field::PositionY};
+            m_hasGeometryScopedRules = false;
+            for (const PhosphorRules::Rule& rule : setOpt->rules()) {
+                if (rule.enabled && rule.match.referencesAnyField(kGeometryFields)) {
+                    m_hasGeometryScopedRules = true;
+                    break;
+                }
+            }
+        }
+
         // Per-window border / title-bar rules ride the same animation rule set
         // (Tag::Effect admits them). Refresh borders so an edited /
         // added / removed SetBorder* / SetHideTitleBar rule applies immediately
         // — updateAllDecorations re-merges every window and reconciles rule-hidden
-        // title bars against the fresh evaluator.
+        // title bars against the fresh evaluator (and re-checks the freshly
+        // sliced decoration exclusions above).
         updateAllDecorations();
-
-        // Update the drag-gate exclusion rule set from the same unified
-        // payload — `loadRuleAnimationsFromDbus` is the effect's one
-        // and only rule-store sync point, so the snapping-exclusion gate
-        // refreshes here too rather than chasing a second D-Bus fetch. The
-        // filter keeps only enabled rules with a terminal Exclude action;
-        // setRules always bumps the bound rule set's revision, which is what
-        // both revision-keyed artifacts hang off: m_snappingExclusionEvaluator's
-        // per-revision sort index rebuilds on its next walk, and its per-window
-        // match cache (isExcludedBySnappingRule resolves through resolveCached,
-        // keyed on (windowId, revision)) self-invalidates. No explicit
-        // clearCache is needed here — that call exists for the changes the
-        // revision does NOT move, such as a placement or metadata change.
-        m_snappingExclusionRuleSet.setRules(PhosphorRules::ExclusionRules::excludeRulesFrom(*setOpt).rules());
 
         // Same refresh for the animation-side exclusion rule set, sliced
         // for `ExcludeAnimations`-action rules. The two slices stay
         // independent so a user can have a window excluded from animations
         // but NOT from snap (or vice versa).
         m_animationExclusionRuleSet.setRules(
-            PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules());
+            withoutNeverStampedRules(PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules(),
+                                     layoutsSeeded, &activeLayoutWithheld));
+        // Publish the pass verdict for the seeding edge. Always assigned, not
+        // ORed into the member: this reply IS the current answer over the
+        // current rule store, and a seeded pass legitimately withholds nothing.
+        // Ordering against a concurrent seed is safe in both directions — a
+        // seed that lands BEFORE this reply makes layoutsSeeded above read
+        // true, so the pass admits ActiveLayout rules itself and correctly
+        // records nothing withheld; a seed that lands AFTER reads the marker
+        // this pass just wrote.
+        m_activeLayoutRulesWithheld = activeLayoutWithheld;
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not
@@ -530,6 +923,95 @@ void PlasmaZonesEffect::loadRuleAnimationsFromDbus()
             KWin::effects->addRepaintFull();
         }
     });
+}
+
+void PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap()
+{
+    // Same predicate the admission filter uses for the conditional half of the
+    // never-stamped set, so what the clear removes is exactly what a cold-start
+    // pass would have refused to admit.
+    const auto referencesActiveLayout = [](const PhosphorRules::Rule& rule) {
+        return rule.match.referencesAnyField(activeLayoutField());
+    };
+    const auto sliceRuleSet = [&referencesActiveLayout](PhosphorRules::RuleSet& set) {
+        QList<PhosphorRules::Rule> kept = set.rules();
+        const qsizetype before = kept.size();
+        kept.removeIf(referencesActiveLayout);
+        if (kept.size() == before) {
+            // setRules always bumps the revision and invalidates every bound
+            // evaluator's match cache, so skip the no-op rewrite.
+            return false;
+        }
+        set.setRules(kept);
+        return true;
+    };
+
+    // Non-short-circuiting OR: every set must be sliced, not just up to the
+    // first one that had a match.
+    bool removed = false;
+    removed |= sliceRuleSet(m_snappingExclusionRuleSet);
+    removed |= sliceRuleSet(m_decorationExclusionRuleSet);
+    removed |= sliceRuleSet(m_animationExclusionRuleSet);
+
+    // The shader manager's effect-rule set is written through its own setter
+    // (it keeps the raw list and the bound mirror in step, and recomputes the
+    // two APPEARANCE presence gates, SetOpacity and SetWindowLayer — the
+    // OpenFullscreen and ScrollFactor gates belong to the verdict setter
+    // below, over the verdict list). The setter no-ops on an unchanged list,
+    // so the size check is only for the marker.
+    QList<PhosphorRules::Rule> animationRules = m_shaderManager.animationRuleSet().rules();
+    const qsizetype animationBefore = animationRules.size();
+    animationRules.removeIf(referencesActiveLayout);
+    if (animationRules.size() != animationBefore) {
+        const bool hadSetOpacity = m_shaderManager.hasOpacityRules();
+        m_shaderManager.setRuleAnimationRules(std::move(animationRules));
+        removed = true;
+        // A dropped rule can be the one routing transitions to an
+        // audio-reactive pack; re-evaluate the cava run gate the same way the
+        // admission pass does after its own setRuleAnimationRules. Deferred
+        // and coalesced, so pairing it with the callers' later work is safe.
+        scheduleEffectAudioSync();
+        // The SetOpacity bookend, for the same reason loadRuleAnimationsFromDbus
+        // takes it on a rule edit: opacity is resolved in the paint path, so a
+        // window dimmed by an ActiveLayout-scoped SetOpacity rule stays at its
+        // last-painted alpha forever once the rule leaves the evaluator, unless
+        // something damages it. The daemon-LOSS caller happens to be covered
+        // (its clearAllDecorations tears down the tint layer), but the bring-up
+        // caller is not: a straight old→new owner handover emits no
+        // serviceUnregistered edge, so decorations are still live there. This
+        // is the one repaint this path owns; borders and rule verdicts remain
+        // the callers' invalidateAllRuleCaches + scheduleBorderSweep. The
+        // "after" term is kept for symmetry with the admission pass's gate;
+        // a slice only removes rules, so only the "was" bookend can fire.
+        if ((hadSetOpacity || m_shaderManager.hasOpacityRules()) && KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    }
+
+    // The verdict set is a fifth effect-bound set and takes the same slice for
+    // the same reason: an ActiveLayout-referencing verdict rule left bound
+    // over the daemon-down interval resolves against an unstamped field, so a
+    // negated leaf over-matches every window — and the two verdicts it can
+    // fill are a real fullscreen flip and a real scroll rescale. No repaint
+    // bookend: neither verdict is painted state (OpenFullscreen is one-shot at
+    // open, ScrollFactor is read per input event).
+    QList<PhosphorRules::Rule> verdictRules = m_shaderManager.effectVerdictRuleSet().rules();
+    const qsizetype verdictBefore = verdictRules.size();
+    verdictRules.removeIf(referencesActiveLayout);
+    if (verdictRules.size() != verdictBefore) {
+        m_shaderManager.setEffectVerdictRules(std::move(verdictRules));
+        removed = true;
+    }
+
+    if (removed) {
+        // Arm the seeding edge in TilingHandler::setActiveLayouts: these rules
+        // are gone from the evaluator until a getAllRules pass re-admits them,
+        // and that pass only runs if the marker is set. Never cleared here —
+        // an earlier true from a bring-up admission pass is still true.
+        m_activeLayoutRulesWithheld = true;
+        qCDebug(lcEffect) << "sliceActiveLayoutRulesForUnseededMap: dropped ActiveLayout-scoped rules for the "
+                             "unseeded map — re-drive armed";
+    }
 }
 
 void PlasmaZonesEffect::loadMotionProfileTreeFromDbus()
@@ -675,11 +1157,7 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
         this, PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths, [this](const QVariant& v) {
             dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::AnimationShaderSearchPaths, v,
                                 /*objectSink=*/{}, [this](const QJsonArray& arr) {
-                                    QStringList paths;
-                                    for (const auto& entry : arr) {
-                                        if (entry.isString())
-                                            paths.append(entry.toString());
-                                    }
+                                    const QStringList paths = validatedShaderSearchPaths(arr);
                                     if (!paths.isEmpty()) {
                                         m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
                                         // paths.size() is the REQUESTED count, pre-dedupe:

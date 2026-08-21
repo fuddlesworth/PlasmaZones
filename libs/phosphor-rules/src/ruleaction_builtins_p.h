@@ -56,6 +56,25 @@ inline bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, d
     return d >= 0.0 && d <= maxValue;
 }
 
+/// Validates that @p params has a number in [@p minValue, @p maxValue] at
+/// @p key. The explicit-floor twin of hasNumberInRange above, for slots whose
+/// floor is not zero — whether below it (the tab indicator's gap, where a
+/// negative draws the indicator over the window, and its corner radius, where
+/// -1 is the "fully rounded" sentinel) or above it (its width and length,
+/// which must reject 0 as well as negatives). Slots that genuinely floor at
+/// zero should keep using hasNumberInRange, so a stray negative stays a
+/// validation failure rather than silently reaching a consumer that assumes
+/// non-negative.
+inline bool hasNumberInSignedRange(const QJsonObject& params, QLatin1StringView key, double minValue, double maxValue)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isDouble()) {
+        return false;
+    }
+    const double d = v.toDouble();
+    return d >= minValue && d <= maxValue;
+}
+
 /// Validates that @p params has a `#`-prefixed hex colour string at @p key.
 /// Accepts the standard QColor hex shapes the effect-side consumer parses via
 /// `QColor(QString)`: `#RGB` (4), `#RRGGBB` (7) and `#AARRGGBB` (9 — QColor reads
@@ -118,6 +137,66 @@ inline constexpr double kMinSplitPercent = 10.0;
 inline constexpr double kMaxSplitPercent = 90.0;
 inline constexpr double kMinSplitRatio = kMinSplitPercent / 100.0;
 inline constexpr double kMaxSplitRatio = kMaxSplitPercent / 100.0;
+// Scrolling column-width bounds. The RATIO pair is the installed
+// PhosphorRules/RuleAction.h constants (shared with the zones-layer context
+// resolver); the percent pair derives from it so the descriptor display
+// range and the stored fraction can never drift.
+inline constexpr double kMinColumnWidthRatio = MinColumnWidthRatio;
+inline constexpr double kMaxColumnWidthRatio = MaxColumnWidthRatio;
+inline constexpr double kMinColumnWidthPercent = kMinColumnWidthRatio * 100.0;
+inline constexpr double kMaxColumnWidthPercent = kMaxColumnWidthRatio * 100.0;
+// ScrollFactor multiplier bounds. Aliased from the installed RuleAction.h
+// constants (the kMinColumnWidthRatio pattern) so the descriptor validator and
+// the KWin-effect consumer re-validation check the same numbers. The wire
+// value is the multiplier itself — a fraction below 1 slows scrolling — so the
+// editor shows it as a PERCENT and the display pair derives from the wire pair
+// exactly as the split-ratio and column-width pairs do.
+inline constexpr double kMinScrollFactor = MinScrollFactor;
+inline constexpr double kMaxScrollFactor = MaxScrollFactor;
+inline constexpr double kMinScrollFactorPercent = kMinScrollFactor * 100.0;
+inline constexpr double kMaxScrollFactorPercent = kMaxScrollFactor * 100.0;
+// Tab-indicator bounds, mirroring the ConfigDefaults ranges the settings
+// schema clamps to. As with every other bound here these only reject grossly
+// malformed hand-edited payloads; the consumer re-clamps.
+//
+// The GAP floor is negative on purpose (a negative gap draws the indicator
+// over the window, which is niri's behaviour) and so is the CORNER RADIUS
+// floor, whose -1 is the config layer's "fully rounded" sentinel rather than a
+// real negative radius. hasNumberInSignedRange is the EXPLICIT-FLOOR helper,
+// so it serves both directions: those two below zero, and WIDTH (floor 1) and
+// LENGTH (floor 0.05) above it. Only the bounds whose floor really is zero use
+// the zero-floored helper.
+// Aliased from the installed RuleAction.h constants, the kMinColumnWidthRatio
+// pattern, so the descriptor validators and the zones-layer context resolver
+// check the same numbers rather than two hand-mirrored copies.
+inline constexpr double kMinTabIndicatorGap = MinTabIndicatorGap;
+inline constexpr double kMaxTabIndicatorGap = MaxTabIndicatorGap;
+inline constexpr double kMinTabIndicatorWidth = MinTabIndicatorWidth;
+inline constexpr double kMaxTabIndicatorWidth = MaxTabIndicatorWidth;
+inline constexpr double kTabIndicatorCornerRadiusPill = TabIndicatorCornerRadiusPill;
+inline constexpr double kMaxTabIndicatorCornerRadius = MaxTabIndicatorCornerRadius;
+inline constexpr double kMinTabIndicatorLengthRatio = MinTabIndicatorLengthRatio;
+inline constexpr double kMaxTabIndicatorLengthRatio = MaxTabIndicatorLengthRatio;
+// LENGTH is stored as a fraction and edited as a percent, so it carries the
+// derived display pair the split ratio and column width do rather than
+// open-coding the * 100.0 in the descriptor.
+inline constexpr double kMinTabIndicatorLengthPercent = kMinTabIndicatorLengthRatio * 100.0;
+inline constexpr double kMaxTabIndicatorLengthPercent = kMaxTabIndicatorLengthRatio * 100.0;
+
+// Drop indicator. Every floor here really is zero — a zero border width is a
+// fill with no edge and a zero radius is a square corner, neither a sentinel —
+// so these take the zero-floored helper rather than the explicit-floor one the
+// tab indicator's signed bounds need.
+inline constexpr double kMinDropIndicatorOpacity = MinDropIndicatorOpacity;
+inline constexpr double kMaxDropIndicatorOpacity = MaxDropIndicatorOpacity;
+// OPACITY is stored as a fraction and edited as a percent, like every other
+// opacity action; the display pair derives from the wire pair.
+inline constexpr double kMinDropIndicatorOpacityPercent = kMinDropIndicatorOpacity * 100.0;
+inline constexpr double kMaxDropIndicatorOpacityPercent = kMaxDropIndicatorOpacity * 100.0;
+inline constexpr double kMinDropIndicatorBorderWidth = MinDropIndicatorBorderWidth;
+inline constexpr double kMaxDropIndicatorBorderWidth = MaxDropIndicatorBorderWidth;
+inline constexpr double kMinDropIndicatorBorderRadius = MinDropIndicatorBorderRadius;
+inline constexpr double kMaxDropIndicatorBorderRadius = MaxDropIndicatorBorderRadius;
 
 /// Helper to keep the registerBuiltins body legible — every built-in shares
 /// the same constant slot pattern (no slot-from-params resolution).
@@ -142,11 +221,19 @@ inline ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)
 inline const QStringList& engineModeOptions()
 {
     // NOTE: this is the engine-mode ACTION vocabulary (SetEngineMode param) and
-    // is DELIBERATELY distinct from the Mode MATCH-field vocabulary in
-    // MatchTypes.h, which uses "snapping" / "tiling" (no "autotile"). The action
-    // names the engine ("autotile"); the match field names the placement mode a
-    // window is in ("tiling"). Do not unify them — a Mode match rule authored
-    // with "autotile" would silently never match.
+    // is DELIBERATELY distinct from the Mode MATCH-field vocabulary, which is
+    // `PhosphorRules::ModeToken` in MatchTypes.h and has no "autotile" — its
+    // middle value is ModeToken::Tiling. The action names the ENGINE; the match
+    // field names the placement mode a window is IN. Do not unify them, and do
+    // not build this list out of the ModeToken constants either: the two
+    // vocabularies agree on two of three spellings by coincidence, and sharing
+    // the constants would make a rename of one silently move the other. A Mode
+    // match rule authored with "autotile" silently never matches, which is the
+    // trap the separation exists to prevent.
+    //
+    // The literals below are therefore the CANONICAL definition of the action
+    // vocabulary — this function is its single source of truth, so spelling
+    // them here is the definition, not a duplicate.
     static const QStringList s_options{
         QStringLiteral("snapping"),
         QStringLiteral("autotile"),

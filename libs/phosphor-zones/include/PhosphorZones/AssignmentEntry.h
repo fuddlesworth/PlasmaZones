@@ -9,6 +9,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QUuid>
 #include <QVariantMap>
 #include <QtGlobal>
 
@@ -18,6 +19,15 @@ namespace PhosphorZones {
 
 /**
  * @brief Key for layout assignment (screen + desktop + activity)
+ *
+ * RETAINED PUBLIC API with no in-tree consumer. The daemon now stores
+ * assignments as context RULES (ContextRuleBridge), and the v3 group format
+ * @c fromGroupName parses is drained by configmigration_v4finalize's own
+ * parser — so nothing in this repo constructs one. It stays exported because
+ * this is an installed LGPL library header whose whole point is third-party
+ * linkage: the (screen, desktop, activity) tuple is still the assignment
+ * identity, and removing an exported type is an ABI break for consumers we do
+ * not control. Deliberately kept, not overlooked.
  */
 struct LayoutAssignmentKey
 {
@@ -52,17 +62,19 @@ struct LayoutAssignmentKey
         if (remainder.isEmpty())
             return result;
 
-        int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+        constexpr QLatin1String kActivityTag(":Activity:");
+        constexpr QLatin1String kDesktopTag(":Desktop:");
+        int actIdx = remainder.indexOf(kActivityTag);
         if (actIdx >= 0) {
-            const QString activity = remainder.mid(actIdx + 10);
+            const QString activity = remainder.mid(actIdx + kActivityTag.size());
             if (!activity.isEmpty())
                 result.activity = activity;
             remainder = remainder.left(actIdx);
         }
-        int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+        int deskIdx = remainder.indexOf(kDesktopTag);
         if (deskIdx >= 0) {
             bool ok = false;
-            int desktop = remainder.mid(deskIdx + 9).toInt(&ok);
+            int desktop = remainder.mid(deskIdx + kDesktopTag.size()).toInt(&ok);
             if (ok && desktop > 0)
                 result.virtualDesktop = desktop;
             remainder = remainder.left(deskIdx);
@@ -80,12 +92,111 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
     return seed;
 }
 
+/// Reserved value of @ref AssignmentEntry::scrollingTemplateLayout meaning
+/// "this context explicitly uses NO scrolling template", as opposed to an
+/// empty field, which means "not chosen here" and inherits the configured
+/// default template. See that field for why the third state exists.
+///
+/// A deliberately non-UUID word. Every consumer that RESOLVES the field to a
+/// template parses it with QUuid::fromString, so a resolver that has not been
+/// taught about the token degrades to a null UUID, which is the no-template
+/// answer anyway. That safety argument covers behaviour and NOT presentation:
+/// a reader that displays the field without parsing shows the word itself, so
+/// any new display surface has to translate it (see the ones that already do,
+/// below).
+///
+/// Only two places may TRANSLATE it, both in LayoutRegistry: the resolver
+/// (scrollingTemplateForContext), because it is the one that would otherwise
+/// substitute the default, and the write choke point
+/// (assignScrollingTemplate), because its UUID normalization would flatten
+/// the token back to empty on the way in. Everywhere else passes it through.
+///
+/// The pass-through sites are not few, so treat this as the list to check
+/// when the spelling changes rather than as a claim that nothing else knows
+/// it: the D-Bus setter skips its UUID validation for it (a refusal, not a
+/// rewrite), the purge writes it when a Scrolling context's template is
+/// deleted, assignScrollingTemplate writes it for an id that does not resolve,
+/// scrollingTemplateExplicitlyNone and scrollingDisplayIdForContext
+/// test it, the unified layout list builds the picker's None row around it
+/// and sorts on it, the daemon's UnifiedLayoutController carries it through
+/// its apply and current-selection answers, the picker's apply path compares
+/// against it, the daemon's scrolling signal path and the rules label
+/// renderer each translate it for display, and the QML files listed on
+/// @ref NoSnappingLayout hardcode the literal against this declaration —
+/// the three sentinels share one spelling, so they share one QML risk list.
+///
+/// Only that last group is at RISK from a respelling. Every C++ site above
+/// reaches the token through this constant, so they follow a change here for
+/// free; they are listed because the doc is a map of who reasons about the
+/// third state, not only of who would break.
+inline constexpr QLatin1String NoScrollingTemplate{"none"};
+
+/// Reserved value of @ref AssignmentEntry::snappingLayout meaning "this
+/// context explicitly uses NO snapping layout", as opposed to an empty field,
+/// which means "not chosen here" and falls back to the registry-wide default
+/// layout. The same third state @ref NoScrollingTemplate carved out for
+/// templates, for the same reason: with only empty and a UUID, a context
+/// could never opt out of the default layout every cascade miss resolves to.
+///
+/// The same deliberately non-UUID word, with the same safety argument: every
+/// consumer that RESOLVES the field parses it with QUuid::fromString, so an
+/// untaught resolver degrades it to a null id — the no-layout answer anyway.
+/// Only two places TRANSLATE it: the resolver (LayoutRegistry::layoutForScreen,
+/// which short-circuits to nullptr BEFORE its defaultLayout() fallback) and
+/// the classification choke point (@ref fromLayoutId below, whose non-UUID
+/// arm passes the word through untouched — deliberate, and load-bearing:
+/// normalizing it would flatten "explicitly none" back to "inherit").
+/// Pass-through sites to check on a respelling: the D-Bus setAssignmentEntry
+/// validator and canonicalizer skip it, the purge writes it when a Snapping
+/// context's layout is deleted, the unified layout list builds the picker's
+/// None row around the word and sorts on it, UnifiedLayoutController's apply
+/// and display-id paths carry it, and the rules label/pill renderers translate
+/// it for display.
+///
+/// The QML sites are the ones actually AT RISK from a respelling, because they
+/// spell the literal rather than reaching this constant. All of them, for all
+/// three sentinels:
+///   - LayoutPickerContent          (the overlay picker's None card)
+///   - MonitorStatePage             (per-screen selectors and staging)
+///   - MonitorModePreviews          (the per-mode preview captions)
+///   - ActionParamEditors           (the rule action's own None row)
+///   - ActionListView               (that action's read-only pill)
+///   - LayoutComboBox               (the shared selector's None wording)
+///   - LayoutContextMenu            (Clear Default — these WRITE the word)
+///   - ProfileRow                   (the profile-diff cell)
+///   - TilingAlgorithmPage          (the cleared-default guard and caption)
+///   - TilingSimplePage             (the same guard on the simple page)
+///   - AlgorithmPreviewCard         (the cleared-default combo caption)
+/// Keep this list current: it is the only safety net for those sites, and the
+/// two LayoutContextMenu occurrences are the highest-stakes of them because
+/// they author the stored value rather than merely reading it.
+inline constexpr QLatin1String NoSnappingLayout{"none"};
+
+/// Reserved value of @ref AssignmentEntry::tilingAlgorithm meaning "this
+/// context explicitly uses NO tiling algorithm": the context stays in
+/// Autotile mode but nothing tiles there — windows float. An empty field
+/// still means "not chosen here", which inherits the configured default
+/// algorithm. The wire id for the state is @c "autotile:none"
+/// (makeAutotileId over this word), so it rides every existing string path.
+///
+/// Unlike the two UUID fields there is no parse-degrade safety net — bare
+/// algorithm ids are words already — so the consumers that resolve an
+/// algorithm gate on the token explicitly: the daemon's updateEngineScreens
+/// skips the screen (the tile engine itself never sees the word; its
+/// setAlgorithm coerces unknown ids to the registry default, which is the
+/// exact opposite of what the opt-out means). The D-Bus setAssignmentEntry
+/// validator exempts it from the registry existence check, and the same
+/// display surfaces listed on @ref NoSnappingLayout translate it.
+inline constexpr QLatin1String NoTilingAlgorithm{"none"};
+
 /**
- * @brief Explicit per-context assignment entry storing both mode fields
+ * @brief Explicit per-context assignment entry storing every mode's payload
  *
- * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
- * the other field is preserved, eliminating the need for shadow assignments.
+ * Each screen/desktop/activity context stores an explicit Mode plus all three
+ * per-mode payloads: SnappingLayout (UUID), PhosphorTiles::TilingAlgorithm,
+ * and ScrollingTemplateLayout (UUID). Toggling between modes only flips the
+ * mode field — the other fields are preserved, eliminating the need for
+ * shadow assignments.
  */
 struct AssignmentEntry
 {
@@ -93,31 +204,68 @@ struct AssignmentEntry
     /// STRINGS produced by `modeToWireString` ("snapping", "autotile",
     /// "scrolling") — `ContextRuleBridge::makeDisableRule` writes them
     /// and `disableRuleMode` reads them back. A consumer's legacy v3→v4
-    /// config migration does still read the int side via
-    /// `Display.<screen>:Mode`, so NEVER renumber existing values — a
+    /// config migration does still read the int side from the assignments
+    /// group (`Assignment:<screen>…`, key `Mode` — NOT the `Display.*`
+    /// per-mode disable-list group), so NEVER renumber existing values — a
     /// renumber would silently swap engines for v3 disable lists that
     /// haven't been migrated yet. Append new modes at the end.
     enum Mode {
         Snapping = 0,
         Autotile = 1,
-        /// Reserved engine slot for a future scrolling-workspace engine.
-        /// The settings UI exposes the mode and persists per-mode disable
-        /// lists / config groups, but the router currently has no engine
-        /// to hand windows to — see `ScreenModeRouter::engineFor` for the
-        /// passthrough fallback (returns nullptr for Scrolling) that lets
-        /// KWin place the window naturally rather than blocking on a
-        /// missing engine. A real engine implementer adds an adapter to
-        /// the router and removes the passthrough; no daemon-internal
-        /// switch needs to be edited because the (Mode, Family) settings
-        /// table here drives all downstream config routing.
+        /// The niri-style scrolling engine (PhosphorScrollEngine): windows
+        /// form columns on an endless strip per context (horizontal or
+        /// vertical, resolved per screen).
+        /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
+        /// live ScrollEngine; the (Mode, Family) settings table here still
+        /// drives all downstream config routing. Scrolling consumes no manual
+        /// layout at all: its sizing comes from a native ScrollingTemplate
+        /// (scrollingTemplateLayout below), its activeLayoutId() stays the
+        /// bare "scrolling:" sentinel, and the mode lookup is the
+        /// discriminator.
         Scrolling = 2
     };
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
     QString tilingAlgorithm; // e.g. "dwindle", "wide", "tall"
+    /// Id of the native scrolling template (ScrollingTemplate) a Scrolling
+    /// context uses for its seed blueprint, default column width and preset
+    /// vocabularies. Its own UUID namespace, disjoint from manual layout ids.
+    /// Deliberately its own field, never a reuse of
+    /// snappingLayout: the lossless mode-toggle contract preserves the
+    /// snapping choice across mode flips, and the "scrolling:" sentinel in
+    /// activeLayoutId() stays payload-free (rules match on the bare
+    /// sentinel). Three states, not two. A UUID names a template. EMPTY
+    /// means "not chosen here", which INHERITS the configured default
+    /// template. @ref NoScrollingTemplate means "explicitly none", which
+    /// takes no template at all and leaves the engine on its built-in
+    /// vocabularies even while a default exists.
+    ///
+    /// The third state is why the token exists: with only empty and a UUID,
+    /// a screen could never opt out of a default someone else had set. It is
+    /// a reserved word rather than a flag so it rides every existing string
+    /// path (assignment JSON, the D-Bus slot setter, the rule action) with no
+    /// schema change, and it is ADDITIVE: no config this project writes can
+    /// contain it, so nothing needs migrating. (rules.json is hand-editable
+    /// and the SetScrollingTemplate descriptor accepts any non-empty string,
+    /// so a hand-written "none" was loadable before and meant the opposite —
+    /// not a case for migration code, just not a claim worth overstating.)
+    QString scrollingTemplateLayout;
 
     QString activeLayoutId() const
     {
+        // Scrolling has no layout entity, so the id is the bare sentinel
+        // "scrolling:". This is LOAD-BEARING: the assignment cascade's
+        // visitors reject entries with an empty activeLayoutId(), and a
+        // fresh mode-only Scrolling entry (empty preserved snappingLayout)
+        // would otherwise silently fail to assign. The gap / lock /
+        // overlay / tiling-param / scrolling-param resolvers stamp this
+        // sentinel into query.activeLayout, so `ActiveLayout Equals
+        // "scrolling:"` matches THERE (the assignment and context-default
+        // resolvers deliberately leave activeLayout unstamped — recursion).
+        // There is no per-layout identity to distinguish beyond the mode.
+        if (mode == Scrolling) {
+            return QString(PhosphorLayout::LayoutId::ScrollingId);
+        }
         if (mode == Autotile) {
             // Autotile mode always produces a non-empty id so the cascade
             // visitors in LayoutRegistry accept it (they reject on
@@ -132,13 +280,24 @@ struct AssignmentEntry
         }
         return snappingLayout;
     }
+    /// True when the entry carries a layout/algorithm PAYLOAD — including
+    /// the reserved opt-out word, which is a stored choice, not an absence
+    /// (an entry whose only content is "none" answers true here).
+    /// This is NOT the cascade's visibility predicate — that is
+    /// activeLayoutId() non-empty, which a payload-less Scrolling entry
+    /// satisfies through the "scrolling:" sentinel while isValid() stays
+    /// false. scrollingTemplateLayout is deliberately EXCLUDED: a template
+    /// never feeds activeLayoutId(), so counting it would make an entry
+    /// "valid" that still resolves to nothing on a Snapping/Autotile
+    /// context. Kept for tests/tooling; no production caller branches on it.
     bool isValid() const
     {
         return !snappingLayout.isEmpty() || !tilingAlgorithm.isEmpty();
     }
     bool operator==(const AssignmentEntry& other) const
     {
-        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm;
+        return mode == other.mode && snappingLayout == other.snappingLayout && tilingAlgorithm == other.tilingAlgorithm
+            && scrollingTemplateLayout == other.scrollingTemplateLayout;
     }
 
     /** @brief Update an existing AssignmentEntry from a layoutId, preserving the "other" field.
@@ -152,24 +311,39 @@ struct AssignmentEntry
         if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
             entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
+        } else if (PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+            // The "scrolling:" sentinel carries no layout entity — flip the
+            // mode and preserve all three layout fields (the lossless-toggle
+            // contract), so a get→set round-trip cannot degrade a Scrolling
+            // assignment into Snapping-pointing-at-a-bogus-id.
+            entry.mode = Scrolling;
         } else {
             entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
+            // Normalize a UUID-shaped id to its canonical braced spelling at
+            // this ONE classification choke point, so every caller (the D-Bus
+            // setAssignmentEntry and the four setAll*Assignments verbs, the
+            // batch rebuilds, the controllers) stores one spelling. A braceless
+            // or upper-case bus-supplied uuid stored verbatim defeats the
+            // exact-string compare that purgeLayoutIdFromAssignments does on
+            // layout delete, and the byte-wise action compare in
+            // upsertAssignmentRule's no-op guard. Anything that is not a UUID
+            // passes through untouched — the snapping slot is not required to
+            // hold one, and @ref NoSnappingLayout DEPENDS on this arm staying
+            // verbatim: parsing the reserved word yields a null QUuid, and
+            // storing that null's toString would silently turn "explicitly
+            // none" into a dangling id.
+            const QUuid parsed = QUuid::fromString(layoutId);
+            entry.snappingLayout = parsed.isNull() ? layoutId : parsed.toString();
         }
         return entry;
     }
-    /** @brief Create a fresh AssignmentEntry from a layoutId string */
+    /** @brief Create a fresh AssignmentEntry from a layoutId string.
+     *  Exactly the two-arg overload applied to a default-constructed entry —
+     *  one classification cascade, so a new mode cannot be added to one
+     *  overload and forgotten in the other. */
     static AssignmentEntry fromLayoutId(const QString& layoutId)
     {
-        AssignmentEntry entry;
-        if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            entry.mode = Autotile;
-            entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        } else {
-            entry.mode = Snapping;
-            entry.snappingLayout = layoutId;
-        }
-        return entry;
+        return fromLayoutId(layoutId, AssignmentEntry{});
     }
 };
 
@@ -288,6 +462,137 @@ struct ContextTilingParams
 };
 
 /**
+ * @brief Per-context scrolling parameter overrides resolved from context rules.
+ *
+ * Each field is set only when a matching context rule fills the corresponding
+ * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+ * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
+ * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
+ * behaviour toggles, the thirteen SetTabIndicator* slots and the six
+ * SetDropIndicator* slots, each documented in its own block below); an unset
+ * field means "use the config value".
+ * Consumed daemon-side: the values are layered onto the scrolling engine's
+ * per-screen parameters (config stays the base, the rule wins where present),
+ * the same way @ref ContextTilingParams is layered onto the autotile override
+ * map. Resolved by @c LayoutRegistry::resolveContextScrollingParams.
+ */
+struct ContextScrollingParams
+{
+    /// Width a newly-opened column takes, as a fraction of the work area
+    /// (0.05-1.0). The wire value is the fraction; the editor shows a percent.
+    std::optional<double> defaultColumnWidth;
+    /// When the viewport re-centres on the focused column (0 = never,
+    /// 1 = always, 2 = on overflow); the resolver maps the wire token to this
+    /// int so the daemon stores the same value the config store uses.
+    std::optional<int> centerFocusedColumn;
+    /// How a newly-opened column lays its windows out (0 = normal, 1 = tabbed).
+    std::optional<int> defaultColumnDisplay;
+    /// Where a fresh-opened window's column enters the strip
+    /// (ScrollInsertPosition ints, right-of-active 0 … into-active-column 4).
+    std::optional<int> insertPosition;
+    /// Height a newly-opened window takes, as a fraction of the work-area
+    /// height (0.05-1.0); the engine commits it as fixed pixels at relayout.
+    std::optional<double> defaultWindowHeight;
+
+    /// The scrolling BEHAVIOUR toggles, filled by the SetScroll* actions of
+    /// the same names. Most are layered onto the engine's per-screen override
+    /// map exactly like the sizing fields above, where each `effective*` reader
+    /// falls back to the global config value. Two are not purely engine-side:
+    /// `cropStraddlers` is layered on the engine map AND pushed to the KWin
+    /// effect, whose paint clip and direct-scanout gate need it, and
+    /// `focusFollowsMouse` is effect-only (see its own note below).
+    std::optional<bool> alwaysCenterSingleColumn;
+    std::optional<bool> respectMinimumSize;
+    std::optional<bool> cropStraddlers;
+    std::optional<bool> focusNewWindows;
+    std::optional<bool> smartGaps;
+    /// EFFECT-consumed, unlike its neighbours: the daemon collects the
+    /// resolved per-screen verdict into a set and pushes it to the KWin
+    /// effect, which owns focus-follows-mouse entirely.
+    std::optional<bool> focusFollowsMouse;
+    /// StickyWindowHandling ints (treatAsNormal 0 / restoreOnly 1 /
+    /// ignoreAll 2); the resolver maps the wire token to the int the config
+    /// store uses, matching centerFocusedColumn's treatment.
+    std::optional<int> stickyWindowHandling;
+    /// Which way the strip runs, in the Scrolling.StripAxis config INTENT
+    /// space (auto 0 / horizontal 1 / vertical 2 — auto resolves from the
+    /// work-area shape at relayout). Layered onto the engine's per-screen
+    /// override map over the settings-channel seed, so the collapse is
+    /// rule > per-screen setting > global. Not a behaviour toggle: it is a
+    /// geometry intent, so it sits beside the sizing fields rather than in
+    /// hasBehaviourOverrides.
+    std::optional<int> stripAxis;
+
+    /// The tab indicator's overrides, niri's `tab-indicator` layout block.
+    /// Split the way IScrollSettings splits the family: the GEOMETRY fields
+    /// are layered onto the scrolling engine's per-screen override map, while
+    /// the PAINT fields never reach that library and are applied to the
+    /// overlay daemon-side. Each is independently optional so a context rule
+    /// that sets one property leaves the other twelve alone.
+    std::optional<bool> tabIndicatorEnabled;
+    std::optional<bool> tabIndicatorHideWhenSingleTab;
+    std::optional<bool> tabIndicatorPlaceWithinColumn;
+    std::optional<int> tabIndicatorGap; ///< px; NEGATIVE draws the indicator over the window
+    std::optional<int> tabIndicatorWidth; ///< px thickness
+    std::optional<double> tabIndicatorLength; ///< fraction of the column extent
+    std::optional<int> tabIndicatorPosition; ///< TabIndicatorPosition ints, left 0 … bottom 3
+    std::optional<int> tabIndicatorStyle; ///< 0 = title chips, 1 = segment bar
+    std::optional<int> tabIndicatorGapsBetweenTabs; ///< px
+    std::optional<int> tabIndicatorCornerRadius; ///< px; -1 is the "fully rounded" sentinel
+    std::optional<QString> tabIndicatorActiveColor;
+    std::optional<QString> tabIndicatorInactiveColor;
+    std::optional<QString> tabIndicatorUrgentColor;
+
+    /// The drop indicator's overrides. ALL PAINT — unlike the tab indicator
+    /// there is no geometry half, because the indicator's rect comes from the
+    /// engine's own layout math and cannot be positioned independently of
+    /// where the drop lands. So none of these reaches the scrolling engine's
+    /// per-screen override map; they go straight to the overlay.
+    std::optional<bool> dropIndicatorEnabled;
+    std::optional<QString> dropIndicatorColor;
+    std::optional<QString> dropIndicatorBorderColor;
+    std::optional<double> dropIndicatorOpacity; ///< fill only; the border is always opaque
+    std::optional<int> dropIndicatorBorderWidth; ///< px; 0 is a fill with no edge
+    std::optional<int> dropIndicatorBorderRadius; ///< px; 0 is square, no sentinel
+
+    // The three block-level aggregates below exist for isEmpty() — their
+    // ONLY caller. Earlier docs claimed the daemon consulted them to skip
+    // whole override blocks; it never did (it tests each optional it
+    // consumes directly), so do not add such a gate on the strength of a
+    // predicate existing here.
+
+    /// True when at least one drop-indicator slot resolved.
+    bool hasDropIndicatorOverrides() const
+    {
+        return dropIndicatorEnabled || dropIndicatorColor || dropIndicatorBorderColor || dropIndicatorOpacity
+            || dropIndicatorBorderWidth || dropIndicatorBorderRadius;
+    }
+
+    /// True when at least one of the thirteen tab-indicator slots resolved.
+    bool hasTabIndicatorOverrides() const
+    {
+        return tabIndicatorEnabled || tabIndicatorHideWhenSingleTab || tabIndicatorPlaceWithinColumn || tabIndicatorGap
+            || tabIndicatorWidth || tabIndicatorLength || tabIndicatorPosition || tabIndicatorStyle
+            || tabIndicatorGapsBetweenTabs || tabIndicatorCornerRadius || tabIndicatorActiveColor
+            || tabIndicatorInactiveColor || tabIndicatorUrgentColor;
+    }
+
+    /// True when at least one of the seven behaviour toggles resolved.
+    bool hasBehaviourOverrides() const
+    {
+        return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
+            || stickyWindowHandling || focusFollowsMouse;
+    }
+
+    bool isEmpty() const
+    {
+        return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
+            && !defaultWindowHeight && !stripAxis && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides()
+            && !hasBehaviourOverrides();
+    }
+};
+
+/**
  * @brief Canonical wire-string for an @ref AssignmentEntry::Mode.
  *
  * The wire vocabulary lives next to the enum so every persister/consumer
@@ -323,7 +628,7 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     // (`engineModeOptions().contains(...)`), so a malformed disable rule
     // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
     // `hasNonEmptyString` (open-vocabulary by design — see its descriptor
-    // validator in `libs/phosphor-rules/src/ruleaction.cpp`), so a
+    // validator in `libs/phosphor-rules/src/ruleaction_builtins_engine.cpp`), so a
     // malformed assignment rule survives load but is silently coerced
     // back to Snapping at consumption via
     // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The

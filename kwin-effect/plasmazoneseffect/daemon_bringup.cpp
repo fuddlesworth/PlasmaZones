@@ -3,7 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
@@ -65,6 +65,7 @@ void PlasmaZonesEffect::slotDaemonReady()
         return;
     }
     m_daemonGate.bridgeRegistrationInFlight = true;
+    const quint64 registrationGeneration = ++m_daemonGate.bridgeRegistrationGeneration;
 
     qCInfo(lcEffect) << "daemon ready: registering bridge before re-pushing state";
 
@@ -83,49 +84,58 @@ void PlasmaZonesEffect::slotDaemonReady()
             {QStringLiteral("kwin"), QString::number(PhosphorProtocol::Service::ApiVersion),
              QStringList{QStringLiteral("borderless"), QStringLiteral("animation")}}),
         this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        // Clear the in-flight flag on EVERY return path (success, error,
-        // rejection, version mismatch) so a subsequent slotDaemonReady
-        // can retry. m_daemonGate.serviceRegistered remains the long-lived
-        // success gate; m_daemonGate.bridgeRegistrationInFlight only covers the
-        // narrow window between the call leaving and its reply arriving.
-        m_daemonGate.bridgeRegistrationInFlight = false;
-        QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
-                                << "— effect remains idle until the daemon signals ready again.";
-            return;
-        }
-        PhosphorProtocol::BridgeRegistrationResult result = reply.value();
-        if (const QString err = result.validationError(); !err.isEmpty()) {
-            qCWarning(lcEffect) << "registerBridge reply rejected:" << err
-                                << "— effect remains idle until the daemon signals ready again.";
-            return;
-        }
-        if (result.sessionId == QLatin1String("REJECTED")) {
-            // REJECTED covers any invalid registration (the daemon also
-            // rejects an empty compositorName); this caller always sends a
-            // non-empty name, so for it the only reachable cause is a
-            // protocol-version mismatch — diagnose that.
-            qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
-                                 << result.apiVersion << "but this effect speaks"
-                                 << PhosphorProtocol::Service::ApiVersion
-                                 << "— a version mismatch; update the effect to match the daemon.";
-            return;
-        }
-        int daemonVersion = result.apiVersion.toInt();
-        if (daemonVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
-            qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
-                                 << PhosphorProtocol::Service::MinPeerApiVersion
-                                 << "— update the daemon to match the effect.";
-            return;
-        }
-        qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
-                         << "session=" << result.sessionId;
-        m_daemonGate.serviceRegistered = true;
-        continueDaemonReadySetup();
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, registrationGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                // Superseded: the daemon this call went to is gone (serviceUnregistered
+                // bumped the generation) and a newer registration may already own the
+                // gate. Touching anything here would clear a live registration's gate
+                // and let a third one start concurrently.
+                if (m_daemonGate.bridgeRegistrationGeneration != registrationGeneration) {
+                    qCInfo(lcEffect) << "registerBridge reply from a superseded daemon cycle — ignoring";
+                    return;
+                }
+                // Clear the in-flight flag on EVERY return path (success, error,
+                // rejection, version mismatch) so a subsequent slotDaemonReady
+                // can retry. m_daemonGate.serviceRegistered remains the long-lived
+                // success gate; m_daemonGate.bridgeRegistrationInFlight only covers the
+                // narrow window between the call leaving and its reply arriving.
+                m_daemonGate.bridgeRegistrationInFlight = false;
+                QDBusPendingReply<PhosphorProtocol::BridgeRegistrationResult> reply = *w;
+                if (reply.isError()) {
+                    qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
+                                        << "— effect remains idle until the daemon signals ready again.";
+                    return;
+                }
+                PhosphorProtocol::BridgeRegistrationResult result = reply.value();
+                if (const QString err = result.validationError(); !err.isEmpty()) {
+                    qCWarning(lcEffect) << "registerBridge reply rejected:" << err
+                                        << "— effect remains idle until the daemon signals ready again.";
+                    return;
+                }
+                if (result.sessionId == QLatin1String("REJECTED")) {
+                    // REJECTED covers any invalid registration (the daemon also
+                    // rejects an empty compositorName); this caller always sends a
+                    // non-empty name, so for it the only reachable cause is a
+                    // protocol-version mismatch — diagnose that.
+                    qCCritical(lcEffect) << "Daemon REJECTED this effect's registration: daemon apiVersion="
+                                         << result.apiVersion << "but this effect speaks"
+                                         << PhosphorProtocol::Service::ApiVersion
+                                         << "— a version mismatch; update the effect to match the daemon.";
+                    return;
+                }
+                int daemonVersion = result.apiVersion.toInt();
+                if (daemonVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
+                    qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
+                                         << PhosphorProtocol::Service::MinPeerApiVersion
+                                         << "— update the daemon to match the effect.";
+                    return;
+                }
+                qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
+                                 << "session=" << result.sessionId;
+                m_daemonGate.serviceRegistered = true;
+                continueDaemonReadySetup();
+            });
 }
 
 void PlasmaZonesEffect::continueDaemonReadySetup()
@@ -150,6 +160,31 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             continue;
         }
         pushWindowMetadata(w);
+        // Seed the daemon's frame-geometry shadow alongside the metadata.
+        // The shadow's only other writer is the motion-driven
+        // flushPendingFrameGeometry, so after a daemon restart every
+        // un-moved window read back as empty — hollowing out the save-time
+        // refreshOpenWindowPlacements sweep (whose stated purpose is restart
+        // survival), the mode-flip presave, and handoff sourceGeometry.
+        // Deliberately NOT routed through m_pendingFrameGeometry: that path
+        // also runs the geometry-scoped rule-cache eviction, which a bulk
+        // seed must not trigger. Idempotent across repeated bringups (plain
+        // map assignment daemon-side, pruned by the alive-set sweep).
+        if (shouldHandleWindow(w)) {
+            // getWindowId, NOT getWindowInstanceId: the daemon's
+            // m_frameGeometry shadow is keyed by the same composite id the
+            // motion-driven flush uses (window_connections.cpp keys its
+            // stash with getWindowId), and a bare-UUID seed would populate
+            // a parallel key space no consumer reads.
+            const QString windowId = getWindowId(w);
+            const QRect frame = w->frameGeometry().toRect();
+            if (!windowId.isEmpty() && frame.width() > 0 && frame.height() > 0) {
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
+                    {windowId, frame.x(), frame.y(), frame.width(), frame.height()},
+                    QStringLiteral("setFrameGeometry bringup seed"));
+            }
+        }
     }
 
     // Drop the snap-assist capture's "we recently posted this handle" set —
@@ -185,6 +220,12 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // to the correct virtual screen, not the physical monitor.
     // m_lastEffectiveScreenId was set during the last slotMouseChanged() call
     // via resolveEffectiveScreenId(), so it already has the correct virtual ID.
+    // ACCEPTED STALENESS: this runs BEFORE fetchAllVirtualScreenConfigs below,
+    // so if the fresh daemon loads a subdivision config that no longer defines
+    // this virtual id, the push names a dead vs id until the first pointer
+    // motion re-resolves (and onVirtualScreensChanged clears the cache when
+    // the defs really change). The window is "screen-targeted shortcut fired
+    // before the cursor moves after a daemon restart".
     if (!m_lastEffectiveScreenId.isEmpty()) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("cursorScreenChanged"), {m_lastEffectiveScreenId},
@@ -203,6 +244,9 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         if (cursorScreenId.isEmpty()) {
             cursorScreenId = m_lastCursorOutput;
         }
+        // Refresh the dedup cache too, or the next pointer motion resolving
+        // the same id re-sends a value the daemon already holds.
+        m_lastEffectiveScreenId = cursorScreenId;
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("cursorScreenChanged"), {cursorScreenId},
                                                        QStringLiteral("cursorScreenChanged"));
@@ -227,19 +271,36 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).
-    // Use notifyWindowActivated which bypasses user exclusion lists — the daemon
-    // must always know which window is active for correct shortcut handling.
-    //
-    // This runs BEFORE the virtual-screen fetch below, so on a subdivided setup
-    // the screen id it reports is the physical one (the defs map is empty here:
-    // cleared on daemon loss, and never populated on a fresh start). That is
-    // deliberate — the daemon should not be left with no active window at all for
-    // the duration of a D-Bus round trip — and it is corrected rather than
-    // tolerated: processDaemonReadyWindowState() re-runs notifyWindowActivated for
-    // the same window once the definitions land, from the fetch-completion path.
-    KWin::EffectWindow* activeWindow = getActiveWindow();
-    if (activeWindow) {
-        notifyWindowActivated(activeWindow);
+    // Hand KWin's RAW active window to notifyWindowActivated and let ITS
+    // filter decide — that filter carries the fullscreen-on-a-scrolling-
+    // screen exemption. Pre-filtering through getActiveWindow() (plain
+    // shouldHandleWindow) rejected a genuinely fullscreen active window and
+    // fell through to the topmost OTHER window in the stacking walk, so the
+    // re-seed reported the NEIGHBOUR as active — the exact wrong-target
+    // failure the exemption exists for (the toggle pressed over a
+    // fullscreen Proton game landing on the terminal beside it), and no
+    // further windowActivated fires while the game keeps focus. The raw
+    // window still has to be genuinely active-eligible (present, on the
+    // current desktop/activity, not minimized) — those terms came from
+    // getActiveWindow()'s stage-1 predicate, not its shouldHandleWindow
+    // pre-filter, and dropping them would let a minimized or off-desktop
+    // window be reported as active. When the raw candidate is unusable,
+    // fall back to getActiveWindow()'s stacking walk so bring-up still
+    // seeds lastActiveScreenName (the walk's pre-filter only loses the
+    // fullscreen exemption, which cannot matter when the raw active window
+    // was rejected for reasons other than being fullscreen).
+    // notifyWindowActivated's bool return covers its INTERNAL rejections too
+    // (plasmashell surface, unmanageable popup): a raw candidate that passes
+    // the eligibility terms here but is rejected inside still falls back to
+    // the stacking walk, so bring-up seeds lastActiveScreenName whenever any
+    // reportable window exists.
+    KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
+    const bool rawEligible = activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized()
+        && activeWindow->isOnCurrentDesktop() && activeWindow->isOnCurrentActivity();
+    if (!rawEligible || !notifyWindowActivated(activeWindow)) {
+        if (KWin::EffectWindow* fallback = getActiveWindow(); fallback && fallback != activeWindow) {
+            notifyWindowActivated(fallback);
+        }
     }
 
     // Fetch virtual screen definitions from daemon — needed before any screen ID
@@ -271,6 +332,15 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
             // retaining them would leave isWindowFloating() returning true for
             // windows that are no longer floating.
             m_navigationHandler->clearAllFloatingState();
+            if (!reply.isValid()) {
+                // Diagnosable: the clear above is correct on its own, but with
+                // no re-seed every window the daemon still considers floating
+                // now reads as tiled to the effect until something else
+                // reports it. Its sibling getSnappedWindows warns on the same
+                // shape; this path was silent.
+                qCWarning(lcEffect) << "getFloatingWindows failed at bringup:" << reply.error().message()
+                                    << "— float state cleared with no re-seed";
+            }
             if (reply.isValid()) {
                 // Bulk re-seed via the direct-write path (no per-window rule
                 // invalidation) — the shared invalidation below drops every
@@ -296,11 +366,6 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // windows snapped before this effect / daemon started are matchable by the
     // IsSnapped / Zone rule fields without waiting for their next state change.
     m_navigationHandler->syncZonesFromDaemon();
-
-    // Repopulate the per-screen active-layout cache. The daemon owns the
-    // assignment cascade, so this is the only way the effect can answer "which
-    // layout is active on this screen" when stamping a window-rule query.
-    fetchActiveLayoutsForScreens();
 
     // One-shot Rules subscription. The daemon emits rulesChanged per
     // per-rule mutation; slotRulesChanged debounces via a 50ms timer to
@@ -359,10 +424,10 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
     // autotile screen — autotile screens handle their own focus via
     // m_pendingAutotileFocusWindowId in the onComplete callback.
     KWin::EffectWindow* activeWin = KWin::effects->activeWindow();
-    if (activeWin && !m_autotileHandler->isAutotileScreen(getWindowScreenId(activeWin))) {
-        m_autotileHandler->setPendingReactivateWindow(activeWin);
+    if (activeWin && !m_tilingHandler->isManagedScreen(getWindowScreenId(activeWin))) {
+        m_tilingHandler->setPendingReactivateWindow(activeWin);
     }
-    m_autotileHandler->onDaemonReady();
+    m_tilingHandler->onDaemonReady();
 
     // Window re-announcement is NOT done here: onDaemonReady's loadSettings
     // queries the new daemon's authoritative autotile screen set and its
@@ -399,11 +464,18 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;
+            // Both failure modes were silent. Neither is fatal — windows fall
+            // back to the async restore path — but the fallback shows as a
+            // visible flash on every window that opens during bringup, which
+            // is exactly the symptom someone would come looking for.
             if (!reply.isValid()) {
+                qCWarning(lcEffect) << "getPendingRestoreGeometries failed at bringup:" << reply.error().message()
+                                    << "— windows opening now fall back to the async restore";
                 return;
             }
             QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
             if (!doc.isObject()) {
+                qCWarning(lcEffect) << "getPendingRestoreGeometries returned a non-object payload — ignoring";
                 return;
             }
             QJsonObject obj = doc.object();
@@ -547,7 +619,8 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 QRectF geoBefore = safeWindow->frameGeometry();
 
                 m_snapHandler->callResolveWindowRestore(
-                    safeWindow.data(), [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
+                    safeWindow.data(),
+                    [pending, movedCount, safeWindow, geoBefore, savedStackingOrder](bool) {
                         // Detect whether moveResize actually fired by comparing geometry.
                         if (safeWindow && !safeWindow->isDeleted() && safeWindow->frameGeometry() != geoBefore) {
                             ++(*movedCount);
@@ -576,7 +649,15 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                                 }
                             }
                         }
-                    });
+                    },
+                    /*releaseSuppressionOnMiss=*/true,
+                    // isOpenPath=false: this sweep re-resolves windows that
+                    // are ALREADY open and on screen, exactly like the
+                    // pending-restores sweep. It restores zone geometry and
+                    // stacking; it must not drive the cross-screen tile
+                    // reclaim and re-home the monitors of every window the
+                    // user is looking at because the daemon restarted.
+                    /*isOpenPath=*/false);
             }
         });
     }
@@ -587,30 +668,44 @@ bool PlasmaZonesEffect::anyLocalTriggerHeld() const
     return TriggerParser::anyTriggerHeld(m_parsedTriggers, m_currentModifiers, m_currentMouseButtons);
 }
 
-bool PlasmaZonesEffect::detectActivationAndGrab()
+bool PlasmaZonesEffect::shouldForwardDragTicks()
 {
     if (m_dragActivation.detected) {
         return true;
     }
-    // Autotile drag-insert toggle mode also forces activation so the daemon
-    // receives dragMoved ticks for rising-edge detection even when the drag
-    // started on a non-autotile screen and the user hasn't held any snap
-    // trigger. Without this, the cross-to-autotile policy flip never fires
-    // because the gate below (drag lambda, slotMouseChanged) swallows ticks.
-    // Zone-span toggle mode (#563) forces activation for the same reason: the
-    // daemon's span rising-edge latch needs the release→press ticks even when
-    // no key is currently held (e.g. activation itself is toggled on and the
-    // user tapped, then released, the activation trigger).
-    if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
-        || m_cachedZoneSpanToggleMode) {
+    // FOUR forcing families beyond a held snap-activation trigger:
+    // (1) toggle-activation, (2) the two engines' drag-insert TOGGLE modes,
+    // (3) zone-span toggle mode — each needs the daemon to see release→press
+    // ticks for its rising-edge latch even when no key is currently held —
+    // and (4) a physically HELD drag-insert trigger (either engine's list).
+    // Without (4), a drag starting on a snap screen with only the insert
+    // trigger held (the shipped default: Alt, hold mode) forwarded nothing,
+    // so the daemon never saw the crossing onto an engine screen and
+    // hold-mode drag-insert was unreachable from off-engine starts.
+    //
+    // FORWARDING ONLY. This deliberately does NOT take the keyboard grab,
+    // which it used to. The grab exists so Escape reaches cancelSnap instead
+    // of KWin's MoveResizeFilter during an ACTIVATED SNAP drag, and the
+    // snap-drag path takes it unconditionally at dragStarted. Taking it here
+    // meant family (4) latched a grab on a plain snap-screen drag whenever
+    // the drag-insert trigger was held — the shipped default is Alt — so
+    // holding Alt while dragging swallowed every key and rerouted Escape,
+    // with no snapping activation in effect to justify it. Engine-owned
+    // drags never take the grab at all (dragStarted returns on its engine
+    // fast path before the grab), so nothing downstream of family (4)
+    // wanted one.
+    const bool forward = anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle
+        || m_cachedScrollingDragInsertToggle || m_cachedZoneSpanToggleMode
+        || TriggerParser::anyTriggerHeld(m_parsedAutotileDragInsertTriggers, m_currentModifiers, m_currentMouseButtons)
+        || TriggerParser::anyTriggerHeld(m_parsedScrollingDragInsertTriggers, m_currentModifiers,
+                                         m_currentMouseButtons);
+    if (forward) {
+        // Latched for the rest of the drag, matching the early return at the
+        // top: a mid-drag release must not silence the tick stream the
+        // daemon's rising-edge latches are counting on.
         m_dragActivation.detected = true;
-        if (!m_keyboardGrabbed) {
-            KWin::effects->grabKeyboard(this);
-            m_keyboardGrabbed = true;
-        }
-        return true;
     }
-    return false;
+    return forward;
 }
 
 // beginDrag is called unconditionally at drag-start; there's no deferred
@@ -646,7 +741,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                           PhosphorProtocol::Service::Interface::WindowTracking,
                                           QStringLiteral("windowOutputMoveExpected"), this,
-                                          SLOT(slotWindowOutputMoveExpected(QString, QString)));
+                                          SLOT(slotWindowOutputMoveExpected(QString, QString, QString)));
 
     // Float toggle is entirely daemon-local: the daemon reads the active
     // window from its own shadow, calls toggleFloatForWindow internally, and
@@ -732,172 +827,24 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("snapAssistReady"), m_snapHandler.get(),
                                           SLOT(slotSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
-    // LayoutRegistry: a screen's resolved active layout moved. Subscribed here
-    // (once, from the constructor) rather than in the daemon-ready setup, so it
-    // needs no re-subscribe gate — the bringup pairs it with a bulk
-    // fetchActiveLayoutsForScreens, and the broadcasts carry deltas from there.
-    // The return value is checked because a failure here is otherwise invisible
-    // and half-silent: the bulk fetch would still seed correct values at bringup,
-    // so the feature looks alive, while every later delta is lost. The bulk fetch
-    // recovers the initial VALUE, never the subscription.
-    if (!QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                               PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                               QStringLiteral("activeLayoutForScreenChanged"), this,
-                                               SLOT(slotActiveLayoutForScreenChanged(QString, QString)))) {
-        qCWarning(lcEffect) << "Failed to subscribe to activeLayoutForScreenChanged — ActiveLayout rules will not "
-                               "track layout switches this session";
-    }
+    // Overlay: the daemon's idle-grace trim just emptied its thumbnail
+    // stores. The capture side's recently-posted dedup set must be dropped in
+    // the same breath, or it keeps skipping re-capture for handles the daemon
+    // no longer holds and snap-assist strands on icons until a daemon restart
+    // (the skip path re-promotes its handles, so the FIFO never rolls them
+    // out on its own).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::Overlay,
+                                          QStringLiteral("snapAssistThumbnailCacheTrimmed"), m_snapAssistHandler.get(),
+                                          SLOT(slotSnapAssistThumbnailCacheTrimmed()));
 
-    qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
-}
-
-void PlasmaZonesEffect::fetchActiveLayoutsForScreens()
-{
-    if (!isDaemonReady("fetch active layouts")) {
-        return;
-    }
-    auto* watcher = new QDBusPendingCallWatcher(
-        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                   QStringLiteral("getActiveLayoutsForScreens")),
-        this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        const QDBusPendingReply<QVariantMap> reply = *w;
-        if (reply.isValid()) {
-            // Authoritative refresh: a VALID reply replaces the map wholesale, so
-            // a screen the daemon no longer reports drops out.
-            //
-            // Only on success. Wiping before checking validity meant a failed
-            // reply emptied the map and then swept every window's decoration to
-            // the no-ActiveLayout appearance, with the retry sweeping it back a
-            // second later — turning a silently wrong value into a visible
-            // flip-flop of border colour, tint and hidden title bar. Holding the
-            // previous ids until the retry resolves is strictly better, and the
-            // stale-across-daemon-restart case the old comment worried about is
-            // already covered by the clear in the service-unregistered handler,
-            // which fires independently of this reply.
-            //
-            // Built into a local first so the reply can be compared with what is
-            // already cached, and an unchanged map cannot make any ActiveLayout
-            // leaf resolve differently. Skipping the invalidate + sweep on that
-            // case spares a full per-window decoration re-fold. The reachable
-            // case is NOT "a restart with unchanged assignments" (daemon loss
-            // clears the map, so a post-restart reply always differs from an
-            // empty one): it is the new daemon broadcasting
-            // activeLayoutForScreenChanged before it registers its service name,
-            // which populates the map ahead of this reply. That broadcast parks
-            // m_activeLayoutInvalidatePending, so the verdict drop this early
-            // return skips still happens on the first post-registration sweep.
-            //
-            // The daemon's keys are taken as-is, not whitelisted against KWin's
-            // outputs, for the reason spelled out in slotActiveLayoutForScreenChanged:
-            // they are EFFECTIVE screen ids, so a subdivided monitor's "<output>/vs:N"
-            // children are not KWin outputs at all.
-            QHash<QString, QString> fresh;
-            const QVariantMap layouts = reply.value();
-            for (auto it = layouts.constBegin(); it != layouts.constEnd(); ++it) {
-                const QString layoutId = it.value().toString();
-                if (!layoutId.isEmpty()) {
-                    fresh.insert(it.key(), layoutId);
-                }
-            }
-            const bool changed = fresh != m_activeLayoutByScreen;
-            m_activeLayoutByScreen = std::move(fresh);
-            qCDebug(lcEffect) << "Synced" << m_activeLayoutByScreen.size() << "screen active layouts from daemon";
-            m_activeLayoutFetchRetried = false;
-            if (!changed) {
-                return;
-            }
-        } else {
-            // This is the path that silently disables ActiveLayout matching for
-            // the whole session, so it warns rather than whispers, and carries
-            // the reason. The broadcast is NOT a fallback: the daemon only emits
-            // for screens whose value MOVES, so a screen whose layout never
-            // changes again would stay unstamped forever after one failed reply.
-            qCWarning(lcEffect) << "Failed to get active layouts from daemon:" << reply.error().message();
-            if (!m_activeLayoutFetchRetried) {
-                // One bounded retry, re-gated on isDaemonReady inside the call.
-                // Bounded because a persistently failing call would otherwise
-                // spin; the flag clears on the next success or daemon-ready.
-                m_activeLayoutFetchRetried = true;
-                m_activeLayoutFetchRetryTimer.start();
-            }
-            // Nothing was touched, so nothing can have resolved differently. Let
-            // the retry's outcome be the only thing that drives a sweep.
-            return;
-        }
-        // The cache is an ActiveLayout match input, so the stale verdicts have to
-        // drop, and the border sweep re-folds the appearance slots that bake into
-        // each decoration. Both are coalesced with the sibling re-seeds above.
-        invalidateAllRuleCaches();
-        scheduleBorderSweep();
-    });
-}
-
-void PlasmaZonesEffect::slotActiveLayoutForScreenChanged(const QString& screenId, const QString& layoutId)
-{
-    if (screenId.isEmpty()) {
-        return;
-    }
-    // The screen id is not whitelisted against KWin's outputs, deliberately. The
-    // daemon keys by EFFECTIVE screen id, which includes virtual-screen
-    // subdivisions ("<output>/vs:N") that are not KWin outputs at all, so
-    // rejecting unknown ids would drop every legitimate entry on a subdivided
-    // monitor. Growth is bounded instead: entries are pruned when their physical
-    // screen disconnects (fetchAllVirtualScreenConfigs) and the whole map is
-    // dropped on daemon loss, and an id matching no window is inert.
-    // An empty id means the screen no longer resolves to any layout (unplugged,
-    // or its assignment was cleared with the default suppressed). Remove the
-    // entry rather than storing "": both leave ruleQuery's ActiveLayout empty
-    // (the field is a non-optional context field, so it is always engaged and
-    // there is no genuinely "unset" state to reach), but removal keeps the map
-    // from accumulating an entry per screen the daemon has ever mentioned.
-    const auto previous = m_activeLayoutByScreen.constFind(screenId);
-    const bool hadEntry = previous != m_activeLayoutByScreen.constEnd();
-    if (hadEntry ? previous.value() == layoutId : layoutId.isEmpty()) {
-        return;
-    }
-    if (layoutId.isEmpty()) {
-        m_activeLayoutByScreen.remove(screenId);
-    } else {
-        m_activeLayoutByScreen.insert(screenId, layoutId);
-    }
-    qCDebug(lcEffect) << "Active layout for screen" << screenId << "changed to" << layoutId;
-    // The map write above is deliberately ungated: a broadcast that arrives
-    // while the daemon gate is closed still carries a real delta, and dropping
-    // it would strand the cache at the previous layout with nothing to correct
-    // it (the bulk fetch only re-runs at the next bringup, where it performs the
-    // invalidate + sweep pair once authoritatively). Only the re-fold below is
-    // gated: with the daemon gone the decorations have already been torn down.
-    if (!m_daemonGate.serviceRegistered) {
-        // The verdict drop is deferred, not skipped. Any ActiveLayout verdict
-        // cached against the value this write just replaced is stale from here
-        // on, and the bulk fetch on the next bringup cannot be relied on to
-        // drop it: the fetch returns early when its reply equals the map, which
-        // is exactly what this pre-registration write makes likely. Parking the
-        // flag hands the drop to the first post-registration border sweep
-        // (syncWindowStates pairs invalidateAllRuleCaches with an unconditional
-        // sweep on both its reply branches), which drains it ahead of its own
-        // updateAllDecorations. A sweep that runs while the gate is still closed
-        // clears the flag instead, which is correct: daemon loss clears
-        // m_activeLayoutByScreen and invalidates everything anyway.
-        m_activeLayoutInvalidatePending = true;
-        return;
-    }
-    // Same pairing as every other match-input change: drop the cached verdicts,
-    // then re-fold, because an ActiveLayout-scoped SetOpacity / border / tint is
-    // baked into the decoration at updateWindowDecoration time and a cache clear
-    // on its own would leave the previous layout's appearance on screen. Both are
-    // coalesced onto the sweep: the daemon emits one broadcast per screen, and a
-    // multi-screen switch would otherwise pay invalidateAllRuleCaches's per-window
-    // layer reconcile once per screen. The sweep drains the flag ahead of its own
-    // updateAllDecorations, so the drop still precedes the re-fold. Deliberate
-    // trade: the drop used to happen synchronously in this slot, so a consult
-    // (shouldHandleWindow, an Exclude or layer verdict) landing later in the SAME
-    // event-loop turn now still sees the pre-broadcast verdicts until the queued
-    // sweep runs — a one-turn window, accepted for the N-screen coalescing.
-    m_activeLayoutInvalidatePending = true;
-    scheduleBorderSweep();
+    // Deliberately not asserting per-connect success: the only failure mode
+    // for these QDBusConnection::connect calls is an unregistered custom
+    // type, and PhosphorProtocol::registerWireTypes() runs at effect
+    // construction, before this wiring (lifecycle.cpp) — so a false return
+    // here would be a build-order bug, not a runtime condition. Worded as
+    // "wired", not "connected", because the returns are not checked.
+    qCDebug(lcEffect) << "Navigation D-Bus signal subscriptions wired";
 }
 
 } // namespace PlasmaZones

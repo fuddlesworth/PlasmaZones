@@ -242,7 +242,10 @@ private Q_SLOTS:
 
     // ─── resolveShaderWithDefault: built-in per-event default ───
 
-    void testDefaultShaderForPathSnapEvents()
+    // Named for the whole predicate rather than for the snap legs alone: it
+    // grew past them long ago and now pins the three opt-in classes' absence
+    // of a default too, which is the load-bearing half.
+    void testDefaultShaderEffectIdForPath()
     {
         // Snap events default to window-morph; others to none.
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
@@ -260,6 +263,12 @@ private Q_SLOTS:
         // fresh configs.
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopSwitch).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopPeek).isEmpty());
+        // The strip pass carries no built-in default either: a full-output
+        // capture-and-repaint on every scroll stays opt-in, so a fresh config
+        // scrolls with the plain translation until the user picks a strip
+        // pack.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ScrollingView).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Scrolling).isEmpty());
     }
 
     void testDefaultShaderForPathOverlayEvents()
@@ -438,9 +447,17 @@ private Q_SLOTS:
     void testShaderPathResolvesInIsolation()
     {
         // The isolation predicate is the SSOT shared by resolve() and the
-        // settings shadowing-children walk: exactly the interactive-drag
-        // leaf, never its parent, siblings, or unrelated paths.
+        // settings shadowing-children walk: the interactive-drag leaf and the
+        // scrolling tab swap, never their parents, siblings, or unrelated
+        // paths.
         QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMove));
+        // The tab leaf's membership is what keeps a strip-class pack set on
+        // `scrolling` from being inherited by a leaf whose applicability gate
+        // would then refuse it at install — the leaf would animate nothing
+        // while settings showed an inherited "current shader" that never
+        // runs. Dropping the membership compiles and passes everything else,
+        // which is exactly why it is pinned here.
+        QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingTabSwitch));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMovement));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowSnapIn));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowOpen));
@@ -452,6 +469,30 @@ private Q_SLOTS:
         // resolves in isolation (AnimationsDesktopsPage.qml). Pin it here.
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopPeek));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopSwitch));
+        // The strip leaf too. It is the class most easily confused with
+        // `move` (both are continuous motion), and move IS the isolated one,
+        // so a fix that generalised the predicate from the move leaf to "the
+        // continuous classes" would take the strip leaf's inheritance with
+        // it.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingView));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::Scrolling));
+    }
+
+    // The other half of the same property: because the strip leaf is NOT
+    // isolated, a shader set on the `scrolling` root cascades down to it.
+    // That is what makes the picker's ambiguous-row policy a policy rather
+    // than a proof, and what the settings page's parent-row decision rests
+    // on, so pin the cascade itself rather than only the predicate.
+    void testScrollingRootCascadesToView()
+    {
+        ShaderProfileTree tree;
+        ShaderProfile root;
+        root.effectId = QStringLiteral("strip-motion-blur");
+        tree.setOverride(PP::Scrolling, root);
+
+        const ShaderProfile resolved = tree.resolve(PP::ScrollingView);
+        QVERIFY(resolved.effectId.has_value());
+        QCOMPARE(*resolved.effectId, QStringLiteral("strip-motion-blur"));
     }
 };
 

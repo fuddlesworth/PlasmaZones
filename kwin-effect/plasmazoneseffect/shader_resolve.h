@@ -239,4 +239,42 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
  */
 std::optional<QString> resolveWindowLayer(const PhosphorRules::ResolvedActions& resolved);
 
+/**
+ * @brief Fullscreen-at-open verdict — the runtime consumer for the
+ *        OpenFullscreen rule.
+ *
+ * Returns the boolean payload when an enabled rule fills the
+ * `open-fullscreen` slot of @p resolved (true = open in real KWin
+ * fullscreen, false = veto the app's own fullscreen request at open), or
+ * `std::nullopt` when no rule fills it or the value is not a strict JSON
+ * bool (same defence-in-depth stance as the other consumers). The caller
+ * (applyRuleOpenFullscreen) flips `KWin::Window::setFullScreen` once, at
+ * windowAdded time, before the window is announced to the daemon — and the
+ * tiling-eligibility gate rejects on the REQUESTED bit as well as the
+ * committed one, so the announce path is not fooled by the commit lag this
+ * flip leaves behind on Wayland.
+ *
+ * Resolved against the effect-VERDICT evaluator (`Tag::EffectVerdict`), whose
+ * terminal scope is the blanket `Exclude` only: an `ExcludeAnimations` rule
+ * must not cancel a fullscreen-at-open decision.
+ */
+std::optional<bool> resolveOpenFullscreen(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Per-window scroll-speed multiplier — the runtime consumer for the
+ *        ScrollFactor rule.
+ *
+ * Returns the validated factor when an enabled rule fills the `scroll-factor`
+ * slot of @p resolved, or `std::nullopt` when no rule fills it or the value is
+ * non-numeric / non-finite / outside [MinScrollFactor, MaxScrollFactor]
+ * (reject-not-clamp, matching the load-time validator; NaN fails an ordered
+ * comparison in BOTH directions, so it is rejected by an explicit finiteness
+ * test rather than by the range test). Resolved against the effect-VERDICT
+ * evaluator, so an `ExcludeAnimations` rule cannot cancel it. The caller (the
+ * effect's input filter,
+ * via ruleScrollFactorFor) rescales the axis event's delta and deltaV120 in
+ * place before the forwarding filter delivers it to the client.
+ */
+std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& resolved);
+
 } // namespace PlasmaZones

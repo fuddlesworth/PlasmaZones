@@ -34,7 +34,10 @@ Menu {
 
     property var layout: null
     /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
-    /// aspect-ratio submenu was last reconciled to. showForLayout
+    /// aspect-ratio submenu was last reconciled to. Scrolling templates
+    /// map onto `"autotile"` here: neither carries zones, so both want
+    /// the submenu taken away, and no third state buys anything.
+    /// showForLayout
     /// only mutates the menu when the current layout's kind
     /// differs from this state — Qt 6's removeMenu() DESTROYS the
     /// Menu itself (docs: "Removes and destroys the specified
@@ -50,7 +53,15 @@ Menu {
     // shape is documented elsewhere in this tree as a "Cannot assign
     // [undefined] to bool" hazard.
     readonly property bool isAutotile: Boolean(layout && layout.isAutotile === true)
+    readonly property bool isTemplate: Boolean(layout && layout.isScrollingTemplate === true)
     readonly property string layoutId: layout ? (layout.id || "") : ""
+    // The reserved no-layout / no-algorithm word (PhosphorZones::NoSnappingLayout
+    // and NoTilingAlgorithm, which share one spelling). Named here because the
+    // Clear Default handler below WRITES it — of the QML sites that hardcode the
+    // literal, the write sites are the ones a respelling would corrupt rather
+    // than merely mis-render, so they should be the easiest to find. The
+    // constants' own doc block carries the full list of QML sites.
+    readonly property string noLayoutToken: "none"
     // Cache the aspect-ratio options + screen list rather than
     // re-deriving them on every binding read. The Instantiator
     // delegate models below depend on these — re-evaluation on
@@ -115,7 +126,7 @@ Menu {
     // can run before Main.qml assigns the required property (precedent:
     // KeyboardShortcutOverlay.qml).
     readonly property var _cachedScreens: {
-        const s = settingsController ? (settingsController.screens || []) : [];
+        const s = layoutContextMenu.settingsController ? (layoutContextMenu.settingsController.screens || []) : [];
         return s.length > 1 ? s : [];
     }
 
@@ -169,7 +180,7 @@ Menu {
                     Qt.callLater(function () {
                         aspectRatioSubMenu.visible = false;
                         layoutContextMenu.visible = false;
-                        settingsController.setLayoutAspectRatio(layoutId, idx);
+                        layoutContextMenu.settingsController.setLayoutAspectRatio(layoutId, idx);
                     });
                 }
             }
@@ -181,11 +192,13 @@ Menu {
     }
 
     signal deleteRequested(var layout)
-    signal exportRequested(string layoutId)
+    /// Carries the card kind so the page routes to the template export
+    /// dialog without having to infer it from its own view mode.
+    signal exportRequested(string layoutId, bool isTemplateExport)
 
     function showForLayout(nextLayout) {
         layoutContextMenu.layout = nextLayout;
-        var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
+        var wantKind = (layoutContextMenu.isAutotile || layoutContextMenu.isTemplate) ? "autotile" : "snap";
         if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
             if (wantKind === "snap") {
                 var markerIdx = -1;
@@ -221,12 +234,27 @@ Menu {
 
         text: i18n("Edit")
         icon.name: "document-edit"
-        onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
+        // Both arms route straight to the controller: a template card's Edit
+        // launches the editor process in template mode, so the page-owned
+        // signal hop the old in-process dialog needed is gone.
+        onTriggered: {
+            if (layoutContextMenu.isTemplate)
+                layoutContextMenu.settingsController.editScrollingTemplate(layoutContextMenu.layoutId);
+            else
+                layoutContextMenu.settingsController.editLayout(layoutContextMenu.layoutId);
+        }
     }
 
     Instantiator {
         id: screenItemInstantiator
 
+        // The model stays the STABLE cached screen list: folding isTemplate
+        // into it would destroy and recreate every delegate (via
+        // removeItem, which also destroys) on each template-to-layout kind
+        // switch — the churn class the header comment warns about. Template
+        // cards hide the entries declaratively instead (with an explicit
+        // height collapse, belt and braces against the Menu keeping a slot
+        // for an invisible item).
         model: layoutContextMenu._cachedScreens
         onObjectAdded: function (index, object) {
             // Insert relative to the Edit marker — a future
@@ -249,6 +277,11 @@ Menu {
             required property var modelData
             readonly property string _screenName: (modelData && modelData.name) ? modelData.name : ""
 
+            // Per-screen entries make no sense for a template: the editor's
+            // template mode is screen-agnostic (openEditorForScrollingTemplate
+            // takes no screen argument; the strip opens under the cursor).
+            visible: !layoutContextMenu.isTemplate
+            height: visible ? implicitHeight : 0
             text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
             icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
             onClicked: {
@@ -267,53 +300,104 @@ Menu {
                 Qt.callLater(function () {
                     layoutContextMenu.visible = false;
                     if (screenName.length > 0)
-                        settingsController.editLayoutOnScreen(layoutId, screenName);
+                        layoutContextMenu.settingsController.editLayoutOnScreen(layoutId, screenName);
                 });
             }
         }
     }
 
     MenuSeparator {
-        visible: layoutContextMenu._cachedScreens.length > 0
+        // The per-screen block above is emptied for templates, so the
+        // separator would otherwise sit against nothing.
+        visible: layoutContextMenu._cachedScreens.length > 0 && !layoutContextMenu.isTemplate
     }
 
     MenuItem {
         text: i18n("Open in Text Editor")
         icon.name: "document-open"
         onTriggered: {
-            if (layoutContextMenu.isAutotile)
-                settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
+            if (layoutContextMenu.isTemplate)
+                layoutContextMenu.settingsController.openScrollingTemplateFile(layoutContextMenu.layoutId);
+            else if (layoutContextMenu.isAutotile)
+                layoutContextMenu.settingsController.openAlgorithm(layoutContextMenu.settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
             else
-                settingsController.openLayoutFile(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.openLayoutFile(layoutContextMenu.layoutId);
         }
     }
 
     MenuSeparator {}
 
     MenuItem {
-        text: i18n("Set as Default")
-        icon.name: "favorite"
-        enabled: {
+        id: defaultItem
+
+        // Whether THIS entry is already its family's default. It selects the
+        // item's CLEARING form, for every family alike (see the block below);
+        // it no longer gates the item's enabled state, which now depends only
+        // on there being a layout to act on.
+        readonly property bool isFamilyDefault: {
             if (!layoutContextMenu.layout)
                 return false;
 
-            if (layoutContextMenu.isAutotile)
-                return layoutContextMenu.layoutId !== ("autotile:" + layoutContextMenu.appSettings.defaultAutotileAlgorithm);
+            if (layoutContextMenu.isTemplate)
+                return layoutContextMenu.layoutId === layoutContextMenu.appSettings.defaultScrollingTemplate;
 
-            return layoutContextMenu.layoutId !== layoutContextMenu.appSettings.defaultLayoutId;
-        }
-        onTriggered: {
             if (layoutContextMenu.isAutotile)
-                layoutContextMenu.appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
-            else
-                layoutContextMenu.appSettings.defaultLayoutId = layoutContextMenu.layoutId;
+                return layoutContextMenu.layoutId === ("autotile:" + layoutContextMenu.appSettings.defaultAutotileAlgorithm);
+
+            return layoutContextMenu.layoutId === layoutContextMenu.appSettings.defaultLayoutId;
+        }
+
+        // All three families can CLEAR their default. Templates clear to an
+        // empty slot (the engine falls back to its built-in width and height
+        // steps); snapping and tiling clear to the reserved no-layout word,
+        // because for them an empty slot means "inherit the bundled pick" —
+        // the sentinel is what makes an unassigned screen genuinely get no
+        // zones / no tiling, the explicit no-layout state the assignments
+        // already carry per context.
+        text: defaultItem.isFamilyDefault ? i18n("Clear Default") : i18n("Set as Default")
+        icon.name: defaultItem.isFamilyDefault ? "edit-clear" : "favorite"
+        enabled: Boolean(layoutContextMenu.layout)
+        onTriggered: {
+            // The active page here is a library page, which is never dirty
+            // (its store writes immediately). Each family's default key is a
+            // staged config key owned by a settings page, so wrap the write in
+            // an external-edit envelope naming the owner: value-based
+            // dirtiness, the badge, and per-page Discard all land on the page
+            // that can actually revert it. The guard runs BEFORE the envelope
+            // opens: QML has no RAII, so a throw between begin and end would
+            // strand the external-edit stack for the rest of the session.
+            if (!layoutContextMenu.appSettings)
+                return;
+            if (layoutContextMenu.isTemplate) {
+                layoutContextMenu.settingsController.beginExternalEdit("scrolling-columns");
+                layoutContextMenu.appSettings.defaultScrollingTemplate = defaultItem.isFamilyDefault ? "" : layoutContextMenu.layoutId;
+                layoutContextMenu.settingsController.endExternalEdit();
+            } else if (layoutContextMenu.isAutotile) {
+                // Clearing writes the reserved word (PhosphorZones::
+                // NoTilingAlgorithm), not an empty string: the setting
+                // defaults to a concrete algorithm, so only the sentinel
+                // expresses "no default algorithm" (unassigned screens stay
+                // in tiling mode but nothing tiles).
+                layoutContextMenu.settingsController.beginExternalEdit("tiling-algorithm");
+                layoutContextMenu.appSettings.defaultAutotileAlgorithm = defaultItem.isFamilyDefault ? layoutContextMenu.noLayoutToken : layoutContextMenu.layoutId.replace("autotile:", "");
+                layoutContextMenu.settingsController.endExternalEdit();
+            } else {
+                // Same shape for snapping (PhosphorZones::NoSnappingLayout):
+                // an EMPTY defaultLayoutId falls back to the first registered
+                // layout, so only the sentinel gives unassigned screens no
+                // zones at all.
+                layoutContextMenu.settingsController.beginExternalEdit("snapping-window-behavior");
+                layoutContextMenu.appSettings.defaultLayoutId = defaultItem.isFamilyDefault ? layoutContextMenu.noLayoutToken : layoutContextMenu.layoutId;
+                layoutContextMenu.settingsController.endExternalEdit();
+            }
         }
     }
 
     MenuItem {
         text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
         icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
-        onTriggered: settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
+        visible: !layoutContextMenu.isTemplate
+        onTriggered: layoutContextMenu.settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
     }
 
     MenuItem {
@@ -322,9 +406,9 @@ Menu {
 
         text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
         icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
-        visible: !layoutContextMenu.isAutotile
+        visible: !layoutContextMenu.isAutotile && !layoutContextMenu.isTemplate
         enabled: !globalAuto
-        onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
+        onTriggered: layoutContextMenu.settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
     }
 
     // Sentinel separators that flank the aspect-ratio submenu's
@@ -351,14 +435,19 @@ Menu {
         text: i18n("Duplicate")
         icon.name: "edit-copy"
         visible: !layoutContextMenu.isAutotile
-        onTriggered: settingsController.duplicateLayout(layoutContextMenu.layoutId)
+        onTriggered: {
+            if (layoutContextMenu.isTemplate)
+                layoutContextMenu.settingsController.duplicateScrollingTemplate(layoutContextMenu.layoutId);
+            else
+                layoutContextMenu.settingsController.duplicateLayout(layoutContextMenu.layoutId);
+        }
     }
 
     MenuItem {
         text: i18n("Export")
         icon.name: "document-export"
         visible: !layoutContextMenu.isAutotile
-        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId, layoutContextMenu.isTemplate)
     }
 
     MenuSeparator {
@@ -380,14 +469,14 @@ Menu {
         text: i18n("Duplicate")
         icon.name: "edit-copy"
         visible: layoutContextMenu.isAutotile
-        onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
+        onTriggered: layoutContextMenu.settingsController.duplicateAlgorithm(layoutContextMenu.settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
     }
 
     MenuItem {
         text: i18n("Export")
         icon.name: "document-export"
         visible: layoutContextMenu.isAutotile
-        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+        onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId, false)
     }
 
     MenuSeparator {

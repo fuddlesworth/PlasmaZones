@@ -3,6 +3,7 @@
 
 #include "windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -51,12 +52,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         return;
     }
 
-    // ── Autotile drag-insert commit ─────────────────────────────────────────
-    // If a drag-insert preview is live, finalize it: commit the reorder so the
-    // dragged window's final geometry is applied on the next retile. Snapping
-    // logic is skipped entirely — the window's place in the stack IS the drop.
-    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
+    // ── Drag-insert commit ──────────────────────────────────────────────────
+    // If a drag-insert preview is live (autotile stack or scroll strip),
+    // finalize it: commit the reorder so the dragged window's final geometry
+    // is applied on the next retile. Snapping logic is skipped entirely — the
+    // window's place in the layout IS the drop.
+    if (settleDragInsertPreviewAt(cursorX, cursorY, windowId)) {
         hideOverlayAndSelector();
         resetDragState();
         return;
@@ -84,6 +85,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const bool capturedWasSnapped = m_wasSnapped;
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
+    const bool capturedExternallyCancelled = m_dragExternallyCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
 
     // Cross-screen stale-geometry guard. capturedZoneGeometry / capturedMultiZoneGeometry
@@ -132,6 +134,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (useOverlayZone && releaseScreen && m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
         useOverlayZone = false;
     }
+    // Same rule for a scrolling-mode release screen: the strip owns
+    // placement there, a manual drag-snap would fight it.
+    if (useOverlayZone && releaseScreen && m_scrollEngine && m_scrollEngine->isActiveOnScreen(releaseScreenId)) {
+        useOverlayZone = false;
+    }
 
     // Release on a layout-suppressed screen: do not snap to overlay zone.
     // This is the drop-time commit authority, and the per-tick gates upstream
@@ -163,55 +170,88 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         const QString snapScreen = snapEngine ? snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString autotileScreen =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
+        const QString scrollScreen = m_scrollEngine ? m_scrollEngine->screenForTrackedWindow(windowId) : QString();
         PhosphorEngine::IPlacementEngine* sourceEngine = nullptr;
         QString sourceScreen;
-        if (!snapScreen.isEmpty() && snapScreen != releaseScreenId) {
+        // screensMatch, not raw !=: an engine may hold the connector-name form
+        // (or a "/vs:" virtual-screen variant) of the very screen the drop
+        // landed on, and a raw compare would read that as a cross-screen move
+        // and release the window's tracking on its own screen.
+        const auto isCrossScreen = [&releaseScreenId](const QString& engineScreen) {
+            return !engineScreen.isEmpty()
+                && !PhosphorScreens::ScreenIdentity::screensMatch(engineScreen, releaseScreenId);
+        };
+        if (isCrossScreen(snapScreen)) {
             sourceEngine = snapEngine;
             sourceScreen = snapScreen;
-        } else if (!autotileScreen.isEmpty() && autotileScreen != releaseScreenId) {
+        } else if (isCrossScreen(autotileScreen)) {
             sourceEngine = m_autotileEngine;
             sourceScreen = autotileScreen;
+        } else if (isCrossScreen(scrollScreen)) {
+            sourceEngine = m_scrollEngine;
+            sourceScreen = scrollScreen;
         }
         if (sourceEngine) {
-            const bool destIsAutotile = m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId);
-            PhosphorEngine::IPlacementEngine* destEngine = destIsAutotile ? m_autotileEngine : snapEngine;
+            // Destination = whichever tiling-family engine claims the release
+            // screen, else snap (the mode fallback for unmanaged screens).
+            PhosphorEngine::IPlacementEngine* destEngine = snapEngine;
+            if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(releaseScreenId)) {
+                destEngine = m_autotileEngine;
+            } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(releaseScreenId)) {
+                destEngine = m_scrollEngine;
+            }
             const bool engineTypeChanged = destEngine && destEngine != sourceEngine;
 
-            sourceEngine->handoffRelease(windowId);
-            qCInfo(lcDbusWindow) << "Cross-screen drag: released" << sourceEngine->engineId() << "state for" << windowId
-                                 << "from" << sourceScreen << "to" << releaseScreenId;
+            const QSize windowMinSize = sourceEngine->windowMinimumSize(windowId);
+            qCInfo(lcDbusWindow) << "Cross-screen drag: releasing" << sourceEngine->engineId() << "state for"
+                                 << windowId << "from" << sourceScreen << "to" << releaseScreenId;
 
             // Engine-type change: hand off to the destination so it can
             // adopt the window. The committing snap/tile path below may
             // still finalize the placement — handoffReceive only sets up
-            // tracking with the right floating disposition.
+            // tracking with the right floating disposition. Guarded: a
+            // refused receive on an engine-owned release screen has no
+            // later re-adopter (the commit branches are gated on
+            // useOverlayZone/capturedZoneId), so the helper's re-home into
+            // the source is the only thing keeping the window managed.
             if (engineTypeChanged) {
                 PhosphorEngine::IPlacementEngine::HandoffContext ctx;
                 ctx.windowId = windowId;
                 ctx.toScreenId = releaseScreenId;
                 ctx.fromEngineId = sourceEngine->engineId();
                 ctx.dropPos = QPoint(cursorX, cursorY);
+                ctx.sourceGeometry = capturedOriginalGeometry;
+                ctx.minSize = windowMinSize;
                 ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
+                // Both sides of the compare are canonical (windowActivated
+                // stores the shadow id): a dragged window normally holds
+                // focus, and a floating arrival's receive must know — no
+                // focus report follows a drop that never moved focus.
+                ctx.heldFocus = m_windowTracking->lastActiveWindowId()
+                    == m_windowTracking->service()->canonicalizeForLookup(windowId);
                 if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
                     // sourceZoneIds is informational for receiving engines —
-                    // populated from the pre-drop captured zone since
-                    // handoffRelease has already cleared live tracking.
+                    // populated from the pre-drop captured zone (the
+                    // helper's release clears live tracking first).
                     ctx.sourceZoneIds = QStringList{capturedZoneId};
                 }
-                destEngine->handoffReceive(ctx);
+                WindowTrackingInternal::guardedHandoff(sourceEngine, destEngine, ctx, sourceScreen);
+            } else {
+                sourceEngine->handoffRelease(windowId);
             }
         }
     }
 
     // Check if a zone was selected via the zone selector (takes priority)
     bool usedZoneSelector = false;
-    if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
+    if (!capturedSnapCancelled && !capturedExternallyCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
-        // Resolve virtual-aware screen ID for the zone selector position
-        auto selectorResolved = resolveScreenAt(QPointF(cursorX, cursorY));
-        QString selectorScreenId = selectorResolved.screenId;
-        QScreen* screen = selectorResolved.qscreen;
+        // The selector screen IS the release screen — releaseResolved above
+        // was computed from the identical cursor point, so a second resolve
+        // only manufactured a name implying they could differ.
+        const QString& selectorScreenId = releaseScreenId;
+        QScreen* screen = releaseScreen;
 
         // Block entire zone selector snap path when screen is locked for its
         // current mode. Take a single resolver snapshot of (desktop, activity)
@@ -227,9 +267,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         bool selectorScreenLocked = false;
         PhosphorContext::ContextHandle selectorCtx;
         if (screen && m_contextResolver && m_layoutManager) {
+            // handleFor stamps the LIVE mode (the router), which is what the
+            // comment above already claims this handle carries and what every
+            // sibling drag site gates on. Overwriting it with the raw cascade
+            // mode made the two disagree precisely when an engine does not own
+            // the screen its assignment names, so a downgraded tiling or
+            // scrolling screen had its lock and disable checked against the
+            // engine axis while the overlay it was dropping onto was the
+            // snapping one — #724 in both directions.
             selectorCtx = m_contextResolver->handleFor(selectorScreenId);
-            selectorCtx.mode =
-                m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
             selectorScreenLocked = m_contextResolver->isLocked(selectorCtx);
         }
         // Reuse the `selectorCtx` handle built above for the lock check —
@@ -245,7 +291,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // handle (empty screenId / desktop=0 / activity=""), which
         // short-circuits to "not disabled" and lets the snap path
         // proceed against stale defaults.
-        if (screen && !selectorScreenLocked && m_contextResolver && m_layoutManager
+        // useOverlayZone carries the engine-ownership verdict for the RELEASE
+        // screen (computed above). It gated only the hover-zone fallback, so a
+        // flick onto an engine-owned screen that released before any 30 Hz
+        // updateDragCursor tick flipped the policy still reached this branch with
+        // bypassReason None: endDrag delegated to dragStopped, which committed a
+        // snap, re-recorded the intent and could even reassign the active layout
+        // on a screen the autotile stack or the scrolling strip owns.
+        if (screen && useOverlayZone && !selectorScreenLocked && m_contextResolver && m_layoutManager
             && !m_contextResolver->isDisabled(selectorCtx)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
@@ -325,7 +378,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // selected layout directly here. Doing the activation earlier on
                     // hover would resnap every other window mid-drag — the "layouts
                     // changing when holding alt to move window" bug.
-                    if (selectedLayout) {
+                    // Gated on the commit surviving: an unresolvable zone
+                    // UUID refuses the snap (shouldApplyGeometry=false), and
+                    // a refused drop must not still reassign the screen's
+                    // layout — that resnaps every OTHER window and persists
+                    // an assignment the user's drop never completed.
+                    if (selectedLayout && shouldApplyGeometry) {
                         // Reuse the `selectorCtx` snapshot built at the top of
                         // this block — its (desktop, activity) is the same
                         // frozen tuple the gate above already consulted, and
@@ -366,7 +424,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Fall back to regular zone detection if zone selector wasn't used
     // Use captured values to avoid race condition with concurrent drags
     // Do not snap to overlay zone when releasing on a disabled monitor
-    if (!usedZoneSelector && !capturedSnapCancelled && !capturedZoneId.isEmpty() && useOverlayZone) {
+    if (!usedZoneSelector && !capturedSnapCancelled && !capturedExternallyCancelled && !capturedZoneId.isEmpty()
+        && useOverlayZone) {
         if (capturedIsMultiZoneMode && capturedMultiZoneGeometry.isValid() && capturedGeometryMatchesReleaseScreen) {
             // Pass ALL zone IDs for multi-zone snap (not just primary)
             QStringList allZoneIds;
@@ -432,7 +491,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Call unconditionally when capturedWasSnapped: unsnapForFloat handles the
     // no-zone case internally, and setWindowFloating ensures windowClosed won't persist
     // the zone (floating windows are excluded from persistence).
-    if (!shouldApplyGeometry && capturedWasSnapped) {
+    // capturedExternallyCancelled is the load-bearing half of this gate. With
+    // the commit branches above skipped, shouldApplyGeometry is false and a
+    // previously-snapped window would fall straight into "drag-out" — so the
+    // obvious fix of reusing m_snapCancelled would unsnap and float the window
+    // on EVERY externally cancelled drag, which is worse than the bug. KWin is
+    // restoring the window to where it started; it is not being dragged out.
+    if (!shouldApplyGeometry && capturedWasSnapped && !capturedExternallyCancelled) {
         qCInfo(lcDbusWindow) << "Drag-out unsnap for" << windowId << "releaseScreen:" << releaseScreenId;
         // Latch the pre-snap float-back BEFORE the float write (twin of
         // WindowTrackingAdaptor::notifyDragOutUnsnap): setWindowFloating's
@@ -508,11 +573,16 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // read would describe the new desktop's occupancy instead of the
         // desktop the user actually dropped on.
         m_snapAssistPendingDesktop = m_layoutManager->currentVirtualDesktopForScreen(releaseScreenId);
+        // Snapshot the activity axis for the same reason as the desktop one:
+        // the deferred compute's suppression gate and layout resolve must
+        // describe the context the user dropped in, not whatever an activity
+        // switch landed on during the one-event-loop deferral.
+        m_snapAssistPendingActivity = m_layoutManager->currentActivity();
         // The snap-assist Escape grab is NOT bound here on purpose. Binding on
         // the dragStopped/endDrag path would fsync kglobalshortcutsrc while the
         // kwin-effect is still awaiting the endDrag reply — the very drop-path
         // compositor stall this change set out to remove (#167). The grab is
-        // bound lazily by start.cpp's snapAssistShown handler instead, which
+        // bound lazily by shortcuts_wiring.cpp's snapAssistShown handler instead, which
         // fires on the deferred computeAndEmitSnapAssist tick (after the
         // compositor is unblocked) and only when snap assist actually shows
         // with non-empty zones. onSnapAssistDismissed releases it. Deferring to
@@ -522,7 +592,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Reset drag state for next operation. No Escape grab is registered on this
     // path: the drag used the kwin-effect's keyboard grab, and snap assist
-    // binds its own grab lazily via snapAssistShown (start.cpp). The default
+    // binds its own grab lazily via snapAssistShown (shortcuts_wiring.cpp). The default
     // unregister is therefore an unconditional no-op here — Registry::unbind
     // ignores an id that was never bound — and snapAssistRequestedOut is left
     // purely as the caller's output flag.
@@ -536,9 +606,11 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     const QString windowId = m_snapAssistPendingWindowId;
     const QString screenId = m_snapAssistPendingScreenId;
     const int desktopAtDrop = m_snapAssistPendingDesktop;
+    const QString activityAtDrop = m_snapAssistPendingActivity;
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
     m_snapAssistPendingDesktop = 0; // mirror snapshot clear; see header
+    m_snapAssistPendingActivity.clear();
 
     if (windowId.isEmpty() || screenId.isEmpty() || !m_layoutManager || !m_windowTracking) {
         return;
@@ -565,12 +637,20 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // desktop, like the occupancy filter below — a live read here could
     // describe a different desktop than the occupancy it gates. Hoisted above
     // the QScreen lookup so the suppressed path pays no discarded resolve.
-    if (isActiveLayoutSuppressedForScreen(screenId, desktopFilter)) {
+    // Snapshot activity, like the desktop: fall back to a live read only
+    // when the snapshot is missing (pre-snapshot codepath).
+    const QString activityFilter = !activityAtDrop.isEmpty() ? activityAtDrop : m_layoutManager->currentActivity();
+    if (m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktopFilter, activityFilter)) {
         return;
     }
 
     QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
-    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    // Desktop-explicit resolve on the same SNAPSHOT axis as the suppression
+    // gate and the occupancy set below — resolveLayoutForScreen reads the
+    // live desktop, so a virtual-desktop switch landing in this handler's
+    // one-event-loop deferral would pair the NEW desktop's layout with the
+    // OLD desktop's occupancy.
+    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktopFilter, activityFilter);
     if (!layout) {
         return;
     }

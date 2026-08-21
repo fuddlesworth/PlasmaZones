@@ -9,11 +9,18 @@
  * out-of-range values, then construct a Settings object and verify that the
  * schema validator coerces the value on read. Covers:
  *  1. clampInt validator -- out-of-range int snaps to the violated clamp bound.
- *  2. validColorOr validator -- invalid color string falls back to default.
+ *  2. canonicalThemeFallbackColor -- an invalid colour string snaps to the
+ *     empty theme-fallback sentinel (all four zone keys).
  *  3. Trigger list JSON parse -- invalid JSON drops back to the default,
  *     max-size cap at MaxTriggersPerAction is enforced.
  *  4. validIntOr enum validator -- unknown enum value snaps to the safe
  *     default rather than the nearest in-range neighbour.
+ *  5. clampDouble validator -- window opacity / tint strength scalars.
+ *  6. validStringOr closed-set validator -- the three scope token settings.
+ *  7. canonicalThemeFallbackColor on the Windows border/tint keys --
+ *     "#AARRGGBB" or the empty follow-the-system sentinel; the legacy
+ *     "accent" token snaps to the sentinel.
+ *  8. Decorations.Performance -- absent-group defaults and reset() round-trip.
  */
 
 #include <QTest>
@@ -154,6 +161,47 @@ private Q_SLOTS:
     }
 
     /**
+     * Same clampDouble contract on the blur-scale multiplier
+     * (Decorations.Performance/BlurScaleMultiplier). Load-bearing like the
+     * timeout above: the effect multiplies this straight into its buffer-target
+     * sizing, and the settings combo assumes the stored value is inside the
+     * declared band. The default (1.0) is neither the min (0.25) nor the max
+     * (2.0), so both legs are unambiguous — a fall-back-to-default validator
+     * fails both.
+     */
+    void testReadValidatedBlurScaleMultiplier_aboveMax_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeDouble(ConfigDefaults::blurScaleMultiplierKey(), 99.0);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplierMax());
+    }
+
+    void testReadValidatedBlurScaleMultiplier_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeDouble(ConfigDefaults::blurScaleMultiplierKey(), -1.0);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplierMin());
+    }
+
+    /**
      * A config with NO Decorations.Performance group at all must report the DEFAULTS,
      * and PauseWhenIdle's default is TRUE.
      *
@@ -174,8 +222,13 @@ private Q_SLOTS:
                  "PauseWhenIdle defaults to TRUE. A false here means something is reading the absent key as a "
                  "value rather than falling back — which is exactly how it shipped inverted once.");
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QVERIFY2(settings.decorationAnimateFocusedOnly(),
+                 "AnimateFocusedOnly defaults to TRUE (flipped in PR #872), putting it in the exact absent-key "
+                 "inversion risk class the PauseWhenIdle pin above exists for. The symbolic QCOMPARE below cannot "
+                 "catch a regression that flips the ConfigDefaults value itself.");
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplier());
     }
 
     /**
@@ -198,20 +251,33 @@ private Q_SLOTS:
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplier());
 
-        // Flip every key away from its default (120 is in-range and distinct from the
-        // default of 30).
-        settings.setDecorationPauseWhenIdle(false);
-        settings.setDecorationAnimateFocusedOnly(true);
+        // Flip AnimateFocusedOnly FIRST while PauseWhenIdle STAYS at its
+        // default (both are true since PR #872): asserting the two bools on
+        // different values at this point is what catches a cross-wired
+        // getter/setter pair — with both flipped together, a copy-paste key
+        // swap in the storescalars macros passes every compare. PauseWhenIdle
+        // is flipped in a SECOND step so its reset leg below is exercised
+        // too. (120 is in-range and distinct from the default of 30; 0.5 is
+        // in-range and distinct from the multiplier's default of 1.0, holding
+        // the group's two scalars at different offsets from their defaults for
+        // the same cross-wiring reason.)
+        settings.setDecorationAnimateFocusedOnly(false);
         settings.setDecorationIdleTimeoutSec(120);
-        QCOMPARE(settings.decorationPauseWhenIdle(), false);
-        QCOMPARE(settings.decorationAnimateFocusedOnly(), true);
+        settings.setDecorationBlurScaleMultiplier(0.5);
+        QCOMPARE(settings.decorationPauseWhenIdle(), true);
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), false);
         QCOMPARE(settings.decorationIdleTimeoutSec(), 120);
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), 0.5);
+        settings.setDecorationPauseWhenIdle(false);
+        QCOMPARE(settings.decorationPauseWhenIdle(), false);
 
         settings.reset();
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplier());
     }
 
     // =========================================================================
@@ -316,32 +382,46 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Schema validColorOr validator (invalid color string)
+    // Schema canonicalThemeFallbackColor validator (invalid color string)
     // =========================================================================
 
     /**
-     * The validColorOr validator must fall back to the schema default when
-     * the stored string fails to parse as a valid QColor. Seeds at
-     * Snapping.Zones.Colors/Highlight and disables useSystemColors so
-     * Settings::load() doesn't call applySystemColorScheme and overwrite the
-     * validated value with a palette-derived tint.
+     * The canonicalThemeFallbackColor validator must snap a stored string that
+     * fails to parse as a valid QColor back to the empty sentinel, so the
+     * colour falls back to following the system palette rather than painting
+     * black. Seeds garbage at ALL FOUR zone colour keys: each key carries its
+     * own validator wiring, and covering only one would let a validator
+     * silently fall off the other three (deleting it would leave the suite
+     * green).
      */
-    void testReadValidatedColor_invalidColor_returnsDefault()
+    void testReadValidatedColor_invalidColor_fallsBackToSentinel()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto appearance = backend->group(ConfigDefaults::snappingZonesColorsGroup());
-            appearance->writeBool(ConfigDefaults::useSystemKey(), false);
-            appearance->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
-            appearance.reset();
+            auto colors = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            colors->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
+            colors->writeString(ConfigDefaults::inactiveKey(), QStringLiteral("also-not-a-color"));
+            colors->writeString(ConfigDefaults::borderKey(), QStringLiteral("#zz1122"));
+            colors.reset();
+            auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
+            labels->writeString(ConfigDefaults::fontColorKey(), QStringLiteral("nope"));
+            labels.reset();
             backend->sync();
         }
 
         Settings settings;
-        // Must fall back to the schema default (which is always valid).
-        QCOMPARE(settings.highlightColor(), ConfigDefaults::highlightColor());
+        // The garbage snaps to the sentinel: each stored value reads empty
+        // and the resolved colour follows the palette (valid either way).
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.inactiveColorRaw(), QString());
+        QCOMPARE(settings.borderColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
+        QVERIFY(settings.inactiveColor().isValid());
+        QVERIFY(settings.borderColor().isValid());
+        QVERIFY(settings.labelFontColor().isValid());
     }
 
     // =========================================================================
@@ -406,9 +486,12 @@ private Q_SLOTS:
     }
 
     /**
-     * A hand-edited garbage border colour (neither the "accent" sentinel nor a
-     * valid QColor) snaps to the schema default so garbage can't flow to the
-     * effect; a valid hex round-trips untouched.
+     * A hand-edited garbage border colour (not a valid QColor) snaps to the
+     * schema default so garbage can't flow to the effect; a valid hex
+     * round-trips untouched. NOTE: the schema default IS the empty sentinel
+     * now, so this and the accent-token test below assert the same OUTCOME
+     * for different INPUTS — the distinguishing power of each test lives in
+     * its hex-preserved leg.
      */
     void testReadValidatedBorderColor_garbageSnaps_hexPreserved()
     {
@@ -429,10 +512,15 @@ private Q_SLOTS:
     }
 
     /**
-     * The "accent" sentinel is a valid border-colour value (the effect resolves it
-     * to the live system colour), so validation must leave it untouched.
+     * "accent" is no longer a stored value for the window colour keys — their
+     * v6 sentinel is the empty string, resolved by the daemon before the
+     * value crosses D-Bus (rules keep the token, the config does not). A
+     * hand-edited leftover "accent" is neither the sentinel nor a QColor, so
+     * canonicalThemeFallbackColor snaps it to the sentinel and the key falls
+     * back to following the system accent rather than painting a black
+     * border.
      */
-    void testReadValidatedBorderColor_accentPreserved()
+    void testReadValidatedBorderColor_accentTokenSnapsToSentinel()
     {
         IsolatedConfigGuard guard;
 
@@ -445,13 +533,15 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+        QCOMPARE(settings.windowBorderColorActive(), QString());
     }
 
     /**
-     * windowTintColor carries the identical "#AARRGGBB"-or-"accent" contract as the border
-     * colours, and a missing/mis-wired validColorOr on its key would ship silently. Pin both
-     * legs: garbage snaps to the schema default, a valid hex round-trips untouched.
+     * windowTintColor carries the identical theme-fallback contract as the
+     * border colours ("#AARRGGBB" or the empty follow-the-system sentinel),
+     * and a missing or mis-wired canonicalThemeFallbackColor on its key
+     * would ship silently. Pin both legs: garbage snaps to the sentinel
+     * default, a valid hex round-trips untouched.
      */
     void testReadValidatedTintColor_garbageSnaps_hexPreserved()
     {
@@ -486,10 +576,11 @@ private Q_SLOTS:
     }
 
     /**
-     * The "accent" sentinel is a valid tint-colour value (the effect resolves it to the
-     * live system colour), so validation must leave it untouched.
+     * The tint colour shares the border keys' v6 contract: "accent" is not a
+     * stored value any more, so a hand-edited leftover snaps to the empty
+     * sentinel (see the border sibling above).
      */
-    void testReadValidatedTintColor_accentPreserved()
+    void testReadValidatedTintColor_accentTokenSnapsToSentinel()
     {
         IsolatedConfigGuard guard;
 
@@ -502,7 +593,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.windowTintColor(), QStringLiteral("accent"));
+        QCOMPARE(settings.windowTintColor(), QString());
     }
 
     // =========================================================================

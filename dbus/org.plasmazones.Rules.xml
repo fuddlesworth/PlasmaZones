@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 <node>
     <!-- Rules Interface -->
     <interface name="org.plasmazones.Rules">
-        <annotation name="org.gtk.GDBus.DocString" value="Unified window-rule store: query and mutate the rule set that maps windows to zones. Rules cross the wire as JSON strings — a single rule serializes to { id, name, enabled, priority, match, actions } and the whole set is a JSON object { _version, rules }. The daemon's RuleStore stays the sole writer of rules.json."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Unified window-rule store: query and mutate the rule set that maps windows to zones. Rules cross the wire as JSON strings — a single rule serializes to { id, name, enabled, priority, match, actions } and the whole set is a JSON object { _version, rules }. This interface serves the daemon's authoritative in-memory view of the rules, which is not the same as being the only writer of rules.json: the settings app writes that file in its own process on a reset, on a per-mode engine disable and on a config import, so every such out-of-process write has to be followed by reloadRules or the daemon keeps serving and re-persisting its pre-write set."/>
         <method name="getAllRules">
             <annotation name="org.gtk.GDBus.DocString" value="Return the whole rule set as a JSON object string ({ _version, rules }). Empty string if the store is unavailable."/>
             <arg name="rulesJson" type="s" direction="out">
@@ -15,43 +15,43 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAllRules">
-            <annotation name="org.gtk.GDBus.DocString" value="Replace the entire rule set. The payload is a JSON object string in the { _version, rules } shape (or a bare object whose rules array carries the list). Malformed entries are dropped and a warning logs the dropped/accepted/total counts. True if the payload parsed; a genuine change is also persisted."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Replace the entire rule set. The payload is a JSON object string in the { _version, rules } shape (or a bare object whose rules array carries the list). Individually malformed entries are dropped and a warning logs the dropped/accepted/total counts. A _version that is present and disagrees with the schema the daemon reads is refused outright rather than re-persisted under the daemon's own stamp; an absent _version is tolerated, since the bare-array spelling is a documented caller shape."/>
             <arg name="rulesJson" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object string carrying the rules array."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string carrying the rules array. Payloads above roughly a million characters are refused at the wire boundary."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the payload parsed; a genuine change is also persisted."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True only when the accepted set was both committed and written to disk. False covers an oversize payload, malformed JSON or a non-object document, a mismatched _version, a missing rules array, a non-empty payload whose every rule was dropped (treated as a rejected payload rather than a clear, so the persisted set survives), and an in-memory replace whose file write failed. A payload identical to the persisted set is a no-op that still returns true."/>
             </arg>
         </method>
         <method name="addRule">
-            <annotation name="org.gtk.GDBus.DocString" value="Append one rule from its JSON object string. Returns false if the JSON is malformed, the rule fails validation, or its id collides with an existing rule."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Append one rule from its JSON object string. Returns false if the payload is over the roughly million-character wire cap, the JSON is malformed, the rule fails validation, its id collides with an existing rule, or the rules.json write failed."/>
             <arg name="ruleJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object string for a single rule ({ id, name, enabled, priority, match, actions })."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the rule was added."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule was added and the set was written to disk."/>
             </arg>
         </method>
         <method name="updateRule">
-            <annotation name="org.gtk.GDBus.DocString" value="Replace the rule with the same id from its JSON object string. Returns false if the JSON is malformed, the rule fails validation, or no rule with that id exists."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Replace the rule with the same id from its JSON object string. Returns false if the payload is over the roughly million-character wire cap, the JSON is malformed, the rule fails validation, no rule with that id exists, or the rules.json write failed."/>
             <arg name="ruleJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object string for a single rule ({ id, name, enabled, priority, match, actions })."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the rule was replaced."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule was replaced and the set was written to disk."/>
             </arg>
         </method>
         <method name="removeRule">
-            <annotation name="org.gtk.GDBus.DocString" value="Remove the rule with the given id. Returns false if the id is malformed or no rule with that id exists."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Remove the rule with the given id. Returns false if the id is malformed, no rule with that id exists, or the rules.json write failed."/>
             <arg name="ruleId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Rule UUID string."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if a rule was removed."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if a rule was removed and the set was written to disk."/>
             </arg>
         </method>
         <method name="setRuleEnabled">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the enabled flag of the rule with the given id. Returns false if the id is malformed or no rule with that id exists."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the enabled flag of the rule with the given id. Returns false if the id is malformed, no rule with that id exists, or the rules.json write failed. Setting a rule to the flag it already carries is a no-op that still returns true."/>
             <arg name="ruleId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Rule UUID string."/>
             </arg>
@@ -59,11 +59,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="True to enable the rule, false to disable it."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the rule's enabled flag was updated."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule now has the requested enabled state, whether or not this call is what put it there."/>
             </arg>
         </method>
         <method name="setRulePriority">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the priority of the rule with the given id. Higher priority wins when multiple rules match a window. Returns false if the id is malformed or no rule with that id exists."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the priority of the rule with the given id. Higher priority wins when multiple rules match a window. Returns false if the id is malformed, no rule with that id exists, or the rules.json write failed. Setting a rule to the priority it already carries is a no-op that still returns true."/>
             <arg name="ruleId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Rule UUID string."/>
             </arg>
@@ -71,11 +71,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="New priority value."/>
             </arg>
             <arg name="ok" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the rule's priority was updated."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the rule now carries the requested priority, whether or not this call is what put it there."/>
             </arg>
         </method>
         <method name="resetManagedDefaults">
-            <annotation name="org.gtk.GDBus.DocString" value="Reset the three managed baseline appearance/gap rules (Default borders, Default title bars, Default gaps) to their factory definitions, preserving every user-authored rule. Reloads the store from disk first, then persists the merged set, so rulesChanged may fire up to twice (reload + write). Backs the settings app's global Restore Defaults for the rule-backed appearance/gap surface."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Global Restore Defaults hook for the rule store. Window border, title bar and gap defaults live in the config store now, so this creates nothing. It reloads the store from disk (to pick up an out-of-process write such as the settings app's own reset) and then strips any stale managed appearance baseline rules an older build left behind, preserving every user-authored rule. rulesChanged may fire up to twice, once for the reload and once for the strip. There is no return value, so a failed write of the stripped set is warned about in the daemon log and nowhere else: the caller is the global Restore Defaults, which is fire-and-forget and has nothing to do with a failure. The in-memory set is stripped either way, and the following rulesChanged carries persisted = false for a consumer that wants to know the disk copy diverged."/>
+        </method>
+        <method name="reloadRules">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-read rules.json from disk. The daemon's rule store is borrowed, and reloadSettings does not reload a borrowed store, so an out-of-process rewrite of rules.json (a settings import, for one) leaves the daemon serving the old set until this is called. Idempotent, and rulesChanged is emitted only when the on-disk content differs from what the store already holds."/>
         </method>
         <signal name="rulesChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted whenever the store's rule set changes (add, update, remove, enable, priority, or full replace)."/>

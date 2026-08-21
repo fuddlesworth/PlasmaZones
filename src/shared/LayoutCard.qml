@@ -50,6 +50,15 @@ Item {
     property color zoneHighlightColor: ZoneColorDefaults.previewActiveZoneColor
     property color zoneInactiveColor: ZoneColorDefaults.previewInactiveZoneColor
     property color zoneBorderColor: ZoneColorDefaults.previewZoneBorderColor
+    /// Icon name drawn centered in the preview well INSTEAD of the zones,
+    /// for an entry that stands for the absence of a layout rather than for
+    /// a layout. Empty (the default) keeps the ordinary zone rendering.
+    ///
+    /// Such an entry has no zones to draw, and an empty well reads as a card
+    /// that failed to load rather than as a deliberate "none of these". The
+    /// caller names the icon so the shared card does not have to know which
+    /// kind of absence it is describing.
+    property string placeholderIcon: ""
     // Autotile algorithm metadata
     property bool showMasterDot: false
     /// Number of master zones to mark with indicator dots (ZonePreview
@@ -233,6 +242,21 @@ Item {
                     durationOverride: root.shortAnimationDuration
                 }
             }
+        }
+
+        // Placeholder icon, drawn in the well an absence-entry has no zones
+        // to fill. Sized off the well rather than the card so it scales with
+        // the preview like the zones it stands in for, and tinted with the
+        // card's own text color at reduced opacity so it reads as a
+        // placeholder rather than as content.
+        Kirigami.Icon {
+            anchors.centerIn: previewBackground
+            visible: root.placeholderIcon !== ""
+            source: root.placeholderIcon
+            width: Math.round(Math.min(previewBackground.width, previewBackground.height) * 0.4)
+            height: width
+            color: root.textColor
+            opacity: 0.7
         }
 
         // Active checkmark badge (top-right)

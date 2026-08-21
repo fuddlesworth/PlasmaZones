@@ -19,7 +19,7 @@ namespace PlasmaZones::TestHelpers {
 inline PhosphorEngine::WindowPlacement makePlacement(const QString& windowId, const QString& appId,
                                                      const QString& state, const QString& engine,
                                                      const QString& screen = QStringLiteral("DP-1"),
-                                                     const QRect& rect = QRect(10, 20, 300, 400))
+                                                     const QRect& rect = QRect(10, 20, 300, 400), int order = 0)
 {
     PhosphorEngine::WindowPlacement p;
     p.windowId = windowId;
@@ -30,11 +30,17 @@ inline PhosphorEngine::WindowPlacement makePlacement(const QString& windowId, co
     if (state == PhosphorEngine::WindowPlacement::stateSnapped()) {
         slot.zoneIds = QStringList{QStringLiteral("z1")};
     } else if (state == PhosphorEngine::WindowPlacement::stateTiled()) {
-        slot.order = 0;
+        slot.order = order;
     }
     p.engines.insert(engine, slot);
-    if (state == PhosphorEngine::WindowPlacement::stateFree()
-        || state == PhosphorEngine::WindowPlacement::stateFloating()) {
+    // Conditional on validity so a test can build a GEOMETRY-LESS floating
+    // record by passing QRect() — the shape the reopen accept distinguishes
+    // (same-instance only) from a restorable float-back. Inserting an
+    // invalid rect instead would create a third record shape that neither
+    // hasRestorableContent nor the merge treats like an absent entry.
+    if ((state == PhosphorEngine::WindowPlacement::stateFree()
+         || state == PhosphorEngine::WindowPlacement::stateFloating())
+        && rect.isValid()) {
         p.freeGeometryByScreen.insert(screen, rect);
     }
     return p;

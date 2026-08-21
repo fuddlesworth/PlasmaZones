@@ -36,6 +36,12 @@ SettingsFlickable {
     // persisted setting on load / external edits / per-screen scope changes via
     // onEffectiveAlgorithmChanged.
     property string selectedAlgorithm: root.effectiveAlgorithm
+    // The reserved "explicitly no algorithm" word
+    // (PhosphorZones::NoTilingAlgorithm), which the library card's Clear
+    // Default stores in defaultAutotileAlgorithm. Named rather than spelled
+    // inline, matching MonitorStatePage's tokens; the constant's own doc block
+    // lists every QML site that hardcodes the literal.
+    readonly property string _noAlgorithmToken: "none"
 
     onEffectiveAlgorithmChanged: root.selectedAlgorithm = root.effectiveAlgorithm
     // Data-driven algorithm capabilities (lookup from cached availableAlgorithms by ID)
@@ -200,6 +206,15 @@ SettingsFlickable {
                         // An empty id means the combo's model rebuilt under the
                         // selection — fall back to the persisted global default.
                         const algoId = selectedId === "" ? appSettings.defaultAutotileAlgorithm : selectedId;
+                        // The persisted default can be the reserved opt-out
+                        // word (the library card's Clear Default). It is not
+                        // a pickable algorithm here, and writing it through
+                        // writeSetting in per-screen scope would plant the
+                        // word in a per-screen Algorithm override — a slot
+                        // whose engine-side resolver has no sentinel arm.
+                        // A rebuild under a cleared default just keeps state.
+                        if (algoId === root._noAlgorithmToken)
+                            return;
                         // Drive the page off the user's pick immediately, then
                         // persist. Only the Algorithm key is written; resetting
                         // global max-windows / split-ratio / master-count here
@@ -211,13 +226,29 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                // Gated with the row it adjoins, per SettingsSeparator's own
+                // contract — otherwise the collapsed row leaves a dangling
+                // rule line behind it.
+                SettingsSeparator {
+                    enabled: root.selectedAlgorithm !== root._noAlgorithmToken
+                }
 
                 // Max windows
                 SettingsRow {
                     title: i18n("Max windows")
                     searchAnchor: "maxWindows"
                     description: i18n("Maximum number of windows to tile on this screen")
+                    // Hidden while the default is cleared: with no algorithm
+                    // selected there is no per-algorithm slot to tune, and the
+                    // controller refuses the write. Left in place, the slider
+                    // would hold the dragged value for the session and snap
+                    // back on reload — a silent discard. SettingsRow is
+                    // `visible: enabled && …`, so this collapses the row
+                    // exactly as the ratio and master rows collapse through
+                    // their capability flags, which answer false for the
+                    // reserved word. Those two are self-gating; this row is
+                    // otherwise unconditional, so it needs the test spelled out.
+                    enabled: root.selectedAlgorithm !== root._noAlgorithmToken
 
                     SettingsSlider {
                         id: previewWindowSlider
@@ -423,9 +454,18 @@ SettingsFlickable {
                                 model: modelData.enumOptions || []
                                 currentIndex: {
                                     let opts = modelData.enumOptions || [];
-                                    let idx = opts.indexOf(paramValue);
-                                    return idx >= 0 ? idx : 0;
+                                    // -1, never 0, for a value the script's
+                                    // current options no longer offer. Falling
+                                    // back to the FIRST option displayed a
+                                    // value the algorithm will not actually
+                                    // run with — a stale or hand-edited enum
+                                    // silently misreported itself as the
+                                    // default. The repo convention for an
+                                    // unmatched selection is -1 plus a
+                                    // verbatim displayText.
+                                    return opts.indexOf(paramValue);
                                 }
+                                displayText: currentIndex >= 0 ? currentText : (paramValue || "")
                                 onActivated: {
                                     root.setLiveCustomParam(modelData.name, currentText);
                                     root.settingsBridge.setCustomParam(root.selectedAlgorithm, modelData.name, currentText);

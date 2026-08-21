@@ -85,9 +85,9 @@ ColumnLayout {
 
     /// Wire→valueKind helper for `_valueLabel`. Returns the field's controller-side
     /// kind string (any of the kinds MatchLeafEditor dispatches on: string, number,
-    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation, layout)
-    /// or "string" for unknown fields — the safest default since `String(value)`
-    /// is what a plain-string render would do anyway.
+    /// bool, screen, activity, windowType, virtualDesktop, mode, orientation,
+    /// colorScheme, layout) or "string" for unknown fields — the safest default
+    /// since `String(value)` is what a plain-string render would do anyway.
     function _valueKind(wire) {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
             if (root.matchFieldOptions[i].wire === wire)
@@ -102,8 +102,8 @@ ColumnLayout {
     ///   - screen → `appSettings.screens.displayLabel` for the matching name
     ///   - activity → `appSettings.activities.name` for the matching id
     ///   - windowType → the enum option's label from the field entry
-    ///   - layout → `appSettings.layouts.displayName` for the matching id
-    ///   - mode / orientation → the token's option label from the field entry
+    ///   - layout → `appSettings.activeLayoutMatchOptions` displayName for the matching id
+    ///   - mode / orientation / colorScheme → the token's option label from the field entry
     ///   - everything else (string, number) → `String(value)`
     /// Falls back to the raw wire value when a lookup misses (e.g. the
     /// rule references an unplugged monitor or removed activity), matching
@@ -124,8 +124,14 @@ ColumnLayout {
                         // displayLabel carries make/model/resolution + connector;
                         // mark the primary monitor to match the editor's picker.
                         var label = screens[i].displayLabel || String(value);
+                        // Same disambiguation as the two monitor PICKERS
+                        // (MatchLeafEditor's screenValueEditor and
+                        // ActionParamEditors' _screenIdEditor): one source
+                        // string with one context, so a translator cannot leave
+                        // the tree and the picker rendering a monitor
+                        // differently.
                         if (screens[i].isPrimary)
-                            return i18nc("@label monitor caption", "%1 · %2", label, i18n("Primary"));
+                            return i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
 
                         return label;
                     }
@@ -142,7 +148,13 @@ ColumnLayout {
             }
         }
         if (kind === "layout" && root.appSettings) {
-            var layouts = root.appSettings.layouts;
+            // activeLayoutMatchOptions carries every layouts entry, with the
+            // template rows rewritten in place to their "scrolling:<uuid>" wire
+            // id (the raw UUID is never an ActiveLayout value, so it is not
+            // offered). The bare "scrolling:" sentinel leads the list. Between
+            // them these resolve to the same friendly names the editor picker
+            // offered.
+            var layouts = root.appSettings.activeLayoutMatchOptions;
             if (layouts) {
                 for (var L = 0; L < layouts.length; ++L) {
                     if (layouts[L].id === value)
@@ -166,10 +178,12 @@ ColumnLayout {
                 break;
             }
         }
-        // Closed string-token dropdowns (Mode, Screen orientation) — resolve the
-        // token to its friendly label from the field entry's options, the same way
-        // windowType does, so the tree shows "Portrait" not the raw "portrait".
-        if (kind === "mode" || kind === "orientation") {
+        // Closed string-token dropdowns (Mode, Screen orientation, Color scheme)
+        // — resolve the token to its friendly label from the field entry's
+        // options, the same way windowType does, so the tree shows "Portrait"
+        // not the raw "portrait". Every closed-vocabulary kind belongs in this
+        // list: a kind missing here renders its untranslated wire token.
+        if (kind === "mode" || kind === "orientation" || kind === "colorScheme") {
             for (var m = 0; m < root.matchFieldOptions.length; ++m) {
                 var modeEntry = root.matchFieldOptions[m];
                 if (modeEntry.wire !== fieldWire)
@@ -594,6 +608,12 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
                         implicitWidth: valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
                         implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
+                        // Cap the pill so a long Title, a regex, or a raw zone
+                        // UUID elides inside it instead of running past the row
+                        // edge. The label below keeps its full text as its
+                        // implicitWidth, so a short value still sizes the pill
+                        // to fit exactly.
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 20
                         radius: Kirigami.Units.smallSpacing
                         color: Kirigami.Theme.alternateBackgroundColor
                         border.width: 1
@@ -603,8 +623,21 @@ ColumnLayout {
                             id: valueLabel
 
                             anchors.centerIn: parent
+                            // Fit inside the (possibly capped) pill. Reading the
+                            // label's own implicitWidth is not a loop: elide
+                            // leaves implicitWidth at the full text width, which
+                            // is what the pill sizes from.
+                            width: Math.min(implicitWidth, parent.width - Kirigami.Units.largeSpacing * 2)
+                            elide: Text.ElideRight
                             text: root._valueLabel(delegate.value, delegate.fieldWire, delegate.opWire)
                             font.family: Kirigami.Theme.smallFont.family
+                            ToolTip.text: valueLabel.text
+                            ToolTip.visible: valueHover.hovered && valueLabel.truncated
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                            HoverHandler {
+                                id: valueHover
+                            }
                         }
                     }
                 }

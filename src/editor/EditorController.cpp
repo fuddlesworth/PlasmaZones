@@ -4,7 +4,7 @@
 #include "EditorController.h"
 
 #include "EditorGapsModel.h"
-#include "../config/configbackends.h"
+#include "EditorTemplateModel.h"
 #include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
 #include "services/DBusLayoutService.h"
@@ -25,10 +25,12 @@
 #include "../shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QClipboard>
 #include <QDBusConnection>
 #include <QGuiApplication>
+#include <QStringList>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include "../common/screenidresolver.h"
@@ -66,6 +68,15 @@ EditorController::EditorController(QObject* parent)
             &EditorController::shaderPresetSaveFailed);
     connect(m_shaderPreview, &ShaderPreviewController::shaderPresetLoadFailed, this,
             &EditorController::shaderPresetLoadFailed);
+
+    // The template preview's axis is derived from the target screen (its
+    // per-screen override, and its size under Auto), so it re-resolves
+    // whenever the target moves. The settings-load path re-resolves it too,
+    // for the other input: the config values themselves. Both go through the
+    // refresh rather than straight at the signal, so an input change that
+    // resolves to the same axis announces nothing.
+    connect(this, &EditorController::targetScreenChanged, this, &EditorController::refreshTemplatePreviewVertical);
+    connect(this, &EditorController::targetScreenSizeChanged, this, &EditorController::refreshTemplatePreviewVertical);
 
     // Begin watching rules.json for external writes. The editor has no
     // D-Bus rules-reload path, so without this its m_localRuleStore would serve
@@ -126,11 +137,55 @@ EditorController::EditorController(QObject* parent)
     const QString svc = QString(PhosphorProtocol::Service::Name);
     const QString path = QString(PhosphorProtocol::Service::ObjectPath);
     const QString iface = QString(PhosphorProtocol::Service::Interface::LayoutRegistry);
+    // A subscription that returns false leaves the editor on a stale snapshot
+    // with nothing to say so. Accumulate the misses and report them in one
+    // line at the end of the wiring, the same batched shape as
+    // SettingsController::wireDaemonSubscriptions: when the daemon is not up
+    // at construction they all fail together, and one summary reads far
+    // better than seven scattered warnings.
+    QStringList failedSubscriptions;
+    const auto subscribe = [&](const QString& interfaceName, const QString& signalName, QObject* receiver,
+                               const char* slot) {
+        if (!bus.connect(svc, path, interfaceName, signalName, receiver, slot)) {
+            failedSubscriptions.append(interfaceName + QStringLiteral(".") + signalName);
+        }
+    };
     for (const auto& sig :
          {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {
-        bus.connect(svc, path, iface, sig, &m_layoutReloadTimer, SLOT(start()));
+        subscribe(iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
+
+    // Strip-axis inputs follow the live config: the daemon's settingsChanged
+    // fires once per key group on a settings-app Save, so debounce the burst
+    // into one config re-read. Without this, a per-screen axis authored
+    // while the editor is open never reached the template preview until a
+    // restart (loadEditorSettings runs only from this constructor).
+    m_stripAxisReloadTimer.setSingleShot(true);
+    m_stripAxisReloadTimer.setInterval(250);
+    connect(&m_stripAxisReloadTimer, &QTimer::timeout, this, &EditorController::reloadScrollingStripAxis);
+    subscribe(QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("settingsChanged"),
+              &m_stripAxisReloadTimer, SLOT(start()));
+
+    // Local read view of the scrolling templates, the template sibling of
+    // m_localLayoutManager: instant template opens without the daemon, plus
+    // the offline save fallback. The store watches nothing, so subscribe to
+    // the daemon's change signal for cross-process writes — no debounce
+    // needed, template CRUD emits once per operation.
+    m_templateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_templateStore->loadTemplates();
+    subscribe(iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
+
+    if (!failedSubscriptions.isEmpty()) {
+        qCWarning(lcEditor) << "EditorController:" << failedSubscriptions.size()
+                            << "D-Bus signal subscription(s) failed at construction — affected routes:"
+                            << failedSubscriptions.join(QStringLiteral(", "))
+                            << "— the editor will not see another process's writes until the next launch.";
+    }
+
+    // Scrolling-template edit state sub-model (see the gaps model above for
+    // the pattern: child QObject that reaches back for undo + dirty flag).
+    m_scrollingTemplate = new EditorTemplateModel(this, this);
 
     // Connect service signals
     connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {
@@ -176,6 +231,25 @@ EditorController::EditorController(QObject* parent)
     connect(m_zoneManager, &ZoneManager::zoneNumberChanged, this, &EditorController::zoneNumberChanged);
     connect(m_zoneManager, &ZoneManager::zoneColorChanged, this, &EditorController::zoneColorChanged);
     connect(m_zoneManager, &ZoneManager::zonesModified, this, &EditorController::markUnsaved);
+
+    // Template mode derives the DIRTY flag from the undo stack's clean state:
+    // every template edit is a command on this stack (field setters, columns,
+    // the rename command), so undoing back to the saved or loaded baseline
+    // genuinely restores it and may clear the flag. Gated hard: a NEW
+    // template is dirty by definition until its first save (its clean-index
+    // baseline is the unsaved blank), and layout mode keeps its wider
+    // markUnsaved sources, where a clean stack does not imply a clean layout.
+    connect(m_undoController, &UndoController::cleanStateChanged, this, [this](bool clean) {
+        if (m_editorMode != ModeScrollingTemplate || m_isNewLayout) {
+            return;
+        }
+        const bool unsaved = !clean;
+        if (m_hasUnsavedChanges == unsaved) {
+            return;
+        }
+        m_hasUnsavedChanges = unsaved;
+        Q_EMIT hasUnsavedChangesChanged();
+    });
 
     // Initialize ZoneManager with default screen size (updated when target screen is set)
     m_zoneManager->setReferenceScreenSize(targetScreenSize());
@@ -296,10 +370,6 @@ bool EditorController::hasMultipleSelection() const
 bool EditorController::hasUnsavedChanges() const
 {
     return m_hasUnsavedChanges;
-}
-bool EditorController::isNewLayout() const
-{
-    return m_isNewLayout;
 }
 bool EditorController::gridSnappingEnabled() const
 {

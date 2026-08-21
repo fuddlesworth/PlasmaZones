@@ -1,0 +1,13 @@
+{
+    "id": "{c2d8e5f3-9a1b-4d7c-b0e8-2a1c0d9e8f03}",
+    "name": "Tabbed halves",
+    "description": "Two columns that each take half the strip and show their windows as tabs, so the screen stays split in two while each half holds as many windows as you like.",
+    "columns": [
+        { "width": 0.5, "display": 1 },
+        { "width": 0.5, "display": 1 }
+    ],
+    "defaultColumnWidth": { "kind": 3, "value": 0.5, "presetIndex": 1 },
+    "defaultColumnDisplay": 1,
+    "presetColumnWidths": [0.33333, 0.5, 0.66667],
+    "presetWindowHeights": [0.33333, 0.5, 0.66667]
+}

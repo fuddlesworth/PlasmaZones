@@ -215,6 +215,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PhosphorProtocol::SnapAssistCandidateList"/>
             </arg>
         </signal>
+        <signal name="snapAssistThumbnailCacheTrimmed">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's idle-grace trim empties its snap-assist thumbnail stores (pixel LRU and dma-buf descriptors). The kwin-effect subscribes and drops its recently-posted dedup set in response, so the next snap-assist re-captures thumbnails the daemon no longer holds. Without this edge the two sides desynchronise permanently after a trim and snap assist falls back to program icons until a daemon restart."/>
+        </signal>
         <signal name="snapAssistDismissed">
             <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted when the Snap Assist overlay closes — whether through a user pick, an Escape / backdrop dismiss, an external hideSnapAssist() D-Bus call, or a screen-change cancel. Pairs with snapAssistShown so external observers (KCMs, kwin-effect, debugging tools) can mirror the visible/hidden state without polling isSnapAssistVisible. Carries no payload; the dismiss reason is intentionally not surfaced because the daemon collapses every dismiss path through the same internal IOverlayService::snapAssistDismissed signal."/>
         </signal>

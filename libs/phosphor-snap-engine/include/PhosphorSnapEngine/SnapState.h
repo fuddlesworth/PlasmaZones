@@ -78,6 +78,19 @@ public:
         bool lastUsedZoneCleared = false;
     };
     UnassignResult unassignWindow(const QString& windowId);
+    /// Drop ONLY the screen/desktop residence entries, leaving the zone
+    /// assignment, the floating bit and the pre-float capture untouched.
+    ///
+    /// For the cross-engine handoff of a window that was FLOATING but not
+    /// snapped: unassignWindow never runs for it (no zone assignment to
+    /// clear), so setFloatingOnScreen's residence writes survived in this
+    /// store. They are invisible to reverse-map reads but NOT to raw scans
+    /// like windowsOnScreenAndDesktop, which feeds cross-desktop focus — snap
+    /// could then offer and activate a window another engine now owns.
+    /// removeWindowData is the wrong primitive here: it also wipes the
+    /// pre-float capture that handoffRelease deliberately preserves.
+    /// @return true when an entry was removed.
+    bool clearScreenAndDesktop(const QString& windowId);
 
     QString zoneForWindow(const QString& windowId) const;
     QStringList zonesForWindow(const QString& windowId) const;
@@ -85,7 +98,47 @@ public:
     QStringList snappedWindows() const;
     bool isWindowSnapped(const QString& windowId) const;
 
+    /// Layer-side focus memory for switch-focus-between-floating-and-tiling.
+    ///
+    /// SnapState holds no focus slot of its own (the engine reads the live
+    /// focus from INavigationStateProvider on demand), so these remember
+    /// only what noteFocused() classified from the engine's windowFocused
+    /// reports: the last SNAPPED window focused and the last FLOATING
+    /// window focused. Residence-only windows (screen recorded, no zone,
+    /// no float bit) belong to neither layer and update neither memory.
+    /// Cleared when the remembered window changes layer (setFloating and
+    /// friends), leaves the store (removeWindowData, migrateWindowTo), and
+    /// never serialized — focus history dies with the session. Consumers
+    /// validate before use, so a stale value degrades to a fallback scan,
+    /// never a wrong activation. Deliberate divergence from TilingState:
+    /// the tiling twin RETAINS a non-focused window's old-side memory on a
+    /// layer change (its transient floats round-trip), which needs a focus
+    /// slot to condition on — snap holds none, so it clears unconditionally.
+    void noteFocused(const QString& windowId);
+    QString lastSnappedFocus() const
+    {
+        return m_lastSnappedFocus;
+    }
+    QString lastFloatingFocus() const
+    {
+        return m_lastFloatingFocus;
+    }
+
     QString screenForWindow(const QString& windowId) const;
+
+    /// Record screen + desktop residence WITHOUT a zone assignment and without
+    /// touching the floating set.
+    ///
+    /// This is how a cross-engine handoff adopts a window as a plain FREE
+    /// window (snapping's default for unmanaged windows): the arrival carries
+    /// no resolvable zone and is not floating, but the adoption must still be
+    /// VISIBLE — guardedHandoff verifies with isWindowTracked() after
+    /// handoffReceive returns, and with no zone and no float only the
+    /// screen-assignment arm can answer. Residence-only is an established
+    /// state in this model (unsnapForFloat preserves it via
+    /// clearZoneAssignment's preserve flag) and handoffRelease clears it
+    /// symmetrically through clearScreenAndDesktop.
+    void recordResidence(const QString& windowId, const QString& screenId, int virtualDesktop);
     int desktopForWindow(const QString& windowId) const;
 
     /// Re-stamp a snapped window's virtual-desktop membership to @p virtualDesktop,
@@ -336,6 +389,9 @@ private:
     QSet<QString> m_floatingWindows;
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
+
+    QString m_lastSnappedFocus;
+    QString m_lastFloatingFocus;
 
     QString m_lastUsedZoneId;
     QString m_lastUsedScreenId;

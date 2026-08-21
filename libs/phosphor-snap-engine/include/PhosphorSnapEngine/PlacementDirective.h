@@ -5,6 +5,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 namespace PhosphorSnapEngine {
 
@@ -17,8 +18,12 @@ namespace PhosphorSnapEngine {
  * resolver declaration can reference it by value without pulling in the full
  * SnapEngine definition.
  *
- *  - @c zoneOrdinals — the `SnapToZone` ordinal list (1-based). Empty means no
- *    SnapToZone rule matched; the engine then has nothing to snap.
+ *  - @c zoneOrdinals — the `SnapToZone` ordinal list (1-based).
+ *  - @c zoneNames — the `SnapToZone` zone-name list. Each name resolves to the
+ *    lowest-numbered zone of that name (case-insensitive, trimmed) in the
+ *    placement layout, so a name-keyed rule follows the zone across layouts that number
+ *    it differently. Names and ordinals union into one span. Both lists empty
+ *    means no SnapToZone rule matched; the engine then has nothing to snap.
  *  - @c targetScreenId — the `RouteToScreen` target monitor (canonical screen-id
  *    form). When non-empty the zones resolve on THAT screen and the window is
  *    moved there, restoring the per-monitor pinning the retired per-layout app
@@ -35,6 +40,9 @@ struct PlacementDirective
     QList<int> zoneOrdinals{};
     QString targetScreenId{};
     int targetDesktop = 0;
+    // Trailing so the positional `{ordinals, screen}` aggregate form the
+    // engine tests use keeps its meaning.
+    QStringList zoneNames{};
 };
 
 } // namespace PhosphorSnapEngine

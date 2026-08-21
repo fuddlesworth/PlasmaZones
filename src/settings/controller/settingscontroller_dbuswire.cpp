@@ -94,6 +94,12 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     subscribeDaemonSignal(layoutIface, QStringLiteral("layoutPropertyChanged"), SLOT(scheduleLayoutLoad()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
     subscribeDaemonSignal(layoutIface, QStringLiteral("layoutListChanged"), SLOT(scheduleLayoutLoad()));
+    // scrollingTemplatesChanged fires on template store CRUD (save, delete,
+    // duplicate, rescan) — reload the LOCAL read view first so the bundle's
+    // template source and export/open-file answer fresh, then the debounced
+    // layout reload refreshes the cards.
+    subscribeDaemonSignal(layoutIface, QStringLiteral("scrollingTemplatesChanged"),
+                          SLOT(onScrollingTemplatesChanged()));
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
     subscribeDaemonSignal(layoutIface, QStringLiteral("screenLayoutChanged"),
                           SLOT(onScreenLayoutChanged(QString, QString, int)));

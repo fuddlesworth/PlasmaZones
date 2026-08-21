@@ -96,7 +96,14 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
         // returned at the top of this method, so an unknown screen reaches the
         // apply unchanged and is refused (or ignored) downstream.
         const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        // setAssignmentEntry(screenId, desktop=0 (current), activity="" (current), mode, layout, algorithm)
+        // setAssignmentEntry(screenId, desktop=0 (screen level), activity="" (all activities), mode, layout, algorithm)
+        //
+        // The two empty strings WIPE the context's stored snapping layout and
+        // tiling algorithm — that is this verb's contract, not an oversight:
+        // it is a bare mode switch with no layout arguments of its own, so it
+        // cannot carry the slots forward, and the toggled mode resolves
+        // through the cascade instead. The scrolling template survives
+        // because setAssignmentEntry seeds the entry from the stored one.
         m_layoutAdaptor->setAssignmentEntry(screenId, 0, QString(), newMode, QString(), QString());
         // Apply this ONE screen explicitly rather than calling
         // applyAssignmentChanges, which drains the shared client buffer: that

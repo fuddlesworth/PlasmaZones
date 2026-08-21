@@ -6,23 +6,29 @@
  * @brief Contracts between the animations settings QML and its C++ controller,
  *        pinned by parsing the QML source itself.
  *
- * Three things the compiler cannot check, because QML resolves names at
+ * Contracts the compiler cannot check, because QML resolves names at
  * runtime and the settings app has no QML test harness:
  *
  *   - every `animationsPage.<name>` the QML calls exists on the controller's
  *     meta-object, so a rename on either side fails here rather than as a
- *     silent no-op in the running app;
+ *     silent no-op in the running app (and likewise for the shader browser's
+ *     bridge calls);
  *   - every event path the simple Animations page hosts falls inside the C++
  *     page-scope roots, so a per-page Reset covers what the page shows;
  *   - the Override toggle's ON branch writes nothing, and its OFF branch closes
  *     the timing editor only when the clear was accepted. Both live entirely in
- *     QML and so cannot be observed by driving the controller from C++.
+ *     QML and so cannot be observed by driving the controller from C++;
+ *   - the shader browser's `_typeCatalog` declares exactly the event-class
+ *     vocabulary (every class present, the synthetic universal bucket absent,
+ *     keying independent of declaration order).
  *
  * Split out of `test_animations_page_controller.cpp`, which owns the
  * controller's own behaviour. These slots need `P_SOURCE_DIR` to read the
  * source tree; that is what makes them a separate concern rather than a
  * separate file for size alone.
  */
+
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QTest>
 
@@ -352,6 +358,81 @@ private Q_SLOTS:
                  "refreshFromTree's latch reset is no longer transition- and selfDriven-gated");
     }
 
+    /// ShaderBrowserPage's `_typeCatalog` labels the shader browser's type
+    /// axis, one entry per event class. There is no way to derive it from the
+    /// C++ SSOT (ProfilePaths::allEventClassTokens) inside QML, so it is a
+    /// hand-maintained list — and a class added without an entry here ships
+    /// an untranslated raw token sorted last, which is exactly how the strip
+    /// class first shipped. Pin the key set against the same literal
+    /// vocabulary test_animationshadereffect pins on the C++ side.
+    void shaderBrowserTypeCatalogCoversEveryEventClass()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        const int start = src.indexOf(QStringLiteral("_typeCatalog"));
+        QVERIFY2(start >= 0, "_typeCatalog is gone from ShaderBrowserPage.qml");
+        const int end = src.indexOf(QStringLiteral("_universalKey"), start);
+        QVERIFY2(end > start, "could not find the end of the _typeCatalog block (_universalKey moved?)");
+        const QString block = src.mid(start, end - start);
+
+        // The C++ SSOT itself, not a mirror: a hand-copied literal here passed
+        // green when a class was added to the vocabulary and NEITHER the QML
+        // catalog nor the copy was updated — the exact failure this slot
+        // exists to prevent. Reading the SSOT makes a new class fail here
+        // until _typeCatalog grows its entry. "universal" is deliberately
+        // absent from the vocabulary: it is the synthetic order-0 bucket the
+        // helpers resolve, not a declared class — pinned below.
+        const QStringList classTokens = PhosphorAnimation::ProfilePaths::allEventClassTokens();
+        QVERIFY(!classTokens.contains(QStringLiteral("universal")));
+        QVERIFY2(!block.contains(QStringLiteral("\"key\": \"universal\"")),
+                 "_typeCatalog must not declare the synthetic universal bucket as a class entry");
+        QStringList missing;
+        for (const QString& token : classTokens) {
+            if (!block.contains(QStringLiteral("\"key\": \"") + token + QLatin1Char('"'))) {
+                missing << token;
+            }
+        }
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("_typeCatalog has no entry for event class(es): ")
+                            + missing.join(QLatin1String(", "))
+                            + QStringLiteral(" — such packs get an untranslated badge sorted last")));
+    }
+
+    /// _effectTypeKey must bucket a pack by CATALOG order, not by the order
+    /// its metadata happens to list its classes. Reading `appliesTo[0]` made
+    /// two behaviourally identical hybrids badge and sort into different
+    /// buckets, and it was the last consumer anywhere that observed the
+    /// declaration order — AnimationShaderEffect::operator== now compares
+    /// appliesTo as a set on the strength of that. A regression here would
+    /// silently reintroduce the asymmetry, so guard the shape.
+    void shaderBrowserTypeKeyIsIndependentOfDeclarationOrder()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        const int start = src.indexOf(QStringLiteral("function _effectTypeKey"));
+        QVERIFY2(start >= 0, "_effectTypeKey is gone from ShaderBrowserPage.qml");
+        const int end = src.indexOf(QStringLiteral("function _typeLabel"), start);
+        QVERIFY2(end > start, "could not find the end of _effectTypeKey");
+        const QString body = src.mid(start, end - start);
+
+        QVERIFY2(body.contains(QStringLiteral("_typeCatalog")),
+                 "_effectTypeKey must resolve the bucket through _typeCatalog so the result is independent of "
+                 "the pack's declaration order");
+        // The bare first-token read is the regression. The catalog-order
+        // walk keeps `appliesTo[0]` only as the unknown-token fallback, so
+        // require the catalog lookup to come FIRST.
+        const int catalogAt = body.indexOf(QStringLiteral("_typeCatalog"));
+        const int firstTokenAt = body.indexOf(QStringLiteral("appliesTo[0]"));
+        if (firstTokenAt >= 0) {
+            QVERIFY2(catalogAt >= 0 && catalogAt < firstTokenAt,
+                     "appliesTo[0] may only be the unknown-token fallback, after the catalog-order lookup");
+        }
+    }
+
     // ─── Shader-browser bridge route ──────────────────────────────────────
 
     /// The Animations → Shaders page routes AnimationsPageController through
@@ -383,7 +464,12 @@ private Q_SLOTS:
                                                 QStringLiteral("ShaderSetCard.qml")};
         {
             static const QRegularExpression bridgeUseRe(QStringLiteral("\\bbridge\\."));
-            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+            // Subdirectories, matching the routeFiles walk: a browser-route
+            // file added in a subfolder must be visible to this completeness
+            // sweep, or the guard goes silent on exactly the file it exists
+            // to catch.
+            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
+                               QDirIterator::Subdirectories);
             while (sweep.hasNext()) {
                 const QString path = sweep.next();
                 if (routeFiles.contains(path) || setsRouteExclusions.contains(QFileInfo(path).fileName())) {

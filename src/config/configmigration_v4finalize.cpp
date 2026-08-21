@@ -676,7 +676,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 
             rules.append(PhosphorRules::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
-                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm, priority));
+                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm, priority,
+                // v4 configs predate the scrolling-template concept, so there
+                // is genuinely no template to migrate — explicit rather than
+                // a defaulted argument that could silently absorb a future
+                // caller's omission.
+                QString()));
         }
     }
 
@@ -844,6 +849,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             // Emit the mode-nested shape the reader expects (snapping slots
             // under the snapping key, autotile empty). There is exactly one
             // on-disk format — the reader does not accept a bare flat map.
+            // The scrolling key is deliberately absent: v3 had no scrolling
+            // engine, so there is nothing to relocate under it, and the reader
+            // treats a missing mode key as "no slots for that mode" rather than
+            // as a malformed file.
             QJsonObject nested;
             nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, quickLayoutsToRelocate);
             nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, QJsonObject{});

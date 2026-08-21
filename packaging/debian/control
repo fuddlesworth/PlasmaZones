@@ -22,6 +22,7 @@ Build-Depends:
  qt6-svg-dev | libqt6svg6-dev,
  libkf6kcmutils-dev (>= 6.26.0),
  libkf6globalaccel-dev (>= 6.26.0),
+ libkf6colorscheme-dev (>= 6.26.0),
  libkf6kirigami-dev (>= 6.26.0) | kf6-kirigami-dev (>= 6.26.0),
  kwin-dev (>= 6.7.0),
  libxkbcommon-dev,
@@ -59,6 +60,7 @@ Recommends:
  systemd,
 Suggests:
  plasma-activities,
+ pci.ids,
 Description: Window tiling and autotiling for KDE Plasma
  PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.7+.
  It allows users to create custom zone layouts and snap windows using

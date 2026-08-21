@@ -37,6 +37,15 @@ ComboBox {
         currentIndex = Math.max(0, indexOfValue(storedValue));
     }
 
+    // For sites whose onActivated conditionally REFUSES the write: the combo
+    // has already committed currentIndex to the clicked item by the time
+    // activated() fires, and a swallowed write never changes storedValue, so
+    // nothing re-syncs the display. Call this in the refusal branch to snap
+    // the field back to the stored value.
+    function revertToStoredValue() {
+        _syncStoredValue();
+    }
+
     // Cached widest-item width — recalculated only when model or count changes.
     // Using a separate TextMetrics avoids the binding loop caused by the
     // _longestItemWidth → metrics.text → advanceWidth → _longestItemWidth cycle.
@@ -106,7 +115,6 @@ ComboBox {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                propagateComposedEvents: true
                 onPressed: function (mouse) {
                     // Map the ComboBox button rect into catcher-local coords
                     // (catcher fills Overlay.overlay, so these match the mouse

@@ -3,6 +3,7 @@
 
 #include "daemon/daemon.h"
 #include "daemon/overlayservice.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -25,6 +26,8 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <QScopeGuard>
+
 #include "seedorderfilter.h"
 #include <QGuiApplication>
 #include <QScopedValueRollback>
@@ -59,21 +62,73 @@ bool Daemon::isAnyScreenAutotile() const
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        // Two screens are in Autotile MODE but tile nothing, and this
+        // predicate gates announcements about the algorithm in USE (the
+        // algorithm-changed OSD): the explicit opt-out, and a screen the
+        // router has downgraded because the tiling engine does not own it
+        // (master switch off, Autotile axis context-disabled). Counting
+        // either meant showing an algorithm card for a change that rearranged
+        // nothing. The router answer already folds in the downgrade, so it is
+        // the same question osd.cpp's filter asks.
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+            && PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) != PhosphorZones::NoTilingAlgorithm
+            && currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Autotile) {
             return true;
         }
     }
     return false;
 }
 
-void Daemon::updateAutotileScreens()
+bool Daemon::intersectsAnyLiveScreen(const QRect& geometry) const
 {
+    if (!geometry.isValid() || !m_screenManager) {
+        return false;
+    }
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
+        const QRect geom = m_screenManager->screenGeometry(screenId);
+        if (geom.isValid() && geom.intersects(geometry)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Daemon::updateEngineScreens()
+{
+    // Pre-init calls bail here; after initEnginesAndWiring the factory
+    // contract guarantees BOTH engines exist (asserted there), so this
+    // early return can never freeze the scrolling half on its own.
     // m_algorithmRegistry joins the preamble: the per-screen override loop
     // below derefs it for the algorithm-default MaxWindows injection, and a
     // guard only on its siblings left that deref as the odd one out.
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager || !m_algorithmRegistry) {
         return;
     }
+    // Re-entrancy latch: the autotile engine's setActiveScreens emits
+    // placementChanged SYNCHRONOUSLY from its tail (context.cpp; the
+    // RETILE-driven emissions are queued — scheduleRetileForScreen
+    // coalesces onto a later turn and cannot re-enter this pass), and the
+    // tiled-count gates recompute through here — running the
+    // capture/seed/apply phases against partially-applied state. Defer the
+    // nested request to a queued re-run instead.
+    if (m_updateEngineScreensInProgress) {
+        if (!m_updateEngineScreensQueued) {
+            m_updateEngineScreensQueued = true;
+            QMetaObject::invokeMethod(
+                this,
+                [this]() {
+                    m_updateEngineScreensQueued = false;
+                    updateEngineScreens();
+                },
+                Qt::QueuedConnection);
+        }
+        return;
+    }
+    m_updateEngineScreensInProgress = true;
+    const auto latchReset = qScopeGuard([this]() {
+        m_updateEngineScreensInProgress = false;
+    });
     // Every entry path into this function is wired in init() or later
     // (settingsChanged, layoutAssigned, virtual-screen reconfigure), so
     // the resolver is always live by the time we run. The earlier guard
@@ -85,12 +140,46 @@ void Daemon::updateAutotileScreens()
 
     const QString activity = currentActivity();
 
+    // ONE restore batch per recompute: both engines' windowsReleased fire
+    // synchronously inside this pass (autotile's setActiveScreens below,
+    // then updateScrollingScreens'), and each release APPENDS to
+    // m_pendingSnapFloatRestores. Clearing at handler entry instead would
+    // wipe the first engine's entries when both release in one flip.
+    m_pendingSnapFloatRestores.clear();
+
     QSet<QString> autotileScreens;
+    QSet<QString> scrollingScreens;
     QHash<QString, QString> screenAlgorithms;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
+        // Scrolling-mode assignment is resolved from the same cascade; it has
+        // no layout id of its own, so the mode lookup is the discriminator.
+        // The master switch gates here (the peer of the snapping/autotile
+        // feature flags): with scrolling disabled the branch is skipped
+        // entirely, the "scrolling:" assignment falls through as a
+        // non-autotile id, and the screen is treated as snapping — the same
+        // downgrade the router applies for an unclaimed scrolling cascade.
+        if (m_settings && m_settings->scrollingEnabled()
+            && m_layoutManager->modeForScreen(screenId, desktop, activity)
+                == PhosphorZones::AssignmentEntry::Scrolling) {
+            if (!m_contextResolver->isDisabled(
+                    m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling))) {
+                scrollingScreens.insert(screenId);
+                // Pre-save snap floats for a screen entering scrolling FROM
+                // SNAPPING, using the PRE-FLIP engine state as the
+                // discriminator (neither engine's live set holds it). This
+                // must run before any setActiveScreens: once the cascade
+                // answer is applied, snap's capturePlacement refuses the
+                // no-longer-Snapping screen and the presave writes nothing.
+                if (m_scrollEngine && !m_scrollEngine->isActiveOnScreen(screenId)
+                    && !m_autotileEngine->isActiveOnScreen(screenId)) {
+                    presaveSnapFloats(screenId);
+                }
+            }
+            continue;
+        }
         // Skip screens/desktops/activities where PlasmaZones is disabled.
         // Single cascade path through the resolver — see
         // libs/phosphor-context-resolver/README.md.
@@ -99,25 +188,90 @@ void Daemon::updateAutotileScreens()
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        // The master switch gates here, the exact peer of the scrolling branch
+        // above: with tiling disabled the branch is skipped entirely, the
+        // "autotile:<algo>" assignment falls through, and the screen is
+        // treated as snapping — the same downgrade the router then applies for
+        // an unclaimed autotile cascade.
+        //
+        // This gate is NOT the toggle-off path. Switching the feature off at
+        // runtime fires handleAutotileDisabled, which flips every Autotile
+        // assignment's MODE to Snapping (keeping tilingAlgorithm as dormant
+        // data for restoreAutotileAssignments to flip back), so by the time
+        // this loop runs there is no autotile id left to gate. What this
+        // covers is the switch being off WITHOUT that transition: a config
+        // that starts with tiling disabled and an autotile assignment already
+        // stored, and a user assigning Tiling on the Monitors page while it is
+        // off, which that page deliberately still allows.
+        //
+        // A null settings pointer disables the branch, matching what the
+        // scrolling peer does with its own switch: during the teardown window
+        // no engine should be claiming screens.
+        if (m_settings && m_settings->autotileEnabled() && PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+            // Explicit per-context opt-out ("autotile:none"): the context is
+            // IN autotile mode but nothing tiles there — windows float, the
+            // same behaviour class as the suppressed bare-autotile skip
+            // below, but unconditional: this is the user's own choice for
+            // the context, not a global default policy. The engine must
+            // never see the word (its setAlgorithm coerces unknown ids to
+            // the registry default, the opposite of an opt-out), so the
+            // screen is simply left out of the autotile set.
+            if (algoId == PhosphorZones::NoTilingAlgorithm) {
+                continue;
+            }
             // Bare autotile (mode set, no concrete algorithm — e.g. a mode-only
             // rule or a plain mode swap) draws its algorithm from the global
-            // default, which the suppress setting disables. Don't tile such a
-            // context when its default is suppressed (globally or by a
-            // per-context rule): tiling is active and would rearrange windows
-            // with a default the user opted out of. A concrete assigned
-            // algorithm is explicit and always tiles.
+            // default, so it must not tile when that default is unavailable.
+            // Two independent ways for it to be unavailable, both checked:
+            //
+            //   - the default is SUPPRESSED (globally or by a per-context
+            //     rule), and
+            //   - the default IS the explicit no-algorithm word, i.e. the user
+            //     cleared it.
+            //
+            // Either way tiling is active and would rearrange windows with a
+            // default the user opted out of. Without the second test the bare
+            // shape escaped entirely: extractAlgorithmId answers EMPTY (not the
+            // sentinel) for a bare "autotile:" id, so the opt-out arm above
+            // misses it, and the screen then tiled with whatever stale global
+            // id the engine still held — AutotileEngine::refreshConfigFromSettings
+            // deliberately declines to update that id for the reserved word, and
+            // its comment there states this exclusion as a guarantee.
+            //
+            // A concrete assigned algorithm is explicit and always tiles.
+            // m_settings is non-null here: the branch condition already
+            // required it before reading the master switch.
             if (algoId.isEmpty()
-                && m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
+                && (m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)
+                    || m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm)) {
                 continue;
             }
             autotileScreens.insert(screenId);
+            // Pre-save snap floats for a screen entering autotile FROM
+            // SNAPPING — the exact twin of the scrolling branch above, and
+            // for the same reason: after the flip snap's capturePlacement
+            // refuses the no-longer-Snapping screen. Without this, only the
+            // mode-toggle shortcut and the global feature enable presaved,
+            // so a cascade-driven flip (KCM apply, rule, layout picker)
+            // silently dropped every window's snap-mode float bit.
+            if (!m_autotileEngine->isActiveOnScreen(screenId)
+                && !(m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId))) {
+                presaveSnapFloats(screenId);
+            }
             if (!algoId.isEmpty()) {
                 screenAlgorithms[screenId] = algoId;
             }
         }
     }
+
+    // Snapshot the derived sets BEFORE any engine set is applied: the
+    // windowsReleased handler fires synchronously inside the applies below
+    // and must know where each released screen is HEADED (the other
+    // engine's live set still lags at that moment, and the raw cascade
+    // cannot see context-disable exclusions).
+    m_derivedAutotileScreens = autotileScreens;
+    m_derivedScrollingScreens = scrollingScreens;
 
     // Capture window order for screens LEAVING autotile before PhosphorTiles::TilingState is destroyed.
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
@@ -162,8 +316,16 @@ void Daemon::updateAutotileScreens()
         // genuinely means "nothing was tiled at toggle-off" rather than "we asked
         // the wrong context".
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
-        m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
+        m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = order;
     }
+
+    // Capture the SCROLLING engine's leaving orders in the same phase, before
+    // EITHER engine seeds: a screen flipping scrolling→autotile in this very
+    // pass must find its fresh column order in m_lastEngineOrders when
+    // seedAutotileOrderForScreen runs below (and the reverse flip finds the
+    // tiled order when updateScrollingScreens seeds). Capture-all →
+    // seed-all → apply-all; the map is shared between the engines by design.
+    captureScrollingOrders(scrollingScreens);
 
     // Seed window order for screens ENTERING autotile from saved state.
     // Must happen before setActiveScreens() which retiles added screens.
@@ -176,15 +338,20 @@ void Daemon::updateAutotileScreens()
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
     // tilingStateForScreen(), which setActiveScreens reuses for added screens.
-    if (m_settings) {
+    {
+        // The loop is NOT gated on m_settings: the algorithm injection and
+        // the rule-parameter layering derive from the layout assignment and
+        // the rule resolver, so a null settings service (defensive-only in
+        // practice) must not silently drop them. Only the config-derived
+        // reads below guard on m_settings individually.
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
             // Virtual->physical fallback: a per-screen autotile override stored on
             // a physical monitor must still apply when this screenId is one of its
             // virtual sub-screens.
-            QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
-            if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            QVariantMap overrides = m_settings ? m_settings->getPerScreenAutotileSettings(screenId) : QVariantMap();
+            if (overrides.isEmpty() && m_settings && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
                 overrides = m_settings->getPerScreenAutotileSettings(
                     PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
             }
@@ -205,12 +372,14 @@ void Daemon::updateAutotileScreens()
             // global config. Clamp before the enum compare exactly as the resolver
             // does (qBound), so a corrupt out-of-range stored value can't make the two
             // determinations drift (which would reintroduce the injected-cap defeat).
-            const int effectiveOverflow = qBound(
-                PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
-                tilingParams.overflowBehavior.value_or(overrides.contains(PerScreenKeys::OverflowBehavior)
-                                                           ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
-                                                           : m_settings->autotileOverflowBehaviorInt()),
-                PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
+            const int effectiveOverflow =
+                qBound(PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
+                       tilingParams.overflowBehavior.value_or(
+                           overrides.contains(PerScreenKeys::OverflowBehavior)
+                               ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
+                               : (m_settings ? m_settings->autotileOverflowBehaviorInt()
+                                             : PhosphorTiles::AutotileDefaults::MinOverflowBehavior)),
+                       PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
             const bool contextUnlimited =
                 effectiveOverflow == static_cast<int>(PhosphorTiles::AutotileOverflowBehavior::Unlimited);
             // Inject algorithm from layout assignment (authoritative source)
@@ -262,19 +431,19 @@ void Daemon::updateAutotileScreens()
                     } else if (auto* screenAlgoPtr = m_algorithmRegistry->algorithm(screenAlgo)) {
                         auto* globalAlgoPtr = m_algorithmRegistry->algorithm(globalAlgo);
                         if (!globalAlgoPtr) {
-                            qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo
+                            qCDebug(lcDaemon) << "updateEngineScreens: global algorithm" << globalAlgo
                                               << "not found - injecting per-screen default MaxWindows";
                         }
                         // Use the engine's runtime maxWindows (not m_settings->
                         // autotileMaxWindows()) — during cycling, settings may
-                        // be stale if updateAutotileScreens runs before
+                        // be stale if updateEngineScreens runs before
                         // setAlgorithm syncs settings via QSignalBlocker.
                         const int runtimeMaxWindows = m_autotileEngine->runtimeMaxWindows();
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
                             overrides[PerScreenKeys::MaxWindows] = screenAlgoPtr->defaultMaxWindows();
                         }
                     } else {
-                        qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo
+                        qCWarning(lcDaemon) << "updateEngineScreens: unknown per-screen algorithm" << screenAlgo
                                             << "for screen" << screenId;
                     }
                 }
@@ -315,7 +484,7 @@ void Daemon::updateAutotileScreens()
             // MaxWindows staleness above (which the engine re-derives at retile time
             // via effectiveMaxWindows), the engine has no retile-time re-resolution
             // for custom params, so a dropped CustomParams override persists until the
-            // next updateAutotileScreens (window open, desktop switch, cycle) rather
+            // next updateEngineScreens (window open, desktop switch, cycle) rather
             // than healing at the next retile.
             const QString effectiveAlgo = screenAlgorithms.value(screenId, m_autotileEngine->algorithmId());
             if (!tilingParams.algorithmParamTarget.isEmpty() && tilingParams.algorithmParamTarget == effectiveAlgo) {
@@ -352,9 +521,13 @@ void Daemon::updateAutotileScreens()
     // retiling them twice (setActiveScreens already did). Diffing gaps here to skip
     // the retile on truly-unrelated edits (appearance/lock/exclude) would have to
     // replicate that exact provider context and risk silently dropping gap
-    // application; the blanket retile is the simple correct choice. Cost is bounded:
-    // rulesChanged fires only on a user rule save, the retile is deferred + coalesced,
-    // and it produces identical geometry (no window movement) when nothing changed.
+    // application; the blanket retile is the simple correct choice. Cost is
+    // bounded by the two clauses that actually hold on every caller (this
+    // runs on every updateEngineScreens entry — desktop/activity switches,
+    // startup, layoutAssigned, settingsChanged, the re-entrancy replay —
+    // not only on a user rule save): the retile is deferred + coalesced,
+    // and it produces identical geometry (no window movement) when nothing
+    // changed.
     for (const QString& screenId : autotileScreens) {
         if (!addedScreens.contains(screenId)) {
             m_autotileEngine->scheduleRetileForScreen(screenId);
@@ -364,19 +537,56 @@ void Daemon::updateAutotileScreens()
     // Retile for existing screens whose overrides changed is handled by the
     // deferred retile scheduled inside applyPerScreenConfig()/clearPerScreenConfig().
     // This coalesces with deferred retiles from setAlgorithm() (called by
-    // applyEntry() after updateAutotileScreens), producing a SINGLE retile pass
+    // applyEntry() after updateEngineScreens), producing a SINGLE retile pass
     // with fully consistent state. An immediate retile() here would fire BEFORE
     // setAlgorithm() updates the global algorithm/splitRatio, causing a second
     // windowsTiled D-Bus signal whose stagger generation increment invalidates
     // the first signal's pending stagger timers — leaving windows at old
     // positions and producing the left-overlapping-right bug.
 
-    // Propagate to overlay service so initializeOverlay() skips autotile screens
+    // The scrolling twin runs from the same recompute points so the two
+    // engines' screen sets flip atomically per context switch; its body —
+    // set derivation details, order seeding, context-param push — lives in
+    // scrolling.cpp.
+    updateScrollingScreens(scrollingScreens);
+
+    // Propagate to overlay service so initializeOverlay() skips
+    // engine-managed screens (autotile and scrolling both run without the
+    // drag overlay).
     if (m_overlayService) {
-        m_overlayService->setExcludedScreens(autotileScreens);
+        m_overlayService->setExcludedScreens(autotileScreens + scrollingScreens);
     }
 
-    qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens;
+    qCDebug(lcDaemon) << "Updated autotile screens=" << autotileScreens << "scrolling screens=" << scrollingScreens;
+
+    // Drain the FLOAT half of the restore batch at the tail, for every
+    // caller — the leak class was "some caller has no downstream consumer,
+    // and the stale batch teleports windows when the NEXT consumer runs".
+    // Floats are excluded from every downstream resnap, so this batch is
+    // window-disjoint from whatever a consumer emits later. The snap-ZONE
+    // half is PRESERVED: the mode-toggle and autotile-disable consumers
+    // run after this recompute and feed it into preClaimedZoneIds and the
+    // batched restore — consuming it here strands previously-floated
+    // windows off their zones (found the hard way).
+    emitPendingSnapFloatRestoresForResnapBuffer(/*preserveZoneEntries=*/true);
+
+    // Push the per-screen RULES-VISIBLE active layout map to the effect so
+    // window-domain (appearance/animation) rules can match Field::ActiveLayout
+    // with the same vocabulary the daemon's context rules see (snapping UUID,
+    // "autotile:<algo>", "scrolling:<templateUuid>", bare sentinel). Runs
+    // UNCONDITIONALLY at this tail and must never move behind a
+    // sets-unchanged short-circuit: a desktop switch changes the map while
+    // both engines' screen sets stay identical. The adaptor owns the
+    // emit-on-change dedup, so the unconditional push costs one map compare.
+    if (m_tilingAdaptor) {
+        QVariantMap activeLayouts;
+        for (const QString& screenId : effectiveIds) {
+            activeLayouts.insert(
+                screenId,
+                m_layoutManager->rulesVisibleActiveLayoutId(screenId, currentDesktopForScreen(screenId), activity));
+        }
+        m_tilingAdaptor->setActiveLayouts(activeLayouts);
+    }
 }
 
 QSet<QString> Daemon::diffActiveAssignments()
@@ -386,7 +596,7 @@ QSet<QString> Daemon::diffActiveAssignments()
         return changed;
     }
     const QString activity = currentActivity();
-    QHash<QString, QString> next;
+    QHash<QString, ActiveAssignmentSnapshot> next;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     next.reserve(effectiveIds.size());
     for (const QString& screenId : effectiveIds) {
@@ -396,9 +606,10 @@ QSet<QString> Daemon::diffActiveAssignments()
         // "autotile:<algo>"), so this fires only when the visible layout changes
         // — e.g. a tiling-algorithm edit while the screen is in snapping mode
         // resolves to the same snapping id and is correctly ignored.
-        const QString id = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        next.insert(screenId, id);
-        if (m_activeAssignmentByScreen.value(screenId) != id) {
+        ActiveAssignmentSnapshot snapshot;
+        snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        next.insert(screenId, snapshot);
+        if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
         }
     }
@@ -416,7 +627,7 @@ QSet<QString> Daemon::diffActiveAssignments()
     // the resnap and OSD paths — see the tolerance note on
     // diffActiveAssignments in daemon.h.
     for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
-        if (!next.contains(it.key()) && !it.value().isEmpty()) {
+        if (!next.contains(it.key()) && !it.value().assignmentId.isEmpty()) {
             changed.insert(it.key());
         }
     }
@@ -429,7 +640,12 @@ QSet<QString> Daemon::diffActiveAssignments()
     // remote ActiveLayout matcher (the KWin effect's window-rule queries) from
     // needing to re-derive the cascade itself.
     if (m_layoutAdaptor) {
-        m_layoutAdaptor->publishActiveAssignments(m_activeAssignmentByScreen, changed);
+        QHash<QString, QString> activeIds;
+        activeIds.reserve(m_activeAssignmentByScreen.size());
+        for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
+            activeIds.insert(it.key(), it.value().assignmentId);
+        }
+        m_layoutAdaptor->publishActiveAssignments(activeIds, changed);
     }
     return changed;
 }
@@ -439,7 +655,7 @@ void Daemon::reconcileActiveAssignments()
     // Bulk-write suppression (m_suppressAssignmentReconcile, daemon.h). The
     // assignment writers in this file flip N rules in a row and each write emits
     // RuleStore::rulesChanged synchronously; reconciling per rule would run a
-    // full updateAutotileScreens + resnap + OSD pass over a half-written set.
+    // full updateEngineScreens + resnap + OSD pass over a half-written set.
     // They used to blanket-block the whole rule store for that, which also cut
     // off rulesChanged's four OTHER consumers (exclude refilter, overlay
     // refresh, Settings::onRuleStoreChanged, the RuleAdaptor D-Bus relay the
@@ -453,15 +669,26 @@ void Daemon::reconcileActiveAssignments()
     const QSet<QString> changed = diffActiveAssignments();
     // Per-context tiling rules change a screen's resolved layout WITHOUT changing
     // its assignment id, so they never appear in `changed` (diffActiveAssignments
-    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). Two
-    // families need updateAutotileScreens() to apply them live: tiling-PARAM rules
+    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). These
+    // families need updateEngineScreens() to apply them live: tiling-PARAM rules
     // (SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
     // SetOverflowBehavior / SetAlgorithmParam), which land in the per-screen overrides
-    // map and self-retile via applyPerScreenConfig; and GAP rules, which resolve
+    // map and self-retile via applyPerScreenConfig; GAP rules, which resolve
     // through the context-gap provider at retile time and rely on the force-retile
-    // inside updateAutotileScreens (see the comment there). SetDragBehavior needs no
-    // retile — it is read live by the drag adaptor.
-    updateAutotileScreens();
+    // inside updateEngineScreens (see the comment there); SCROLLING TEMPLATE
+    // rules (SetScrollingTemplate), whose id stays the bare "scrolling:" sentinel
+    // while the resolved template — and so the pushed preset vocabulary — changes;
+    // and the per-context SCROLLING BEHAVIOUR and STRIP AXIS rules, which
+    // updateScrollingScreens resolves into the same per-screen override map
+    // plus the effect-owned focus-follows-mouse / crop-straddlers / vertical-
+    // axis membership pushes. SetDragBehavior needs no retile — it is read
+    // live by the drag adaptor.
+    updateEngineScreens();
+    // A rule edit that demotes a screen from tiling to snapping releases its
+    // windows in the recompute above, and nothing on this path consumes the
+    // preserved snap-ZONE half (the KCM apply below drains it without
+    // applying). Put those windows back on their recorded zones.
+    flushPendingSnapZoneRestores();
     if (changed.isEmpty()) {
         return;
     }
@@ -488,7 +715,7 @@ void Daemon::reconcileActiveAssignments()
 /**
  * @brief Deactivate autotile: clear assignments, restore manual layout, resnap windows.
  *
- * @note Callers MUST call updateAutotileScreens() + updateLayoutFilter()
+ * @note Callers MUST call updateEngineScreens() + updateLayoutFilter()
  *       afterward to derive per-screen state and update the layout model.
  */
 void Daemon::handleAutotileDisabled()
@@ -505,7 +732,7 @@ void Daemon::handleAutotileDisabled()
         // Every assignment write goes through upsertAssignmentRule and emits
         // RuleStore::rulesChanged synchronously, which drives
         // reconcileActiveAssignments — so blocking the registry alone still ran a
-        // full reconcile (updateAutotileScreens, resnap apply, OSD) per iteration
+        // full reconcile (updateEngineScreens, resnap apply, OSD) per iteration
         // over a half-written assignment set. The store itself stays live so the
         // exclude refilter, overlay refresh, Settings and the RuleAdaptor D-Bus
         // relay still see the edit. The caller's own diffActiveAssignments()
@@ -539,6 +766,35 @@ void Daemon::handleAutotileDisabled()
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
                 const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                // The OPT-OUT test alone widens to the empty-activity entry.
+                // The cascade returns the most specific entry WHOLE rather
+                // than merging fields, and clearAutotileAssignments leaves
+                // exactly the shape that hides a broader opt-out: flipping an
+                // Autotile entry to Snapping preserves tilingAlgorithm, not
+                // snappingLayout. Without the widening the skip missed,
+                // parseUuid("") failed, and the loop deleted the activity
+                // entry and overwrote the broader one with the fallback —
+                // silently destroying the user's stored no-layout choice on
+                // any system using activities.
+                //
+                // Deliberately scoped to this test rather than to
+                // existingSnapId itself: the valid-UUID arm below decides
+                // whether this context already has a usable layout of its
+                // OWN, and answering that with a broader entry's layout would
+                // leave the empty activity-scoped entry in place while
+                // skipping the fill this loop exists to perform.
+                QString optOutProbe = existingSnapId;
+                if (optOutProbe.isEmpty() && !activity.isEmpty()) {
+                    optOutProbe = m_layoutManager->snappingLayoutForScreen(screenId, desktop, QString());
+                }
+                if (optOutProbe == PhosphorZones::NoSnappingLayout) {
+                    // The explicit opt-out IS a stored choice, not a missing
+                    // assignment: parseUuid("none") fails like a dangling id
+                    // would, and without this skip the loop replaces the
+                    // opt-out with the fallback layout (after deleting the
+                    // activity-scoped entry that held it).
+                    continue;
+                }
                 const auto existingSnapUuid = Utils::parseUuid(existingSnapId);
                 PhosphorZones::Layout* existing =
                     existingSnapUuid ? m_layoutManager->layoutById(*existingSnapUuid) : nullptr;
@@ -564,14 +820,14 @@ void Daemon::handleAutotileDisabled()
     // settings handler in init_services.cpp) ends with its own
     // diffActiveAssignments(), which republishes the snapshot the blocked
     // rulesChanged would otherwise have driven. Calling reconcileActiveAssignments
-    // here instead ran updateAutotileScreens BEFORE that caller does, which moved
+    // here instead ran updateEngineScreens BEFORE that caller does, which moved
     // the synchronous windowsReleased that populates m_pendingSnapFloatRestores
     // ahead of the caller's own release, and the resnap apply it triggers then
     // cleared that buffer — losing the snap-float restore the caller depends on,
     // and costing a second full resnap plus an unbudgeted OSD burst.
     // No parallel saved-floating sets to clear — each window's cross-mode state
     // lives only in its unified WindowPlacement record (single source of truth).
-    // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
+    // Note: resnap happens at the call site AFTER updateEngineScreens() so that
     // windowsReleased clears floating state before windows are resnapped.
 }
 
@@ -579,7 +835,8 @@ void Daemon::handleAutotileDisabled()
  * @brief Activate autotile: presave snap floats, restore every neutered
  *        context, then convert the screens still on snapping.
  *
- * @note Callers MUST call updateAutotileScreens() + updateLayoutFilter() and
+ * Assigns autotile layout to every screen and sets mode to Autotile.
+ * @note Callers MUST call updateEngineScreens() + updateLayoutFilter() and
  *       diffActiveAssignments() afterward — this function derives no per-screen
  *       state and publishes nothing itself. See the daemon.h docblock.
  */
@@ -636,9 +893,32 @@ void Daemon::handleSnappingToAutotile()
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
         const QString existing = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (!PhosphorLayout::LayoutId::isAutotile(existing)) {
-            screensToConvert.append(screenId);
+        // Skip Scrolling screens too: a global autotile ENABLE must not
+        // clobber an explicit scrolling assignment (its id is the
+        // "scrolling:" sentinel, which is not an autotile id). The explicit
+        // snapping opt-out (the bare reserved word) gets the same protection:
+        // converting it would erase the stored no-layout choice (the write
+        // loop clears the activity-scoped entry holding it), so an opted-out
+        // screen stays opted out across a global autotile enable — the same
+        // contract the scrolling exemption gives explicit assignments.
+        if (PhosphorLayout::LayoutId::isAutotile(existing) || PhosphorLayout::LayoutId::isScrolling(existing)
+            || existing == PhosphorZones::NoSnappingLayout) {
+            continue;
         }
+        // Nothing to convert TO when the global default is the reserved
+        // no-algorithm word and this screen has no algorithm of its own that
+        // the disable preserved. Converting anyway wrote "autotile:none" as an
+        // EXPLICIT per-context entry, which then outranks the global default
+        // forever: configuring a default afterwards could never reach the
+        // screen again, and every surface stayed silent about it. Leaving the
+        // screen in Snapping keeps the enable a no-op for it and leaves no
+        // durable pin behind, matching how the suppressed-default sibling
+        // avoids stamping a decision the user did not make.
+        if (defaultAlgoId == PhosphorZones::NoTilingAlgorithm
+            && m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity).isEmpty()) {
+            continue;
+        }
+        screensToConvert.append(screenId);
     }
 
     // The restore above can flip contexts on other desktops and activities even
@@ -654,10 +934,12 @@ void Daemon::handleSnappingToAutotile()
     // restore. A restored context never needs the engine's global algorithm:
     // restoreAutotileAssignments only flips entries whose tilingAlgorithm is
     // non-empty (its predicate in layoutregistry_batch.cpp is exactly
-    // "Snapping mode AND non-empty tilingAlgorithm"), so every restored context
-    // carries a concrete algorithm of its own, and that algorithm reaches the
-    // engine as a PerScreenKeys::Algorithm override the next time
-    // updateAutotileScreens resolves that context, not through the global id.
+    // "Snapping mode AND non-empty tilingAlgorithm"), so no restored context
+    // depends on the global id. A restored context carrying a REAL algorithm
+    // reaches the engine as a PerScreenKeys::Algorithm override the next time
+    // updateEngineScreens resolves it; one carrying the reserved word — the
+    // predicate admits it, since the word is non-empty — is skipped by that
+    // same pass's opt-out arm instead. Neither route reads the global.
     //
     // Setting the global anyway on a restore-only enable is destructive: the
     // engine's live global algorithm CAN differ from
@@ -672,7 +954,12 @@ void Daemon::handleSnappingToAutotile()
     // restore (see the top of this function), so it is unconditional. That is
     // safe because captureWindowPlacement is an idempotent record refresh — a
     // content-identical capture writes nothing.
-    if (m_autotileEngine && !screensToConvert.isEmpty()) {
+    // The reserved word never reaches the engine (its setAlgorithm coerces
+    // unknown ids to the registry default, the opposite of an opt-out, and
+    // the coercion also drops per-screen tuning). A "none" default still
+    // flows into the per-screen assignment writes below, where
+    // updateEngineScreens leaves those screens out of the engine set.
+    if (m_autotileEngine && !screensToConvert.isEmpty() && defaultAlgoId != PhosphorZones::NoTilingAlgorithm) {
         m_autotileEngine->setAlgorithm(defaultAlgoId);
     }
 
@@ -684,7 +971,7 @@ void Daemon::handleSnappingToAutotile()
     }
 
     // Assign autotile layout to the screens being converted. Block signals to
-    // avoid N intermediate updateAutotileScreens() from layoutAssigned — one
+    // avoid N intermediate updateEngineScreens() from layoutAssigned — one
     // final call from the caller is sufficient. Write with empty activity so
     // the entry is visible to D-Bus/KCM queries that use empty activity for
     // cascading resolution.
@@ -717,7 +1004,7 @@ void Daemon::handleSnappingToAutotile()
     // No reconcile here either, for the same reason as handleAutotileDisabled:
     // the sole caller's own diffActiveAssignments() republishes the snapshot, and
     // reconciling here would fire a full resnap and a per-screen OSD burst
-    // mid-enable, ahead of the caller's own updateAutotileScreens.
+    // mid-enable, ahead of the caller's own updateEngineScreens.
 }
 
 QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
@@ -742,20 +1029,27 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
                                                                  const QString& activity, const QString& onlyScreenId)
 {
     QVector<ZoneAssignmentEntry> entries;
-    if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
+    if (!m_windowTrackingAdaptor || m_lastEngineOrders.isEmpty()) {
         return entries;
     }
     // No null-check on service(): the adaptor constructs and owns its service
     // (never null once the adaptor exists) — the sibling callers in this file
     // rely on the same invariant.
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
+    for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
+        // Independent scopes: the activity compare must not hide behind the
+        // desktop sentinel, or a desktop-unscoped caller (the master-switch
+        // toggle) emits float restores for orders captured on OTHER
+        // activities.
+        if (desktop >= 0 && it.key().desktop != desktop) {
+            continue;
+        }
+        if (!activity.isEmpty() && it.key().activity != activity) {
             continue;
         }
         // Scope to the toggled screen when the caller says so. The per-screen
         // mode toggle merges captured orders for EVERY active autotile screen
-        // into m_lastAutotileOrders, and two screens routinely share a
+        // into m_lastEngineOrders, and two screens routinely share a
         // (desktop, activity) pair — without this filter the toggle emits
         // pre-tile restores for windows still happily tiled on OTHER screens
         // and teleports them to their old float positions.
@@ -804,9 +1098,11 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
 
 void Daemon::presaveSnapFloats(const QString& screenId)
 {
-    // Snapshot snap-mode float state into the unified record BEFORE a screen leaves
-    // snapping for autotile, so the screen's return restores the float from the
-    // SINGLE source of truth (the record's snap slot) — no parallel saved-float set.
+    // Snapshot snap-mode window state (explicit floats AND plain free windows)
+    // into the unified record BEFORE a screen leaves snapping for a tiling
+    // mode, so the screen's return restores each window from the SINGLE source
+    // of truth (the record's snap slot + shared free geometry) — no parallel
+    // saved-float set.
     // Runs while the screen is still in snapping mode, so captureWindowPlacement
     // routes to the snap engine and records the snap slot (= floating) plus the
     // shared free geometry from the live frame.
@@ -821,13 +1117,26 @@ void Daemon::presaveSnapFloats(const QString& screenId)
     // Reachable from `Settings::settingsChanged` (init_services.cpp) before the
     // engines exist — any synchronous re-entry into settingsChanged during the
     // D-Bus retry loop in init() would hit this path with null engine pointers.
-    if (!m_windowTrackingAdaptor || !m_autotileEngine || !m_snapEngine) {
+    if (!m_windowTrackingAdaptor || !m_windowTrackingAdaptor->service() || !m_autotileEngine || !m_snapEngine) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    const QStringList floatingIds = wts->floatingWindows();
-    for (const QString& fid : floatingIds) {
-        if (m_autotileEngine->isModeSpecificFloated(fid)) {
+    // EVERY open window, not only the explicitly-floated set. A free window in
+    // snapping mode (never snapped, never floated) has no live state anywhere,
+    // and its CURRENT frame at the flip instant is the only correct restore
+    // target for the return trip — the periodic save-time sweep is dirty-gated,
+    // so a plain user move/resize between saves would otherwise never reach the
+    // record and the return restored a stale rect. captureWindowPlacement's
+    // slot-state gate keeps this safe for the rest of the sweep: snapped and
+    // engine-tiled windows refresh their slots without any geometry write, and
+    // minimized windows take its preserve path.
+    const QStringList allIds = m_windowTrackingAdaptor->knownWindowIds();
+    for (const QString& fid : allIds) {
+        // A window floated BY a tiling mode (either engine) is that mode's
+        // own float, not a snap float: capturing it here would poison the
+        // snap slot with a tiling-mode frame.
+        if (m_autotileEngine->isModeSpecificFloated(fid)
+            || (m_scrollEngine && m_scrollEngine->isModeSpecificFloated(fid))) {
             continue;
         }
         // When scoped to a screen, only snapshot windows on that screen.
@@ -857,7 +1166,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
     TilingStateKey orderKey{screenId, currentDesktopForScreen(screenId), currentActivity()};
-    QStringList order = m_lastAutotileOrders.value(orderKey);
+    QStringList order = m_lastEngineOrders.value(orderKey);
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     if (!wts) {
         // Fail CLOSED: without the WTS the seed filter cannot drop live user
@@ -883,10 +1192,11 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
             qCWarning(lcDaemon) << "seedAutotileOrderForScreen: no window registry —"
                                 << "minimized windows cannot be filtered for" << screenId;
         }
-        // Drop entries that must not be seeded as tiled (live user floats,
-        // durable snap-slot floats); minimized windows stay as positional
-        // placeholders. See filterAutotileSeedOrder's doc for the rationale.
-        filterAutotileSeedOrder(order, wts, registry);
+        // Float is per mode: non-minimized entries always seed (a snap-mode
+        // float must not make the window untileable here). Minimized entries
+        // stay as positional placeholders, except user-floated-then-minimized
+        // ones. See filterEngineSeedOrder's doc for the rationale.
+        filterEngineSeedOrder(order, wts, registry, PhosphorEngine::WindowPlacement::autotileEngineId());
     }
 
     if (!order.isEmpty()) {
@@ -904,7 +1214,13 @@ void Daemon::processPendingGeometryUpdates()
     }
     // Timer-driven entry (the geometry debounce fires from the event loop),
     // so unlike the signal-wired paths nothing upstream vouches for these
-    // members during a stop() teardown window.
+    // members during a stop() teardown window — and the same shutdown guard
+    // the async tails below carry applies to the synchronous body too: a
+    // debounce firing after stop() must not retile torn-down engines or
+    // restart the reapply timer stop() just stopped.
+    if (m_shuttingDown) {
+        return;
+    }
     if (!m_screenManager || !m_layoutManager || !m_layoutComputeService || !m_overlayService) {
         return;
     }
@@ -949,7 +1265,59 @@ void Daemon::processPendingGeometryUpdates()
 
     m_geometryUpdatePending = false;
 
+    // Re-derive the scrolling screens' per-screen overrides. Native
+    // templates carry fractions, so no geometry feeds the push itself. What
+    // this pass is for is the rest of the resolve: per-context rule params
+    // and the context gaps both re-resolve here. The engine's equality guard
+    // no-ops an unchanged override map, so the pass is cheap and idempotent.
+    // What makes the re-resolved values LAND is updateScrollingScreens'
+    // own push: the set it hands setActiveScreens is identical to the
+    // engine's current one, and that branch retiles every screen
+    // unconditionally (engine_core.cpp, `screens == m_scrollingScreens`) —
+    // the same guarantee scrolling.cpp's LOAD-BEARING gate leans on. The
+    // retile loop below runs on every pass (hoisted above the
+    // compute-barrier early return), but it is a deferred, coalesced extra
+    // pass — this push stays the documented mechanism: it is what
+    // re-resolves the override map, not just the geometry.
+    if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
+        updateScrollingScreens(m_scrollEngine->activeScreens());
+    }
+
+    // The panel-settle requery and the tiling-family retiles run BEFORE the
+    // empty-barrier early return below: a geometry pass in which no screen
+    // produced a compute request (all screens in a tiling mode, say) still
+    // changed the work areas, so the settled-panel follow-up pass must still
+    // arm and both engines must still pick up the new geometry. They are
+    // independent of the compute barrier — the barrier watches the layout
+    // compute service, the retiles drive the engines directly.
+    //
+    // Re-query panel geometry once after a delay to pick up settled state
+    // (e.g. panel editor close). That completion emits
+    // availableGeometryChanged → debounce → processPendingGeometryUpdates →
+    // reapply.
+    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
+
+    // Retile BOTH tiling-family engines to adapt to new screen geometry
+    // (panels added/removed, resolution changes, etc.). The scroll engine
+    // reads the available geometry only at relayout time and subscribes to
+    // no ScreenManager signal of its own, so without this its columns keep
+    // stale widths/offsets until an unrelated event happens to retile.
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        m_autotileEngine->retile();
+    }
+    if (m_scrollEngine && m_scrollEngine->isEnabled()) {
+        for (const QString& screenId : m_scrollEngine->activeScreens()) {
+            m_scrollEngine->scheduleRetileForScreen(screenId);
+        }
+    }
+
     if (pending->isEmpty()) {
+        // pending is empty only when EVERY effective screen yielded a null
+        // layout (registry holds zero layouts — reachable, the template
+        // store works with zero manual layouts loaded) or an invalid
+        // geometry. The retiles and the settled-panel requery already ran
+        // above the barrier (hoisted so this arm and the barrier path share
+        // one copy), so this arm only finishes the overlay refresh.
         m_overlayService->updateGeometries();
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
@@ -977,6 +1345,14 @@ void Daemon::processPendingGeometryUpdates()
     *conn = connect(
         m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
         [this, pending, conn](const QString& screenId, const QUuid&, PhosphorZones::Layout*, uint64_t generation) {
+            // Shutdown guard, the async-completion idiom lifecycle.cpp's
+            // D-Bus replies use: stop() has already hidden the overlays and
+            // stopped the reapply timer, and restarting it here would push a
+            // geometry reapply at the effect against torn-down engine state
+            // up to 3s after shutdown began.
+            if (m_shuttingDown) {
+                return;
+            }
             auto expected = pending->find(screenId);
             if (expected == pending->end() || generation < expected.value()) {
                 return;
@@ -1000,6 +1376,12 @@ void Daemon::processPendingGeometryUpdates()
     // empty pending set and an already-disconnected conn — the timeout then
     // no-ops.
     QTimer::singleShot(COMPUTE_BARRIER_TIMEOUT_MS, this, [this, pending, conn]() {
+        // Same shutdown guard as the completion lambda above; the barrier
+        // connection still gets torn down with the daemon.
+        if (m_shuttingDown) {
+            QObject::disconnect(*conn);
+            return;
+        }
         if (pending->isEmpty()) {
             return;
         }
@@ -1011,16 +1393,6 @@ void Daemon::processPendingGeometryUpdates()
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
     });
-
-    // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
-    // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
-    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
-
-    // Retile autotile windows to adapt to new screen geometry
-    // (panels added/removed, resolution changes, etc.)
-    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
-        m_autotileEngine->retile();
-    }
 }
 
 } // namespace PlasmaZones

@@ -17,11 +17,11 @@ import org.kde.kirigami as Kirigami
  *   - `groupByIndex` / `sortByIndex` / `sortAscending`: the live selection,
  *     read AND written here. The host owns persistence — this component holds
  *     no Settings of its own — so each page persists however it likes (the
- *     Layouts page persists per view mode).
+ *     library pages persist per view mode).
  *   - `sortItemAvailable`: optional per-sort-option enablement. A `false` entry
  *     greys that option, suppresses its hover highlight, shows
- *     `disabledSortTooltip`, and makes selecting it a no-op (the Layouts page
- *     uses this for "Priority", which needs an order set on the Priority page).
+ *     `disabledSortTooltip`, and makes selecting it a no-op (the library pages
+ *     use this for "Priority", which needs an order set on the Priority page).
  *
  * Emits `changed()` on every user-driven edit. After the host imperatively
  * rewrites the index properties (e.g. loading persisted state), it must call

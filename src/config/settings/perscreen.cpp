@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "config/settings.h"
+#include "config/settings/perscreen_detail.h"
+#include "config/settings/settings_detail.h"
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include "core/types/constants.h"
@@ -27,97 +29,33 @@ namespace PlasmaZones {
 
 namespace {
 
-// D-Bus boundary guards: per-screen values arrive as raw QVariants from the
-// settings adaptor dispatch. QVariant::toInt()/toDouble() silently coerce a
-// non-numeric payload to 0, which the validators would then accept or clamp
-// as a real override (e.g. Position "garbage" -> 0 = TopLeft stored). These
-// helpers reject non-convertible payloads with an invalid QVariant instead,
-// matching the contract the enum-range validators already use.
-QVariant boundedInt(const QVariant& value, int min, int max)
-{
-    bool ok = false;
-    const int v = value.toInt(&ok);
-    return ok ? QVariant(qBound(min, v, max)) : QVariant();
-}
+using PerScreenDetail::boundedInt;
 
+// The double-valued D-Bus boundary guard, TU-local because this is its only
+// caller. See the guard block in perscreen_detail.h for why the numericPayload
+// check carries as much weight as the bound.
 QVariant boundedDouble(const QVariant& value, double min, double max)
 {
     bool ok = false;
     const double v = value.toDouble(&ok);
-    return ok ? QVariant(qBound(min, v, max)) : QVariant();
+    return (ok && PerScreenDetail::numericPayload(value)) ? QVariant(qBound(min, v, max)) : QVariant();
 }
 
-/// Enum-range check over [0, max]; rejects non-numeric payloads.
-QVariant enumInRange(const QVariant& value, int max)
+/// Closed-set check for enums whose legal values are not a contiguous range
+/// from 0 — the ConfigDefaults isValid* predicates. The ok-check matters as
+/// much as the predicate: every one of those sets contains 0, so a bare
+/// toInt() would turn a non-numeric payload into a legal-looking override.
+template<typename Predicate>
+QVariant closedSetInt(const QVariant& value, Predicate isValid)
 {
     bool ok = false;
     const int v = value.toInt(&ok);
-    return (ok && v >= 0 && v <= max) ? QVariant(v) : QVariant();
+    return (ok && PerScreenDetail::numericPayload(value) && isValid(v)) ? QVariant(v) : QVariant();
 }
 
-QVariant validatePerScreenValue(const QString& key, const QVariant& value)
-{
-    namespace K = ZoneSelectorConfigKey;
-    if (key == QLatin1String(K::Position)) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorPosition::BottomRight));
-    }
-    if (key == QLatin1String(K::LayoutMode)) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorLayoutMode::Vertical));
-    }
-    if (key == QLatin1String(K::SizeMode)) {
-        return enumInRange(value, static_cast<int>(ZoneSelectorSizeMode::Manual));
-    }
-    if (key == QLatin1String(K::MaxRows))
-        return boundedInt(value, ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax());
-    if (key == QLatin1String(K::PreviewWidth))
-        return boundedInt(value, ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax());
-    if (key == QLatin1String(K::PreviewHeight))
-        return boundedInt(value, ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax());
-    if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(value.toBool());
-    if (key == QLatin1String(K::GridColumns))
-        return boundedInt(value, ConfigDefaults::gridColumnsMin(), ConfigDefaults::gridColumnsMax());
-    if (key == QLatin1String(K::TriggerDistance))
-        return boundedInt(value, ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax());
-    return QVariant();
-}
-
-void applyPerScreenOverrides(ZoneSelectorConfig& config, const QVariantMap& overrides)
-{
-    namespace K = ZoneSelectorConfigKey;
-    auto applyInt = [&](const char* key, int& field) {
-        auto it = overrides.constFind(QLatin1String(key));
-        if (it != overrides.constEnd()) {
-            QVariant v = validatePerScreenValue(QLatin1String(key), it.value());
-            if (v.isValid()) {
-                field = v.toInt();
-            }
-        }
-    };
-    applyInt(K::Position, config.position);
-    applyInt(K::LayoutMode, config.layoutMode);
-    applyInt(K::SizeMode, config.sizeMode);
-    applyInt(K::MaxRows, config.maxRows);
-    applyInt(K::PreviewWidth, config.previewWidth);
-    applyInt(K::PreviewHeight, config.previewHeight);
-    applyInt(K::GridColumns, config.gridColumns);
-    applyInt(K::TriggerDistance, config.triggerDistance);
-    auto lockIt = overrides.constFind(QLatin1String(K::PreviewLockAspect));
-    if (lockIt != overrides.constEnd()) {
-        QVariant v = validatePerScreenValue(QLatin1String(K::PreviewLockAspect), lockIt.value());
-        if (v.isValid()) {
-            config.previewLockAspect = v.toBool();
-        }
-    }
-}
-
-const QLatin1String kPerScreenKeys[] = {
-    QLatin1String(ZoneSelectorConfigKey::Position),          QLatin1String(ZoneSelectorConfigKey::LayoutMode),
-    QLatin1String(ZoneSelectorConfigKey::SizeMode),          QLatin1String(ZoneSelectorConfigKey::MaxRows),
-    QLatin1String(ZoneSelectorConfigKey::PreviewWidth),      QLatin1String(ZoneSelectorConfigKey::PreviewHeight),
-    QLatin1String(ZoneSelectorConfigKey::PreviewLockAspect), QLatin1String(ZoneSelectorConfigKey::GridColumns),
-    QLatin1String(ZoneSelectorConfigKey::TriggerDistance),
-};
+// The two zone-selector families' key tables, validators and accessors live in
+// perscreen_selector.cpp; perscreen_detail.h declares what the load/save
+// passes below need from them.
 
 // The per-screen inner/outer gap dimensions live in THIS store (config-backed,
 // unified — one value per monitor drives both snap and tile). SmartGaps stays
@@ -177,6 +115,165 @@ const QLatin1String kPerScreenGapDimensionKeys[] = {
 // ("InnerGap"). Centralized so the strip/expand sites can't desync on the
 // literal or its length.
 constexpr QLatin1String kAutotilePrefix{"Autotile"};
+
+// Per-screen scrolling override keys. NO prefix asymmetry (the autotile
+// "Autotile" prefix exists only for v4-migration history): disk, memory, QML,
+// and the engine's ScrollPerScreenKeys settings channel all use one spelling,
+// so the daemon merge is a plain copy.
+//
+// TWO disjoint sub-domains: the New-columns card's sizing defaults (the
+// analogue of the tiling Algorithm card's per-monitor tuning) and the strip
+// axis. They are split by isPerScreenScrollingSizingKey /
+// isPerScreenScrollingAxisKey below so one card's scope chip cannot report or
+// clear the other's override — the whole-domain accessors remain the D-Bus
+// category surface, not a card's chip surface.
+//
+// Scrolling's other behavior/view settings stay app-wide like their
+// tiling/snapping siblings; per-context variants of those are the rule
+// actions' job (SetCenterFocusedColumn / SetScrollInsertPosition), which write
+// the engine's RULE channel, not this store.
+const QLatin1String kPerScreenScrollingKeys[] = {
+    QLatin1String(PerScreenScrollingKey::DefaultColumnWidthKind),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnWidthValue),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnWidthPresetIndex),
+    QLatin1String(PerScreenScrollingKey::DefaultColumnDisplay),
+    QLatin1String(PerScreenScrollingKey::DefaultWindowHeightKind),
+    QLatin1String(PerScreenScrollingKey::DefaultWindowHeightValue),
+    QLatin1String(PerScreenScrollingKey::DefaultWindowHeightPresetIndex),
+    QLatin1String(PerScreenScrollingKey::StripAxis),
+};
+
+static_assert(std::size(kPerScreenScrollingKeys) == 8,
+              "kPerScreenScrollingKeys changed size — the validate ladder, the read ladder, and the engine's "
+              "ScrollPerScreenKeys channel each carry one arm per key and have to grow with it");
+
+// The strip axis is its own sub-domain: it is an orientation intent, not a
+// sizing default, and it is surfaced by a different card on a different page.
+bool isPerScreenScrollingAxisKey(const QString& key)
+{
+    return key == QLatin1String(PerScreenScrollingKey::StripAxis);
+}
+
+// The New-columns card's sizing keys, as the complement — the same shape as
+// the autotile store's isPerScreenAutotileAlgorithmKey. Being the complement
+// makes the two sub-domains exhaustive and disjoint by construction, but it
+// also means a NEW key defaults to SIZING silently. The thing that actually
+// catches a new key is the static_assert on kPerScreenScrollingKeys' size
+// above: adding one fails the build until its sub-domain is decided here.
+bool isPerScreenScrollingSizingKey(const QString& key)
+{
+    return !isPerScreenScrollingAxisKey(key);
+}
+
+// Repair an inconsistent per-screen {Kind, Value} width pair, the way
+// Settings::normalizeScrollingColumnWidthValue repairs the global one.
+//
+// The value key's schema-level bound spans both kinds (one key, one
+// validator), and validatePerScreenScrollingValue applies that same
+// kind-spanning union clamp — so a pair like {Kind=Fixed, Value=0.5} passes
+// validation on both the write and the load path and reaches the daemon's
+// plain-copy merge intact, opening every column on that monitor one pixel
+// wide. The inverse pair opens them at 100%.
+//
+// A VALUE-only override (no per-screen Kind key) is left untouched: the
+// engine gates the whole per-screen width channel on the Kind key's presence
+// (ScrollEngine::effectiveDefaultColumnWidth returns the global width
+// wholesale when the per-screen Kind is absent), so such a value never
+// applies — and repairing it against the GLOBAL kind would destroy the
+// retained figure the engine would use the moment the user re-adds a
+// per-screen kind.
+//
+// Returns whether @p overrides was modified.
+bool repairPerScreenScrollingWidth(QVariantMap& overrides)
+{
+    namespace K = PerScreenScrollingKey;
+    auto valueIt = overrides.find(QString(QLatin1String(K::DefaultColumnWidthValue)));
+    if (valueIt == overrides.end()) {
+        return false;
+    }
+    const auto kindIt = overrides.constFind(QString(QLatin1String(K::DefaultColumnWidthKind)));
+    if (kindIt == overrides.constEnd()) {
+        return false;
+    }
+    const int kind = kindIt->toInt();
+    const qreal stored = valueIt->toDouble();
+    // ClientDecides and Preset are returned untouched by the shared helper —
+    // neither owns the value, so neither can make the pair inconsistent.
+    const qreal coerced = settings_detail::reseedColumnWidthForKind(stored, kind);
+    if (qFuzzyCompare(1.0 + stored, 1.0 + coerced)) {
+        return false;
+    }
+    // Warning once per process, debug after: this repair runs on every read
+    // of the map, and a D-Bus writer that keeps re-installing an
+    // inconsistent pair would otherwise emit one warning per call
+    // indefinitely without adding information. Main-thread only (Settings'
+    // threading contract), so a plain static latch suffices.
+    static bool warnedOnce = false;
+    if (!warnedOnce) {
+        warnedOnce = true;
+        qCWarning(lcConfig) << "scrolling: per-screen column width" << stored << "is out of range for kind" << kind
+                            << "— using" << coerced << "(further repairs log at debug)";
+    } else {
+        qCDebug(lcConfig) << "scrolling: per-screen column width" << stored << "is out of range for kind" << kind
+                          << "— using" << coerced;
+    }
+    *valueIt = coerced;
+    return true;
+}
+
+QVariant validatePerScreenScrollingValue(const QString& key, const QVariant& value)
+{
+    namespace K = PerScreenScrollingKey;
+    if (key == QLatin1String(K::DefaultColumnWidthKind)) {
+        return closedSetInt(value, ConfigDefaults::isValidScrollingWidthKind);
+    }
+    if (key == QLatin1String(K::DefaultColumnWidthValue)) {
+        // Kind-spanning clamp, mirroring the global schema entry: the shared
+        // value key serves proportion and fixed, so bound by the union.
+        return boundedDouble(value, ConfigDefaults::scrollingDefaultColumnWidthProportionMin(),
+                             ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
+    }
+    if (key == QLatin1String(K::DefaultColumnWidthPresetIndex)
+        || key == QLatin1String(K::DefaultWindowHeightPresetIndex)) {
+        return boundedInt(value, 0, ConfigDefaults::scrollingPresetIndexMax());
+    }
+    if (key == QLatin1String(K::DefaultColumnDisplay)) {
+        return closedSetInt(value, ConfigDefaults::isValidScrollingColumnDisplay);
+    }
+    if (key == QLatin1String(K::DefaultWindowHeightKind)) {
+        return closedSetInt(value, ConfigDefaults::isValidScrollingHeightKind);
+    }
+    if (key == QLatin1String(K::DefaultWindowHeightValue)) {
+        return boundedDouble(value, ConfigDefaults::scrollingDefaultWindowHeightMin(),
+                             ConfigDefaults::scrollingDefaultWindowHeightMax());
+    }
+    if (key == QLatin1String(K::StripAxis)) {
+        return closedSetInt(value, ConfigDefaults::isValidScrollingStripAxis);
+    }
+    return QVariant();
+}
+
+QVariant readPerScreenScrollingEntry(PhosphorConfig::IGroup& group, const QString& key)
+{
+    namespace K = PerScreenScrollingKey;
+    if (key == QLatin1String(K::DefaultColumnWidthKind))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultColumnWidthKind()));
+    if (key == QLatin1String(K::DefaultColumnWidthValue))
+        return QVariant(group.readDouble(key, ConfigDefaults::scrollingDefaultColumnWidthValue()));
+    if (key == QLatin1String(K::DefaultColumnWidthPresetIndex))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultColumnWidthPresetIndex()));
+    if (key == QLatin1String(K::DefaultColumnDisplay))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultColumnDisplay()));
+    if (key == QLatin1String(K::DefaultWindowHeightKind))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultWindowHeightKind()));
+    if (key == QLatin1String(K::DefaultWindowHeightValue))
+        return QVariant(group.readDouble(key, ConfigDefaults::scrollingDefaultWindowHeightValue()));
+    if (key == QLatin1String(K::DefaultWindowHeightPresetIndex))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultWindowHeightPresetIndex()));
+    if (key == QLatin1String(K::StripAxis))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingStripAxis()));
+    return QVariant();
+}
 
 // Strip the "Autotile" prefix to the short in-memory key form, returning the
 // key unchanged when it carries no prefix (e.g. the unprefixed Animation keys).
@@ -249,7 +346,9 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
         || k == PerScreenKeys::OuterGapLeft || k == PerScreenKeys::OuterGapRight)
         return boundedInt(value, ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax());
     if (k == PerScreenKeys::UsePerSideOuterGap)
-        return QVariant(value.toBool());
+        // Type-gated like the numeric arms (see the strip selector's
+        // PreviewLockAspect for the rationale).
+        return value.typeId() == QMetaType::Bool ? QVariant(value.toBool()) : QVariant();
     if (k == PerScreenKeys::MaxWindows)
         return boundedInt(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
     if (k == PerScreenKeys::InsertPosition)
@@ -267,7 +366,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
         return value.toString().isEmpty() ? QVariant() : QVariant(value.toString());
     if (k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps || k == PerScreenKeys::FocusFollowsMouse
         || k == PerScreenKeys::RespectMinimumSize || k == PerScreenKeys::AnimationsEnabled)
-        return QVariant(value.toBool());
+        return value.typeId() == QMetaType::Bool ? QVariant(value.toBool()) : QVariant();
     if (k == PerScreenKeys::AnimationDuration)
         return boundedInt(value, ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax());
     return QVariant();
@@ -315,14 +414,6 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 // value per monitor drives both snap and tile). getPerScreenSnappingSettings
 // surfaces that gap subset via perScreenGapOverrides. So there is no separate
 // snapping load/save/validate path.
-
-QVariant readPerScreenZoneSelectorEntry(PhosphorConfig::IGroup& group, const QString& key)
-{
-    namespace K = ZoneSelectorConfigKey;
-    if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(group.readBool(key, ConfigDefaults::previewLockAspect()));
-    return QVariant(group.readInt(key, 0));
-}
 
 void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& prefix,
                             const QHash<QString, QVariantMap>& source)
@@ -454,15 +545,35 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
 void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
-    loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
-                       std::size(kPerScreenKeys), readPerScreenZoneSelectorEntry, validatePerScreenValue,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(),
+                       PerScreenDetail::kZoneSelectorKeys, std::size(PerScreenDetail::kZoneSelectorKeys),
+                       PerScreenDetail::readZoneSelectorEntry, PerScreenDetail::validateZoneSelectorValue,
                        m_perScreenZoneSelectorSettings);
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::scrollingZoneSelectorGroupPrefix(),
+                       PerScreenDetail::kStripSelectorKeys, std::size(PerScreenDetail::kStripSelectorKeys),
+                       PerScreenDetail::readZoneSelectorEntry, PerScreenDetail::validateStripSelectorValue,
+                       m_perScreenScrollingZoneSelectorSettings);
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::autotileScreenGroupPrefix(), kPerScreenAutotileKeys,
                        std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
                        m_perScreenAutotileSettings);
     // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
     // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
     normalizeAutotileKeys(m_perScreenAutotileSettings);
+    // Scrolling keys carry no prefix asymmetry: disk form IS the in-memory
+    // form, so no normalize/expand pair.
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::scrollingScreenGroupPrefix(), kPerScreenScrollingKeys,
+                       std::size(kPerScreenScrollingKeys), readPerScreenScrollingEntry, validatePerScreenScrollingValue,
+                       m_perScreenScrollingSettings);
+    // The width pair's per-key validation cannot see the pair, so a
+    // {Kind, Value} combination that is individually legal but jointly
+    // impossible survives it — from a hand edit or a config import. Repair it
+    // here, the load-path twin of the kind-aware re-seed
+    // setPerScreenScrollingSetting applies on a kind write. Screens overriding
+    // the value WITHOUT a kind are skipped inside the helper (the engine
+    // ignores such a value entirely).
+    for (auto it = m_perScreenScrollingSettings.begin(); it != m_perScreenScrollingSettings.end(); ++it) {
+        repairPerScreenScrollingWidth(it.value());
+    }
     // No separate per-screen snapping group to load: per-monitor gaps are unified
     // and live in the per-screen autotile store loaded above.
     // Per-screen change signals are emitted by the caller (Settings::load()),
@@ -512,9 +623,12 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
 void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::scrollingZoneSelectorGroupPrefix(),
+                           m_perScreenScrollingZoneSelectorSettings);
     // Expand short keys back to disk format before saving
     savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
                            expandAutotileKeys(m_perScreenAutotileSettings));
+    savePerScreenOverrides(backend, ConfigDefaults::scrollingScreenGroupPrefix(), m_perScreenScrollingSettings);
     // No separate per-screen snapping group to save: per-monitor gaps are unified
     // and persisted in the per-screen autotile store above.
 }
@@ -539,11 +653,18 @@ QString Settings::canonicalPerScreenKey(const QString& screenIdOrName)
     return vsIndex >= 0 ? VS::make(resolved, vsIndex) : resolved;
 }
 
+QString PerScreenDetail::canonicalWriteKey(const QString& screenIdOrName)
+{
+    return Settings::canonicalPerScreenKey(screenIdOrName);
+}
+
 // Ordered, de-duplicated storage-key forms an entry could be keyed under: the
 // queried form first, then its connector ↔ EDID-id translation (with the
 // virtual "/vs:N" suffix preserved). Lets a lookup find an entry stored under
-// the alternate form regardless of which one was written.
-static QStringList perScreenKeyVariants(const QString& screenIdOrName)
+// the alternate form regardless of which one was written. Declared in
+// perscreen_detail.h and defined here, next to canonicalPerScreenKey, which it
+// must stay in lockstep with.
+QStringList PerScreenDetail::perScreenKeyVariants(const QString& screenIdOrName)
 {
     namespace VS = PhosphorIdentity::VirtualScreenId;
     namespace SI = PhosphorScreens::ScreenIdentity;
@@ -566,174 +687,12 @@ static QStringList perScreenKeyVariants(const QString& screenIdOrName)
     return variants;
 }
 
-template<typename T>
-static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash<QString, T>& hash,
-                                                                     const QString& screenIdOrName)
-{
-    for (const QString& key : perScreenKeyVariants(screenIdOrName)) {
-        auto it = hash.constFind(key);
-        if (it != hash.constEnd())
-            return it;
-    }
-    return hash.constEnd();
-}
-
-template<typename T>
-static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenIdOrName)
-{
-    for (const QString& key : perScreenKeyVariants(screenIdOrName)) {
-        if (hash.remove(key))
-            return true;
-    }
-    return false;
-}
-
-// Mutable sibling of findPerScreenEntry — same id/connector resolution, used by
-// the per-screen setter (applyPerScreenSetting) and the gaps/algorithm
-// sub-domain partial-clears below.
-template<typename T>
-static typename QHash<QString, T>::iterator findPerScreenEntryMutable(QHash<QString, T>& hash,
-                                                                      const QString& screenIdOrName)
-{
-    for (const QString& key : perScreenKeyVariants(screenIdOrName)) {
-        auto it = hash.find(key);
-        if (it != hash.end())
-            return it;
-    }
-    return hash.end();
-}
-
-// True if the screen's override map holds any key in the requested sub-domain
-// (gaps when wantGaps, otherwise the complement), classified by isGapsKey.
-static bool hasPerScreenKeySubset(const QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
-                                  bool (*isGapsKey)(const QString&), bool wantGaps)
-{
-    auto it = findPerScreenEntry(hash, screenIdOrName);
-    if (it == hash.constEnd())
-        return false;
-    for (auto k = it.value().constBegin(); k != it.value().constEnd(); ++k) {
-        if (isGapsKey(k.key()) == wantGaps)
-            return true;
-    }
-    return false;
-}
-
-// Remove only the requested sub-domain's keys from the screen's override map
-// (gaps when clearGaps, otherwise the complement), classified by isGapsKey,
-// dropping the whole entry once empty. Returns true if anything changed.
-static bool clearPerScreenKeySubset(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
-                                    bool (*isGapsKey)(const QString&), bool clearGaps)
-{
-    auto it = findPerScreenEntryMutable(hash, screenIdOrName);
-    if (it == hash.end())
-        return false;
-    QVariantMap& overrides = it.value();
-    bool changed = false;
-    for (auto k = overrides.begin(); k != overrides.end();) {
-        if (isGapsKey(k.key()) == clearGaps) {
-            k = overrides.erase(k);
-            changed = true;
-        } else {
-            ++k;
-        }
-    }
-    if (overrides.isEmpty())
-        hash.erase(it);
-    return changed;
-}
-
-// Store a single validated per-screen override under `key`. Matches any existing
-// entry under either the connector or EDID id form and updates it in place, so a
-// write never creates a duplicate under the alternate form and a no-op write
-// never default-inserts an empty husk entry (which the hasPerScreen* readers
-// would treat as a phantom override). New entries key by the canonical EDID
-// form. Returns true if the map was mutated (caller emits the change signals).
-static bool applyPerScreenSetting(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName, const QString& key,
-                                  const QVariant& validated)
-{
-    auto it = findPerScreenEntryMutable(hash, screenIdOrName);
-    if (it != hash.end()) {
-        if (it.value().value(key) == validated)
-            return false;
-        it.value()[key] = validated;
-    } else {
-        hash[Settings::canonicalPerScreenKey(screenIdOrName)][key] = validated;
-    }
-    return true;
-}
-
-// ── Per-Screen PhosphorZones::Zone Selector Config ──────────────────────────────────────────
-
-ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
-{
-    ZoneSelectorConfig config = {static_cast<int>(zoneSelectorPosition()),
-                                 static_cast<int>(zoneSelectorLayoutMode()),
-                                 static_cast<int>(zoneSelectorSizeMode()),
-                                 zoneSelectorMaxRows(),
-                                 zoneSelectorPreviewWidth(),
-                                 zoneSelectorPreviewHeight(),
-                                 zoneSelectorPreviewLockAspect(),
-                                 zoneSelectorGridColumns(),
-                                 zoneSelectorTriggerDistance()};
-
-    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
-    // Virtual-screen fallback: an override stored on the physical monitor must
-    // still apply when the selector runs on one of its virtual sub-screens.
-    // Resolve a physical-monitor override for a virtual sub-screen id, matching
-    // the virtual->physical fallback the per-screen reads elsewhere perform.
-    if (it == m_perScreenZoneSelectorSettings.constEnd()
-        && PhosphorIdentity::VirtualScreenId::isVirtual(screenIdOrName)) {
-        it = findPerScreenEntry(m_perScreenZoneSelectorSettings,
-                                PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenIdOrName));
-    }
-    if (it == m_perScreenZoneSelectorSettings.constEnd()) {
-        return config;
-    }
-
-    applyPerScreenOverrides(config, it.value());
-    return config;
-}
-
-QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const
-{
-    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
-    return (it != m_perScreenZoneSelectorSettings.constEnd()) ? it.value() : QVariantMap();
-}
-
-void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
-{
-    if (screenIdOrName.isEmpty() || key.isEmpty()) {
-        return;
-    }
-
-    QVariant validated = validatePerScreenValue(key, value);
-    if (!validated.isValid()) {
-        // DEBUG, and the value is not echoed — the same reasoning as the autotile twin
-        // below, reached over the same bus by the same caller. Demoting one of the two and
-        // leaving the other is not a fix, it is a door left open beside a locked one.
-        qCDebug(lcConfig) << "Rejected per-screen zone selector setting" << key;
-        return;
-    }
-
-    if (applyPerScreenSetting(m_perScreenZoneSelectorSettings, screenIdOrName, key, validated)) {
-        Q_EMIT perScreenZoneSelectorSettingsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::clearPerScreenZoneSelectorSettings(const QString& screenIdOrName)
-{
-    if (removePerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName)) {
-        Q_EMIT perScreenZoneSelectorSettingsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const
-{
-    return findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName)
-        != m_perScreenZoneSelectorSettings.constEnd();
-}
+using PerScreenDetail::applyPerScreenSetting;
+using PerScreenDetail::clearPerScreenKeySubset;
+using PerScreenDetail::findPerScreenEntry;
+using PerScreenDetail::findPerScreenEntryMutable;
+using PerScreenDetail::hasPerScreenKeySubset;
+using PerScreenDetail::removePerScreenEntry;
 
 // ── Per-Screen Gap Overrides (config-backed) ─────────────────────────────────
 
@@ -769,7 +728,7 @@ QVariantMap Settings::perScreenGapOverrides(const QString& screenIdOrName) const
 bool Settings::hasPerScreenGapOverride(const QString& screenIdOrName) const
 {
     return hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenGapDimensionKey,
-                                 /*wantGaps=*/true);
+                                 /*wantMatch=*/true);
 }
 
 bool Settings::perScreenGapDimensionsDiffer(const QHash<QString, QVariantMap>& before,
@@ -796,7 +755,7 @@ bool Settings::perScreenGapDimensionsDiffer(const QHash<QString, QVariantMap>& b
 void Settings::clearPerScreenGapOverride(const QString& screenIdOrName)
 {
     if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenGapDimensionKey,
-                                /*clearGaps=*/true)) {
+                                /*clearMatch=*/true)) {
         Q_EMIT perScreenAutotileSettingsChanged();
         // Clearing a per-monitor gap override is a gap-dimension change, so fire
         // the gap-resnap trigger too (see setPerScreenAutotileSetting).
@@ -856,7 +815,7 @@ void Settings::clearPerScreenAutotileSettings(const QString& screenIdOrName)
     // before the erase to fire the gap-resnap trigger in parity with
     // clearPerScreenGapOverride / the gap-dimension write path.
     const bool hadGaps = hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenGapDimensionKey,
-                                               /*wantGaps=*/true);
+                                               /*wantMatch=*/true);
     if (removePerScreenEntry(m_perScreenAutotileSettings, screenIdOrName)) {
         Q_EMIT perScreenAutotileSettingsChanged();
         if (hadGaps) {
@@ -880,14 +839,109 @@ bool Settings::hasPerScreenAutotileSettings(const QString& screenIdOrName) const
 bool Settings::hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const
 {
     return hasPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileAlgorithmKey,
-                                 /*wantGaps=*/true);
+                                 /*wantMatch=*/true);
 }
 
 void Settings::clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName)
 {
     if (clearPerScreenKeySubset(m_perScreenAutotileSettings, screenIdOrName, isPerScreenAutotileAlgorithmKey,
-                                /*clearGaps=*/true)) {
+                                /*clearMatch=*/true)) {
         Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// ── Per-Screen Scrolling Config ──────────────────────────────────────────────
+
+// Reads the stored overrides for exactly this screen. Deliberately NO
+// virtual→physical fallback, unlike resolvedZoneSelectorConfig and
+// perScreenGapOverrides: the daemon resolves the virtual-screen fallback in
+// its own scrolling path, so doing it here too would resolve it twice. Same
+// shape as the autotile twin above.
+QVariantMap Settings::getPerScreenScrollingSettings(const QString& screenIdOrName) const
+{
+    auto it = findPerScreenEntry(m_perScreenScrollingSettings, screenIdOrName);
+    return (it != m_perScreenScrollingSettings.constEnd()) ? it.value() : QVariantMap();
+}
+
+void Settings::setPerScreenScrollingSetting(const QString& screenIdOrName, const QString& key, const QVariant& value)
+{
+    if (screenIdOrName.isEmpty() || key.isEmpty()) {
+        return;
+    }
+    QVariant validated = validatePerScreenScrollingValue(key, value);
+    if (!validated.isValid()) {
+        // DEBUG, value not echoed — same session-bus log-flood rationale as
+        // the autotile twin.
+        qCDebug(lcConfig) << "Rejected per-screen scrolling setting" << key;
+        return;
+    }
+    if (!applyPerScreenSetting(m_perScreenScrollingSettings, screenIdOrName, key, validated)) {
+        return;
+    }
+    // A kind write can strand the value key on the other kind's scale — the
+    // per-key validators bound each half independently and neither can see the
+    // pair. Re-seed it now, matching what the global kind setter does, so a
+    // scoped monitor never runs with a proportion under Fixed (1px columns) or
+    // pixels under Proportion (100% columns). The VALUE key deliberately
+    // takes NO repair: a client writing Value before Kind (the natural batch
+    // order) would have its value re-seeded to the OLD kind's default before
+    // the kind write arrives — destroying data to fix a pair the very next
+    // write was about to make consistent. A value-only cross-kind write does
+    // mis-render until the pair is next repaired (the kind arm here, or the
+    // load()-time sweep), which is the lesser harm.
+    if (key == QLatin1String(PerScreenScrollingKey::DefaultColumnWidthKind)) {
+        auto it = findPerScreenEntryMutable(m_perScreenScrollingSettings, screenIdOrName);
+        if (it != m_perScreenScrollingSettings.end()) {
+            repairPerScreenScrollingWidth(it.value());
+        }
+    }
+    Q_EMIT perScreenScrollingSettingsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::clearPerScreenScrollingSettings(const QString& screenIdOrName)
+{
+    if (removePerScreenEntry(m_perScreenScrollingSettings, screenIdOrName)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingSettings(const QString& screenIdOrName) const
+{
+    // WHOLE-DOMAIN: this is the D-Bus category surface (clear-the-category),
+    // not a card's chip surface. The cards use the sizing/axis sub-domain
+    // accessors below, the way the autotile store's Algorithm twins do.
+    return findPerScreenEntry(m_perScreenScrollingSettings, screenIdOrName) != m_perScreenScrollingSettings.constEnd();
+}
+
+bool Settings::hasPerScreenScrollingSizingSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingSizingKey,
+                                 /*wantMatch=*/true);
+}
+
+void Settings::clearPerScreenScrollingSizingSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingSizingKey,
+                                /*clearMatch=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingAxisSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingAxisKey,
+                                 /*wantMatch=*/true);
+}
+
+void Settings::clearPerScreenScrollingAxisSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingAxisKey,
+                                /*clearMatch=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
         Q_EMIT settingsChanged();
     }
 }

@@ -1,8 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1250 LINES: this is one Q_OBJECT
+// class declaration, and moc needs the whole class in a single header, so the
+// only available "split" would fragment one class across several headers and
+// cost every reader the hunt for where a property lives (the settings.h and
+// settingscontroller.h precedent). The bulk here is the Q_PROPERTY /
+// Q_INVOKABLE surface QML binds to, which cannot move without rewriting every
+// binding in src/editor/qml. The IMPLEMENTATION is already split by concern
+// under src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and
+// siblings), which is where the real per-concern boundary is.
+//
+// The ceiling is a budget, not a description of where the file sits: a new
+// declaration that would pass it has to buy its room by retiring another. Long
+// rationale belongs on the definition in the matching controller/*.cpp when it
+// will not fit here.
+
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
@@ -13,12 +29,12 @@
 #include <QScreen>
 #include <QQuickWindow>
 #include <QSize>
-#include "../config/configbackends.h"
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/platform/logging.h"
 #include "undo/UndoController.h"
 #include "EditorGapsModel.h"
+#include "EditorTemplateModel.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
 
 #include <memory>
@@ -26,6 +42,13 @@
 
 namespace PhosphorZones {
 class Layout;
+class ScrollingTemplateStore;
+}
+
+namespace PhosphorConfig {
+// Forward-declared for refreshScrollingStripAxisSnapshot's reference
+// parameter; the .cpp includes the backend headers directly.
+class IBackend;
 }
 
 namespace PhosphorRules {
@@ -56,6 +79,8 @@ class EditorController : public QObject, public IShaderPreviewBackend
 
     // The gap sub-model calls markUnsaved() and reaches the shared undo stack.
     friend class EditorGapsModel;
+    // The scrolling-template sub-model does the same.
+    friend class EditorTemplateModel;
 
     // PhosphorZones::Layout properties
     Q_PROPERTY(QString layoutId READ layoutId NOTIFY layoutIdChanged)
@@ -101,6 +126,15 @@ class EditorController : public QObject, public IShaderPreviewBackend
 
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
+
+    // Scrolling-template preview axis: true when the strip on the TARGET
+    // SCREEN runs vertically. Read-only and derived, never a preference of its
+    // own — the strip canvas is a picture of what the engine will do with this
+    // template, so it resolves the same per-screen-override / global-setting /
+    // Auto ladder the engine resolves, against the target screen's size. A
+    // template itself carries no axis: its column extents are fractions ALONG
+    // the strip whichever way that strip happens to run.
+    Q_PROPERTY(bool templatePreviewVertical READ templatePreviewVertical NOTIFY templatePreviewVerticalChanged)
 
     // PhosphorZones::Zone gap settings (per-layout override + global mirrors).
     // Extracted into a sub-model exposed by pointer; QML reads
@@ -174,6 +208,19 @@ class EditorController : public QObject, public IShaderPreviewBackend
     // Preview mode (read-only view for autotile layouts)
     Q_PROPERTY(bool previewMode READ previewMode NOTIFY previewModeChanged)
 
+    // Editing mode: which domain object the editor is editing, orthogonal to
+    // previewMode. 0 = ModeLayout, 1 = ModeScrollingTemplate. The mode
+    // follows whichever object last loaded or was created (launch shapes,
+    // createNewLayout / loadLayout, the template pair); a failed load never
+    // flips it.
+    Q_PROPERTY(int editorMode READ editorMode NOTIFY editorModeChanged)
+
+    // Scrolling-template edit state sub-model (see EditorTemplateModel for
+    // the contract); exposed by pointer the way `gaps` is. The template's
+    // name / id / dirty flag reuse layoutName / layoutId / hasUnsavedChanges
+    // so the TopBar, save gating, and confirm dialogs work unchanged.
+    Q_PROPERTY(PlasmaZones::EditorTemplateModel* scrollingTemplate READ scrollingTemplate CONSTANT)
+
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
@@ -185,6 +232,22 @@ public:
     // Preview mode
     bool previewMode() const;
     void setPreviewMode(bool preview);
+
+    // Editing mode values for the editorMode property. Deliberately not a
+    // Q_ENUM: the controller is a context property and its type is never
+    // QML-registered, so QML compares against these documented ints.
+    static constexpr int ModeLayout = 0;
+    static constexpr int ModeScrollingTemplate = 1;
+
+    int editorMode() const
+    {
+        return m_editorMode;
+    }
+
+    EditorTemplateModel* scrollingTemplate() const
+    {
+        return m_scrollingTemplate;
+    }
 
     // Property getters
     QString layoutId() const;
@@ -199,7 +262,6 @@ public:
     int selectionCount() const;
     bool hasMultipleSelection() const;
     bool hasUnsavedChanges() const;
-    bool isNewLayout() const;
     bool gridSnappingEnabled() const;
     bool edgeSnappingEnabled() const;
     qreal snapIntervalX() const;
@@ -214,6 +276,7 @@ public:
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
     QString targetScreen() const;
+    bool templatePreviewVertical() const;
     EditorGapsModel* gaps() const
     {
         return m_gaps;
@@ -374,7 +437,8 @@ public:
      * cancelPendingLaunch(). With a clean editor — every initial launch, since
      * a freshly constructed controller has nothing unsaved — it applies at once.
      */
-    void requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                       const QString& templateId = QString(), bool newTemplate = false);
 
     /// Apply the launch parked by requestLaunch(). No-op when nothing is
     /// pending. The caller decides whether the outgoing edits were saved
@@ -495,16 +559,29 @@ public:
     Q_INVOKABLE void stopAudioCapture();
 
 public Q_SLOTS:
-    // PhosphorZones::Layout operations
+    // PhosphorZones::Layout operations; loadLayout's bool = payload
+    // resolved (false leaves the session, mode included, intact).
     void createNewLayout();
-    void loadLayout(const QString& layoutId);
-    /// Persist the current layout. Returns false when the save did not land —
-    /// the daemon refused the payload, or the services are not up — in which
-    /// case layoutSaveFailed carries the reason and the unsaved-changes flag
-    /// stays set. Callers that follow a save with an action that REPLACES the
-    /// loaded layout (a screen switch, closing the window) must gate that
-    /// action on the return value or they discard the work the user just
-    /// pressed Save to keep.
+    bool loadLayout(const QString& layoutId);
+
+    // Scrolling-template operations. Both flip into template mode;
+    // saveLayout() then dispatches to the template save path, and
+    // loadScrollingTemplate's bool follows loadLayout's contract.
+    bool loadScrollingTemplate(const QString& templateId);
+    void createNewScrollingTemplate();
+
+    // Daemon scrollingTemplatesChanged subscriber: the store watches
+    // nothing, so this reload is how other-process writes reach us.
+    void reloadLocalTemplates();
+    /// Daemon settingsChanged subscriber (debounced by
+    /// m_stripAxisReloadTimer): re-snapshots the strip-axis inputs so an
+    /// axis authored in the settings app while the editor is open reaches
+    /// the template preview without a restart.
+    void reloadScrollingStripAxis();
+    /// Persist the current layout. False = the save did not land
+    /// (layoutSaveFailed carries the reason, the unsaved flag stays set); a
+    /// caller chaining a layout-replacing action (screen switch, close)
+    /// must gate on it or it discards the work the user just saved.
     bool saveLayout();
     void discardChanges();
 
@@ -758,6 +835,7 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void targetScreenChanged();
+    void templatePreviewVerticalChanged();
 
     /// A screen switch was requested while unsaved edits were pending, so it
     /// was parked instead of applied. The UI prompts, then calls
@@ -818,6 +896,9 @@ Q_SIGNALS:
     // Preview mode signal
     void previewModeChanged();
 
+    // Editing mode (template-state signals live on EditorTemplateModel)
+    void editorModeChanged();
+
     // Clipboard signals
     void canPasteChanged();
     void clipboardOperationFailed(const QString& error);
@@ -826,9 +907,10 @@ private:
     QVariant audioSpectrumVariant() const;
     void markUnsaved();
     void cacheVirtualScreenGeometry(const QString& screenName);
-    /// Carry out the screen switch setTargetScreen / confirmPendingTargetScreen
-    /// gate on. Caller has already decided the outgoing layout may be replaced.
-    void applyTargetScreen(const QString& screenName);
+    /// Carry out the gated screen switch (caller cleared the replace
+    /// decision). forceLayoutMode = the plain-screen launch shape: flips out
+    /// of template/preview mode at apply time and loads even same-screen.
+    void applyTargetScreen(const QString& screenName, bool forceLayoutMode = false);
     void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
     void setInsets(int left, int top, int right, int bottom);
 
@@ -875,29 +957,6 @@ private:
     void syncSelectionSignals();
 
     /**
-     * @brief Load a shortcut from config with validation
-     * @param group KConfig group to read from
-     * @param key Config key name
-     * @param defaultValue Default shortcut if not set or empty
-     * @param member Reference to member variable to update
-     * @param emitSignal Lambda to emit the changed signal
-     */
-    template<typename F>
-    void loadShortcutSetting(PhosphorConfig::IGroup& group, const QString& key, const QString& defaultValue,
-                             QString& member, F emitSignal)
-    {
-        QString value = group.readString(key, defaultValue);
-        if (value.isEmpty()) {
-            qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
-            value = defaultValue;
-        }
-        if (member != value) {
-            member = value;
-            emitSignal();
-        }
-    }
-
-    /**
      * @brief Loads editor settings from KConfig
      */
     void loadEditorSettings();
@@ -936,6 +995,20 @@ private:
     bool m_hasUnsavedChanges = false;
     bool m_isNewLayout = false;
     bool m_previewMode = false;
+
+    // ─── Editing mode + scrolling-template state ─────────────────────────
+    int m_editorMode = ModeLayout;
+    /// Edit-state sub-model (child QObject; reaches back for undo + dirty).
+    EditorTemplateModel* m_scrollingTemplate = nullptr;
+    /// Local read view of the template files, the template sibling of
+    /// m_localLayoutManager: instant opens without the daemon, offline save
+    /// fallback, reloaded on the daemon's scrollingTemplatesChanged signal.
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_templateStore;
+
+    /// Flip the editing mode, resetting cross-mode UI state (selection).
+    void setEditorModeInternal(int mode);
+    /// The template save path saveLayout() dispatches to in template mode.
+    bool saveScrollingTemplateNow();
 
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;
@@ -982,6 +1055,15 @@ private:
     /// entire config, so running that per tick is a drag-long stutter. Batch
     /// the burst into one write once the value settles.
     QTimer m_editorSettingsSaveTimer;
+    /// Debounces settingsChanged bursts (a settings-app Save emits per key
+    /// group) into one reloadScrollingStripAxis() re-read.
+    QTimer m_stripAxisReloadTimer;
+
+    /// The one snapshot writer for the strip-axis inputs (global value +
+    /// per-screen overrides), shared by loadEditorSettings and the
+    /// settingsChanged reload; routes a genuine change through
+    /// refreshTemplatePreviewVertical's own change gate.
+    void refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend);
 
     /// Recompute zone geometry for every manual layout against the primary
     /// screen so a layout opened through the in-process registry carries its
@@ -1006,6 +1088,33 @@ private:
 
     // Screen
     QString m_targetScreen;
+
+    // Strip-axis inputs for templatePreviewVertical(), snapshotted by
+    // loadEditorSettings(). The tri-state config enum (Auto / Horizontal /
+    // Vertical), NOT PhosphorProtocol::ScrollAxis — the two numberings differ
+    // on purpose and are never cast between.
+    /// Auto. Spelled as the literal rather than ConfigDefaults::
+    /// scrollingStripAxis() so this header need not pull in configdefaults.h;
+    /// loadEditorSettings() carries a static_assert tying the two together.
+    int m_scrollingStripAxis = 0;
+    /// Per-screen StripAxis overrides, keyed by the screen id or name the
+    /// group was stored under. Absent screen means "use the global value".
+    QHash<QString, int> m_perScreenStripAxis;
+    /// The NOTIFY comparand: the last answer refreshTemplatePreviewVertical()
+    /// resolved, and that refresh is its ONLY writer. The getter computes
+    /// fresh per read instead of stamping, so a binding evaluating between an
+    /// input change and the refresh cannot consume the flip and suppress the
+    /// change signal for every other consumer.
+    bool m_templatePreviewVertical = false;
+    /// The pure resolution behind both the getter and the refresh: per-screen
+    /// override (looked up under every ScreenIdentity spelling of the
+    /// target), then the global setting, then the Auto size rule. Const and
+    /// side-effect free.
+    bool resolveTemplatePreviewVertical() const;
+    /// Re-resolve the preview axis and emit the change signal only when the
+    /// answer actually flipped. Every input that feeds the axis routes here
+    /// rather than emitting directly.
+    void refreshTemplatePreviewVertical();
     /// Launch arguments parked by requestLaunch() while unsaved edits are
     /// pending. nullopt when nothing is awaiting confirmation.
     struct PendingLaunch
@@ -1014,17 +1123,22 @@ private:
         QString layoutId;
         bool createNew = false;
         bool preview = false;
+        QString templateId;
+        bool newTemplate = false;
     };
     std::optional<PendingLaunch> m_pendingLaunch;
     /// Apply a launch request outright, replacing whatever is loaded.
     void applyLaunch(const PendingLaunch& launch);
+    /// Shared template session-begin tail (signal-order contract on the definition).
+    void beginTemplateSession(const QString& id, const QString& name, bool isNew, const QVariantMap& state,
+                              bool isSystem);
 
-    /// Screen parked by setTargetScreen() while unsaved edits are pending.
-    /// nullopt when nothing is awaiting confirmation. Optional rather than an
-    /// empty string because "" is a legitimate parked value (it is what
-    /// targetScreen() reports before a screen is resolved), so the two states
-    /// need to stay distinguishable even though no caller parks one today.
+    /// Screen parked by setTargetScreen() / a plain-screen launch while
+    /// unsaved edits are pending (optional: "" is a legitimate value). The
+    /// bool is the launch shape's intent — confirm then also leaves
+    /// template/preview mode and loads. Both reset on any mode change.
     std::optional<QString> m_pendingTargetScreen;
+    bool m_pendingTargetEditsLayout = false;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
     QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
     /// Layout-derived reference-size override. When valid, takes precedence

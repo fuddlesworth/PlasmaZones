@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Built-in action descriptor table, engine/window-management/animation/overlay
-// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls this
-// then registerBuiltinsAppearance() in that order. Shared param validators and
-// slot helpers live in ruleaction_builtins_p.h.
+// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls this,
+// then registerBuiltinsAppearance(), then registerBuiltinsIndicators(), in that
+// order. Shared param validators and slot helpers live in
+// ruleaction_builtins_p.h.
 
 #include <PhosphorRules/RuleAction.h>
 
@@ -56,7 +57,14 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
-    // ── layout slot — both layout-shaping actions share it ──
+    // ── layout slot — SetSnappingLayout and SetTilingAlgorithm SHARE it, which
+    // is the lossless mode-toggle pair: one rule may carry both, and the
+    // context's active mode picks which one answers. Sharing costs nothing
+    // because duplicate detection keys on (slot, type), not slot alone, and the
+    // decoder walks the action list by type rather than reading a single winner
+    // out of the slot. The scrolling template is NOT part of the pair: it
+    // carries its own slot, registered below, which is what lets a rule name a
+    // template alongside either of these.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetSnappingLayout),
         .slotFor = constantSlot(ActionSlot::Layout),
@@ -88,6 +96,27 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── scrolling-template slot ──
+    // The value is a NATIVE scrolling-template id (its own picker kind and
+    // name resolution) filling its OWN slot: the lossless assignment set
+    // stores it beside the snapping layout in one rule (see
+    // ActionSlot::ScrollingTemplate).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollingTemplate),
+        .slotFor = constantSlot(ActionSlot::ScrollingTemplate),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::LayoutId);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::LayoutId)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("scrollingTemplate")}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 3,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
     // ── engine-enable slot ──
     // `mode` records which engine the rule disables. The recognised tokens
     // are the wire vocabulary `PhosphorZones::modeFromWireString` accepts —
@@ -111,7 +140,7 @@ void ActionRegistry::registerBuiltinsEngine()
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 3,
+        .displayOrder = 4,
         .tags = {QString(Tag::LayoutEngine)},
     });
 
@@ -139,7 +168,7 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 4,
+        .displayOrder = 5,
         .tags = {QString(Tag::LayoutEngine)},
     });
 
@@ -168,8 +197,77 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("layoutEngine"),
-        .displayOrder = 5,
+        .displayOrder = 6,
         .tags = {QString(Tag::LayoutEngine)},
+    });
+
+    // ── osd-enabled slot — context-domain override of the OSD toggles. A
+    //    matched context rule shows or hides on-screen displays for its
+    //    screen/desktop/activity: value == false suppresses every OSD there,
+    //    value == true forces them past the per-trigger global toggles
+    //    (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch / showNavigationOsd)
+    //    but NOT past the OsdStyle::None kill switch, which returns before a
+    //    rendering style is chosen. One action, not a per-trigger family: the
+    //    user-level intent is "no popups on this screen" (a projector, a
+    //    recording monitor), which is trigger-agnostic. Live-resolved via
+    //    LayoutRegistry::resolveContextOsdEnabled, mirroring LockContext.
+    //    Seeds FALSE: the trigger toggles default ON, so the meaningful fresh
+    //    rule is "suppress here" — DefaultLayoutAssignment's rationale.
+    //    Category "overlay": it governs the overlay/OSD service surface, not
+    //    an engine. It carries NO tag, deliberately, and is one of the two
+    //    actions in the overlay category without Tag::Overlay
+    //    (SetDragSelectorEnabled below is the other): that tag classifies the
+    //    zone-overlay PROPERTY overrides the overlay service reads through
+    //    LayoutRegistry::resolveContextOverlay, and this action is not one of
+    //    them — it is read by the daemon's OSD gates through
+    //    resolveContextOsdEnabled. Tagging it Overlay would put an OSD
+    //    visibility switch into a set whose members are all overlay
+    //    appearance/shape properties.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOsdEnabled),
+        .slotFor = constantSlot(ActionSlot::OsdEnabled),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 10,
+    });
+
+    // ── drag-selector-enabled slot — context-domain override of the drag
+    //    selector popup, the edge-triggered picker offered while a window is
+    //    dragged. A matched context rule shows or hides it for its
+    //    screen/desktop/activity: value == false suppresses it there,
+    //    value == true forces it past the global selector toggle. One action
+    //    covers both variants of the popup (the classic zone selector and the
+    //    scrolling strip selector) because the user-level intent is "no drag
+    //    picker on this monitor", which does not depend on which engine the
+    //    screen runs. It does NOT disable the engine, and it does not override
+    //    the gates that exist because a pick could not be committed. Live-
+    //    resolved via LayoutRegistry::resolveContextDragSelectorEnabled,
+    //    mirroring SetOsdEnabled. Seeds FALSE for the same reason: the global
+    //    selector toggle defaults ON, so the meaningful fresh rule is
+    //    "suppress here". Category "overlay" and NO tag, exactly as
+    //    SetOsdEnabled — Tag::Overlay classifies the zone-overlay PROPERTY
+    //    overrides read through resolveContextOverlay, and a popup visibility
+    //    switch is not one of them.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDragSelectorEnabled),
+        .slotFor = constantSlot(ActionSlot::DragSelectorEnabled),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 11,
     });
 
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
@@ -184,6 +282,22 @@ void ActionRegistry::registerBuiltinsEngine()
         .domain = ActionDomain::Window,
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 0,
+    });
+
+    // ── manage slot — terminal, the placement-only sibling of Exclude. Shares
+    //    the Manage slot deliberately: both mean "unmanaged by the placement
+    //    engines", and the slices that bind them (excludePlacementRulesFrom)
+    //    resolve through `isExcluded()`, never through the slot. Free-form for
+    //    the same future-param reason as Exclude. ──
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludePlacement),
+        .slotFor = constantSlot(ActionSlot::Manage),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 5,
     });
 
     // ── float slot — intentionally free-form (future float-geometry hints);
@@ -204,37 +318,72 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::Placement),
         .validate =
             [](const QJsonObject& p) {
-                // A non-empty array of positive integer (1-based) zone ordinals.
-                const QJsonValue v = p.value(ActionParam::Zones);
-                if (!v.isArray()) {
-                    return false;
-                }
-                const QJsonArray arr = v.toArray();
-                if (arr.isEmpty()) {
-                    return false;
-                }
-                for (const QJsonValue& e : arr) {
-                    if (!e.isDouble()) {
+                // Two optional arrays: `zones` (positive integer 1-based
+                // ordinals) and `zoneNames` (non-blank strings). Each PRESENT
+                // key must be a well-formed array, and at least one entry must
+                // exist across the two so the action always names a target.
+                int targets = 0;
+                if (p.contains(ActionParam::Zones)) {
+                    const QJsonValue v = p.value(ActionParam::Zones);
+                    if (!v.isArray()) {
                         return false;
                     }
-                    const double d = e.toDouble();
-                    // Bound on the DOUBLE before narrowing — a float-to-int cast
-                    // out of int's range is undefined behaviour. Reject < 1
-                    // (ordinals are 1-based) and an absurd upper value first; only
-                    // then is the cast for the integrality check well-defined.
-                    if (d < 1.0 || d > MaxZoneOrdinal) {
+                    const QJsonArray arr = v.toArray();
+                    for (const QJsonValue& e : arr) {
+                        if (!e.isDouble()) {
+                            return false;
+                        }
+                        const double d = e.toDouble();
+                        // Bound on the DOUBLE before narrowing — a float-to-int
+                        // cast out of int's range is undefined behaviour. Reject
+                        // < 1 (ordinals are 1-based) and an absurd upper value
+                        // first; only then is the cast for the integrality check
+                        // well-defined.
+                        if (d < 1.0 || d > MaxZoneOrdinal) {
+                            return false;
+                        }
+                        if (static_cast<double>(static_cast<int>(d)) != d) {
+                            return false; // non-integral
+                        }
+                    }
+                    targets += static_cast<int>(arr.size());
+                }
+                if (p.contains(ActionParam::ZoneNames)) {
+                    const QJsonValue v = p.value(ActionParam::ZoneNames);
+                    if (!v.isArray()) {
                         return false;
                     }
-                    if (static_cast<double>(static_cast<int>(d)) != d) {
-                        return false; // non-integral
+                    const QJsonArray arr = v.toArray();
+                    for (const QJsonValue& e : arr) {
+                        if (!e.isString()) {
+                            return false;
+                        }
+                        // Trim before measuring: the daemon's placement reader
+                        // trims before it applies the same bound, so the two
+                        // must measure the same string or a padded name could
+                        // pass one and fail the other.
+                        const QString name = e.toString().trimmed();
+                        if (name.isEmpty() || name.size() > MaxZoneNameLength) {
+                            return false;
+                        }
                     }
+                    targets += static_cast<int>(arr.size());
                 }
-                return true;
+                return targets > 0;
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Zones)},
+        .allowedKeys = {QString(ActionParam::Zones), QString(ActionParam::ZoneNames)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Zones), .kind = QStringLiteral("zoneOrdinals")}},
+        // Both picker-aware kinds carry an advisory `max` so the settings editor
+        // reads the bound from the schema instead of re-typing the constant:
+        // the ordinal cap for `zoneOrdinals`, the per-entry character cap for
+        // `zoneNames`.
+        .params = {P{.key = QString(ActionParam::Zones),
+                     .kind = QStringLiteral("zoneOrdinals"),
+                     .max = static_cast<double>(MaxZoneOrdinal)},
+                   P{.key = QString(ActionParam::ZoneNames),
+                     .kind = QStringLiteral("zoneNames"),
+                     .max = static_cast<double>(MaxZoneNameLength)}},
         // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
         // open path), not an Effect / Border / Animation / Overlay action.
         .category = QStringLiteral("windowManagement"),
@@ -383,6 +532,10 @@ void ActionRegistry::registerBuiltinsEngine()
         .displayOrder = 3,
         .tags = {QString(Tag::Animation)},
     });
+
+    // (ExcludeDecorations, the decoration mirror of ExcludeAnimations, is
+    // registered in ruleaction_builtins_appearance.cpp with the rest of the
+    // borderAppearance category.)
 
     // ── opacity slot ──
     registerAction(ActionDescriptor{

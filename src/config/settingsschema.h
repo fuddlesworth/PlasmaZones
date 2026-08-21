@@ -33,6 +33,21 @@ PLASMAZONES_EXPORT const PhosphorConfig::Schema& cachedSettingsSchema();
 // functions so the migration can add them one at a time without touching
 // a monolithic switch statement.
 
+/// Canonicalize a trigger list (cap size, coerce entries to
+/// {modifier:int, mouseButton:int} maps). Defined in settingsschema.cpp;
+/// shared with the per-domain schema TUs because trigger-list keys now span
+/// domains (Tiling.Behavior and Scrolling.Behavior).
+QVariant canonicalTriggerList(const QVariant& v);
+
+/// Canonicalize a theme-fallback colour: keep EMPTY (the "follow the colour
+/// scheme" sentinel) and any string QColor can parse, and drop anything else
+/// back to empty. The D-Bus boundary already refuses an unparseable colour,
+/// but the DISK path does not go through it — a hand-edited config reached
+/// QML unchecked and Qt paints an invalid QColor as black. Shared by every
+/// theme-fallback colour key: the zone colours, the Windows border/tint
+/// colours, the tab indicator's three, and the drop indicator's two.
+QVariant canonicalThemeFallbackColor(const QVariant& v);
+
 void appendShadersSchema(PhosphorConfig::Schema& schema);
 void appendAppearanceSchema(PhosphorConfig::Schema& schema);
 void appendOrderingSchema(PhosphorConfig::Schema& schema);
@@ -48,6 +63,12 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema);
 void appendActivationSchema(PhosphorConfig::Schema& schema);
 void appendBehaviorSchema(PhosphorConfig::Schema& schema);
 void appendAutotilingSchema(PhosphorConfig::Schema& schema);
+// The three scrolling entry points live in settingsschema_scrolling.cpp (split
+// out for file-size). appendScrollingShortcutsSchema is called from
+// appendShortcutsSchema, not from buildSettingsSchema.
+void appendScrollingSchema(PhosphorConfig::Schema& schema);
+void appendScrollingZoneSelectorSchema(PhosphorConfig::Schema& schema);
+void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema);
 void appendWindowsSchema(PhosphorConfig::Schema& schema);
 void appendGapsSchema(PhosphorConfig::Schema& schema);
 void appendDecorationsSchema(PhosphorConfig::Schema& schema);

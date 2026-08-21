@@ -37,7 +37,7 @@ Kirigami.Dialog {
     // sampling once on open.
     readonly property real screenAspectRatio: WizardUtils.clampedScreenAspectRatio(dialogContent.Screen.width, dialogContent.Screen.height)
     // Template previews match TemplateService strategies exactly
-    // (see src/editor/services/TemplateService.cpp and core/constants.h)
+    // (see src/editor/services/TemplateService.cpp and core/types/constants.h)
     readonly property var templates: [
         {
             "name": i18n("Blank Canvas"),
@@ -369,7 +369,7 @@ Kirigami.Dialog {
 
                             Layout.fillWidth: true
                             placeholderText: i18n("My Layout")
-                            // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                            // Mirrors PlasmaZones::MaxLayoutNameLength (core/types/constants.h),
                             // same client-side cap as the editor's layout name field.
                             maximumLength: 40
                             Accessible.name: i18n("Layout name")
@@ -436,6 +436,7 @@ Kirigami.Dialog {
                         // 0. The daemon default is Any, so the net behavior is
                         // the same either way.
                         SettingsButtonGroup {
+                            Accessible.name: i18n("Aspect ratio")
                             model: [i18n("Any"), "16:9", "21:9", "32:9", i18n("Portrait")]
                             currentIndex: Math.max(0, root.selectedAspectRatio)
                             onIndexChanged: index => {

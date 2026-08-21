@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 40);
+        QCOMPARE(FieldCount, 41);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
@@ -101,10 +101,10 @@ private Q_SLOTS:
 
     void testFieldIsContext()
     {
-        // Exactly the seven context fields are context (screen / desktop /
+        // Exactly the eight context fields are context (screen / desktop /
         // activity, the placement Mode, the tiled-window count, the screen
-        // orientation, and the active layout) — everything else is a window
-        // property. Action/match compatibility hinges on this split, so pin it
+        // orientation, the active layout, and the system colour scheme) —
+        // everything else is a window property. Action/match compatibility hinges on this split, so pin it
         // down explicitly rather than re-deriving it from
         // fieldIsString/fieldIsBool/fieldIsNumeric.
         QVERIFY(fieldIsContext(Field::ScreenId));
@@ -124,6 +124,9 @@ private Q_SLOTS:
         // layout-keyed gap/overlay/assignment rule participates in the cascade.
         QVERIFY(fieldIsContext(Field::ScreenOrientation));
         QVERIFY(fieldIsContext(Field::ActiveLayout));
+        // ColorScheme is the session-wide light/dark context field, stamped
+        // during windowless context resolution AND on daemon window queries.
+        QVERIFY(fieldIsContext(Field::ColorScheme));
 
         // The capability fields added alongside them are window properties, not
         // context, so a rule keying on them is a per-window match.
@@ -160,6 +163,38 @@ private Q_SLOTS:
         QVERIFY(!fieldIsContext(Field::IsSnapped));
         QVERIFY(!fieldIsContext(Field::Zone));
         QVERIFY(!fieldIsContext(Field::IsTiled));
+    }
+
+    void testModeTokenVocabulary()
+    {
+        // The Field::Mode vocabulary is a WIRE contract: the tokens are written
+        // into saved rules and stamped onto every context query by producers in
+        // other libraries. Nothing validates a Mode leaf's value at load (the
+        // match language has no per-field vocabulary check), so a renamed
+        // constant would not fail anything downstream — it would just stop
+        // matching. Spell the three wire strings out literally here, the one
+        // place they are pinned, so a rename has to come through this test.
+        QCOMPARE(QString(ModeToken::Snapping), QStringLiteral("snapping"));
+        QCOMPARE(QString(ModeToken::Tiling), QStringLiteral("tiling"));
+        QCOMPARE(QString(ModeToken::Scrolling), QStringLiteral("scrolling"));
+
+        // The enumeration is complete and in the documented order — a caller
+        // validating a hand-edited value iterates it.
+        QCOMPARE(static_cast<int>(sizeof(kModeTokens) / sizeof(kModeTokens[0])), 3);
+        QCOMPARE(QString(kModeTokens[0]), QString(ModeToken::Snapping));
+        QCOMPARE(QString(kModeTokens[1]), QString(ModeToken::Tiling));
+        QCOMPARE(QString(kModeTokens[2]), QString(ModeToken::Scrolling));
+
+        // The trap this vocabulary exists to prevent: the engine-mode ACTION
+        // vocabulary (SetEngineMode / DisableEngine, in the private
+        // ruleaction_builtins_p.h) spells the middle value "autotile". A Mode
+        // match leaf carrying that token silently never matches, so the two
+        // must stay distinct. Asserted against the literal deliberately — the
+        // point is that the action spelling is NOT reachable from here.
+        QVERIFY(QString(ModeToken::Tiling) != QStringLiteral("autotile"));
+        for (const QLatin1StringView token : kModeTokens) {
+            QVERIFY2(QString(token) != QStringLiteral("autotile"), token.data());
+        }
     }
 
     void testFieldTableOrdering()

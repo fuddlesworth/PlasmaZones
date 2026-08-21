@@ -1,0 +1,26 @@
+{
+    "id": "tab-flip",
+    "name": "Tab Flip",
+    "description": "Turns the column over like a card. The tab you left narrows to its edge, and the one you picked opens out from that edge to fill the column again. Shading darkens the turn at its steepest so the card reads as solid.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Geometry",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "vertical",
+            "name": "Turn Vertically",
+            "type": "bool",
+            "default": false
+        },
+        {
+            "id": "shade",
+            "name": "Edge Shading",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 1.0
+        }
+    ]
+}

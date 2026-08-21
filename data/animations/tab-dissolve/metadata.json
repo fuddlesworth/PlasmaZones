@@ -1,0 +1,28 @@
+{
+    "id": "tab-dissolve",
+    "name": "Tab Dissolve",
+    "description": "Every speckle of the column turns over from one tab to the other at its own moment, so the tab you left grains away into the one you picked. Raise the density for a finer grain and the fade width for a softer speckle.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Dissolve",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "scale",
+            "name": "Speckle Density",
+            "type": "float",
+            "default": 120.0,
+            "min": 8.0,
+            "max": 600.0
+        },
+        {
+            "id": "softness",
+            "name": "Speckle Softness",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.5
+        }
+    ]
+}

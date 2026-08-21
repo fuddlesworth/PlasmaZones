@@ -14,6 +14,7 @@
  *   - the no-op update contract (updating to an identical rule does not churn).
  */
 
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -116,6 +117,10 @@ private Q_SLOTS:
     void boolMatchConditionRendersOnOff();
     void shaderAndCurveLabelsResolveThroughLookups();
     void routeActionsRenderFriendlyLabels();
+    void scrollingActionsRenderDistinctLabels();
+    void snapToZoneSummaryQuotesNamesAndFiltersTargets();
+    void animationOverridesSummariseWithTheirEvent();
+    void actionLabelPrefixesAreUnique();
 };
 
 void TestRuleModel::rolesExposed()
@@ -164,6 +169,20 @@ void TestRuleModel::sectionDerivation()
     gap.params.insert(ActionParam::Value, 12);
     screenGap.actions = {gap};
     QCOMPARE(RuleModel::sectionFor(screenGap), RuleModel::Section::Monitor);
+
+    // Same shape for a per-monitor scrolling override: a ScreenId leaf plus a
+    // context-domain scrolling action and no LayoutEngine action still reads
+    // as Monitor & Layout. Mirrors the gap row above — the classifier goes
+    // through hasContextAction, so a scrolling action left out of that
+    // predicate would silently drop these rules to Advanced.
+    Rule screenScroll;
+    screenScroll.id = QUuid::createUuid();
+    screenScroll.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2"));
+    RuleAction columnWidth;
+    columnWidth.type = QString(ActionType::SetScrollDefaultColumnWidth);
+    columnWidth.params.insert(ActionParam::Value, 0.5);
+    screenScroll.actions = {columnWidth};
+    QCOMPARE(RuleModel::sectionFor(screenScroll), RuleModel::Section::Monitor);
 }
 
 void TestRuleModel::compositeGraduatesToAdvanced()
@@ -371,11 +390,14 @@ void TestRuleModel::actionSummaryRendersAllEngineModes()
     // the i18n surface may add prefixes ("Engine: ") but the casing of
     // the engine name is the load-bearing contract.
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
-    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    // "Tiling" is the one user-facing word for the autotile engine across
+    // the rule editor (the wire token stays "autotile").
+    QVERIFY2(s1.contains(QStringLiteral("Tiling")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
     // Negative assertion: no summary should leak the lowercase wire
     // token — that would indicate the i18n branch fell through.
     QVERIFY2(!s2.contains(QStringLiteral("scrolling")), qPrintable(s2));
+    QVERIFY2(!s1.contains(QStringLiteral("autotile")), qPrintable(s1));
 }
 
 void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
@@ -403,7 +425,7 @@ void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
     const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
     const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
-    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s1.contains(QStringLiteral("Tiling")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
     // The three labels must be pairwise-distinct — otherwise a user with
     // multiple disable rules sees ambiguous "Disabled" rows.
@@ -732,6 +754,209 @@ void TestRuleModel::routeActionsRenderFriendlyLabels()
     });
     model.refreshLabels();
     QCOMPARE(summaryAt(0), QStringLiteral("Open on monitor: LG Ultra HD · DP-2"));
+}
+
+void TestRuleModel::scrollingActionsRenderDistinctLabels()
+{
+    // Pin the summaries of the three scrolling actions added by the
+    // per-window/insert-position work. The two heights share
+    // scrollFractionPercent with the column-width pair, so a copy-pasted
+    // branch that renders the wrong prefix (or reuses the width prefix)
+    // reads plausibly in the rules list but names the wrong axis.
+    const auto ruleWith = [](QLatin1StringView type, const QJsonValue& value) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = QString(type);
+        if (!value.isNull()) {
+            action.params.insert(ActionParam::Value, value);
+        }
+        rule.actions = {action};
+        return rule;
+    };
+
+    RuleModel model;
+    model.setRules({
+        ruleWith(ActionType::SetScrollDefaultWindowHeight, 0.5),
+        ruleWith(ActionType::OpenWindowHeight, 0.5),
+        ruleWith(ActionType::SetScrollInsertPosition, QStringLiteral("last")),
+        ruleWith(ActionType::SetScrollDefaultWindowHeight, 2.0), // out of range
+        ruleWith(ActionType::OpenWindowHeight, true), // wrong type
+        ruleWith(ActionType::SetScrollInsertPosition, QStringLiteral("middle")), // unknown token
+        // The column-width pair renders alongside these three; their labels
+        // must stay distinguishable from the height pair's.
+        ruleWith(ActionType::SetScrollDefaultColumnWidth, 0.5),
+        ruleWith(ActionType::OpenColumnWidth, 0.5),
+    });
+
+    const auto summaryAt = [&](int row) {
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
+    };
+
+    QCOMPARE(summaryAt(0), QStringLiteral("Window height: 50%"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Open at height: 50%"));
+    // The insert-position token resolves through the shared enumOptionLabel,
+    // so pin the prefix and the no-raw-token contract rather than the
+    // option text (which the enum-label layer owns).
+    QVERIFY2(summaryAt(2).startsWith(QStringLiteral("Insert new windows: ")), qPrintable(summaryAt(2)));
+    QVERIFY2(!summaryAt(2).contains(QStringLiteral("last")), qPrintable(summaryAt(2)));
+    // Reject paths render the (invalid) marker rather than a plausible number.
+    QVERIFY2(summaryAt(3).contains(QStringLiteral("invalid")), qPrintable(summaryAt(3)));
+    QVERIFY2(summaryAt(4).contains(QStringLiteral("invalid")), qPrintable(summaryAt(4)));
+    QVERIFY2(summaryAt(5).contains(QStringLiteral("invalid")), qPrintable(summaryAt(5)));
+    // The height pair must not borrow the width pair's wording.
+    QCOMPARE(summaryAt(6), QStringLiteral("Column width: 50%"));
+    QCOMPARE(summaryAt(7), QStringLiteral("Open at width: 50%"));
+    QVERIFY(summaryAt(0) != summaryAt(6));
+    QVERIFY(summaryAt(1) != summaryAt(7));
+}
+
+void TestRuleModel::actionLabelPrefixesAreUnique()
+{
+    // Canary for the duplicate-label class: two registered action types that
+    // render the same summary make their rules indistinguishable in the rules
+    // list, and nothing else in the suite would notice. Build one rule per
+    // registered type (no params — the placeholder/invalid branch, which is
+    // the shape a duplicated copy-paste produces) and assert the resulting
+    // labels are pairwise distinct.
+    //
+    // The three RouteTo*/zone actions legitimately share a family prefix only
+    // through their VALUE, so comparing whole labels at the no-value shape is
+    // the right granularity: it is exactly the text a user sees before
+    // filling the value in.
+    const QStringList types = ActionRegistry::instance().registeredTypes();
+    QVERIFY(!types.isEmpty());
+
+    QList<Rule> rules;
+    rules.reserve(types.size());
+    for (const QString& type : types) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 100;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = type;
+        rule.actions = {action};
+        rules.append(rule);
+    }
+
+    RuleModel model;
+    model.setRules(rules);
+    QCOMPARE(model.rowCount(), types.size());
+
+    // Accumulate every collision before reporting, so one duplicate does not
+    // hide the rest.
+    QHash<QString, QString> labelToType;
+    QStringList collisions;
+    for (int row = 0; row < model.rowCount(); ++row) {
+        const QString label = model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
+        QVERIFY2(!label.isEmpty(), qPrintable(types.at(row)));
+        // A label that is just the wire type means actionLabel fell through
+        // to the raw-type fallback — a missing branch, not a duplicate.
+        QVERIFY2(label != types.at(row), qPrintable(types.at(row)));
+        const auto existing = labelToType.constFind(label);
+        if (existing != labelToType.cend()) {
+            collisions.append(QStringLiteral("%1 == %2 (%3)").arg(*existing, types.at(row), label));
+        } else {
+            labelToType.insert(label, types.at(row));
+        }
+    }
+    QVERIFY2(collisions.isEmpty(), qPrintable(collisions.join(QStringLiteral("; "))));
+}
+
+void TestRuleModel::snapToZoneSummaryQuotesNamesAndFiltersTargets()
+{
+    // The SnapToZone summary renders zone names in quotes so a name made of
+    // digits (discussion #924's disambiguation case) cannot be mistaken for an
+    // ordinal, and applies the validator's bounds plus a dedupe so it never
+    // claims a target the runtime discards or counts one twice.
+    const auto buildRule = [](const QJsonArray& zones, const QJsonArray& names) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 300;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("editor"));
+        RuleAction snap;
+        snap.type = QString(ActionType::SnapToZone);
+        if (!zones.isEmpty()) {
+            snap.params.insert(ActionParam::Zones, zones);
+        }
+        if (!names.isEmpty()) {
+            snap.params.insert(ActionParam::ZoneNames, names);
+        }
+        rule.actions = {snap};
+        return rule;
+    };
+    RuleModel model;
+    model.setRules({
+        // Ordinal 1 beside the NAME "2": the name must render quoted, distinct
+        // from a bare ordinal 2.
+        buildRule(QJsonArray{1}, QJsonArray{QStringLiteral("2")}),
+        // Names only, one of them padded: the quoted, trimmed name renders and
+        // the singular form is used.
+        buildRule(QJsonArray{}, QJsonArray{QStringLiteral("  Editor ")}),
+        // Duplicates and out-of-bound entries collapse / drop: ordinal 1 twice,
+        // an ordinal past MaxZoneOrdinal, the same name in two spellings, and a
+        // blank name, leave exactly two targets.
+        buildRule(QJsonArray{1, 1, MaxZoneOrdinal + 1},
+                  QJsonArray{QStringLiteral("Editor"), QStringLiteral("editor"), QStringLiteral("   ")}),
+    });
+    QCOMPARE(model.rowCount(), 3);
+    const QString s0 = model.data(model.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
+    QVERIFY2(s0.contains(QStringLiteral("1, “2”")), qPrintable(s0));
+    QVERIFY2(s0.startsWith(QStringLiteral("Snap to zones")), qPrintable(s0));
+    QVERIFY2(s1 == QStringLiteral("Snap to zone “Editor”"), qPrintable(s1));
+    QVERIFY2(s2 == QStringLiteral("Snap to zones 1, “Editor”"), qPrintable(s2));
+}
+
+void TestRuleModel::animationOverridesSummariseWithTheirEvent()
+{
+    // The three per-event animation overrides key their slot on the event, so
+    // one rule legitimately carries two of each; without the event in the
+    // label the two summarise identically. The event resolver is the lookup
+    // SettingsController wires from the animations page; here it is a stub
+    // that maps the path to a fixed word so the prefix is observable.
+    Rule rule;
+    rule.id = QUuid::createUuid();
+    rule.priority = 300;
+    rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("editor"));
+    RuleAction openShader;
+    openShader.type = QString(ActionType::OverrideAnimationShader);
+    openShader.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    openShader.params.insert(ActionParam::EffectId, QStringLiteral("dissolve"));
+    RuleAction closeShader = openShader;
+    closeShader.params.insert(ActionParam::Event, QStringLiteral("window.close"));
+    RuleAction timing;
+    timing.type = QString(ActionType::OverrideAnimationTiming);
+    timing.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    timing.params.insert(ActionParam::DurationMs, 250);
+    RuleAction curve;
+    curve.type = QString(ActionType::OverrideAnimationCurve);
+    curve.params.insert(ActionParam::Event, QStringLiteral("window.close"));
+    curve.params.insert(ActionParam::Curve, QStringLiteral("ease"));
+    rule.actions = {openShader, closeShader, timing, curve};
+
+    RuleModel model;
+    model.setAnimationEventLabelLookup([](const QString& path) {
+        return path == QStringLiteral("window.open") ? QStringLiteral("Open") : QStringLiteral("Close");
+    });
+    model.setRules({rule});
+    const QString summary = model.data(model.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    QVERIFY2(summary.contains(QStringLiteral("Open shader: dissolve")), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("Close shader: dissolve")), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("Open duration: 250 ms")), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("Close curve: ease")), qPrintable(summary));
+
+    // Without the resolver the event path itself leads, so two events still
+    // never collapse into one wording.
+    RuleModel bare;
+    bare.setRules({rule});
+    const QString bareSummary = bare.data(bare.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    QVERIFY2(bareSummary.contains(QStringLiteral("window.open shader: dissolve")), qPrintable(bareSummary));
+    QVERIFY2(bareSummary.contains(QStringLiteral("window.close shader: dissolve")), qPrintable(bareSummary));
 }
 
 QTEST_MAIN(TestRuleModel)

@@ -77,4 +77,15 @@ bool windowIsTransient(KWin::EffectWindow* w);
 PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
                                         bool isTiled, const QString& zoneId);
 
+/// "portrait" / "landscape" for the output containing @p w's frame centre, or
+/// an empty string when no output does. A square screen counts as landscape,
+/// matching the daemon-side orientation provider.
+///
+/// This is the position-derived FALLBACK for the screen orientation: it is
+/// wrong for a scroll strip's off-screen parked windows (their centre lies
+/// outside every output, or inside the neighbour's), so a caller holding a
+/// resolved screen id should derive the orientation from that id and use this
+/// only when the id resolves to no output.
+QString centreScreenOrientation(KWin::EffectWindow* w);
+
 } // namespace PlasmaZones

@@ -15,10 +15,42 @@
 
 #include <QByteArray>
 #include <QLoggingCategory>
+#include <QUrl>
 
 namespace PhosphorRendering {
 
 Q_DECLARE_LOGGING_CATEGORY(lcShaderNode)
+
+/// True for URLs the shader loader can read: file://, qrc:, scheme-less
+/// local paths, and the empty/invalid URL (an intentional "no shader").
+/// Shared by the setter guards (shadereffect_setters.cpp) and kept beside
+/// its path-resolving sibling below so the two can never drift.
+inline bool isLocalShaderUrl(const QUrl& url)
+{
+    if (!url.isValid() || url.isEmpty()) {
+        return true;
+    }
+    const QString scheme = url.scheme();
+    return url.isLocalFile() || scheme.isEmpty() || scheme == QLatin1String("file") || scheme == QLatin1String("qrc");
+}
+
+/// Resolve a shader URL (already vetted by isLocalShaderUrl) to the local
+/// path QFile can open — ":"-prefixed for qrc:, toLocalFile() for file://,
+/// the raw path otherwise. Used by the load path (shadereffect.cpp).
+inline QString localPathFromShaderUrl(const QUrl& url)
+{
+    if (!url.isValid() || url.isEmpty()) {
+        return QString();
+    }
+    if (url.scheme() == QLatin1String("qrc")) {
+        return QLatin1Char(':') + url.path();
+    }
+    const QString local = url.toLocalFile();
+    if (!local.isEmpty()) {
+        return local;
+    }
+    return url.path();
+}
 
 /// Clear the filename+mtime cache that lives in shadernoderhicore.cpp.
 /// Called from ShaderCompiler::clearCache() so a single public clearCache()

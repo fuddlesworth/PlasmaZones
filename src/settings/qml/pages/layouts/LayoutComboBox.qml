@@ -15,7 +15,7 @@ import org.plasmazones.common as PZCommon
  * This component eliminates duplication of the layout model building logic
  * across MonitorAssignments, ActivityAssignments, and QuickLayoutSlots.
  *
- * Category: 0 = Manual
+ * Category: 0 = Manual, 1 = Autotile, 2 = Scrolling template
  *
  * The "Default" option resolves to the actual default layout for preview.
  */
@@ -33,22 +33,49 @@ ComboBox {
     property string noneText: i18n("Default")
     property string currentLayoutId: ""
     property bool showPreview: false
+    // Thumbnail frame widths shared by the layout and the no-layout preview
+    // tiles (the QQC2 hairline idiom: one unit at rest, two when highlighted),
+    // named once so the two tiles cannot drift.
+    readonly property int _previewBorderWidth: 1
+    readonly property int _previewBorderHighlighted: 2
     // Whether to show the "Default"/"None" entry at the top of the list
     property bool showNoneOption: true
-    // Filter layouts by category: -1 = show all, 0 = manual/zone only, 1 = autotile only
+    // An optional SECOND leading entry, directly under the Default one, whose
+    // value is a caller-supplied token rather than the empty string. It exists
+    // for the three-state pickers (scrolling templates first, and now the
+    // Monitors page's snapping/tiling selectors too), where "inherit the
+    // configured default" and "explicitly none at all" are different answers
+    // and the empty string can only spell the first. Off by default, so a
+    // caller that wants a two-state picker keeps one.
+    //
+    // Placed after Default rather than before it so row 0 keeps meaning what
+    // updateSelection and clearSelection assume it means.
+    property bool showExplicitNoneOption: false
+    property string explicitNoneText: i18n("None")
+    /// The value the explicit-none row carries. Never empty when the row is
+    /// shown — an empty token would collide with the Default row and make the
+    /// two indistinguishable to updateSelection's value match.
+    property string explicitNoneValue: ""
+    // Filter layouts by category: -1 = show all, 0 = manual/zone only,
+    // 1 = autotile only, 2 = scrolling templates only
     property int layoutFilter: -1
     // The layout ID that "Default" actually resolves to at runtime.
     // Set by parent based on context:
     // - Monitor dropdown: appSettings.defaultLayoutId (global default)
     // - Per-desktop dropdown: monitor's layout (or global if none)
     // - Activity dropdown: monitor's layout (or global if none)
-    // When layoutFilter === 1 (autotile only), falls back to the global default algorithm.
+    // When layoutFilter === 1 (autotile only), falls back to the global default
+    // algorithm; when it is 2 (scrolling templates only), to the global default
+    // scrolling template.
     property string resolvedDefaultId: {
         if (!appSettings)
             return "";
 
         if (root.layoutFilter === 1)
             return "autotile:" + appSettings.defaultAutotileAlgorithm;
+
+        if (root.layoutFilter === 2)
+            return appSettings.defaultScrollingTemplate;
 
         return appSettings.defaultLayoutId;
     }
@@ -78,11 +105,15 @@ ComboBox {
     }
 
     // Helper to get category with default fallback.
-    // Layout objects use `isAutotile` (bool), while overlay/D-Bus objects
-    // use `category` (int: 0=Manual, 1=Autotile). Check both fields.
+    // Layout objects use `isAutotile` / `isScrollingTemplate` (bool), while
+    // overlay/D-Bus objects use `category` (int: 0=Manual, 1=Autotile,
+    // 2=ScrollingTemplate). Check both fields.
     function getCategory(layout, defaultCategory) {
         if (!layout)
             return defaultCategory;
+
+        if (layout.isScrollingTemplate === true)
+            return 2;
 
         if (layout.category !== undefined)
             return layout.category;
@@ -105,12 +136,35 @@ ComboBox {
         let items = [];
         if (root.showNoneOption) {
             let defaultLayout = _resolveDefaultLayout();
+            // The configured default can BE the explicit opt-out (the library
+            // card's Clear Default writes the reserved word). findLayoutById
+            // then resolves nothing, which without this flag rendered the
+            // same "No layout assigned" subtitle a stale default gets — a
+            // warning wording for a state the user chose on purpose. The
+            // delegate reads the flag to caption the row like the explicit
+            // None row instead.
+            let defaultIsNone = root.resolvedDefaultId === "none" || root.resolvedDefaultId === "autotile:none";
             items.push({
                 "text": noneText,
                 "value": "",
                 "layout": defaultLayout,
                 "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
-                "isDefaultOption": true
+                "isDefaultOption": true,
+                "defaultIsNone": defaultIsNone
+            });
+        }
+        if (root.showExplicitNoneOption && root.explicitNoneValue !== "") {
+            // No `layout`, deliberately: this row stands for the ABSENCE of
+            // one, so the preview delegate has nothing to draw and falls back
+            // to its no-layout rendering, exactly as it would for a row whose
+            // layout was deleted. isDefaultOption stays false — this is a real
+            // pick the user is making, not the inherit-the-default row.
+            items.push({
+                "text": root.explicitNoneText,
+                "value": root.explicitNoneValue,
+                "layout": null,
+                "category": root.layoutFilter,
+                "isDefaultOption": false
             });
         }
         if (appSettings && appSettings.layouts) {
@@ -131,8 +185,10 @@ ComboBox {
                     "isDefaultOption": false
                 });
             }
-            // Sort: manual (category 0) before dynamic (category 1),
-            // alphabetical within each group.
+            // Sort by category ascending — manual (0), then dynamic (1), then
+            // scrolling templates (2) — and alphabetically within each group.
+            // A filtered combo holds one category, so the category term only
+            // matters on the unfiltered (-1) view.
             layoutItems.sort(function (a, b) {
                 if (a.category !== b.category)
                     return a.category - b.category;
@@ -213,6 +269,13 @@ ComboBox {
             // For "Default" entry, also check which layout it resolves to
             if (old.isDefaultOption && ((old.layout ? old.layout.id : "") !== (nw.layout ? nw.layout.id : "")))
                 return false;
+
+            // A default flipping between the explicit opt-out and any other
+            // unresolvable id keeps layout === null on both sides, so the id
+            // compare above cannot see it — but the subtitle differs ("No
+            // layout" vs "No layout assigned"), so the model must invalidate.
+            if (old.isDefaultOption && (old.defaultIsNone === true) !== (nw.defaultIsNone === true))
+                return false;
         }
         return true;
     }
@@ -291,6 +354,22 @@ ComboBox {
     model: []
     onResolvedDefaultIdChanged: rebuildModel()
     onNoneTextChanged: rebuildModel()
+    // Every property _buildItems() reads needs a rebuild trigger, or a
+    // consumer that changes one after construction is left with a stale
+    // model — and, for the two leading rows, a stale updateSelection /
+    // clearSelection invariant, since both branch on which rows exist. The
+    // current consumers all set these once declaratively, so this is closing
+    // an asymmetric surface rather than a live bug.
+    onShowNoneOptionChanged: rebuildModel()
+    onShowExplicitNoneOptionChanged: rebuildModel()
+    onExplicitNoneTextChanged: rebuildModel()
+    onExplicitNoneValueChanged: rebuildModel()
+    // Not read by _buildItems but by _modelMatchesItems, which only compares
+    // zone geometry while the previews are on. With them off a geometry-only
+    // edit counts as "no visible change" and no rebuild happens, so turning
+    // them on afterwards would render the layout objects captured by the
+    // older model. Same asymmetry as the four above.
+    onShowPreviewChanged: rebuildModel()
     // Filter change (e.g., viewMode switch) completely replaces model content.
     // Rebuild the model synchronously, but do NOT call updateSelection() here.
     // Both layoutFilter and currentLayoutId depend on the same root property
@@ -302,9 +381,14 @@ ComboBox {
     onLayoutFilterChanged: {
         _rebuildScheduled = false;
         let items = _buildItems();
-        if (_modelMatchesItems(items))
+        // Same ordering as _doRebuild: when the model did not change visually,
+        // currentLayoutId may still have moved while this filter change was
+        // coalesced, so re-sync the selection (popup open or not) and return;
+        // only a real model change defers behind an open popup.
+        if (_modelMatchesItems(items)) {
+            Qt.callLater(updateSelection);
             return;
-
+        }
         if (popup && popup.visible) {
             _rebuildPending = true;
             return;
@@ -360,7 +444,6 @@ ComboBox {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                propagateComposedEvents: true
                 onPressed: function (mouse) {
                     const rootPos = root.mapToItem(catcher, 0, 0);
                     const onCombo = mouse.x >= rootPos.x && mouse.y >= rootPos.y && mouse.x < rootPos.x + root.width && mouse.y < rootPos.y + root.height;
@@ -410,7 +493,9 @@ ComboBox {
             }
         }
         width: Math.max(root.width, Kirigami.Units.gridUnit * 18)
-        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
+        // Before the combo is in a window there is no real height to fit; a
+        // Units-derived fallback keeps the popup bounded without a raw pixel.
+        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : Kirigami.Units.gridUnit * 30) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
@@ -466,8 +551,64 @@ ComboBox {
         readonly property bool hasLayout: modelData.layout != null
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
         readonly property bool isCurrentSelection: root.currentIndex === index
+        // The subtitle the sighted user reads under the row name — hoisted to
+        // the delegate so the screen reader gets it too: the two leading rows
+        // ("Default" and "None") are otherwise indistinguishable by name
+        // alone.
+        readonly property string subtitleText: {
+            if (isDefaultOption && !hasLayout && modelData.defaultIsNone === true) {
+                // The configured default IS the explicit opt-out — caption it
+                // with the same per-family wording as the explicit None row,
+                // not the unresolved-default warning below.
+                if (root.layoutFilter === 2)
+                    return i18n("No template");
+                if (root.layoutFilter === 1)
+                    return i18n("No algorithm");
+                return i18n("No layout");
+            } else if (isDefaultOption && !hasLayout) {
+                // "Default" with nothing to resolve to. Worded per family like
+                // the branches around it: the template family clears its
+                // default to an EMPTY value rather than the reserved word, so
+                // this branch — not the opt-out branch above — is what the
+                // Monitors page's template selector shows in its ordinary
+                // cleared state, and a flat "No layout assigned" named the
+                // wrong family there.
+                if (root.layoutFilter === 2)
+                    return i18n("No template assigned");
+                if (root.layoutFilter === 1)
+                    return i18n("No algorithm assigned");
+                return i18n("No layout assigned");
+            } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {
+                // The explicit-none row means "deliberately none", not an
+                // unresolved default — without this branch it fell into the
+                // wording below and read as a configuration warning. Worded
+                // per family now that all three carry the row.
+                if (root.layoutFilter === 2)
+                    return i18n("No template");
+                if (root.layoutFilter === 1)
+                    return i18n("No algorithm");
+                return i18n("No layout");
+            } else if (!hasLayout) {
+                return i18n("No default configured");
+            }
+            // A scrolling template's zoneCount carries the number of bands
+            // its preview draws, which is its starting columns, or its width
+            // presets, or the single fallback band a template with neither
+            // draws (default width when a fraction, half width otherwise), so
+            // the honest wording here is widths not columns.
+            // Read the category off the resolved layout: the option's own
+            // category follows layoutFilter when one is set.
+            const count = (modelData.layout && modelData.layout.zoneCount) || 0;
+            const countText = root.getCategory(modelData.layout, modelData.category) === 2 ? i18np("%n width", "%n widths", count) : i18np("%n zone", "%n zones", count);
+            if (isDefaultOption) {
+                let layoutName = (modelData.layout && modelData.layout.displayName) || "";
+                return i18n("→ %1 (%2)", layoutName, countText);
+            }
+            return countText;
+        }
 
         Accessible.name: modelData.text || ""
+        Accessible.description: subtitleText
         // Reserve the scrollbar's gutter so the row content ends at the
         // scrollbar's left edge instead of running underneath it — otherwise
         // the seam between the full-width delegate and the floating scrollbar
@@ -518,14 +659,20 @@ ComboBox {
                 radius: Kirigami.Units.smallSpacing / 2
                 color: Kirigami.Theme.alternateBackgroundColor
                 border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                border.width: highlighted ? 2 : 1
+                border.width: highlighted ? root._previewBorderHighlighted : root._previewBorderWidth
                 visible: root.showPreview && hasLayout
 
                 PZCommon.ZonePreview {
                     anchors.fill: parent
                     anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
                     zones: (modelData.layout && modelData.layout.zones) || []
-                    isHovered: highlighted
+                    // Always render zones highlighted — the inactive fill is
+                    // near-invisible on the alternate-background thumbnail, so
+                    // gating it on the row highlight hid what each entry is.
+                    // Same convention as OrderingPage and the other static
+                    // settings previews; the row highlight stays visible on
+                    // the thumbnail border.
+                    isHovered: true
                     showZoneNumbers: false
                     minZoneSize: 2
                 }
@@ -538,7 +685,7 @@ ComboBox {
                 radius: Kirigami.Units.smallSpacing / 2
                 color: Kirigami.Theme.alternateBackgroundColor
                 border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                border.width: highlighted ? 2 : 1
+                border.width: highlighted ? root._previewBorderHighlighted : root._previewBorderWidth
                 visible: root.showPreview && !hasLayout
 
                 Kirigami.Icon {
@@ -571,8 +718,11 @@ ComboBox {
                     PZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
-                        autoAssign: modelData.layout && modelData.layout.autoAssign === true
-                        globalAutoAssign: root.appSettings && root.appSettings.autoAssignAllLayouts === true
+                        // Ternary, not `a && b`: on the None entry `layout` is
+                        // undefined and `undefined && x` is undefined, which
+                        // cannot be assigned to a bool.
+                        autoAssign: modelData.layout ? modelData.layout.autoAssign === true : false
+                        globalAutoAssign: root.appSettings ? root.appSettings.autoAssignAllLayouts === true : false
                     }
 
                     // Autotile capability badges (memory / reflow / script-state)
@@ -588,19 +738,9 @@ ComboBox {
 
                 Label {
                     visible: root.showPreview
-                    text: {
-                        if (isDefaultOption && !hasLayout) {
-                            // "Default"/"None" with no resolution (e.g., quick layout slots)
-                            return i18n("No layout assigned");
-                        } else if (!hasLayout) {
-                            return i18n("No default configured");
-                        } else if (isDefaultOption) {
-                            let layoutName = (modelData.layout && modelData.layout.displayName) || "";
-                            return i18n("→ %1 (%2)", layoutName, i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0));
-                        } else {
-                            return i18np("%n zone", "%n zones", (modelData.layout && modelData.layout.zoneCount) || 0);
-                        }
-                    }
+                    // Hoisted to the delegate's subtitleText so the screen
+                    // reader announces the same distinction the eye gets.
+                    text: subtitleText
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.textColor
                     opacity: 0.7

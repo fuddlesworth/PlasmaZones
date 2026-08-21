@@ -78,8 +78,14 @@ Rectangle {
         Label {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
+            // Capped like the description below: the tile height is fixed
+            // (tileHeight), so an uncapped wrapping title on a long template
+            // name (the retitled exclude template) would push the
+            // description out of the tile instead of eliding.
+            elide: Text.ElideRight
             font.bold: true
             horizontalAlignment: Text.AlignHCenter
+            maximumLineCount: 2
             text: tile.label
             wrapMode: Text.WordWrap
         }

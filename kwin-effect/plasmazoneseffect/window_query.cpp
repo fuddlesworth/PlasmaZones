@@ -35,6 +35,17 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     if (w->isDock()) {
         return WindowType::Dock;
     }
+    // Plasma applet popups (Kickoff, tray flyouts, any widget's expanded view).
+    // Placed HIGH on purpose rather than next to the generic Popup branch at
+    // the bottom: NET::AppletPopup is its own type and, as measured, sets none
+    // of the generic predicates below (not isPopupWindow, not isMenu, not
+    // isDialog, no transientFor), so it would otherwise fall all the way
+    // through to Unknown — which is exactly the bug this branch fixes. Sitting
+    // above the generic tests means a future KWin that ALSO reports one of
+    // them cannot silently re-route these surfaces to a vaguer type.
+    if (w->isAppletPopup()) {
+        return WindowType::AppletPopup;
+    }
     if (w->isOnScreenDisplay()) {
         return WindowType::OnScreenDisplay;
     }
@@ -50,6 +61,14 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     if (w->isDropdownMenu() || w->isPopupMenu() || w->isMenu()) {
         return WindowType::Menu;
     }
+    // Explicit arm so a NET::Toolbar surface resolves as its own type instead
+    // of falling through to Unknown (it sets none of the generic predicates
+    // below, not even isNormalWindow) — the same fall-through bug the
+    // isAppletPopup arm above fixes, and the Rules page offers Toolbar as a
+    // window-type value, so without a producer that rule could never match.
+    if (w->isToolbar()) {
+        return WindowType::Toolbar;
+    }
     if (w->isUtility()) {
         return WindowType::Utility;
     }
@@ -63,6 +82,26 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
         return WindowType::Normal;
     }
     return WindowType::Unknown;
+}
+
+QString centreScreenOrientation(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return {};
+    }
+    // Position-resolved output (screenAt on the frame centre), NOT w->screen():
+    // KWin can assign a window the wrong one of two identical-model outputs
+    // (discussion #724).
+    const QPointF centreF = w->frameGeometry().center();
+    const auto* output = KWin::effects->screenAt(QPoint(qRound(centreF.x()), qRound(centreF.y())));
+    if (!output) {
+        return {};
+    }
+    const QRect g = output->geometry();
+    if (!g.isValid()) {
+        return {};
+    }
+    return g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
 }
 
 PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& screenId, bool isFloating, bool isSnapped,
@@ -84,13 +123,23 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     }
     // Engine mode (context field) — derived from the snapped / tiled state above
     // so a per-mode rule (`Mode Equals "tiling"`) resolves this window's border /
-    // title / colour the same way the daemon resolves its per-mode gaps. Snapping
-    // and tiling are the only engine modes; a floating (unmanaged) window has no
-    // mode, so query.mode is left empty and no Mode leaf matches it.
+    // title / colour the same way the daemon resolves its per-mode gaps. A
+    // floating (unmanaged) window has no mode, so query.mode is left empty —
+    // which is NOT inert in both polarities: `mode` is a plain QString, so
+    // valueForField hands the evaluator an ENGAGED empty value. A positive leaf
+    // (`Mode Equals "tiling"`) correctly never matches, but a negated one
+    // (`None{Mode Equals "tiling"}`) matches every floating window precisely
+    // because the inner leaf failed. That is the intended reading of "not
+    // tiled" here, so the field is stamped rather than withheld — unlike
+    // ActiveLayout, whose empty stamp carries no such meaning. Scrolling is
+    // indistinguishable from tiling at
+    // this level (strip windows ride the tile pipeline); the effect's
+    // ruleQuery() funnel re-stamps "scrolling" from the per-screen engine
+    // discriminator, which this free helper cannot reach.
     if (isTiled) {
-        query.mode = QStringLiteral("tiling");
+        query.mode = QString(PhosphorRules::ModeToken::Tiling);
     } else if (isSnapped) {
-        query.mode = QStringLiteral("snapping");
+        query.mode = QString(PhosphorRules::ModeToken::Snapping);
     }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the
@@ -100,12 +149,14 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.screenId = screenId;
     // Orientation of the window's screen ("portrait" when taller than wide), so a
     // window rule can match ScreenOrientation the same way a context rule does.
-    // Left empty (inert) when the output or its geometry is unavailable; a square
-    // screen counts as landscape, matching the daemon-side orientation provider.
-    if (const auto* output = w->screen()) {
-        const QRect g = output->geometry();
-        if (g.isValid()) {
-            query.screenOrientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+    // Only derived from the frame centre when the caller has no screen id to
+    // offer: a centre-resolved output is wrong for a scroll strip's off-screen
+    // parked windows, so a caller that HAS an id (the effect's ruleQuery()
+    // funnel) derives the field from that id instead and only falls back to
+    // this helper when the id resolves to no output.
+    if (screenId.isEmpty()) {
+        if (const QString orientation = centreScreenOrientation(w); !orientation.isEmpty()) {
+            query.screenOrientation = orientation;
         }
     }
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged
@@ -149,9 +200,11 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
             query.appId = appId;
         }
     }
-    // pid 0 is KWin's "unknown" sentinel — Wayland surfaces during early
-    // lifecycle and X11 windows missing the _NET_WM_PID hint return 0
-    // from EffectWindow::pid(). Engaging `query.pid = 0` would let a
+    // EffectWindow::pid() reports an unknown PID as -1 (KWin's documented
+    // sentinel — see the matching notes in window_identity.cpp and
+    // window_filtering.cpp); 0 can also surface transiently during early
+    // Wayland lifecycle. The `pid > 0` guard below covers both. Engaging
+    // `query.pid = 0` would let a
     // `Pid Equals 0` predicate silently match every such window. Gate
     // on pid > 0 so the optional stays disengaged in the no-process case.
     // pid_t comes from <sys/types.h>; included explicitly (don't rely on
@@ -177,6 +230,13 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
         query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
         // KWin::Window-only accessory / capability flags (not exposed on
         // EffectWindow). Always engaged when the underlying window exists.
+        // NO INVALIDATION EDGE, deliberately: these flags rarely change
+        // after map (X11 clients and KWin window rules can flip them), and
+        // no change-signal is connected for them — a verdict scoped on one
+        // refreshes at the next natural invalidation (focus, placement,
+        // class swap, rule edit) rather than on its own edge. Accepted
+        // staleness; wiring five rarely-firing signals was judged not worth
+        // the connection overhead per window.
         query.skipTaskbar = kw->skipTaskbar();
         query.skipPager = kw->skipPager();
         query.isResizable = kw->isResizable();
@@ -212,9 +272,29 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.isNotification = w->isNotification() || w->isCriticalNotification() || w->isOnScreenDisplay();
     // Stacking / accessory flags read straight off EffectWindow. Always engaged
     // when the window exists, like the other bool flags above.
+    //
+    // keepAbove / keepBelow are substituted with the window's pre-rule
+    // snapshot by the caller's applyOwnLayerFlags pass when a SetWindowLayer
+    // rule owns the window — see window_filtering.cpp — so a `WHEN KeepAbove`
+    // predicate never reads its own rule's effect. A MANUAL keep-above toggle
+    // (window menu) has no cache-invalidation edge, deliberately: routing it
+    // through invalidateRuleCacheForStateChange would re-run the layer
+    // reconcile and instantly re-assert the rule over the user's toggle,
+    // which the reconcile's own docs rule out. A verdict scoped on these
+    // flags refreshes at the next natural invalidation instead.
     query.keepAbove = w->keepAbove();
     query.keepBelow = w->keepBelow();
     query.isModal = w->isModal();
+    // KNOWN SELF-FEED HAZARD, unresolved: hasDecoration is rule OUTPUT
+    // (SetHideTitleBar reaches KWin::Window::setNoBorder through the
+    // decoration bridge) stamped back in as rule INPUT with no snapshot
+    // substitution — the exact shape applyOwnLayerFlags neutralises for the
+    // layer flags. Whether it actually oscillates depends on whether
+    // setNoBorder(true) flips EffectWindow::hasDecoration(), which is
+    // KWin-version behaviour this code cannot verify statically. Do not
+    // scope a SetHideTitleBar rule on HasDecoration; a substitution needs a
+    // pre-rule snapshot sourced from the DecorationManager's restore state
+    // if this ever bites in practice.
     query.hasDecoration = w->hasDecoration();
     query.skipSwitcher = w->isSkipSwitcher();
     const QRectF frame = w->frameGeometry();
@@ -225,9 +305,20 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     query.positionY = static_cast<int>(frame.y());
     // virtualDesktop: first non-null desktop's 1-based x11 number (0 = all/
     // unknown). activity: first activity UUID (empty = all/unknown). Both
-    // mirror the daemon-side setWindowMetadata derivation in
-    // window_identity.cpp so a window-domain rule pinning VirtualDesktop /
-    // Activity resolves the same way the context cascade does.
+    // mirror the METADATA derivation this effect pushes to the daemon
+    // (window_identity.cpp), so the two ends describe a window identically.
+    //
+    // They do NOT mirror the daemon's own CONTEXT cascade, and a rule author
+    // should not expect them to: buildRuleQueryForWindow
+    // (src/dbus/windowtrackingadaptor/rules.cpp) resolves the governing
+    // desktop / activity through WindowContext::effectiveDesktop /
+    // effectiveActivity, which prefer the SCREEN's current desktop when a
+    // window spans several and handle sticky windows. This builder sees only
+    // the window, so for a spanning or sticky window it reports the first
+    // entry where the daemon reports the one actually on screen. Both values
+    // are always engaged (the fields are a plain int and QString, not
+    // optionals), so a negated VirtualDesktop / Activity leaf matches the
+    // unknown 0 / "" case here too.
     if (kw) {
         const QList<KWin::VirtualDesktop*> desktops = kw->desktops();
         for (const KWin::VirtualDesktop* vd : desktops) {
@@ -241,6 +332,19 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     if (!activities.isEmpty()) {
         query.activity = activities.first();
     }
+    // activeLayout is left at the empty string HERE and re-stamped by the
+    // caller: ruleQuery (window_filtering.cpp) resolves it from the daemon's
+    // per-screen map, which this window-only builder has no handle on. It is
+    // not an inert default — the field is a plain QString, so an empty value
+    // still resolves ENGAGED and a negated leaf would match every window —
+    // which is why the map's bring-up window is covered by holding
+    // ActiveLayout rules out of the evaluator entirely (see
+    // TilingHandler::activeLayoutsSeeded).
+    //
+    // DELIBERATELY NOT STAMPED effect-side:
+    //  - tiledWindowCount: optional and left disengaged, so a positive count
+    //    leaf is inert here by design; the context resolvers exclude negated
+    //    references structurally for the same absence-polarity reason.
     return query;
 }
 

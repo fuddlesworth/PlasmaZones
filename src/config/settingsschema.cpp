@@ -1,9 +1,25 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// SANCTIONED FILE-SIZE EXCEPTION. This TU sits just past the 1150-line
+// ceiling and stays whole deliberately: it is a flat sequence of one
+// appendXxxSchema function per config domain plus the validator helpers
+// several of them share — most file-local (canonicalCommaList,
+// sanitizePerAlgorithmSettings, validStringOr), two at namespace scope
+// because the scrolling TU shares them too (canonicalThemeFallbackColor,
+// canonicalTriggerList). The three domains big enough to carry their own
+// weight are already split (settingsschema_scrolling.cpp's three entry
+// points); each remaining function is well under a hundred lines, and moving
+// one out drags its shared helpers into a header for a single consumer. When
+// a domain grows past that, split it the way scrolling was — do not grow
+// this banner's scope instead.
+
 #include "settingsschema.h"
 
+#include <QColor>
+
 #include "settingsschemachoices.h"
+#include "settingsschema_p.h"
 
 #include "configdefaults.h"
 #include "configmigration.h"
@@ -12,8 +28,11 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
+
+#include <iterator>
 
 using namespace Qt::StringLiterals;
 
@@ -40,6 +59,8 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendScrollingSchema(s);
+    appendScrollingZoneSelectorSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
@@ -49,56 +70,14 @@ PhosphorConfig::Schema buildSettingsSchema()
 
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
-// the same function-object type as KeyDef::validator.
+// the same function-object type as KeyDef::validator. The ones the scrolling
+// TU shares live in settingsschema_p.h; the rest are local to this file.
+
+using SchemaValidators::clampDouble;
+using SchemaValidators::clampInt;
+using SchemaValidators::validIntOr;
 
 namespace {
-auto clampInt(int minVal, int maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toInt(), maxVal);
-    };
-}
-
-auto clampDouble(double minVal, double maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        const double d = v.toDouble();
-        // qBound on NaN is unspecified — it decays to qMin/qMax comparisons,
-        // all false for NaN, so a corrupt "nan" in the config would land on an
-        // arbitrary bound depending on argument order. NaN is not a value, so
-        // pin it deterministically to the minimum rather than leaving it to
-        // that pathology.
-        if (qIsNaN(d)) {
-            return minVal;
-        }
-        return qBound(minVal, d, maxVal);
-    };
-}
-
-/// Fall back to @p fallback when the value is an invalid color. Defaults
-/// in the schema are already valid, so this mostly protects against
-/// garbage in the on-disk file.
-auto validColorOr(QColor fallback)
-{
-    return [fallback](const QVariant& v) -> QVariant {
-        const QColor c = v.value<QColor>();
-        return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
-    };
-}
-
-/// Snap-to-default enum validator: accept a value only if it appears in the
-/// explicit valid set, otherwise return @p fallback. Used for enums where
-/// qBound would silently reinterpret out-of-range values as the nearest
-/// neighbour — that's the exact bug the effect-side cache loader avoids,
-/// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
-auto validIntOr(std::initializer_list<int> valid, int fallback)
-{
-    return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
-        const int raw = v.toInt();
-        return valid.contains(raw) ? raw : fallback;
-    };
-}
-
 /// Snap-to-default string-enum validator: the closed-set string analogue of
 /// validIntOr. Accept the value only if it is one of @p valid, otherwise return
 /// @p fallback. Used for closed-set tokens (e.g. the appearance "Apply to" scope)
@@ -116,28 +95,10 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
     };
 }
 
-/// Window-border colour validator. The value is a string that is EITHER the
-/// "accent" sentinel (which the effect resolves to the live system colour) OR any
-/// string QColor accepts (a #hex or a named colour, matching what the effect
-/// parses); snap anything else to @p fallback. Kept as a string round-trip
-/// (not validColorOr, which coerces to QColor and would drop the sentinel) so a
-/// hand-edited garbage colour in the on-disk file can't flow to the effect. The
-/// bare "accent" literal mirrors ConfigDefaults::windowBorderColorActive (the
-/// config layer deliberately avoids pulling PhosphorRules::BorderColorToken in).
-auto validBorderColorOr(QString fallback)
-{
-    return [fallback = std::move(fallback)](const QVariant& v) -> QVariant {
-        const QString raw = v.toString();
-        if (raw == QLatin1String("accent") || QColor(raw).isValid()) {
-            return raw;
-        }
-        return fallback;
-    };
-}
-
 /// Normalize a comma-joined list: split, trim each entry, drop empties,
 /// drop duplicates, rejoin. Shared by every setting whose wire format is a
-/// comma-separated list (layout order, algorithm order, exclusion lists).
+/// comma-separated list: the three picker orders (snapping layout, tiling
+/// algorithm, scrolling template) and the tiling locked-screens list.
 QVariant canonicalCommaList(const QVariant& v)
 {
     QStringList parts = v.toString().split(QLatin1Char(','));
@@ -149,16 +110,35 @@ QVariant canonicalCommaList(const QVariant& v)
     return QVariant(parts.join(QLatin1Char(',')));
 }
 
-/// Canonicalize a trigger list: cap size, coerce each entry to a
-/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
-/// every write so the flush loop enforces the cap even when the setter
-/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
-///
-/// Both this file's cap and Settings::MaxTriggersPerAction resolve to
+/// Both this cap and Settings::MaxTriggersPerAction resolve to
 /// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
 /// drift possible because neither TU carries its own literal.
 constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
 
+} // namespace
+
+/// Canonicalize a theme-fallback colour: the EMPTY sentinel ("follow the
+/// theme") and any valid colour name pass through unchanged; anything else
+/// maps back to empty rather than reaching QML as an invalid QColor. See the
+/// header. The single validator behind EVERY theme-fallback colour key in
+/// both schema TUs — the seven in this file (four zone, three Windows) and,
+/// via namespace scope, the five in settingsschema_scrolling.cpp.
+QVariant canonicalThemeFallbackColor(const QVariant& v)
+{
+    const QString s = v.toString();
+    if (s.isEmpty() || QColor::isValidColorName(s)) {
+        return s;
+    }
+    return QString();
+}
+
+/// Canonicalize a trigger list: cap size, coerce each entry to a
+/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
+/// every write so the flush loop enforces the cap even when the setter
+/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
+/// Namespace scope (declared in settingsschema.h): shared with
+/// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
+/// scrolling drag-insert trigger list.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -176,13 +156,40 @@ QVariant canonicalTriggerList(const QVariant& v)
             continue;
         }
         const QVariantMap src = entry.toMap();
+        // Field-level ok-flags, for the same drop-malformed reason as the
+        // entry gate above: a partially-garbage entry ({modifier: "alt",
+        // mouseButton: 1}) used to coerce its bad field to 0, and modifier 0
+        // means "don't care" to the drag readers — silently widening a
+        // configured "Alt + Left" trigger to "Left button, any modifier".
+        bool modOk = false;
+        bool btnOk = false;
+        const int modifier = src.value(ConfigKeys::triggerModifierField(), 0).toInt(&modOk);
+        const int mouseButton = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt(&btnOk);
+        // Range half of the hardening, one step past the type (ok-flag)
+        // half, in each field's OWN vocabulary: `modifier` is a DragModifier
+        // ENUMERATOR (the drag readers switch on it), not a Qt modifier
+        // mask, and `mouseButton` is a Qt::MouseButtons bitmask (matched
+        // with `&`). A numeric-but-impossible field is dropped like a
+        // malformed type instead of being persisted verbatim as a trigger
+        // no event can ever match.
+        // Qt::AllButtons, NOT Qt::MouseButtonMask: the mask is 0xffffffff,
+        // whose int cast is -1, and `x & ~(-1)` is always 0 — a check that
+        // rejects nothing. AllButtons is the real any-valid-button set, and
+        // a negative int's sign bit lies outside it, so negatives fail too.
+        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled)
+            || modifier > static_cast<int>(DragModifier::CtrlAltMeta)
+            || (mouseButton & ~static_cast<int>(Qt::AllButtons)) != 0) {
+            continue;
+        }
         QVariantMap canon;
-        canon[ConfigKeys::triggerModifierField()] = src.value(ConfigKeys::triggerModifierField(), 0).toInt();
-        canon[ConfigKeys::triggerMouseButtonField()] = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt();
+        canon[ConfigKeys::triggerModifierField()] = modifier;
+        canon[ConfigKeys::triggerMouseButtonField()] = mouseButton;
         out.append(canon);
     }
     return QVariant(out);
 }
+
+namespace {
 
 /// Canonicalize a per-algorithm settings map: round-trip through
 /// @c AutotileConfig so each algorithm's settings are validated against
@@ -268,10 +275,10 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
-// toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
-// underline/strikeout toggles), Opacity (active + inactive), Border (width +
-// radius). The per-mode snapped-window
+// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (3
+// theme-fallback zone colors), Labels (font family/color/scale/weight +
+// italic/underline/strikeout toggles), Opacity (active + inactive), Border
+// (width + radius). The per-mode snapped-window
 // decoration groups that used to live here are gone — window border and title-bar
 // appearance moved to the top-level mode-neutral Windows config group (see
 // appendWindowsSchema).
@@ -280,15 +287,18 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
 
+    // Theme-fallback colour keys — the three zone colours here AND the
+    // Labels FontColor below: stored as strings where EMPTY means "follow
+    // the system palette" (the same sentinel the scrolling colour keys
+    // use); Settings resolves in the getters.
     schema.groups[CD::snappingZonesColorsGroup()] = {
-        {CD::useSystemKey(), CD::useSystemColors(), QMetaType::Bool},
-        {CD::highlightKey(), CD::highlightColor(), QMetaType::QColor, {}, validColorOr(CD::highlightColor())},
-        {CD::inactiveKey(), CD::inactiveColor(), QMetaType::QColor, {}, validColorOr(CD::inactiveColor())},
-        {CD::borderKey(), CD::borderColor(), QMetaType::QColor, {}, validColorOr(CD::borderColor())},
+        {CD::highlightKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::inactiveKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::borderKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
     };
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
-        {CD::fontColorKey(), CD::labelFontColor(), QMetaType::QColor, {}, validColorOr(CD::labelFontColor())},
+        {CD::fontColorKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
         {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString},
         {CD::fontSizeScaleKey(),
          CD::labelFontSizeScale(),
@@ -332,16 +342,18 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
-// User-defined sort order for the layout picker and tiling algorithm menu.
-// Both are comma-joined lists on disk; the canonicalCommaList validator
-// normalizes formatting (trim, de-dupe) on every read/write.
+// User-defined sort order for the layout picker, the tiling algorithm menu
+// and the scrolling template picker. All are comma-joined lists on disk; the
+// canonicalCommaList validator normalizes formatting (trim, de-dupe) on every
+// read/write.
 
 void appendOrderingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::orderingGroup()] = {
-        {CD::snappingLayoutOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::tilingAlgorithmOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::scrollingTemplateOrderKey(), CD::scrollingTemplateOrder(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 
@@ -387,8 +399,8 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
-// Single-key group selecting the GPU backend. The validator coerces any
-// unknown string to a known value via ConfigDefaults::normalizeRenderingBackend
+// Two keys: the graphics API backend token and the GPU device pin. Each has
+// its own coercing validator (normalizeRenderingBackend / normalizeGpuDevice)
 // so hand-edited configs can't persist garbage.
 
 void appendRenderingSchema(PhosphorConfig::Schema& schema)
@@ -403,6 +415,17 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
              return QVariant(CD::normalizeRenderingBackend(v.toString()));
          },
          tokenChoices(CD::renderingBackendOptions())},
+        // Gpu is a free string, not a token enum: the legal values are the
+        // machine's GPUs ("auto" or a "vendor:device" hex PCI pair), so there
+        // are no declared choices — the picker enumerates DRM render nodes at
+        // runtime. The validator still coerces malformed strings to "auto".
+        {CD::gpuKey(),
+         CD::gpuDevice(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeGpuDevice(v.toString()));
+         }},
     };
 }
 
@@ -450,11 +473,12 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────────────────────
-// Three sub-groups: Global (editor/settings launchers, zone navigation,
-// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
-// Tiling (autotile master/ratio/count controls + retile toggle), Editor
-// (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed.
+// TWO sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation)
+// and Tiling (autotile master/ratio/count controls + retile toggle). All
+// QString keys, no validators needed. There is no Editor group here — the
+// zone editor's shortcuts are not part of the daemon's schema; EditorController
+// owns its own settings in a separate process.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -475,12 +499,19 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
     addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
     addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
-    const QString quickDefaults[9] = {
+    const QString quickDefaults[] = {
         CD::quickLayout1Shortcut(), CD::quickLayout2Shortcut(), CD::quickLayout3Shortcut(),
         CD::quickLayout4Shortcut(), CD::quickLayout5Shortcut(), CD::quickLayout6Shortcut(),
         CD::quickLayout7Shortcut(), CD::quickLayout8Shortcut(), CD::quickLayout9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Bound by the protocol constant, not a local 9: quickLayoutKey() qFatals
+    // outside [1, QuickLayoutSlotCount], so a raised constant with a stale
+    // local literal would silently declare too few keys and a LOWERED one
+    // would abort at startup. The static_assert makes the defaults array
+    // track the constant at compile time instead.
+    static_assert(std::size(quickDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "quick-layout defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i]);
     }
     addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut());
@@ -494,6 +525,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::pushToEmptyZoneKey(), CD::pushToEmptyZoneShortcut());
     addShortcut(globals, CD::restoreWindowSizeKey(), CD::restoreWindowSizeShortcut());
     addShortcut(globals, CD::toggleWindowFloatKey(), CD::toggleWindowFloatShortcut());
+    addShortcut(globals, CD::switchFocusFloatTilingKey(), CD::switchFocusFloatTilingShortcut());
     addShortcut(globals, CD::swapWindowLeftKey(), CD::swapWindowLeftShortcut());
     addShortcut(globals, CD::swapWindowRightKey(), CD::swapWindowRightShortcut());
     addShortcut(globals, CD::swapWindowUpKey(), CD::swapWindowUpShortcut());
@@ -502,12 +534,15 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut());
     addShortcut(globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut());
     addShortcut(globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut());
-    const QString snapToZoneDefaults[9] = {
+    const QString snapToZoneDefaults[] = {
         CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
         CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),
         CD::snapToZone7Shortcut(), CD::snapToZone8Shortcut(), CD::snapToZone9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Same protocol-constant bound as the quick-layout loop above.
+    static_assert(std::size(snapToZoneDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "snap-to-zone defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i]);
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut());
@@ -537,6 +572,11 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
     };
+
+    // Shortcuts.Scrolling is declared by the scrolling TU (split out for
+    // file-size) but still assembled from here, so the whole Shortcuts.*
+    // family has one entry point.
+    appendScrollingShortcutsSchema(schema);
 }
 
 // ─── Editor ─────────────────────────────────────────────────────────────────
@@ -559,9 +599,13 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 
     auto modifierOr = [](int fallback) {
         return [fallback](const QVariant& v) -> QVariant {
-            const int raw = v.toInt();
+            // Ok-flag so a non-numeric payload takes the fallback instead of
+            // coercing to 0 == Qt::NoModifier, which the range check would
+            // accept as a deliberate "no modifier".
+            bool ok = false;
+            const int raw = v.toInt(&ok);
             constexpr int valid = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-            if (raw == Qt::NoModifier || (raw & valid) == raw) {
+            if (ok && (raw == Qt::NoModifier || (raw & valid) == raw)) {
                 return QVariant(raw);
             }
             return QVariant(fallback);
@@ -705,11 +749,16 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
         {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool},
         {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
+        // validIntOr, not clampInt, per the enum-key convention documented in
+        // settingsschema_p.h: qBound would reinterpret an out-of-range stored
+        // value as the nearest enumerator instead of snapping to the default.
         {CD::osdStyleKey(),
          CD::osdStyle(),
          QMetaType::Int,
          {},
-         clampInt(CD::osdStyleMin(), CD::osdStyleMax()),
+         validIntOr(
+             {static_cast<int>(OsdStyle::None), static_cast<int>(OsdStyle::Text), static_cast<int>(OsdStyle::Preview)},
+             CD::osdStyle()),
          intChoices({{static_cast<int>(OsdStyle::None), "none"_L1},
                      {static_cast<int>(OsdStyle::Text), "text"_L1},
                      {static_cast<int>(OsdStyle::Preview), "preview"_L1}})},
@@ -717,7 +766,9 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
          CD::overlayDisplayMode(),
          QMetaType::Int,
          {},
-         clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax()),
+         validIntOr({static_cast<int>(OverlayDisplayMode::ZoneRectangles),
+                     static_cast<int>(OverlayDisplayMode::LayoutPreview)},
+                    CD::overlayDisplayMode()),
          intChoices({{static_cast<int>(OverlayDisplayMode::ZoneRectangles), "zoneRectangles"_L1},
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
     };
@@ -738,11 +789,18 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
+        // validIntOr for the three enum keys below, same convention note as
+        // the Effects group's OSD enums.
         {CD::positionKey(),
          CD::position(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorPosition::TopLeft), static_cast<int>(ZoneSelectorPosition::BottomRight)),
+         validIntOr({static_cast<int>(ZoneSelectorPosition::TopLeft), static_cast<int>(ZoneSelectorPosition::Top),
+                     static_cast<int>(ZoneSelectorPosition::TopRight), static_cast<int>(ZoneSelectorPosition::Left),
+                     static_cast<int>(ZoneSelectorPosition::Center), static_cast<int>(ZoneSelectorPosition::Right),
+                     static_cast<int>(ZoneSelectorPosition::BottomLeft), static_cast<int>(ZoneSelectorPosition::Bottom),
+                     static_cast<int>(ZoneSelectorPosition::BottomRight)},
+                    CD::position()),
          intChoices({{static_cast<int>(ZoneSelectorPosition::TopLeft), "topLeft"_L1},
                      {static_cast<int>(ZoneSelectorPosition::Top), "top"_L1},
                      {static_cast<int>(ZoneSelectorPosition::TopRight), "topRight"_L1},
@@ -756,7 +814,10 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::layoutMode(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorLayoutMode::Grid), static_cast<int>(ZoneSelectorLayoutMode::Vertical)),
+         validIntOr({static_cast<int>(ZoneSelectorLayoutMode::Grid),
+                     static_cast<int>(ZoneSelectorLayoutMode::Horizontal),
+                     static_cast<int>(ZoneSelectorLayoutMode::Vertical)},
+                    CD::layoutMode()),
          intChoices({{static_cast<int>(ZoneSelectorLayoutMode::Grid), "grid"_L1},
                      {static_cast<int>(ZoneSelectorLayoutMode::Horizontal), "horizontal"_L1},
                      {static_cast<int>(ZoneSelectorLayoutMode::Vertical), "vertical"_L1}})},
@@ -780,7 +841,8 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::sizeMode(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual)),
+         validIntOr({static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual)},
+                    CD::sizeMode()),
          intChoices({{static_cast<int>(ZoneSelectorSizeMode::Auto), "auto"_L1},
                      {static_cast<int>(ZoneSelectorSizeMode::Manual), "manual"_L1}})},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
@@ -798,8 +860,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns two scalar keys directly (Triggers, ToggleActivation);
-    // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
+    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
+    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
@@ -858,8 +921,10 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          CD::snappingStickyWindowHandling(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                     static_cast<int>(StickyWindowHandling::RestoreOnly),
+                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
+                    CD::snappingStickyWindowHandling()),
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
@@ -868,7 +933,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
         {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool},
-        {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
+        {CD::defaultLayoutIdKey(), CD::defaultLayoutId(), QMetaType::QString},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
@@ -915,7 +980,11 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::autotileMaxWindowsMin(), CD::autotileMaxWindowsMax())},
-        {CD::perAlgorithmSettingsKey(), QVariantMap{}, QMetaType::QVariantMap, {}, sanitizePerAlgorithmSettings},
+        {CD::perAlgorithmSettingsKey(),
+         CD::autotilePerAlgorithmSettings(),
+         QMetaType::QVariantMap,
+         {},
+         sanitizePerAlgorithmSettings},
     };
 
     schema.groups[CD::tilingBehaviorGroup()] = {
@@ -923,7 +992,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileInsertPosition(),
          QMetaType::Int,
          {},
-         clampInt(CD::autotileInsertPositionMin(), CD::autotileInsertPositionMax()),
+         validIntOr({static_cast<int>(AutotileInsertPosition::End),
+                     static_cast<int>(AutotileInsertPosition::AfterFocused),
+                     static_cast<int>(AutotileInsertPosition::AsMaster)},
+                    CD::autotileInsertPosition()),
          intChoices({{static_cast<int>(AutotileInsertPosition::End), "end"_L1},
                      {static_cast<int>(AutotileInsertPosition::AfterFocused), "afterFocused"_L1},
                      {static_cast<int>(AutotileInsertPosition::AsMaster), "asMaster"_L1}})},
@@ -935,8 +1007,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileStickyWindowHandling(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                     static_cast<int>(StickyWindowHandling::RestoreOnly),
+                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
+                    CD::autotileStickyWindowHandling()),
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
@@ -945,7 +1019,7 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          validIntOr({static_cast<int>(AutotileDragBehavior::Float), static_cast<int>(AutotileDragBehavior::Reorder)},
-                    static_cast<int>(AutotileDragBehavior::Float)),
+                    CD::autotileDragBehavior()),
          intChoices({{static_cast<int>(AutotileDragBehavior::Float), "float"_L1},
                      {static_cast<int>(AutotileDragBehavior::Reorder), "reorder"_L1}})},
         {CD::overflowBehaviorKey(),
@@ -954,10 +1028,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          {},
          validIntOr(
              {static_cast<int>(AutotileOverflowBehavior::Float), static_cast<int>(AutotileOverflowBehavior::Unlimited)},
-             static_cast<int>(AutotileOverflowBehavior::Float)),
+             CD::autotileOverflowBehavior()),
          intChoices({{static_cast<int>(AutotileOverflowBehavior::Float), "float"_L1},
                      {static_cast<int>(AutotileOverflowBehavior::Unlimited), "unlimited"_L1}})},
-        {CD::lockedScreensKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::lockedScreensKey(), CD::autotileLockedScreens(), QMetaType::QString, {}, canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };
@@ -970,12 +1044,12 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Windows (window decoration appearance) ─────────────────────────────────
-// Mode-neutral window border + title bar. Border colours are strings (the
-// "accent" sentinel, or a hex/named colour) validated by the string-form
-// validBorderColorOr rather than the QColor-coercing validColorOr. The
-// border/title-bar scope is a closed-set token ("tiled" / "normal" / "all")
-// the Appearance page and the effect agree on, snapped to the default on an
-// unknown on-disk value.
+// Mode-neutral window border + title bar. Border colours are theme-fallback
+// strings (EMPTY = "follow the system accent", or a hex/named colour),
+// validated by canonicalThemeFallbackColor like every other follow-the-system
+// colour key. The border/title-bar scope is a closed-set token
+// ("tiled" / "normal" / "all") the Appearance page and the effect agree on,
+// snapped to the default on an unknown on-disk value.
 // Width/radius are clamped ints reusing the generic Width/Radius keys (the Windows
 // group disambiguates them from the Snapping.Zones.Border keys of the same spelling).
 // FocusFadeDuration is a clamped int: the decoration focus cross-fade in ms
@@ -1013,12 +1087,12 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          CD::windowBorderColorActive(),
          QMetaType::QString,
          {},
-         validBorderColorOr(CD::windowBorderColorActive())},
+         canonicalThemeFallbackColor},
         {CD::borderColorInactiveKey(),
          CD::windowBorderColorInactive(),
          QMetaType::QString,
          {},
-         validBorderColorOr(CD::windowBorderColorInactive())},
+         canonicalThemeFallbackColor},
         {CD::hideTitleBarsKey(), CD::hideWindowTitleBars(), QMetaType::Bool},
         {CD::titleBarScopeKey(),
          CD::windowTitleBarScope(),
@@ -1033,7 +1107,8 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
         // Plain opacity+tint layer: opacity/strength are [0.0, 1.0] doubles,
         // the tint colour shares the border-colour shape (#AARRGGBB or the
-        // accent sentinel) and the scope shares the closed token set.
+        // empty follow-the-accent sentinel) and the scope shares the closed
+        // token set.
         {CD::showOpacityTintKey(), CD::showWindowOpacityTint(), QMetaType::Bool},
         {CD::opacityTintScopeKey(),
          CD::windowOpacityTintScope(),
@@ -1051,7 +1126,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Double,
          {},
          clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
-        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, validBorderColorOr(CD::windowTintColor())},
+        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, canonicalThemeFallbackColor},
     };
 }
 
@@ -1112,9 +1187,10 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
          QMetaType::QVariantMap},
     };
-    // What the decoration chain is allowed to keep redrawing. An animated pack
-    // repaints every window carrying it on every vsync, which never lets the GPU
-    // leave its top performance state.
+    // Mostly what the decoration chain is allowed to keep redrawing (an animated
+    // pack repaints every window carrying it on every vsync, which never lets the
+    // GPU leave its top performance state), plus one per-frame-cost knob, the
+    // blur-scale multiplier.
     schema.groups[CD::decorationsPerformanceGroup()] = {
         {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool},
         {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool},
@@ -1129,6 +1205,21 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::decorationIdleTimeoutSecMin(), CD::decorationIdleTimeoutSecMax())},
+        // Multiplier on each pack's declared buffer-pass resolution (the blur
+        // pyramid density). Clamped so the persisted value stays inside its
+        // declared band and every surface agrees on it: without this a
+        // hand-edited 5.0 would ride the wire as 5.0 and render as "500%" in
+        // the profile diff. Defence in depth rather than the only guard — the
+        // effect's own loader independently rejects non-numeric, non-finite,
+        // and non-positive replies, and clamps to the same shared bounds. The
+        // band is deliberately wider on the low end than the UI's three tiers
+        // (headroom down to 0.25 for hand edits); the combo highlights the
+        // nearest tier for an off-tier value.
+        {CD::blurScaleMultiplierKey(),
+         CD::decorationBlurScaleMultiplier(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
     };
 }
 

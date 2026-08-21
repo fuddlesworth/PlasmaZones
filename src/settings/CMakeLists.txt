@@ -19,7 +19,10 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 set(plasmazones_settings_SRCS
     main.cpp
     search/searchcatalog.h
+    search/searchcatalog_p.h
     search/searchcatalog.cpp
+    search/searchcatalog_animations.cpp
+    search/searchcatalog_simple.cpp
     search/searchproviders.h
     search/searchproviders.cpp
     utils/registryshaderpreviewbackend.h
@@ -33,8 +36,12 @@ set(plasmazones_settings_SRCS
     controller/settingscontroller_pageregistration.cpp
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
+    controller/settingscontroller_rulelookups.cpp
     controller/settingscontroller_session.cpp
-    # Per-screen autotile/snapping/zone-selector override wrappers.
+    # Whole-config export/import + KZones import (split from _session).
+    controller/settingscontroller_transfer.cpp
+    # Per-screen autotile/scrolling/zone-selector/strip-selector/gap
+    # override wrappers.
     controller/settingscontroller_perscreen.cpp
     controller/settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
@@ -145,6 +152,8 @@ set(plasmazones_settings_SRCS
     pages/tilingalgorithmcontroller.cpp
     pages/tilingbehaviorcontroller.h
     pages/tilingbehaviorcontroller.cpp
+    pages/scrollingbehaviorcontroller.h
+    pages/scrollingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
     # plain-QObject page controllers so they can be registered with
     # PhosphorControl::PageRegistry without changing each controller's
@@ -161,6 +170,12 @@ set(plasmazones_settings_SRCS
     # daemon's org.plasmazones.Rules adaptor.
     rules/rulemodel.h
     rules/rulemodel.cpp
+    # Label composition + summaries, split from rulemodel.cpp for file-size.
+    rules/rulemodel_labels.cpp
+    rules/rulemodel_matchlabels.cpp
+    # The static section / match-field name tables, split from
+    # rulemodel_labels.cpp when that file in turn reached the size ceiling.
+    rules/rulemodel_fieldtables.cpp
     rules/rulecontroller.h
     rules/rulecontroller.cpp
     # Read-only / projection methods of RuleController — sections,
@@ -182,6 +197,8 @@ set(plasmazones_settings_SRCS
     rules/ruleauthoring.h
     rules/ruleauthoring_p.h
     rules/ruleauthoring.cpp
+    rules/ruleauthoring_actiondescriptions.cpp
+    rules/ruleauthoring_actionparams.cpp
     rules/ruleauthoring_actions.cpp
     rules/ruletemplates.h
     rules/ruletemplates.cpp
@@ -218,6 +235,8 @@ set(plasmazones_settings_SRCS
     utils/screenhelper.cpp
     utils/screenprovider.h
     utils/screenprovider.cpp
+    utils/gpudevicelist.h
+    utils/gpudevicelist.cpp
     utils/dbusutils.h
 )
 
@@ -314,11 +333,37 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingDragTriggerRow.qml
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
+        # Scrolling: the condensed simple page, the advanced leaves
+        # (Columns / Tabs / Window / Strip Selector), the Configuration
+        # leaves (template priority + the quick-shortcuts page binding
+        # templates to the quick digits), and the cards the two surfaces
+        # host (the drag re-insert trio is advanced-only; Window handling,
+        # Strip direction and Focus are shared with the simple page).
+        qml/pages/scrolling/ScrollingZoneSelectorPage.qml
+        qml/pages/scrolling/ScrollingSimplePage.qml
+        qml/pages/scrolling/ScrollingColumnsPage.qml
+        qml/pages/scrolling/ScrollingTabsPage.qml
+        qml/pages/scrolling/ScrollingWindowPage.qml
+        qml/pages/scrolling/ScrollingOrderingPage.qml
+        qml/pages/scrolling/ScrollingQuickShortcutsPage.qml
+        qml/pages/scrolling/PresetListEditor.qml
+        qml/pages/scrolling/ScrollingWindowHandlingCard.qml
+        qml/pages/scrolling/ScrollingDragInsertCard.qml
+        qml/pages/scrolling/ScrollingEdgeScrollCard.qml
+        qml/pages/scrolling/ScrollingDropIndicatorCard.qml
+        qml/pages/scrolling/ScrollingFocusCard.qml
+        qml/pages/scrolling/ScrollingStripDirectionCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml
         qml/EditorPage.qml
-        qml/pages/layouts/LayoutsPage.qml
+        # Per-mode library pages — thin hosts fixing the shared
+        # LayoutBrowserPage to one view (snapping layouts / tiling
+        # algorithms / scrolling templates).
+        qml/pages/layouts/LayoutBrowserPage.qml
+        qml/pages/snapping/SnappingLayoutsPage.qml
+        qml/pages/tiling/TilingLibraryPage.qml
+        qml/pages/scrolling/ScrollingTemplatesPage.qml
         qml/pages/snapping/SnappingQuickShortcutsPage.qml
         qml/OrderingPage.qml
         qml/pages/snapping/SnappingOrderingPage.qml
@@ -362,6 +407,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
+        qml/pages/screens/MonitorModePreviews.qml
         qml/pages/screens/MonitorStatePage.qml
         qml/pages/screens/VirtualScreensPage.qml
         qml/pages/screens/VirtualScreenPreview.qml
@@ -384,7 +430,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/screens/MonitorScopeChip.qml
         qml/pages/layouts/LayoutGridDelegate.qml
         qml/pages/layouts/LayoutManageCard.qml
-        qml/components/SegmentedViewSwitch.qml
         qml/pages/layouts/LayoutFilterBar.qml
         qml/js/LayoutFilterLogic.js
         # Shared group/sort infrastructure (Layouts + Rules pages)
@@ -393,6 +438,9 @@ qt_add_qml_module(plasmazones-settings
         # Shared theme-font construction (whole-group `font:` bindings)
         qml/js/FontUtils.js
         qml/pages/screens/ZoneSelectorSection.qml
+        qml/pages/screens/ZoneSelectorPositionCard.qml
+        qml/pages/screens/ZoneSelectorPreviewSizeCard.qml
+        qml/pages/screens/ScrollingZoneSelectorSection.qml
         qml/pages/animations/EasingPreview.qml
         # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in
@@ -412,6 +460,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsOsdsPage.qml
         qml/pages/animations/AnimationsOverlaysPage.qml
         qml/pages/animations/AnimationsDesktopsPage.qml
+        qml/pages/animations/AnimationsScrollingPage.qml
         qml/pages/animations/AnimationsEditorPage.qml
         qml/pages/animations/AnimationsSidePanelsPage.qml
         qml/pages/animations/AnimationsWidgetsPage.qml
@@ -422,14 +471,15 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsShadersPage.qml
         qml/pages/snapping/SnappingShadersPage.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
-        # Popups), each driving a ChainEditor (ordered decoration-pack list with
-        # per-pack params) and border/titlebar field overrides via
+        # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
+        # list with per-pack params) and border/titlebar field overrides via
         # DecorationPageController.
         qml/pages/decoration/DecorationSetsPage.qml
         qml/pages/decoration/DecorationShadersPage.qml
         qml/pages/decoration/DecorationWindowsPage.qml
         qml/pages/decoration/DecorationOsdsPage.qml
         qml/pages/decoration/DecorationPopupsPage.qml
+        qml/pages/decoration/DecorationShellPage.qml
         qml/pages/decoration/DecorationSurfaceCardList.qml
         qml/pages/decoration/DecorationSurfaceCard.qml
         qml/pages/tiling/ChainEditor.qml
@@ -478,8 +528,12 @@ qt_add_qml_module(plasmazones-settings
         qml/components/SettingsFlickable.qml
         qml/js/AlgorithmCapabilities.js
         qml/js/SearchAnchorHelpers.js
+        qml/js/PresetList.js
         qml/components/SettingsButtonGroup.qml
-        qml/components/ColorSwatchRow.qml
+        # The sentinel-fallback colour surface: the inner control (swatch,
+        # hex, reset) plus the SettingsRow wrapper the settings pages host.
+        qml/components/ThemeFallbackColorControl.qml
+        qml/components/ThemeFallbackColorRow.qml
         qml/pages/layouts/NewLayoutDialog.qml
         qml/pages/tiling/NewAlgorithmDialog.qml
         qml/pages/wizard/WizardStepIndicator.qml

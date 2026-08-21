@@ -296,7 +296,7 @@ private:
     /// @p outputTarget and @p outputViewport are the ON-SCREEN target this
     /// capture will ultimately be blended into. They supply the capture's device
     /// size, internal format and colour space, so the blend is a pass-through
-    /// rather than a conversion — see captureFormatFor.
+    /// rather than a conversion. See TransitionPass::captureFormatFor.
     std::unique_ptr<KWin::GLTexture> captureDesktop(KWin::VirtualDesktop* desktop, KWin::LogicalOutput* screen,
                                                     const KWin::RenderTarget& outputTarget,
                                                     const KWin::RenderViewport& outputViewport);
@@ -338,9 +338,23 @@ private:
     /// reconstruct windows that are NOT in this frame's scene walk; windows the
     /// live scene IS painting render black through this path, so filters must
     /// exclude them.
+    ///
+    /// @p pillScreen, when non-null, asks for the compositor-drawn tab pills to
+    /// be blitted into the capture at their stacking slot (right after the
+    /// topmost scroll-managed window of that output that this loop paints),
+    /// the way the live scene walk blits them at its anchor. The direct-drive
+    /// walk bypasses paintWindow's own triggers (they are gated off under
+    /// m_directPaintCapture, whose other callers paint with an infinite region
+    /// and must not blit unclipped), so the blit is issued here explicitly,
+    /// clipped to the capture's full region. captureDesktop passes its
+    /// screen so the OUTGOING texture carries the pills the live scene was
+    /// showing, and capturePeekWindowsScene passes it for the same reason:
+    /// its bare-desktop base was captured with the columns hidden, so the
+    /// pills can only enter the FROM endpoint with the hidden columns.
     void compositeWindowsInto(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                               const QRectF& logicalGeometry,
-                              const std::function<bool(KWin::EffectWindow*)>& includeWindow);
+                              const std::function<bool(KWin::EffectWindow*)>& includeWindow,
+                              KWin::LogicalOutput* pillScreen = nullptr);
 
     /// Shared resolve prologue of begin() and beginPeek(): validates the pack
     /// (installed + desktop-contract via shaderEffectAppliesToEventPath against

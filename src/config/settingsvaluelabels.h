@@ -66,6 +66,12 @@ struct ValueDescriptor
     /// opacity/ratio keys, which persist 0.0-1.0 but read as a percentage.
     double displayScale = 1.0;
 
+    /// Added AFTER displayScale to get the displayed number. 1 for the preset
+    /// index keys, which store a 0-based index but are counted from 1
+    /// everywhere a user sees them. Kept separate from displayScale because
+    /// the two compose: a key can be both rescaled and offset.
+    double displayOffset = 0.0;
+
     /// True where the UI presents 0 as "Off" rather than as a zero quantity
     /// (the minimum window size filters).
     bool zeroMeansOff = false;

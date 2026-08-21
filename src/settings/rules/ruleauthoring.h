@@ -3,7 +3,10 @@
 
 #pragma once
 
+#include <PhosphorRules/MatchTypes.h>
+
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -12,10 +15,17 @@ namespace PlasmaZones::RuleAuthoring {
 /// Match fields suitable for the leaf-editor field dropdown. Each entry:
 /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
 ///    valueKind: "string"|"number"|"bool"|"screen"|"activity"|"windowType"|
-///    "virtualDesktop"|"mode"|"orientation"|"layout" }`. Closed-vocab kinds
-///    (windowType/mode/orientation) also carry an `options` array. QML keys off
-///    `wire` so it never has to reconstruct the enum↔wire-string table.
+///    "virtualDesktop"|"mode"|"orientation"|"colorScheme"|"layout" }`.
+///    Closed-vocab kinds (windowType/mode/orientation/colorScheme) also carry
+///    an `options` array. QML keys off `wire` so it never has to reconstruct
+///    the enum↔wire-string table.
 QVariantList matchFields();
+
+/// Translated label for one match operator ("is", "contains", "greater than").
+/// The single source shared by the operator pickers below and the collapsed
+/// rule-list summary, so an operator is worded the same wherever it appears.
+/// Falls back to the raw wire token for an operator with no label entry.
+QString operatorLabel(PhosphorRules::Operator op);
 
 /// Operators valid for @p fieldValue (a `PhosphorRules::Field` enum int).
 /// Each entry: `{ value: int (Operator enum), wire: QString, label }`.
@@ -42,6 +52,12 @@ QString matchValueHint(const QString& op);
 /// here and surfaces this list verbatim.
 QVariantList actionTypes();
 
+/// Translated picker label for one action type wire id — the same label
+/// `actionTypes()` carries per entry, exposed singly so per-issue surfaces
+/// (the validation status bar) can name an action without walking the full
+/// list. Falls back to the raw wire id for an unknown type.
+QString actionTypeLabel(const QString& typeWire);
+
 /// Polarity-aware phrase for a boolean action's current value — e.g.
 /// `SetBorderVisible` → "Show border" when @p on, "Hide border" when off. The
 /// single source of truth shared by the rule-list summary (`RuleModel`) and the
@@ -62,17 +78,45 @@ QString enumOptionLabel(const QString& typeWire, const QString& key, const QStri
 /// so the two never drift. Returns the raw int as a string for an unknown value.
 QString windowTypeLabel(int windowTypeValue);
 
-/// Translated label for a Mode / ScreenOrientation match token (e.g. "tiling" →
-/// "Tiling", "portrait" → "Portrait"). Single source shared by the editor dropdown
-/// (matchFields) and the collapsed rule-list summary (RuleModel) so they never drift.
-/// An unknown token round-trips verbatim.
+/// Translated label for a Mode / ScreenOrientation / ColorScheme match token
+/// (e.g. "tiling" → "Tiling", "portrait" → "Portrait", "dark" → "Dark"). Single
+/// source shared by the editor dropdown (matchFields) and the collapsed
+/// rule-list summary (RuleModel) so they never drift. An unknown token
+/// round-trips verbatim.
 QString modeLabel(const QString& modeToken);
 QString orientationLabel(const QString& orientationToken);
+QString colorSchemeLabel(const QString& schemeToken);
+
+/// One-line hover help for a registered action type — the action-side mirror
+/// of fieldDescription(), rendered by the action row's info icon. Empty for an
+/// unregistered type; the controller test canary keeps the ladder exhaustive.
+QString actionDescription(const QString& type);
+
+/// The display form of a scrolling template's name, marking it as a template
+/// rather than a plain layout. The one consumer is the ActiveLayout match
+/// options SettingsController builds (activeLayoutMatchOptions). The collapsed
+/// rule-list summary deliberately does NOT use it: there the value already sits
+/// behind the field label, so wrapping it reads doubled ("Active layout:
+/// Template: X").
+QString templateDisplayLabel(const QString& templateName);
 
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `RuleController::defaultPayloadFor` for the
 /// seeding contract (the controller delegates here).
 QVariantMap defaultPayloadFor(const QString& typeWire);
+
+/// The SnapToZone "Zone names" free-text contract. parseZoneNameList splits
+/// @p text on `,` and `;` outside straight double quotes (a quoted token may
+/// contain separators; a doubled quote inside it stands for one literal
+/// quote), trims every entry, drops blank entries and entries longer than
+/// PhosphorRules::MaxZoneNameLength, and deduplicates case-insensitively,
+/// keeping the first spelling and order. formatZoneNameList is its inverse:
+/// it joins with ", " and quotes any name the parser could not otherwise read
+/// back verbatim, so `parseZoneNameList(formatZoneNameList(x)) == x` for every
+/// list the parser can produce. See `RuleController::parseZoneNameList` (the
+/// controller delegates here).
+QStringList parseZoneNameList(const QString& text);
+QString formatZoneNameList(const QStringList& names);
 
 } // namespace PlasmaZones::RuleAuthoring

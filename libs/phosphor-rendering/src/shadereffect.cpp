@@ -9,10 +9,13 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 #include <PhosphorShaders/IUniformExtension.h>
 
-#include <QElapsedTimer>
+#include <QImageReader>
 #include <QMutexLocker>
 #include <QPainter>
+#include <QPointer>
 #include <QQuickWindow>
+#include <QRunnable>
+#include <QThread>
 #if QT_VERSION < QT_VERSION_CHECK(6, 11, 0)
 #include <QScreen>
 #endif
@@ -75,32 +78,6 @@ void main() {
 )");
 
 // ============================================================================
-// DRY helpers
-// ============================================================================
-
-// Setter macro for vec4 custom params (index into array)
-#define PR_VEC4_SETTER(Name, idx)                                                                                      \
-    void ShaderEffect::set##Name(const QVector4D& params)                                                              \
-    {                                                                                                                  \
-        if (m_customParams[idx] == params)                                                                             \
-            return;                                                                                                    \
-        m_customParams[idx] = params;                                                                                  \
-        Q_EMIT customParamsChanged();                                                                                  \
-        update();                                                                                                      \
-    }
-
-// Setter macro for QColor custom colors (index into array)
-#define PR_COLOR_SETTER(Name, idx)                                                                                     \
-    void ShaderEffect::set##Name(const QColor& color)                                                                  \
-    {                                                                                                                  \
-        if (m_customColors[idx] == color)                                                                              \
-            return;                                                                                                    \
-        m_customColors[idx] = color;                                                                                   \
-        Q_EMIT customColorsChanged();                                                                                  \
-        update();                                                                                                      \
-    }
-
-// ============================================================================
 // Construction / Destruction
 // ============================================================================
 
@@ -112,7 +89,29 @@ QImage ShaderEffect::loadUserTextureFile(const QString& path, int svgMaxDim)
     const bool isSvg = path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)
         || path.endsWith(QLatin1String(".svgz"), Qt::CaseInsensitive);
     if (!isSvg) {
-        return QImage(path).convertToFormat(QImage::Format_RGBA8888);
+        QImageReader reader(path);
+        const QSize rasterSize = reader.size();
+        // Same byte budget the SVG branch enforces below, applied during
+        // DECODE: setScaledSize means an oversized file never materialises at
+        // full resolution, unlike a post-hoc QImage::scaled() which would need
+        // the full allocation first. A reader that cannot report size() up
+        // front returns an invalid QSize; decode unscaled in that case rather
+        // than guess. Deliberately NO setAutoTransform: QImage(path) never
+        // applied EXIF orientation, and turning it on here would silently
+        // rotate existing pack textures that carry an orientation tag.
+        if (rasterSize.isValid() && !rasterSize.isEmpty()) {
+            const qint64 rasterBytes = static_cast<qint64>(rasterSize.width()) * rasterSize.height() * 4;
+            if (rasterBytes > kMaxSvgPixelBytes) {
+                const double scale = std::sqrt(static_cast<double>(kMaxSvgPixelBytes) / rasterBytes);
+                const QSize scaledSize(qMax(1, static_cast<int>(rasterSize.width() * scale)),
+                                       qMax(1, static_cast<int>(rasterSize.height() * scale)));
+                qCWarning(lcShaderNode) << "ShaderEffect::loadUserTextureFile: raster size" << rasterSize
+                                        << "exceeds byte budget" << kMaxSvgPixelBytes << "B, downscaling to"
+                                        << scaledSize << "for path" << path;
+                reader.setScaledSize(scaledSize);
+            }
+        }
+        return reader.read().convertToFormat(QImage::Format_RGBA8888);
     }
     QSvgRenderer renderer(path);
     if (!renderer.isValid()) {
@@ -159,6 +158,10 @@ QImage ShaderEffect::loadUserTextureFile(const QString& path, int svgMaxDim)
 ShaderEffect::ShaderEffect(QQuickItem* parent)
     : QQuickItem(parent)
 {
+    // No lock needed: the token is not shared with any render job until
+    // releaseIdleGraphicsResources hands it to scheduleRenderJob, which
+    // synchronises the publication.
+    m_selfToken->effect = this;
     setFlag(ItemHasContents, true);
 
     m_userTextureSvgSizes.fill(kDefaultUserTextureSvgSize);
@@ -203,6 +206,14 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
                     if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
                         node->releaseResources();
                     }
+                    // The invalidation that follows this signal deletes the
+                    // scene graph's nodes, so the tracked pointer is about to
+                    // dangle. Null it here (render thread, before deletion)
+                    // so late readers — the destructor's sever-backpointer
+                    // guard, releaseIdleGraphicsResources' render job — see
+                    // null instead of freed memory. The next updatePaintNode
+                    // re-registers whatever node it gets handed.
+                    m_renderNode.store(nullptr, std::memory_order_release);
                     m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
@@ -212,6 +223,18 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 
 ShaderEffect::~ShaderEffect()
 {
+    // FIRST statement, before any member teardown: invalidate the liveness
+    // token so a queued ReleaseIdleResourcesJob that runs from here on
+    // observes null and never touches this object. Taking the token's mutex
+    // also BLOCKS this destructor until a job that is mid-run finishes — the
+    // job holds the lock across its node access — which closes the
+    // destruction race the previous atomic-only token merely narrowed (see
+    // m_selfToken's doc).
+    {
+        const std::lock_guard<std::mutex> tokenLock(m_selfToken->mutex);
+        m_selfToken->effect = nullptr;
+    }
+
     // Disconnect the DirectConnection sceneGraphAboutToStop callback FIRST.
     // That lambda executes on the render thread and touches this object.
     //
@@ -258,398 +281,6 @@ std::shared_ptr<PhosphorShaders::IUniformExtension> ShaderEffect::uniformExtensi
 }
 
 // ============================================================================
-// Shadertoy Uniform Setters
-// ============================================================================
-
-void ShaderEffect::setITime(qreal time)
-{
-    // Relative comparison: a fixed 1e-9 absolute epsilon falls below ULP for
-    // m_iTime once it grows past ~1, so animation would silently freeze after
-    // a short runtime. Compare via qFuzzyCompare with +1.0 offset to handle
-    // both near-zero and large values uniformly.
-    if (qFuzzyCompare(m_iTime + 1.0, time + 1.0)) {
-        return;
-    }
-    m_iTime = time;
-    Q_EMIT iTimeChanged();
-    update();
-}
-
-void ShaderEffect::setITimeDelta(qreal delta)
-{
-    if (qFuzzyCompare(m_iTimeDelta + 1.0, delta + 1.0)) {
-        return;
-    }
-    m_iTimeDelta = delta;
-    Q_EMIT iTimeDeltaChanged();
-    update();
-}
-
-void ShaderEffect::setIFrame(int frame)
-{
-    if (m_iFrame == frame) {
-        return;
-    }
-    m_iFrame = frame;
-    Q_EMIT iFrameChanged();
-    update();
-}
-
-void ShaderEffect::setPlaying(bool playing)
-{
-    if (m_playing == playing) {
-        return;
-    }
-    m_playing = playing;
-    if (m_playing) {
-        // Reset the wall-clock baseline so the next tick produces a sensible
-        // delta (not a several-second jump from the time the property was
-        // last toggled). iTime is *not* reset — toggling playing off and on
-        // resumes from whatever iTime value the shader was at.
-        m_playingLastFrameSeconds = 0.0;
-    }
-    updatePlayingConnection();
-    Q_EMIT playingChanged();
-}
-
-void ShaderEffect::updatePlayingConnection()
-{
-    // Always tear down the previous connection before deciding whether to
-    // re-establish it. itemChange (window changes) and setPlaying both call
-    // through here; tearing down unconditionally avoids leaking a stale
-    // connection to a previous window.
-    QObject::disconnect(m_playingConnection);
-    m_playingConnection = {};
-    if (!m_playing) {
-        return;
-    }
-    QQuickWindow* w = window();
-    if (!w) {
-        // Item not parented to a window yet. itemChange(ItemSceneChange)
-        // will re-call us when the item gets a window.
-        return;
-    }
-    // afterAnimating fires once per frame on the GUI thread, immediately
-    // before the render thread is asked to synchronize. That's the right
-    // place to advance per-frame uniforms — the values we set here land in
-    // the next sync without thread-marshalling. afterFrameEnd would fire on
-    // the render thread under Qt's threaded render loop, and emitting our
-    // *Changed signals from there could trigger QML JS bindings on the
-    // wrong thread (V4 is GUI-thread-only).
-    m_playingConnection = QObject::connect(w, &QQuickWindow::afterAnimating, this, &ShaderEffect::onPlayingTick);
-    // Kick a first frame so the shader paints the new state immediately
-    // (otherwise it'd wait until something else dirties the scene).
-    update();
-}
-
-void ShaderEffect::onPlayingTick()
-{
-    if (!m_playing) {
-        return;
-    }
-    // QElapsedTimer wall-clock seconds — monotonic, immune to NTP jumps.
-    // Static across this TU because nsecsElapsed() needs a fixed start
-    // anchor; the monotonic value is read into a per-instance baseline
-    // (m_playingLastFrameSeconds) so each instance's delta is fully
-    // independent of every other.
-    static QElapsedTimer s_clock;
-    if (!s_clock.isValid()) {
-        s_clock.start();
-    }
-    const qreal now = s_clock.nsecsElapsed() * 1e-9;
-
-    // Skip the per-frame property pump for invisible / off-screen /
-    // zero-sized items, and for shaders that aren't ready (compile
-    // failure, still loading, no source set). afterAnimating fires on
-    // EVERY frame of the host window, so without these gates every
-    // playing ShaderEffect on the window pays setITime / setITimeDelta /
-    // setIFrame / 3×update cost regardless. The visual side-effect of
-    // skipping is that animation appears frozen — desired behaviour.
-    //
-    // Crucially, update m_playingLastFrameSeconds even on the skip path
-    // so the next visible tick computes a SMALL delta (the time between
-    // two consecutive frames) instead of a huge one (the time since the
-    // item was last visible — which would produce a giant iTime jump
-    // and a visible animation skip on re-show).
-    if (!isVisible() || width() <= 0 || height() <= 0 || m_status.load(std::memory_order_acquire) != Status::Ready) {
-        m_playingLastFrameSeconds = now;
-        return;
-    }
-
-    const qreal delta = (m_playingLastFrameSeconds > 0.0) ? (now - m_playingLastFrameSeconds) : 0.0;
-    m_playingLastFrameSeconds = now;
-
-    // Increment iTime by the frame delta rather than assigning `now`
-    // directly so toggling `playing` off and on doesn't produce a giant
-    // visual jump — iTime is the shader's animation clock, not wall time.
-    setITime(m_iTime + delta);
-    setITimeDelta(delta);
-    setIFrame(m_iFrame + 1);
-    // setITime/setITimeDelta/setIFrame each call update(); the scene graph
-    // coalesces multiple update() requests on the same frame so this is
-    // cheap.
-}
-
-void ShaderEffect::setIsReversed(bool reverse)
-{
-    if (m_isReversed == reverse) {
-        return;
-    }
-    m_isReversed = reverse;
-    // Exposed as a Q_PROPERTY (isReversed) for QML-binding parity with the
-    // rest of the animation-state setters. SurfaceAnimator still pushes this
-    // imperatively at each leg attach; the property + signal close the
-    // asymmetry without changing the imperative call site.
-    Q_EMIT isReversedChanged();
-    update();
-}
-
-void ShaderEffect::setIResolution(const QSizeF& resolution)
-{
-    if (m_iResolution == resolution) {
-        return;
-    }
-    m_iResolution = resolution;
-    Q_EMIT iResolutionChanged();
-    update();
-}
-
-void ShaderEffect::setIMouse(const QPointF& mouse)
-{
-    if (m_iMouse == mouse) {
-        return;
-    }
-    m_iMouse = mouse;
-    Q_EMIT iMouseChanged();
-    update();
-}
-
-// ============================================================================
-// Shader Source / Buffer Setters
-// ============================================================================
-
-static bool isLocalShaderUrl(const QUrl& url)
-{
-    if (!url.isValid() || url.isEmpty()) {
-        return true;
-    }
-    const QString scheme = url.scheme();
-    return url.isLocalFile() || scheme.isEmpty() || scheme == QLatin1String("file") || scheme == QLatin1String("qrc");
-}
-
-static QString localPathFromShaderUrl(const QUrl& url)
-{
-    if (!url.isValid() || url.isEmpty()) {
-        return QString();
-    }
-    if (url.scheme() == QLatin1String("qrc")) {
-        return QLatin1Char(':') + url.path();
-    }
-    const QString local = url.toLocalFile();
-    if (!local.isEmpty()) {
-        return local;
-    }
-    return url.path();
-}
-
-void ShaderEffect::setShaderSource(const QUrl& source)
-{
-    if (m_shaderSource == source) {
-        return;
-    }
-    if (!isLocalShaderUrl(source)) {
-        qCWarning(lcShaderNode) << "setShaderSource: unsupported URL scheme" << source.scheme()
-                                << "— only file:// and qrc: are accepted";
-        setError(QStringLiteral("Unsupported shader URL scheme: ") + source.scheme());
-        return;
-    }
-    m_shaderSource = source;
-    m_shaderDirty = true;
-    setStatus(Status::Loading);
-    Q_EMIT shaderSourceChanged();
-    update();
-}
-
-void ShaderEffect::setVertexShaderUrl(const QUrl& source)
-{
-    if (m_vertexShaderUrl == source) {
-        return;
-    }
-    if (!isLocalShaderUrl(source)) {
-        qCWarning(lcShaderNode) << "setVertexShaderUrl: unsupported URL scheme" << source.scheme()
-                                << "— only file:// and qrc: are accepted";
-        setError(QStringLiteral("Unsupported vertex shader URL scheme: ") + source.scheme());
-        return;
-    }
-    m_vertexShaderUrl = source;
-    m_shaderDirty = true;
-    if (source.isValid() && !source.isEmpty()) {
-        setStatus(Status::Loading);
-    }
-    Q_EMIT vertexShaderUrlChanged();
-    update();
-}
-
-void ShaderEffect::setSourceItem(QQuickItem* item)
-{
-    if (m_sourceItem.data() == item) {
-        return;
-    }
-    // Self-reference (sampling literally `this`) is rejected; ANCESTOR
-    // sampling is supported and load-bearing (SurfaceAnimator parents
-    // shaderItem under shaderAnchor for coord-system mapping, then calls
-    // setSourceItem(shaderAnchor) so the anchor's layer texture binds to
-    // uTexture0). Qt's layer system uses a back-buffer so sampling an
-    // ancestor reads last-frame's content — no infinite recursion. An
-    // earlier ancestor-walk guard here silently broke every shader leg.
-    if (item == this) {
-        if (!m_warnedSelfSourceItem) {
-            qCWarning(lcShaderNode) << "setSourceItem: refused — candidate is `this`; cannot sample own output.";
-            m_warnedSelfSourceItem = true;
-        }
-        return;
-    }
-    m_sourceItem = item;
-    if (item) {
-        // Force `layer.enabled = true` so the QQuickItem becomes a
-        // texture provider. The naive single-step
-        // `item->setProperty("layer.enabled", true)` doesn't work —
-        // Qt's meta-object system doesn't auto-resolve nested property
-        // paths; the call sets a brand new dynamic property called
-        // "layer.enabled" on the item without ever touching
-        // QQuickItemLayer. Diagnostic logging confirmed this:
-        // `isTextureProvider()` stayed false immediately after a
-        // setProperty call that "succeeded".
-        //
-        // The two-step access via `item->property("layer")` resolves
-        // the QQuickItemLayer sub-object (a QObject in its own right)
-        // and `layer->setProperty("enabled", true)` flips the real
-        // backing flag, which synchronously triggers QSGLayer creation
-        // and makes `isTextureProvider()` return true. Already-true is
-        // idempotent — Qt's layer property setter early-returns on
-        // unchanged values.
-        //
-        // We don't restore the previous value on unset because we
-        // can't know whether the consumer wanted layer for other
-        // reasons; callers that need symmetric teardown should track
-        // and reset `layer.enabled` themselves.
-        if (!item->isTextureProvider()) {
-            QObject* layer = item->property("layer").value<QObject*>();
-            if (layer) {
-                layer->setProperty("enabled", true);
-            }
-        }
-    }
-    // No m_shaderDirty here. The SRB rebind is already covered:
-    // updatePaintNode() pushes the new provider via
-    // setSourceTextureProvider() which calls resetAllBindingsAndPipelines()
-    // when the pointer changes. Forcing a full shader recompile every
-    // sourceItem swap (the previous behaviour) was wasted work — the
-    // baked QShader doesn't depend on which texture is bound.
-    Q_EMIT sourceItemChanged();
-    update();
-}
-
-// ============================================================================
-// Custom Parameters (DRY macro)
-// ============================================================================
-
-PR_VEC4_SETTER(CustomParams1, 0)
-PR_VEC4_SETTER(CustomParams2, 1)
-PR_VEC4_SETTER(CustomParams3, 2)
-PR_VEC4_SETTER(CustomParams4, 3)
-PR_VEC4_SETTER(CustomParams5, 4)
-PR_VEC4_SETTER(CustomParams6, 5)
-PR_VEC4_SETTER(CustomParams7, 6)
-PR_VEC4_SETTER(CustomParams8, 7)
-
-// ============================================================================
-// Custom Colors (DRY macro)
-// ============================================================================
-
-PR_COLOR_SETTER(CustomColor1, 0)
-PR_COLOR_SETTER(CustomColor2, 1)
-PR_COLOR_SETTER(CustomColor3, 2)
-PR_COLOR_SETTER(CustomColor4, 3)
-PR_COLOR_SETTER(CustomColor5, 4)
-PR_COLOR_SETTER(CustomColor6, 5)
-PR_COLOR_SETTER(CustomColor7, 6)
-PR_COLOR_SETTER(CustomColor8, 7)
-PR_COLOR_SETTER(CustomColor9, 8)
-PR_COLOR_SETTER(CustomColor10, 9)
-PR_COLOR_SETTER(CustomColor11, 10)
-PR_COLOR_SETTER(CustomColor12, 11)
-PR_COLOR_SETTER(CustomColor13, 12)
-PR_COLOR_SETTER(CustomColor14, 13)
-PR_COLOR_SETTER(CustomColor15, 14)
-PR_COLOR_SETTER(CustomColor16, 15)
-
-#undef PR_VEC4_SETTER
-#undef PR_COLOR_SETTER
-
-// ============================================================================
-// Shader Include Paths
-// ============================================================================
-
-void ShaderEffect::setParamPreamble(const QString& preamble)
-{
-    if (m_paramPreamble == preamble) {
-        return;
-    }
-    m_paramPreamble = preamble;
-    Q_EMIT paramPreambleChanged();
-    // Same reload requirement as setShaderIncludePaths: the preamble is spliced
-    // inside the node's loadFragmentShader and the expanded+spliced source is
-    // cached, so a pure re-bake would carry the OLD defines. Force a full
-    // reload (not just a dirty flag) so the node re-splices. Inlined rather
-    // than calling reloadShader() to keep a statusChanged binding from looping
-    // back through this setter.
-    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-        setStatus(Status::Loading);
-    }
-    m_shaderDirty = true;
-    update();
-}
-
-void ShaderEffect::setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates)
-{
-    if (m_entryPrologue == prologue && m_entryCandidates == candidates) {
-        return;
-    }
-    m_entryPrologue = prologue;
-    m_entryCandidates = candidates;
-    // Same reload requirement as setParamPreamble: the scaffold is applied
-    // inside the node's loadFragmentShader and the assembled+expanded source is
-    // cached, so a pure re-bake would carry the OLD scaffold. Force a full
-    // reload; inlined (not reloadShader()) to keep a statusChanged binding from
-    // looping back through this setter.
-    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-        setStatus(Status::Loading);
-    }
-    m_shaderDirty = true;
-    update();
-}
-
-void ShaderEffect::setShaderIncludePaths(const QStringList& paths)
-{
-    if (m_shaderIncludePaths == paths) {
-        return;
-    }
-    m_shaderIncludePaths = paths;
-    // Marking dirty alone is not enough: include expansion happens inside
-    // loadFragmentShader()/loadVertexShader() and the expanded source is
-    // cached on the node. A pure re-bake of the cached source would still
-    // carry the OLD include contents. Inline the two-line reload instead of
-    // calling reloadShader() so a QML binding on statusChanged can't loop
-    // back through this setter.
-    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-        setStatus(Status::Loading);
-    }
-    m_shaderDirty = true;
-    update();
-}
-
-// ============================================================================
 // Shader Loading
 // ============================================================================
 
@@ -662,6 +293,94 @@ void ShaderEffect::reloadShader()
     setStatus(Status::Loading);
     m_shaderDirty = true;
     update();
+}
+
+void ShaderEffect::releaseIdleGraphicsResources()
+{
+    QQuickWindow* win = window();
+    if (!win) {
+        return;
+    }
+    // The node is owned and only ever touched by the scene-graph thread, and
+    // an idle (typically invisible) item never reaches updatePaintNode — so
+    // the release must travel as a render job, which the render loop runs on
+    // that thread at the next opportunity even when no frame is pending
+    // (QQuickWindow::NoStage).
+    //
+    // Lifetime, spelled out because it is the whole safety argument:
+    //   • The job re-reads m_renderNode when it RUNS, on the render thread —
+    //     the same thread that deletes nodes — so it can never race a node
+    //     teardown. Every path that can retire the node without immediately
+    //     re-storing (updatePaintNode's width<=0 branch, windowChanged, and
+    //     scene-graph invalidation via the sceneGraphAboutToStop hook above)
+    //     nulls the atomic first.
+    //   • The self-token guards effect deletion. A QPointer is not documented
+    //     thread-safe against concurrent destruction, and a queued NoStage job
+    //     can sit for an unbounded interval (destroyPassiveShell on screen
+    //     removal is a real path that deletes overlay content on the GUI
+    //     thread with a quiesce job pending). The job captures the shared
+    //     token by value and holds its mutex across the node access; the
+    //     destructor takes the same mutex and nulls the pointer as its FIRST
+    //     statement, so it blocks until a mid-run job finishes. That CLOSES
+    //     the destruction race (an earlier atomic-only token merely narrowed
+    //     it to the destructor body).
+    //   • Recovery is node-side: releaseRhiResources() retains the shader
+    //     sources and re-arms the node's own dirty flags, so the next painted
+    //     frame re-bakes from cached source with zero file I/O. The item-side
+    //     m_shaderDirty is deliberately NOT raised here — that would force
+    //     updatePaintNode's needLoad branch, a synchronous QFile read +
+    //     include expansion in the sync phase on the first frame of the next
+    //     drag. (The sceneGraphAboutToStop hook DOES raise it, because there
+    //     the node object itself is about to be destroyed.)
+    class ReleaseIdleResourcesJob : public QRunnable
+    {
+    public:
+        explicit ReleaseIdleResourcesJob(std::shared_ptr<SelfToken> token)
+            : m_token(std::move(token))
+        {
+        }
+        void run() override
+        {
+            // Hold the token's mutex across the node access: a destructor
+            // that begins while this job runs blocks on the same mutex, so
+            // the effect (and its m_renderNode atomic) cannot be freed out
+            // from under the release call.
+            const std::lock_guard<std::mutex> tokenLock(m_token->mutex);
+            ShaderEffect* effect = m_token->effect;
+            if (!effect) {
+                return;
+            }
+            // Field-verifiable: whether the render loop dispatches a NoStage
+            // job for an idle (mapped-but-undamaged, or unexposed) window is
+            // a Qt-version-dependent behaviour the release depends on. This
+            // line is the check — if it never appears after the idle grace
+            // fires, the reclaim is a no-op in that configuration.
+            qCDebug(lcShaderNode) << "ReleaseIdleResourcesJob: releasing idle shader GPU resources";
+            if (ShaderNodeRhi* node = effect->m_renderNode.load(std::memory_order_acquire)) {
+                node->releaseResources();
+            }
+        }
+
+    private:
+        std::shared_ptr<SelfToken> m_token;
+    };
+    win->scheduleRenderJob(new ReleaseIdleResourcesJob(m_selfToken), QQuickWindow::NoStage);
+    // Force one render-loop pass. Two duties ride on this frame:
+    //   • The QML overlay host latches its park state (dropping the item's
+    //     QQuickItemLayer FBO) immediately before calling in here, and on an
+    //     idle window nothing else schedules the sync pass that applies it.
+    //     This is the frame that flushes the layer drop.
+    //   • Belt for the NoStage job above: whether the render loop dispatches
+    //     a queued job for a mapped-but-undamaged window without a frame
+    //     behind it is Qt-version-dependent (the qCDebug line in the job is
+    //     the field check); a real frame removes the doubt.
+    // update() requests a frame through the normal damage path. While the
+    // surface is mapped (keepMappedOnHide — which is effects-gated, so with
+    // visual effects disabled the hidden surface is unmapped and the frame
+    // waits for the next show) the compositor grants it, the render thread
+    // runs once, and both the layer drop and the queued job apply. One extra
+    // composited frame of an invisible overlay, once per idle grace.
+    win->update();
 }
 
 // ============================================================================
@@ -684,7 +403,7 @@ void ShaderEffect::setError(const QString& error)
         }
     }
     if (changed) {
-        Q_EMIT errorLogChanged();
+        notifyOnGuiThread(&ShaderEffect::errorLogChanged);
     }
     setStatus(Status::Error);
 }
@@ -699,7 +418,25 @@ void ShaderEffect::setStatus(Status newStatus)
     if (previous == newStatus) {
         return;
     }
-    Q_EMIT statusChanged();
+    notifyOnGuiThread(&ShaderEffect::statusChanged);
+}
+
+void ShaderEffect::notifyOnGuiThread(void (ShaderEffect::*signal)())
+{
+    // setStatus/setError run in updatePaintNode, i.e. in the sync phase on
+    // the RENDER thread under the threaded loop. A direct Q_EMIT there hands
+    // any DirectConnection consumer (and any queued side effect a handler
+    // creates, which acquires render-thread affinity) the wrong thread — the
+    // same hazard the afterAnimating choice elsewhere in this file exists to
+    // avoid. QML's own connection path marshals, but marshal here so the
+    // signal's thread contract holds for every consumer. During sync the GUI
+    // thread is blocked, so `this` cannot be destroyed before the queued
+    // notify is posted.
+    if (QThread::currentThread() == thread()) {
+        Q_EMIT(this->*signal)();
+    } else {
+        QMetaObject::invokeMethod(this, signal, Qt::QueuedConnection);
+    }
 }
 
 // ============================================================================
@@ -709,7 +446,12 @@ void ShaderEffect::setStatus(Status newStatus)
 qreal ShaderEffect::effectiveResolutionScale() const
 {
     const bool needsPhysical = !m_uniformExtension || m_uniformExtension->requiresPhysicalResolution();
-    if (needsPhysical && window() && window()->screen()) {
+    // No screen() term: effectiveDevicePixelRatio() has its own null-screen
+    // fallback, and gating on a transiently screen-less window (output
+    // hotplug) would silently answer 1.0 on a fractional-scale display —
+    // iResolution in logical units against a physical gl_FragCoord, the
+    // exact edge-stripe bug documented at the physical/logical split below.
+    if (needsPhysical && window()) {
         return window()->effectiveDevicePixelRatio();
     }
     return 1.0;
@@ -815,6 +557,7 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setBufferShaderPaths(effectivePaths);
     node->setBufferFeedback(m_bufferFeedback);
     node->setBufferScale(m_bufferScale);
+    node->setHalfFloatBuffers(m_halfFloatBuffers);
     node->setBufferWrap(m_bufferWrap);
     if (!m_bufferWraps.isEmpty()) {
         node->setBufferWraps(m_bufferWraps);
@@ -888,6 +631,11 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     // errors retry on the next shaderSource change.
     const bool wasDirty = m_shaderDirty.exchange(false);
     const bool needLoad = wasDirty || freshNode;
+    // Set only by a SUCCESSFUL load in this sync. The status block below must
+    // not report the node's resident shaderError against a load that just
+    // succeeded — that error belongs to the PREVIOUS shader (the node clears
+    // it only inside prepare()'s bake, which has not run yet).
+    bool loadSucceededThisSync = false;
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             const QString fragPath = localPathFromShaderUrl(m_shaderSource);
@@ -918,6 +666,14 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
                 if (node->loadFragmentShader(fragPath)) {
                     node->invalidateShader();
                     setStatus(Status::Ready);
+                    loadSucceededThisSync = true;
+                    // One extra frame so prepare()'s bake can report its real
+                    // outcome (Ready stands, or a genuine compile error lands
+                    // via the status block on that next sync). Without it a
+                    // static (playing=false) item never paints again after
+                    // this frame, so a compile failure would go unreported —
+                    // and a stale previous-shader error could stand forever.
+                    update();
                 } else {
                     QString errorMsg = node->shaderError();
                     if (errorMsg.isEmpty()) {
@@ -958,7 +714,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     const Status currentStatus = m_status.load(std::memory_order_acquire);
     if (node->isShaderReady() && currentStatus != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && currentStatus != Status::Error) {
+    } else if (!loadSucceededThisSync && !node->shaderError().isEmpty() && currentStatus != Status::Error) {
         setError(node->shaderError());
     }
 
@@ -990,9 +746,19 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
     QQuickItem::itemChange(change, value);
 
     if (change == ItemVisibleHasChanged && value.boolValue) {
-        // Item became visible — force scene graph update. On Vulkan, window hide
-        // destroys the swapchain; update() calls during the hidden period are lost.
-        m_shaderDirty = true;
+        // Item became visible — force scene graph update (update() calls
+        // during the hidden period are lost). Only force a full reload when
+        // the node is actually gone: an unconditional m_shaderDirty here
+        // re-read the shader file and re-expanded every include synchronously
+        // in the sync phase on EVERY show, while the resident node's bake was
+        // still perfectly valid. The two real teardown paths are covered
+        // independently — scene-graph invalidation (Vulkan window hide) goes
+        // through the sceneGraphAboutToStop hook, which raises m_shaderDirty
+        // and nulls the node; and any path that leaves the node null makes
+        // the next updatePaintNode's freshNode branch load regardless.
+        if (!m_renderNode.load(std::memory_order_acquire)) {
+            m_shaderDirty = true;
+        }
         update();
     } else if (change == ItemSceneChange) {
         // Re-hook the playing-mode tick connection to whatever window the

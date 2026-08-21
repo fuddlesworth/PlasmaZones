@@ -9,15 +9,55 @@
 #include "../helpers/SettingsDbusQueries.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "phosphor_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
 #include "../../config/configbackends.h"
+#include <QKeySequence>
 #include <QRegularExpression>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// Load a shortcut from config with validation: an empty or unparseable
+/// stored value falls back to the default, and the member only updates (and
+/// the signal only fires) when the value actually changes. Lives here
+/// rather than in the header because loadEditorSettings is its only caller.
+template<typename F>
+void loadShortcutSetting(PhosphorConfig::IGroup& group, const QString& key, const QString& defaultValue,
+                         QString& member, F emitSignal)
+{
+    // An empty or unparseable stored value is INVALID rather than
+    // "disabled" (the capture field offers no clear affordance, so such a
+    // value only appears via a hand-edited config). The in-memory fallback
+    // to the default is deliberate, and the next settings flush writing that
+    // default back over the broken value is accepted — a broken shortcut
+    // entry has nothing worth preserving.
+    // QKeySequence::fromString does not answer "unparseable" with an empty
+    // sequence — garbage parses to an entry holding Qt::Key_unknown — so the
+    // gate checks every chord for that sentinel explicitly.
+    QString value = group.readString(key, defaultValue);
+    const QKeySequence parsed = QKeySequence::fromString(value, QKeySequence::PortableText);
+    bool invalid = value.isEmpty() || parsed.isEmpty();
+    for (int i = 0; !invalid && i < parsed.count(); ++i) {
+        invalid = parsed[i].key() == Qt::Key_unknown;
+    }
+    if (invalid) {
+        qCWarning(lcEditor) << "Invalid editor shortcut" << key << value << "- using default";
+        value = defaultValue;
+    }
+    if (member != value) {
+        member = value;
+        emitSignal();
+    }
+}
+
+} // anonymous namespace
 
 QString EditorController::validateZoneName(const QString& zoneId, const QString& name)
 {
@@ -34,8 +74,8 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
     // Check for invalid characters (allow alphanumeric, spaces, hyphens, underscores)
     // But be lenient - allow most characters for internationalization
     // Only block characters that could break JSON or filenames
-    QRegularExpression invalidChars(QStringLiteral("[<>\"'\\\\]"));
-    QRegularExpressionMatch match = invalidChars.match(name);
+    static const QRegularExpression invalidChars(QStringLiteral("[<>\"'\\\\]"));
+    const QRegularExpressionMatch match = invalidChars.match(name);
     if (match.hasMatch()) {
         return PhosphorI18n::tr("Zone name contains invalid characters: < > \" ' \\");
     }
@@ -45,9 +85,9 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
         QVariantList zones = m_zoneManager->zones();
         for (const QVariant& zoneVar : zones) {
             QVariantMap zone = zoneVar.toMap();
-            QString otherZoneId = zone.value(QStringLiteral("id")).toString();
+            QString otherZoneId = zone.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
             if (otherZoneId != zoneId) {
-                QString otherName = zone.value(QStringLiteral("name")).toString();
+                QString otherName = zone.value(::PhosphorZones::ZoneJsonKeys::Name).toString();
                 if (otherName == name) {
                     return PhosphorI18n::tr("A zone with this name already exists");
                 }
@@ -150,10 +190,14 @@ void EditorController::loadEditorSettings()
         bool edgeEnabled =
             editorSnapping->readBool(ConfigDefaults::edgeEnabledKey(), ConfigDefaults::editorEdgeSnappingEnabled());
 
+        // ConfigDefaults accessors, not EditorConstants::DefaultSnapInterval:
+        // under sparse persistence an at-default key is ABSENT, so the
+        // fallback here is the value most installs actually run with, and a
+        // divergent second spelling would silently fork on a future retune.
         qreal snapIntX =
-            editorSnapping->readDouble(ConfigDefaults::intervalXKey(), EditorConstants::DefaultSnapInterval);
+            editorSnapping->readDouble(ConfigDefaults::intervalXKey(), ConfigDefaults::editorSnapIntervalX());
         qreal snapIntY =
-            editorSnapping->readDouble(ConfigDefaults::intervalYKey(), EditorConstants::DefaultSnapInterval);
+            editorSnapping->readDouble(ConfigDefaults::intervalYKey(), ConfigDefaults::editorSnapIntervalY());
 
         m_snappingService->setGridSnappingEnabled(gridEnabled);
         m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
@@ -207,6 +251,124 @@ void EditorController::loadEditorSettings()
             Q_EMIT fillOnDropModifierChanged();
         }
     }
+
+    // Strip axis, read ONLY (the editor never writes a scrolling setting).
+    // Snapshotted from the same backend, and RE-snapshotted while the editor
+    // runs: reloadScrollingStripAxis below is wired to the daemon's
+    // settingsChanged signal, so an axis authored in the settings app while
+    // the editor is open reaches the preview without a restart.
+    refreshScrollingStripAxisSnapshot(*backend);
+}
+
+void EditorController::refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend)
+{
+    // Both the global value and every per-screen override are snapshotted,
+    // because the target screen changes without a settings reload and
+    // templatePreviewVertical() has to answer for whichever screen is current.
+    static_assert(ConfigDefaults::scrollingStripAxisAuto() == 0,
+                  "EditorController::m_scrollingStripAxis defaults to the literal 0 to keep configdefaults.h out "
+                  "of EditorController.h; that literal has to stay Auto.");
+
+    auto scrolling = backend.group(ConfigDefaults::scrollingGroup());
+    const int axis = scrolling->readInt(ConfigDefaults::stripAxisKey(), ConfigDefaults::scrollingStripAxis());
+    bool axisChanged = false;
+    if (m_scrollingStripAxis != axis) {
+        m_scrollingStripAxis = axis;
+        axisChanged = true;
+    }
+
+    // Per-screen groups are "<prefix><screen id or name>"; only the ones
+    // that actually carry the key are recorded, so an absent screen falls
+    // through to the global value rather than to a stale default.
+    const QString prefix = ConfigDefaults::scrollingScreenGroupPrefix();
+    QHash<QString, int> perScreen;
+    const QStringList groups = backend.groupList();
+    for (const QString& groupName : groups) {
+        if (!groupName.startsWith(prefix))
+            continue;
+        const QString screenKey = groupName.mid(prefix.size());
+        if (screenKey.isEmpty())
+            continue;
+        auto screenGroup = backend.group(groupName);
+        if (!screenGroup->hasKey(ConfigDefaults::stripAxisKey()))
+            continue;
+        perScreen.insert(screenKey,
+                         screenGroup->readInt(ConfigDefaults::stripAxisKey(), ConfigDefaults::scrollingStripAxis()));
+    }
+    if (m_perScreenStripAxis != perScreen) {
+        m_perScreenStripAxis = perScreen;
+        axisChanged = true;
+    }
+
+    // Through the refresh, not a bare emit: a config-input change does not
+    // have to change the ANSWER (a per-screen override for some other
+    // monitor, an Auto value that resolves the same way), and the property
+    // must only announce a real flip.
+    if (axisChanged)
+        refreshTemplatePreviewVertical();
+}
+
+void EditorController::reloadScrollingStripAxis()
+{
+    // The debounced settingsChanged arm: re-read from a fresh backend (the
+    // daemon just rewrote the file) and let the snapshot's own change gates
+    // decide whether anything is announced.
+    auto backend = PlasmaZones::createDefaultConfigBackend();
+    refreshScrollingStripAxisSnapshot(*backend);
+}
+
+void EditorController::refreshTemplatePreviewVertical()
+{
+    // The ONE writer of the NOTIFY comparand: the getter is a pure read, so a
+    // binding evaluating between an input change and this refresh cannot
+    // consume the flip and suppress the emit for every other consumer.
+    const bool vertical = resolveTemplatePreviewVertical();
+    if (m_templatePreviewVertical != vertical) {
+        m_templatePreviewVertical = vertical;
+        Q_EMIT templatePreviewVerticalChanged();
+    }
+}
+
+bool EditorController::templatePreviewVertical() const
+{
+    return resolveTemplatePreviewVertical();
+}
+
+bool EditorController::resolveTemplatePreviewVertical() const
+{
+    // Per-screen override first, then the global setting, then the Auto rule
+    // against the target screen's size — the settings ladder the engine walks
+    // (a SetScrollStripAxis rule can still outrank all three on the live
+    // strip; the editor has no rule-resolution seam, and the settings app's
+    // preview shares that documented limit).
+    //
+    // The screen key is matched against EVERY config spelling of the target:
+    // ScreenIdentity::variantsFor answers the id and its connector-name
+    // alternate (input first), which are the two forms per-screen groups are
+    // stored under. The old fallback matched screenDisplayName, a decorated
+    // human label ("DP-2 — Vendor Model") that is never a stored key on a
+    // monitor with EDID metadata.
+    int configured = m_scrollingStripAxis;
+    const QStringList spellings = PhosphorScreens::ScreenIdentity::variantsFor(m_targetScreen);
+    for (const QString& spelling : spellings) {
+        const auto it = m_perScreenStripAxis.constFind(spelling);
+        if (it != m_perScreenStripAxis.constEnd()) {
+            configured = it.value();
+            break;
+        }
+    }
+
+    // Auto (and any out-of-range value a hand-edited config could carry) falls
+    // through to the size rule.
+    if (configured == ConfigDefaults::scrollingStripAxisVertical()) {
+        return true;
+    }
+    if (configured != ConfigDefaults::scrollingStripAxisHorizontal()) {
+        const QSize size = targetScreenSize();
+        return PhosphorProtocol::autoScrollAxisFor(size.width(), size.height())
+            == PhosphorProtocol::ScrollAxis::Vertical;
+    }
+    return false;
 }
 
 void EditorController::saveEditorSettings()

@@ -15,7 +15,7 @@
 // Inherits PhosphorLayout::ILayoutSourceRegistry so concrete registries
 // (LayoutManager) carry the unified `contentsChanged` signal that
 // ZonesLayoutSource subscribes to - matching the pattern every other
-// provider library (phosphor-tiles, future phosphor-scrolling, …)
+// provider library (phosphor-tiles, phosphor-scroll-engine, …)
 // follows. Inheriting QObject via the unified base rather than
 // directly keeps ILayoutManager's non-virtual multi-inheritance safe:
 // every path through ILayoutManager reaches QObject exactly once, so
@@ -24,15 +24,21 @@
 #include <phosphorzones_export.h>
 
 #include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
 
 #include <QJsonObject>
 #include <QString>
 #include <QUuid>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorZones {
+
+class ScrollingTemplateStore;
 
 /**
  * @brief Enumeration + mutation surface for the in-memory zone-layout
@@ -76,8 +82,17 @@ public:
     ///               via @c deleteLater (matching how the registry
     ///               adopted it in @ref addLayout). Callers must drop
     ///               any other references before this call returns.
-    virtual void removeLayout(Layout* layout) = 0;
-    virtual void removeLayoutById(const QUuid& id) = 0;
+    /// @return       @c true when the layout was removed. @c false when the
+    ///               removal was REFUSED and the layout is still registered:
+    ///               the implementation keeps the layout, its file and its
+    ///               settings sidecar mutually consistent rather than deleting
+    ///               a half of them, so a caller that announces the deletion
+    ///               (a `layoutRemoved`-style signal, an eviction of per-layout
+    ///               state) must gate that announcement on this result.
+    virtual bool removeLayout(Layout* layout) = 0;
+    /// @copydoc removeLayout
+    /// Also returns @c false when no layout carries @p id.
+    virtual bool removeLayoutById(const QUuid& id) = 0;
     /// @param source Borrowed - caller retains ownership.
     /// @return       Newly allocated copy; ownership transferred to the
     ///               registry (mirrors @c addLayout semantics). Returns
@@ -107,10 +122,68 @@ public:
     /// (desktop, activity) context.
     virtual Layout* resolveLayoutForScreen(const QString& screenId) const = 0;
 
-    /// Raw assignment id (manual-layout UUID or @c "autotile:<algorithmId>")
-    /// for @p screenId, with cascade + level-1 provider fallback.
+    /// Raw assignment id (manual-layout UUID, @c "autotile:<algorithmId>",
+    /// or the bare @c "scrolling:" sentinel) for @p screenId, with cascade +
+    /// level-1 provider fallback. An explicit mode-only Snapping pin settles
+    /// as an EMPTY id (no layout identity exists for it) — see the concrete
+    /// class doc.
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
+
+    /// The native scrolling-template store wired into this registry, or
+    /// null when none is (lightweight stubs, roots with no template
+    /// feature). Consumers use it for template enumeration (picker lists);
+    /// context RESOLUTION goes through scrollingTemplateForContext below.
+    virtual ScrollingTemplateStore* scrollingTemplateStore() const
+    {
+        return nullptr;
+    }
+
+    /// The resolved scrolling TEMPLATE for a context (the native
+    /// ScrollingTemplate whose vocabularies and blueprint the engine push
+    /// consumes), by value — isValid() is false when the context is not
+    /// Scrolling, names no template and no default template answers, or the
+    /// named template no longer exists in the store. Default invalid so
+    /// lightweight test stubs need not implement the template feature.
+    virtual ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return {};
+    }
+
+    // scrollingTemplateExplicitlyNone, the other half of the pair the next
+    // function reads, is declared at the END of the virtuals (see its own doc
+    // there for both what it answers and why it sits last).
+
+    /// The id the layout PICKER highlights for a scrolling context: the
+    /// resolved template's bare UUID, the reserved no-template word when the
+    /// context opted out explicitly, or the "scrolling:" sentinel (matches no
+    /// card) when no template resolves for any other reason. The shared
+    /// authority for the picker-highlight sites
+    /// (UnifiedLayoutController::displayIdForAssignment and
+    /// OverlayService::activeLayoutIdForScreen) — callers keep their own
+    /// live-capability gates. Distinct from the rules-visible query stamp,
+    /// which uses the PREFIXED "scrolling:<uuid>" form. Non-virtual on
+    /// purpose: a pure convenience over the two virtuals above.
+    QString scrollingDisplayIdForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
+    {
+        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
+        if (templ.isValid()) {
+            return templ.id.toString();
+        }
+        // Tested only once the resolver has come back empty: a context cannot
+        // both name a template and be opted out. That ordering costs a second
+        // resolve on a screen with no template and no configured default,
+        // which is not rare — the memoized context cache makes it a lookup
+        // rather than a second priority walk.
+        if (scrollingTemplateExplicitlyNone(screenId, virtualDesktop, activity)) {
+            return QString(NoScrollingTemplate);
+        }
+        return QString(PhosphorLayout::LayoutId::ScrollingId);
+    }
 
     /// Effective global default layout (snap-only fallback).
     virtual Layout* defaultLayout() const = 0;
@@ -168,12 +241,15 @@ public:
     /// override (no rule gaps); a registry that does not model context rules —
     /// e.g. a fixture stub — keeps the legacy per-screen/layout/global cascade.
     ///
-    /// @p mode is the placement-mode wire token ("snapping" / "tiling") of the
-    /// engine asking. It is matched against a context rule's `Mode` leaf, so a
-    /// per-mode gap rule (e.g. a wider inner gap only while tiling) resolves for
-    /// the matching engine and stays inert for the other. The snapping geometry
-    /// path passes "snapping"; the autotile path passes "tiling". Left empty for
-    /// a mode-agnostic caller (no Mode leaf then matches).
+    /// @p mode is the placement-mode wire token ("snapping" / "tiling" /
+    /// "scrolling") of the engine asking. It is matched against a context
+    /// rule's `Mode` leaf, so a per-mode gap rule (e.g. a wider inner gap
+    /// only while tiling) resolves for the matching engine and stays inert
+    /// for the others. The snapping geometry path passes "snapping", the
+    /// autotile path "tiling", the scroll engine's provider "scrolling".
+    /// Left empty for a mode-agnostic caller (no Mode leaf then matches).
+    /// An EMPTY @p mode means "mode-agnostic" and excludes Field::Mode
+    /// structurally — see the LayoutRegistry override.
     virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                                   const QString& mode = QString()) const
     {
@@ -199,6 +275,23 @@ public:
         Q_UNUSED(virtualDesktop);
         Q_UNUSED(activity);
         return false;
+    }
+
+    /// Resolve a per-context override of the drag selector popup — the
+    /// edge-triggered zone / strip picker offered during a window drag — for
+    /// the (@p screenId, @p virtualDesktop, @p activity) context. An engaged
+    /// true forces the popup on past the global selector toggle, an engaged
+    /// false suppresses it, and @c std::nullopt means no rule fills the slot
+    /// and the context follows the global toggle. The default returns
+    /// @c std::nullopt; a registry that does not model context rules — e.g.
+    /// a fixture stub — keeps the toggle-only behaviour.
+    virtual std::optional<bool> resolveContextDragSelectorEnabled(const QString& screenId, int virtualDesktop,
+                                                                  const QString& activity) const
+    {
+        Q_UNUSED(screenId);
+        Q_UNUSED(virtualDesktop);
+        Q_UNUSED(activity);
+        return std::nullopt;
     }
 
     /// True iff the (@p screenId, @p virtualDesktop, @p activity) context has no
@@ -234,9 +327,39 @@ public:
         return {};
     }
 
+    /// Whether the context opted out of templates EXPLICITLY, as opposed to
+    /// merely naming none (an unset slot, or one whose template is gone, or a
+    /// context with no configured default to inherit). The resolver answers
+    /// invalid for all of those alike, so this is the only way to tell the
+    /// deliberate choice from the incidental absence — which the picker
+    /// needs, because one of them highlights its None card and the rest
+    /// highlight nothing. Default false so lightweight stubs need not
+    /// implement it.
+    ///
+    /// Declared LAST among the virtuals on purpose. This is a
+    /// PHOSPHORZONES_EXPORT class in a library with an soname, so a virtual
+    /// added mid-class would renumber the vtable slot of every virtual below
+    /// it and break any consumer built against the previous headers. New
+    /// virtuals append here.
+    ///
+    /// This one was MOVED here from mid-class, which is itself that renumber:
+    /// every virtual it used to precede shifted a slot. Deliberate and safe
+    /// only because the mid-class placement had not been released — an
+    /// in-place move like it is an ABI break, not a cleanup, once consumers
+    /// exist. The rule above is the one to follow instead.
+    virtual bool scrollingTemplateExplicitlyNone(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return false;
+    }
+
 Q_SIGNALS:
     // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;
-    // @c removeLayout / @c removeLayoutById fire `layoutRemoved`.
+    // @c removeLayout / @c removeLayoutById fire `layoutRemoved` on success;
+    // a refused removal (see their @return) fires nothing.
     void layoutAdded(Layout* layout);
     void layoutRemoved(Layout* layout);
 
@@ -247,12 +370,15 @@ Q_SIGNALS:
     // changes").
     void activeLayoutChanged(Layout* layout);
 
-    // Assignment churn. Fires when a (screenId, virtualDesktop)
-    // assignment changes; activity context is intentionally omitted
-    // from the signal - consumers that care about activity-keyed
-    // assignments re-query via @c layoutForScreen with their current
-    // activity. Concrete impl emits only on actual change (matches the
-    // project "emit only when value changes" rule).
+    // Assignment churn. Fires when a (screenId, virtualDesktop) assignment
+    // is WRITTEN; activity context is intentionally omitted from the signal -
+    // consumers that care about activity-keyed assignments re-query via
+    // @c layoutForScreen with their current activity. Deliberately NOT an
+    // emit-on-change signal: the emitters fire unconditionally on every
+    // assignment write, because consumers use it as a re-derive trigger
+    // (engine screen sets, layout filters, template vocabulary pushes) whose
+    // inputs go beyond the (screen, desktop, layout) payload - an identical
+    // payload can still mean a changed template or activity-keyed entry.
     void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
 };
 

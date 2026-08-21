@@ -16,6 +16,7 @@
 #include <PhosphorOverlay/ShellState.h>
 
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
@@ -96,9 +97,88 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         existing->shell = nullptr;
         m_screenStates.erase(existing);
     }
+
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
+
+    // Several more per-screen overlay maps are keyed by screen id, and each
+    // needs something different from the move. Deliberately not a count: the
+    // enumeration below drifted from one twice already, and what matters is
+    // that a map is named here at all.
+    //  - m_lastScrollDropIndicatorRect MUST follow, for a reason sharper than
+    //    the others. It is the drop indicator's CHANGE GATE, and the rekey
+    //    preserves the live slot — so an indicator visible under oldKey stays
+    //    on screen while its cache entry strands. A later clear addressed to
+    //    newKey then finds no entry, takes the "already clear" early return,
+    //    and never hides the still-visible slot. The common path self-heals
+    //    (the next push hides the old id first), but a rekey with no further
+    //    push before the drop leaves the rectangle painted with no drag left
+    //    to dismiss it.
+    //  - m_scrollDropIndicatorHidePending is NOT an inert bit. The rekey
+    //    preserves the slot and the animator track, so a hide in flight still
+    //    completes and dropping the bit alone would strand the slot. The
+    //    pending teardown is finished here rather than dropped, and
+    //    m_scrollDropIndicatorHideGuard is bumped for the OLD key and the new
+    //    key is seeded one generation ahead of it, so the in-flight
+    //    completion stale-returns instead of running twice and no generation
+    //    is ever re-issued under either key.
+    //  - m_stripCardFractionsCache is DROPPED for both keys rather than moved:
+    //    it is a memo the next trigger-edge probe rebuilds in one call, and
+    //    a stale entry under either key would mis-size the keep-visible band.
+    //  - m_selectedStripTarget/m_selectedStripScreenId are DROPPED when keyed
+    //    to the old key rather than migrated: a rekey renumbers nothing, but
+    //    the stored key would never screensMatch the live one again, so the
+    //    popup pick would be silently ignored at drop. The next cursor tick
+    //    re-selects under the new key.
+    // After the rekey the old key has no removal path of its own (the rekeyed
+    // key never reaches unwirePassiveShellSlots, and the by-key clears in
+    // updateScrollingScreens name the LIVE screen), so failing to move these
+    // leaks an entry per rekey rather than merely misbehaving once.
+    if (const auto dropRectIt = m_lastScrollDropIndicatorRect.constFind(oldKey);
+        dropRectIt != m_lastScrollDropIndicatorRect.constEnd()) {
+        m_lastScrollDropIndicatorRect.insert(newKey, dropRectIt.value());
+        m_lastScrollDropIndicatorRect.remove(oldKey);
+    }
+    // The drop indicator's paint overrides follow too: their only writer is a
+    // context re-resolve, so an entry left under the dead key means the
+    // rekeyed screen silently falls back to config colours until one happens,
+    // and the stranded entry never goes away.
+    if (const auto dropOverrideIt = m_scrollDropIndicatorOverrides.constFind(oldKey);
+        dropOverrideIt != m_scrollDropIndicatorOverrides.constEnd()) {
+        m_scrollDropIndicatorOverrides.insert(newKey, dropOverrideIt.value());
+        m_scrollDropIndicatorOverrides.remove(oldKey);
+    }
+    m_stripCardFractionsCache.remove(oldKey);
+    m_stripCardFractionsCache.remove(newKey);
+    if (PhosphorScreens::ScreenIdentity::screensMatch(m_selectedStripScreenId, oldKey)) {
+        m_selectedStripTarget = {};
+        m_selectedStripScreenId.clear();
+    }
+    // A hide in flight under oldKey cannot simply have its bit dropped. The
+    // animator's track is keyed by {surface, item}, neither of which the rekey
+    // touches, so the completion still fires — and it captured oldKey and the
+    // generation it was issued. Left alone, it would pass its own guard check,
+    // then fail the m_screenStates lookup (the state now lives under newKey)
+    // and return early, never running the teardown it owns. That leaves the
+    // slot visible at opacity 0, so the drop indicator stops painting until
+    // the drag ends, and that does not self-heal through the normal update
+    // path, which early-returns on a slot that is already visible. So finish
+    // the teardown here, against the migrated state, and bump the old key's
+    // guard so the in-flight completion stale-returns instead of running
+    // twice. Deferred to after the surface re-announce below, which needs the
+    // pre-teardown state.
+    const bool dropHideWasPending = m_scrollDropIndicatorHidePending.remove(oldKey);
+    // The old key's counter is bumped IN PLACE and kept (the monotonic
+    // exception at overlayservice.h's guard doc: an entry, once issued, never
+    // restarts — a later life of oldKey, re-created by the ordinary show path,
+    // must not re-issue a generation an abandoned completion still holds),
+    // and the new key is seeded strictly ahead of it, so the counter that
+    // follows the state is ahead of every generation ever issued under either
+    // key. qMax rather than a plain assign because newKey may already carry a
+    // counter from an earlier life of its own.
+    const quint64 oldGeneration = ++m_scrollDropIndicatorHideGuard[oldKey];
+    m_scrollDropIndicatorHideGuard[newKey] = qMax(m_scrollDropIndicatorHideGuard.value(newKey), oldGeneration + 1);
 
     // The geometryChanged lambda captured the OLD sid by value. After the
     // state moved to newKey, the lambda's m_screenStates.find(oldSid) lookup
@@ -114,30 +194,61 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (physScreen) {
         const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(newKey);
 
-        // Re-anchor the live layer surface to the new VS's region. The donor's
-        // anchors/margins were baked in at attach time for the old key - if the
-        // flavor flip changes the target geometry (e.g. bare-physical donor
-        // rekeyed to a sub-region VS target) the surface would otherwise keep
-        // rendering across the full monitor. wlr-layer-shell v2+ allows
-        // set_anchor / set_margin post-attach; push the corrected placement
-        // through the mutable transport handle.
+        // Re-anchor the live layer surface to the new key's region. The
+        // donor's anchors/margins were baked in at attach time for the old
+        // key, and the flavor guard above only pins the ANCHOR SET as
+        // unchanged - the region can still move, which is exactly the live
+        // case here: a VS→VS rekey onto a different sub-region of the same
+        // monitor. Without this the surface keeps rendering across the old
+        // VS's rectangle. wlr-layer-shell v2+ allows set_anchor / set_margin
+        // post-attach; push the corrected placement through the mutable
+        // transport handle. (isVS == wasVS by the guard, so the physical
+        // branch below is the both-bare-physical case, where AnchorAll
+        // already covers the whole monitor and only the margins are reset.)
+        const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
+        const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
+        // The screen's passive shell carries the placement, so it is what has
+        // to be re-anchored; a stranded one would keep drawing over the old
+        // VS's rectangle.
         if (rekeyed.shell && rekeyed.shell->shellSurface()) {
+            // Same independent-guard split as the geometry watcher: a warmed
+            // shell that has not attached yet has a window but no transport,
+            // and its window must still take the target VS's size.
             if (auto* handle = rekeyed.shell->shellSurface()->transport()) {
-                const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
-                const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
                 handle->setAnchors(placement.anchors);
                 handle->setMargins(placement.margins);
-                if (isVS && targetVsGeom.isValid()) {
-                    rekeyed.overlayGeometry = targetVsGeom;
-                    if (auto* w = rekeyed.shell->shellWindow()) {
-                        w->setWidth(targetVsGeom.width());
-                        w->setHeight(targetVsGeom.height());
-                    }
+            }
+            if (isVS && targetVsGeom.isValid()) {
+                if (auto* w = rekeyed.shell->shellWindow()) {
+                    w->setWidth(targetVsGeom.width());
+                    w->setHeight(targetVsGeom.height());
                 }
+            }
+        }
+        if (isVS && targetVsGeom.isValid() && rekeyed.shell && rekeyed.shell->shellSurface()) {
+            rekeyed.overlayGeometry = targetVsGeom;
+            // The zone-selector popup converts global cursor coords through
+            // its OWN captured rect (updateSelectorPosition prefers it over
+            // the window geometry); left at the old VS rect, every later
+            // hit-test on this screen is offset by the old->new origin delta
+            // for the rest of the drag.
+            if (rekeyed.zoneSelectorGeometry.isValid()) {
+                rekeyed.zoneSelectorGeometry = targetVsGeom;
             }
         }
 
         rekeyed.overlayGeomConnection = installOverlayGeometryWatcher(physScreen, newKey, isVS);
+    }
+
+    // Finish the hide the rekey inherited (see the pending-bit block above).
+    // Same teardown the abandoned completion would have run, addressed to the
+    // migrated key.
+    if (dropHideWasPending) {
+        if (QQuickItem* slot = rekeyed.scrollDropIndicatorSlot()) {
+            slot->setVisible(false);
+            writeQmlProperty(slot, QStringLiteral("loaded"), false);
+        }
+        syncPassiveShellSurfaceState(newKey);
     }
 
     qCInfo(lcOverlay) << "rekeyOverlayState: migrated overlay" << oldKey << "->" << newKey
@@ -163,13 +274,13 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
         // both be null/missing). Catches desync from a failed rekey,
         // an out-of-band lib mutation, or a future code path that
         // forgets to refresh the daemon-side cache.
+        // stateFor is a peek: it is declared const-only and returns
+        // pointer-or-nullptr, and the accessor that materializes an entry on a
+        // miss is separately named getOrCreateStateFor precisely so a
+        // debug-only check like this one cannot reach it by accident.
+        //
         if (it.value().shell) {
-            // Explicit const-pointer binding to reach the const
-            // overload of stateFor (returns pointer-or-nullptr); the
-            // non-const overload would materialize an entry on a
-            // miss, which we must not do from a debug-only check.
-            const PhosphorOverlay::ShellHost* host = m_shellHost.get();
-            const PhosphorOverlay::ShellState* libState = host->stateFor(it.key());
+            const PhosphorOverlay::ShellState* libState = m_shellHost->stateFor(it.key());
             if (libState != it.value().shell) {
                 qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib ShellState pointer desync for"
                                      << it.key() << "daemon=" << it.value().shell << "lib=" << libState;
@@ -207,10 +318,37 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
             return; // State was cleaned up, ignore stale geometry signal
         }
         auto& st = stateIt.value();
-        if (!st.overlayPhysScreen || !st.shell) {
+        // The zone selector is NOT gated on the overlay's active axis, so a
+        // live resize while the popup is up must refresh its hit-test frame
+        // (zoneSelectorGeometry) and bar layout BEFORE the overlay-context
+        // guard below can return early on a selector-only screen. The full
+        // update rewrites both in one call. For a physical screen, re-stamp
+        // the frame with the SIGNAL's rect afterwards: ScreenManager may not
+        // have processed this same geometryChanged yet, and
+        // updateZoneSelectorWindow stamps whatever it resolves — the signal
+        // value is the authority for THIS resize. (A VS frame is a derived
+        // sub-rect, so it keeps the resolved value.) Re-find after the
+        // update rather than reusing `st`: updateZoneSelectorWindow writes
+        // screen state through non-const operator[], the detach hazard the
+        // strip refresh documents.
+        if (st.zoneSelectorSlot() && st.zoneSelectorSlot()->isVisible()) {
+            updateZoneSelectorWindow(sid);
+            if (!isVS) {
+                if (const auto zsIt = m_screenStates.find(sid); zsIt != m_screenStates.end()) {
+                    zsIt->zoneSelectorGeometry = newGeom;
+                }
+            }
+        }
+        // Re-find: the selector refresh above may have detached the hash.
+        stateIt = m_screenStates.find(sid);
+        if (stateIt == m_screenStates.end()) {
+            return;
+        }
+        auto& stAfter = stateIt.value();
+        if (!stAfter.overlayPhysScreen || !stAfter.shell) {
             return; // Main overlay context not active for this entry
         }
-        if (auto* w = st.shell->shellWindow()) {
+        if (auto* w = stAfter.shell->shellWindow()) {
             if (isVS) {
                 // Virtual screen: recompute sub-region geometry from
                 // PhosphorScreens::ScreenManager (virtual proportions
@@ -218,13 +356,23 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
                 // margins via the PhosphorLayer transport handle.
                 // Anchors (Top|Left) are fixed at attach and can't change.
                 const QRect vsGeom = resolveScreenGeometry(m_screenManager, sid);
-                if (vsGeom.isValid() && st.shell->shellSurface()) {
-                    if (auto* handle = st.shell->shellSurface()->transport()) {
-                        handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
+                if (vsGeom.isValid() && stAfter.shell->shellSurface()) {
+                    // The passive shell carries the VS margins, so they go
+                    // stale with the geometry and a stranded surface keeps
+                    // drawing over the old VS rectangle — the same failure
+                    // rekeyOverlayState re-anchors to avoid.
+                    const auto placement = layerPlacementForVs(vsGeom, newGeom);
+                    // Two independent guards on purpose: a warmed shell that
+                    // has not attached yet (or just detached) has a window but
+                    // no transport, and its window must still follow the VS.
+                    if (auto* handle = stAfter.shell->shellSurface()->transport()) {
+                        handle->setMargins(placement.margins);
                     }
-                    w->setWidth(vsGeom.width());
-                    w->setHeight(vsGeom.height());
-                    st.overlayGeometry = vsGeom;
+                    if (auto* sw = stAfter.shell->shellWindow()) {
+                        sw->setWidth(vsGeom.width());
+                        sw->setHeight(vsGeom.height());
+                    }
+                    stAfter.overlayGeometry = vsGeom;
                     updateOverlayWindow(sid, screenPtr);
                     return;
                 }
@@ -233,7 +381,7 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
                 // just mirror the resize to our cached state.
                 w->setWidth(newGeom.width());
                 w->setHeight(newGeom.height());
-                st.overlayGeometry = newGeom;
+                stAfter.overlayGeometry = newGeom;
                 updateOverlayWindow(sid, screenPtr);
             }
         }

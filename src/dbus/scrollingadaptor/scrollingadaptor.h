@@ -1,0 +1,309 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include "plasmazones_export.h"
+
+#include <QDBusAbstractAdaptor>
+#include <QObject>
+#include <QString>
+#include <QStringList>
+#include <QVariantMap>
+
+namespace PhosphorScrollEngine {
+class ScrollEngine;
+}
+
+namespace PlasmaZones {
+
+/**
+ * @brief D-Bus adaptor for the scrolling placement engine
+ *
+ * Provides D-Bus interface: org.plasmazones.Scrolling
+ *
+ * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
+ * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
+ * (with the preset vocabulary beside it), the wheel-driven focusColumn
+ * verb, the four absolute width/height setters for external scripting, the
+ * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
+ * when a client leaves fullscreen on its own), and the
+ * reapplyWindowGeometry repair call (inbound too, for a fullscreen exit
+ * whose strip rects never moved).
+ * Window lifecycle and tile-request traffic for
+ * scrolling screens deliberately stays on org.plasmazones.Tiling — the
+ * effect keeps ONE engine-managed screen set and one geometry pipeline
+ * for both tiling-family engines, and TilingAdaptor routes per screen.
+ */
+class PLASMAZONES_EXPORT ScrollingAdaptor : public QDBusAbstractAdaptor
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Scrolling")
+
+    Q_PROPERTY(QStringList scrollingScreens READ scrollingScreens NOTIFY scrollingScreensChanged)
+    Q_PROPERTY(QVariantMap scrollEffectBehaviour READ scrollEffectBehaviour NOTIFY scrollEffectBehaviourChanged)
+
+public:
+    explicit ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent = nullptr);
+    ~ScrollingAdaptor() override = default;
+
+    /// The scrolling screen set, sorted so a property read and a signal
+    /// payload for the same set compare equal.
+    ///
+    /// This is the RAW set. The KWin effect does not answer its Mode
+    /// discriminator from it directly: it intersects this with the
+    /// engine-managed union published on org.plasmazones.Tiling at read
+    /// time, because the two arrive as independent signals with no
+    /// ordering guarantee and this set can transiently name a screen the
+    /// union has already dropped.
+    QStringList scrollingScreens() const;
+
+    /// The three scrolling facts the COMPOSITOR owns, as already-resolved
+    /// screen-id lists: `{"focusFollowsMouse": [...], "cropStraddlers": [...],
+    /// "verticalAxis": [...]}`.
+    ///
+    /// The first two are per-context rule slots
+    /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer
+    /// lives in the KWin effect, not the engine — so unlike their four
+    /// siblings they cannot ride the engine's per-screen override map. The
+    /// third is the strip axis as membership (see @ref verticalAxisKey). The
+    /// daemon resolves `rule ?? config` per scrolling screen and publishes the
+    /// RESOLVED membership, which keeps the effect free of any config
+    /// knowledge: it answers each question with a set lookup and needs no
+    /// fallback of its own. A screen absent from a list has that behaviour
+    /// OFF (for verticalAxis, a horizontal strip); a screen absent from the
+    /// daemon's scrolling set appears in none of the three.
+    ///
+    /// One map rather than three list properties so the compositor pays a
+    /// single bring-up query and a single change subscription for what is
+    /// really one push.
+    QVariantMap scrollEffectBehaviour() const;
+
+    /// Replace the published behaviour map and broadcast on a real change.
+    /// Driven by the daemon's per-screen scrolling pass, which resolves all
+    /// three while it is already walking the scrolling screens. Emit-on-change:
+    /// the compositor's copy is a plain cache it can re-query, so a redundant
+    /// broadcast would only cost a rule-cache invalidation on the other side.
+    ///
+    /// All three lists are SORTED and de-duplicated here rather than taken on
+    /// trust. The published contract says sorted, and the change gate is a
+    /// list compare, so canonicalizing at the one write site is what makes
+    /// both true whatever order the producer walked its screens in.
+    /// @p verticalAxisScreens are the scrolling screens whose strip runs
+    /// VERTICALLY. Absent from the list, like an absent key, means horizontal —
+    /// the historical layout — so a compositor that predates the axis reads
+    /// the whole desktop as horizontal, which is what it would have drawn
+    /// anyway.
+    void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens,
+                                  const QStringList& verticalAxisScreens);
+
+    /// Wire keys of the @ref scrollEffectBehaviour map, in one place for the
+    /// DAEMON side (this adaptor and its tests). They are not shared with the
+    /// compositor: the KWin effect is a separate module that does not link
+    /// this library and spells all three literals itself when it reads the map
+    /// (kwin-effect/tilinghandler/state.cpp), and the XML DocString spells
+    /// them a third time. A rename is therefore an edit here, an edit in the
+    /// effect and an edit in the XML — the same kept-in-sync-BY-HAND rule the
+    /// presetVocabularyJson payload keys follow (scrollingadaptor.cpp).
+    static QString focusFollowsMouseKey()
+    {
+        return QStringLiteral("focusFollowsMouse");
+    }
+    static QString cropStraddlersKey()
+    {
+        return QStringLiteral("cropStraddlers");
+    }
+    /// Membership, not a per-screen value: a screen IN this list runs its
+    /// strip vertically, and absence means horizontal. Membership keeps the
+    /// map's one shape rather than introducing a second, and it makes an
+    /// absent key and an empty list mean the same safe thing.
+    static QString verticalAxisKey()
+    {
+        return QStringLiteral("verticalAxis");
+    }
+
+    /// Clear the engine pointer during shutdown (same late-D-Bus-call
+    /// contract as the sibling adaptors' clearEngine).
+    void clearEngine();
+
+public Q_SLOTS:
+    /**
+     * @brief Focus the adjacent column on a scrolling screen
+     *
+     * The KWin effect's Meta+wheel axis shortcut calls this with the
+     * cursor's screen. Gated on the engine actually owning @p screenId —
+     * the engine's own screen fallback would otherwise redirect a wheel
+     * event from a non-scrolling monitor onto the active scrolling one.
+     *
+     * @p delta is STRIP-RELATIVE, not screen-relative: -1 is the previous
+     * column along the strip and +1 the next one, which reads as left/right
+     * on a horizontal strip and up/down on a vertical one.
+     *
+     * A press at the strip's END CROSSES onto the adjacent output when
+     * one exists (a different-mode neighbour defers to the daemon, which
+     * activates that engine's entry-edge window), and a press on an EMPTY
+     * scrolling screen crosses the same way instead of dead-ending — so a
+     * wheel notch can legitimately move focus to another monitor.
+     *
+     * Every rejection is a SILENT no-op, not an error reply: an empty
+     * @p screenId, a screen the engine does not own, and any @p delta
+     * other than -1 or +1 all return without acting, so a caller cannot
+     * distinguish a refusal from a call that landed on an empty strip.
+     *
+     * @param screenId Screen whose strip should move (the cursor's screen);
+     *                 an empty string is ignored
+     * @param delta -1 focuses the previous column along the strip, +1 the
+     *              next one; any other value is ignored
+     */
+    void focusColumn(const QString& screenId, int delta);
+
+    /**
+     * @brief Absolute width/height intents for the focused column and window
+     *
+     * The D-Bus home of niri's absolute set-column-width and
+     * set-window-height: a global shortcut carries no value argument, so the
+     * absolute setters live only on this surface. All four share focusColumn's
+     * silent ownership gate, and each refuses out-of-range values silently —
+     * proportions outside the settings UI's proportion range, pixels outside
+     * its fixed range (the width and height fixed ranges happen to agree
+     * today; each is validated against its own accessor). A value equal to
+     * the current intent answers with a no-target OSD, like the step verbs.
+     *
+     * Width proportions are exact (ColumnWidth has a Proportion kind).
+     * Height proportions are NOT: the strip model stores them as a fraction
+     * anchor that snaps to the nearest effective height preset at relayout
+     * (WindowHeight::Preset's value-anchored contract), so an exact height
+     * needs the pixel form.
+     *
+     * NOTE: nothing in this tree calls these four — they exist FOR external
+     * scripting, like presetVocabularyJson below. Do not re-justify them by
+     * naming an in-tree caller; there is none beyond the contract tests.
+     */
+    void setColumnWidthProportion(const QString& screenId, double proportion);
+    void setColumnWidthPixels(const QString& screenId, int px);
+    void setWindowHeightProportion(const QString& screenId, double proportion);
+    void setWindowHeightPixels(const QString& screenId, int px);
+
+    /**
+     * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
+     *
+     * The KWin effect calls this when a windowed-fullscreen client leaves
+     * fullscreen on its own (the app's in-app toggle), so the strip's flag
+     * follows reality. Silent no-op for an unknown window or one whose
+     * flag is not set, same wire-boundary policy as focusColumn.
+     *
+     * @param windowId Window whose flag to clear; an empty string is ignored
+     */
+    void clearWindowedFullscreen(const QString& windowId);
+
+    /**
+     * @brief Re-emit a window's true strip rect (compositor repair)
+     *
+     * The KWin effect calls this when the compositor moved a window behind
+     * the engine's back (KWin restores a fullscreen-exiting window to its
+     * pre-fullscreen rect one round-trip after the batch). The engine
+     * evicts the window's emit-gate memory and relayouts its screen, so
+     * the next batch re-carries the rect the gate would otherwise keep
+     * silent. Silent no-op for an unknown window, same wire-boundary
+     * policy as focusColumn.
+     *
+     * @param windowId Window to re-emit; an empty string is ignored
+     */
+    void reapplyWindowGeometry(const QString& windowId);
+
+    /**
+     * @brief The strip as it currently looks on a screen, for previews
+     *
+     * Returns a JSON array with ONE OBJECT PER TILE carrying
+     * {x, y, width, height} plus zoneNumber, the 1-based visible tile slot
+     * the rect occupies in strip order. The rects are 0.0 to 1.0 per axis,
+     * normalized against the screen's FULL geometry — the tiles themselves
+     * are clipped to the gap-inset work area, so the fractions show the
+     * panel gap, and a consumer maps back to pixels by scaling against the
+     * screen rectangle. Same basis as the daemon's own OSD strip card.
+     *
+     * Excluded and unnumbered: hidden tabs of a tabbed column, minimized
+     * tiles, parked columns, and tiles whose intersection with the work
+     * area is EMPTY (a stack whose minimum heights overflow the work area
+     * resolves its tail below the bottom edge). Partially visible columns
+     * are clipped rather than dropped, with no minimum-visibility
+     * threshold, so an arbitrarily thin sliver still carries its number.
+     *
+     * The settings app renders it where the other modes show a layout
+     * thumbnail. Empty array when the screen has no strip or is not
+     * scrolling.
+     *
+     * @param screenId Screen whose strip to describe
+     * @return JSON array string
+     */
+    QString visibleStripJson(const QString& screenId) const;
+
+    /**
+     * @brief The screen's effective preset vocabulary, for inspection
+     *
+     * Returns a JSON object {"columnWidths": [...], "windowHeights": [...]}
+     * of 0.0 to 1.0 fractions. Each list resolves independently: a list the
+     * context's resolved scrolling template supplies is that template's own
+     * preset list, and a list it does not supply falls back to the configured
+     * preset list, so a template that defines widths but no heights yields
+     * template widths beside the configured heights. This is the vocabulary
+     * the cycle-preset-width and cycle-preset-height shortcuts walk on that
+     * screen. Same silent ownership gate as focusColumn: an empty object when
+     * the screen is not scrolling.
+     *
+     * NOTE: nothing in this tree calls it. It stays as part of the PUBLISHED
+     * D-Bus read surface (declared in org.plasmazones.Scrolling.xml, covered
+     * by tests/unit/dbus), for external clients that want to know which
+     * fractions the cycle shortcuts will walk. Do not re-justify it by naming
+     * an in-tree caller; there is none.
+     *
+     * @param screenId Screen whose vocabulary to describe
+     * @return JSON object string
+     */
+    QString presetVocabularyJson(const QString& screenId) const;
+
+    /**
+     * @brief How far the screen has worked through its template blueprint
+     *
+     * Returns a JSON object {"total": n, "used": n}. @c total is how many
+     * starting columns the context's resolved scrolling template declares,
+     * and @c used is how many of them the screen's strip has already taken.
+     * An entry is spent once a column has taken it, so a closed column does
+     * not return its entry to the pool, and @c used == @c total means further
+     * columns open at the template's ordinary width and display instead.
+     * The count restarts when the strip empties or the screen is given a
+     * different template.
+     *
+     * Reports the CURRENT (desktop, activity) context, matching
+     * visibleStripJson. Same silent ownership gate as focusColumn: an empty
+     * object when the screen is not scrolling.
+     *
+     * @param screenId Screen whose progress to describe
+     * @return JSON object string
+     */
+    QString blueprintProgressJson(const QString& screenId) const;
+
+Q_SIGNALS:
+    /**
+     * @brief Emitted when the set of screens using the scrolling engine changes
+     * @param screenIds List of screen IDs currently in scrolling mode
+     */
+    void scrollingScreensChanged(const QStringList& screenIds);
+
+    /// The resolved per-screen effect-owned behaviour changed. Payload is the
+    /// whole map (see @ref scrollEffectBehaviour), so a receiver never has to
+    /// merge a delta against a copy it might have missed an update to.
+    void scrollEffectBehaviourChanged(const QVariantMap& behaviour);
+
+private:
+    PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
+    /// Last set broadcast on the bus (the change gate's memory; the engine
+    /// re-emits identical sets on desktop switches for the tiling channel).
+    QStringList m_lastBroadcastScreens;
+    /// Published copy of @ref scrollEffectBehaviour. Held as the built map so
+    /// the property read is a plain copy and the change compare is one
+    /// QVariantMap compare rather than two list compares.
+    QVariantMap m_scrollEffectBehaviour;
+};
+
+} // namespace PlasmaZones

@@ -87,6 +87,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="windowKind" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient)."/>
             </arg>
+            <arg name="isOpenPath" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True when this resolve is driven by a window OPEN (session restore, deferred-routing flush); false for the unminimize-orphan, pending-restores-sweep and bring-up stacking-restore drivers, which re-resolve windows that are already open and on screen. Gates the cross-screen tile reclaim, which must never move a window the user is already looking at."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum width, or 0 when unknown. Used only by the cross-screen tile reclaim, whose adopting engine evaluates its oversized/float verdict once from these."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Client-declared minimum height, or 0 when unknown."/>
+            </arg>
             <arg name="snapX" type="i" direction="out"/>
             <arg name="snapY" type="i" direction="out"/>
             <arg name="snapWidth" type="i" direction="out"/>

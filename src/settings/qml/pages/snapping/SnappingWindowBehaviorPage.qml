@@ -67,7 +67,6 @@ SettingsFlickable {
 
                     ModifierAndMouseCheckBoxes {
                         width: root.sliderPreferredWidth
-                        allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: root.settingsBridge.snapAssistTriggers
                         defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers

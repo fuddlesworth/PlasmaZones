@@ -177,6 +177,8 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
              "main overlay on this screen");
     wireSlot(PhosphorSlotKeys::Cheatsheet(), "cheatsheetSlotItem", PhosphorRoles::Cheatsheet,
              "cheatsheet on this screen");
+    wireSlot(PhosphorSlotKeys::ScrollDropIndicator(), "scrollDropIndicatorSlotItem", PhosphorRoles::ScrollDropIndicator,
+             "scroll drag drop indicator on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source
@@ -270,6 +272,18 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // clear the daemon's PZ-content sentinels and disconnect the geom
     // watcher - those are the parallel-state bookkeeping the lib does
     // not know about.
+    //
+    // The drop indicator's two per-screen maps DO belong here. Its guard
+    // follows the monotonic EXCEPTION: m_scrollDropIndicatorHideGuard must
+    // never restart, so it stays. Dropping the rect cache
+    // matters for more than the leak — it is the change gate, so a retained
+    // entry would make an identical rect after a shell teardown compare equal
+    // and early-return, and the indicator would silently never show again.
+    m_scrollDropIndicatorHidePending.remove(screenId);
+    m_lastScrollDropIndicatorRect.remove(screenId);
+    // The paint overrides go too: they belong to the torn-down shell's
+    // context, and nothing else drops them.
+    m_scrollDropIndicatorOverrides.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;
@@ -277,6 +291,32 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     it->labelsTextureHash = 0;
     it->zoneSelectorPhysScreen = nullptr;
     it->zoneSelectorGeometry = QRect();
+}
+
+void OverlayService::removeShellStates(const QString& screenId)
+{
+    // destroyShell only zeroes a ShellState's fields; the entry itself survives
+    // in the host's map, so a hot-plug cycle would slowly grow it with dead
+    // keys.
+    m_shellHost->removeState(screenId);
+}
+
+void OverlayService::clearShellFailuresForPhysicalScreen(const QString& physicalScreenId)
+{
+    // Drop sticky creation-failure sentinels for every screen id rooted on this
+    // physical monitor. Without this, reconnecting the same monitor inherits
+    // the stale flag and we silently refuse to recreate its shells. Matching is
+    // prefix-based because virtual-screen ids embed the physical id as their
+    // prefix, and the bare physical id is checked for equality.
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    const QString vsPrefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
+    for (const QString& flagged : m_shellHost->failureScreenIds()) {
+        if (flagged == physicalScreenId || flagged.startsWith(vsPrefix)) {
+            m_shellHost->clearFailure(flagged);
+        }
+    }
 }
 
 void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
@@ -328,7 +368,8 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // real drag-end via dismissOverlayWindow - that is the right edge
     // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
-        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot());
+        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot())
+        || isVisible(s.scrollDropIndicatorSlot());
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 

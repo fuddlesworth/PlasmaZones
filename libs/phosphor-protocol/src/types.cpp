@@ -38,7 +38,7 @@ QString toWireString(DragBypassReason r)
     switch (r) {
     case DragBypassReason::None:
         return {};
-    case DragBypassReason::AutotileScreen:
+    case DragBypassReason::EngineOwnedScreen:
         return kBypassAutotileScreen;
     case DragBypassReason::SnappingDisabled:
         return kBypassSnappingDisabled;
@@ -56,7 +56,7 @@ DragBypassReason bypassReasonFromWireString(const QString& s)
         return DragBypassReason::None;
     }
     if (s == kBypassAutotileScreen) {
-        return DragBypassReason::AutotileScreen;
+        return DragBypassReason::EngineOwnedScreen;
     }
     if (s == kBypassSnappingDisabled) {
         return DragBypassReason::SnappingDisabled;
@@ -103,6 +103,62 @@ QString TileRequestEntry::validationError() const
     if (!stacking.isEmpty() && stacking != QLatin1String("firstOnTop") && stacking != QLatin1String("lastOnTop")) {
         return QStringLiteral("TileRequestEntry: invalid stacking '%1' (windowId=%2)").arg(stacking, windowId);
     }
+    // scrollEdge is optional (empty = not a scrolling placement). Same
+    // reasoning as stacking: the effect re-anchors a window's animation origin
+    // on any non-empty value, so an unrecognised string would silently move
+    // the window's apparent entry side. Reject it at the unmarshal boundary.
+    //
+    // Four values since v12: a strip can run vertically, and a departure is
+    // named by the screen edge the column left through, so the pair widens
+    // with the axis (left/right horizontally, top/bottom vertically).
+    if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")
+        && scrollEdge != QLatin1String("top") && scrollEdge != QLatin1String("bottom")) {
+        return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
+    }
+    // tabFrom names the OTHER window of a tab swap, so it can never be this
+    // entry's own id: the compositor would cross-fade a window against a
+    // snapshot of itself, capturing through the very transition it is meant
+    // to seed. A hint rather than an action, so garbling it costs only the
+    // cross-fade — but the self-reference is cheap to reject and can only be
+    // a bug or a spoof. Deliberately NOT rejected here: tabFrom on a floating
+    // entry. That pair is contradictory too, but unlike windowedFullscreen
+    // below the field is a paint hint, so the app-side parse strips it and
+    // keeps the placement rather than dropping the whole entry.
+    if (!tabFrom.isEmpty() && tabFrom == windowId) {
+        return QStringLiteral("TileRequestEntry: tabFrom names its own window (windowId=%1)").arg(windowId);
+    }
+    // Windowed fullscreen is a strip placement by definition (the tile keeps
+    // its column slot), so it cannot ride a floating entry — the effect
+    // would flip KWin fullscreen state on a free window. The engine never
+    // emits the pair; reject it as garbling. A dropped entry here loses the
+    // whole placement on purpose: unlike the paint hints below, both flags
+    // are ACTIONS, and acting on a contradictory pair is worse than acting
+    // on neither.
+    if (windowedFullscreen && floating) {
+        return QStringLiteral("TileRequestEntry: windowedFullscreen on a floating entry (windowId=%1)").arg(windowId);
+    }
+    // Same shape for monocle: the two flags come from DISJOINT producers
+    // (monocle only from the autotile engine's layout_apply, the fullscreen
+    // flag only from the scroll engine's applyLayout), so the pair is
+    // impossible in-tree — and acted on it would put one window under two
+    // compositor authorities (maximize AND fullscreen) in two effect-side
+    // membership sets with independent exits.
+    if (windowedFullscreen && monocle) {
+        return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
+    }
+    // viewDelta, visualX, visualY, hasVisualPos and viewImmediate are
+    // deliberately NOT validated here, unlike their neighbours. All five are
+    // PAINT hints rather than placement inputs: the committed rect stands on
+    // its own whatever they say, so an absurd value costs one wild slide or
+    // one column drawn in the wrong place for a leg, and rejecting the entry
+    // would instead drop a perfectly good placement over a cosmetic field.
+    // Each consumer defends itself where the damage would be — the effect
+    // clamps the delta before it reaches either the spring or the per-window
+    // origin, the JSON hop requires the visual pair to be present, numeric
+    // and paired with a tiled placement before it sets the flag, and
+    // viewImmediate is inert without a non-zero viewDelta (the effect's seed
+    // loop skips delta-less entries); viewDelta and viewImmediate are both
+    // dropped on a floating entry at the same hop.
     return {};
 }
 
@@ -133,15 +189,15 @@ QString BridgeRegistrationResult::validationError() const
 
 QString DragPolicy::validationError() const
 {
-    // The only strong invariant: an AutotileScreen bypass must carry the
-    // autotile screen id, because the effect uses it to scope retroactive
+    // The only strong invariant: an EngineOwnedScreen bypass must carry the
+    // owning engine's screen id, because the effect uses it to scope retroactive
     // bypass state and the post-drag float target. Every other bypass reason
     // (SnappingDisabled, ContextDisabled, LayoutSuppressed) may be emitted
     // with an empty screenId when beginDrag was called with an empty
     // startScreenId — the producer code in drag_protocol.cpp deliberately
     // tolerates that.
-    if (bypassReason == DragBypassReason::AutotileScreen && screenId.isEmpty()) {
-        return QStringLiteral("DragPolicy: AutotileScreen bypass requires non-empty screenId");
+    if (bypassReason == DragBypassReason::EngineOwnedScreen && screenId.isEmpty()) {
+        return QStringLiteral("DragPolicy: EngineOwnedScreen bypass requires non-empty screenId");
     }
     return {};
 }
@@ -205,8 +261,8 @@ QDebug operator<<(QDebug debug, DragBypassReason r)
     case DragBypassReason::None:
         debug << "DragBypassReason::None";
         break;
-    case DragBypassReason::AutotileScreen:
-        debug << "DragBypassReason::AutotileScreen";
+    case DragBypassReason::EngineOwnedScreen:
+        debug << "DragBypassReason::EngineOwnedScreen";
         break;
     case DragBypassReason::SnappingDisabled:
         debug << "DragBypassReason::SnappingDisabled";

@@ -28,12 +28,14 @@ Item {
         anchors.fill: parent
         headerText: i18n("On-Screen Display")
         collapsible: true
+        searchAnchor: "onScreenDisplay"
 
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
             SettingsRow {
                 title: i18n("Layout switch OSD")
+                searchAnchor: "osdOnLayoutSwitch"
                 description: i18n("Show notification when switching between zone layouts")
 
                 SettingsSwitch {
@@ -49,6 +51,7 @@ Item {
 
             SettingsRow {
                 title: i18n("Desktop switch OSD")
+                searchAnchor: "osdOnDesktopSwitch"
                 description: i18n("Show notification on virtual desktop change, activity change, and daemon startup")
 
                 SettingsSwitch {
@@ -64,6 +67,7 @@ Item {
 
             SettingsRow {
                 title: i18n("Keyboard navigation OSD")
+                searchAnchor: "navigationOsd"
                 description: i18n("Show notification when moving windows with keyboard shortcuts")
 
                 SettingsSwitch {
@@ -79,6 +83,7 @@ Item {
 
             SettingsRow {
                 title: i18n("OSD style")
+                searchAnchor: "osdStyle"
                 description: i18n("Visual style of on-screen notifications")
 
                 WideComboBox {
@@ -102,6 +107,7 @@ Item {
 
             SettingsRow {
                 title: i18n("Overlay style")
+                searchAnchor: "overlayDisplayMode"
                 description: i18n("How zones appear while dragging a window")
 
                 WideComboBox {

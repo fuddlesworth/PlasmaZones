@@ -158,9 +158,9 @@ cd build && ctest --output-on-failure
 ```
 
 - CMake with `CMAKE_AUTOMOC/AUTORCC/AUTOUIC ON`
-- `qt6_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
+- `qt_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
 - `cmake -DUSE_KDE_FRAMEWORKS=ON` (default) or `OFF` for portable Qt-only build
-- KF6 deps when ON: `KCMUtils`, `GlobalAccel`; optional: `Activities`
+- KF6 deps when ON: `KCMUtils`, `GlobalAccel`, `ColorScheme` (the KWin effect's KColorScheme); optional: `Activities`
 - Pluggable backends: `IConfigBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`
 - Standalone settings app (`plasmazones-settings`) + minimal KCM launcher
 

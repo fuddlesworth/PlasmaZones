@@ -27,36 +27,33 @@ using namespace RuleHelpers;
 namespace {
 
 // One walk, both directions. @p shouldFlip selects the entries to convert and
-// @p target is the mode they are rewritten to; both layout fields are carried
-// across verbatim, which is what lets the pair round-trip. Returns the flipped
-// rules through @p updated and the (screen, desktop) pairs to announce through
-// @p affected — dedup'ed, see purgeSnappingLayoutFromAssignments for the
-// duplicate-emit hazard that guards against. The caller commits and emits,
-// because the two directions differ in what else they persist.
+// @p target is the mode they are rewritten to; the layout fields (snapping,
+// tiling, scrolling template) are carried across verbatim, which is what lets
+// the pair round-trip. Returns the flipped rules through @p updated and the
+// full context dims to announce through @p affected. The caller commits and
+// emits, because the two directions differ in what else they persist.
 //
-// The rewrite replaces only the three assignment slots. A MIXED context rule
+// The rewrite replaces only the assignment slot actions. A MIXED context rule
 // (context match + SetEngineMode alongside SetOpacity / Float / Exclude /
 // LockContext / OverrideAnimation* / gap actions) must still flip — a mixed
 // autotile rule is a real autotile assignment and a global disable has to
 // neuter it — so the predicate deliberately does NOT gate on
 // isPureAssignmentRule the way the purge path at layoutregistry_assignments.cpp
 // does. Assigning makeAssignmentActions' output wholesale would therefore drop
-// every non-assignment action such a rule carries, in BOTH directions. Instead
-// the fresh slot actions are followed by every surviving non-slot action, in
-// their original order relative to each other (their position relative to the
-// slot actions is NOT preserved — survivors always follow the rebuilt slots).
-// Dropping a gap action here also changed the gap
-// fingerprint the settings layer watches, which re-entered the settings handler
-// mid-write; preserving the actions closes that re-entrancy exposure too.
+// every non-assignment action such a rule carries, in BOTH directions;
+// carryOverNonAssignmentActions preserves them. Dropping a gap action here
+// also changed the gap fingerprint the settings layer watches, which
+// re-entered the settings handler mid-write; preserving the actions closes
+// that re-entrancy exposure too.
 template<typename PredicateFn>
-int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<QPair<QString, int>>& affected, AssignmentEntry::Mode target,
+int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<ContextDims>& affected, AssignmentEntry::Mode target,
                         PredicateFn shouldFlip)
 {
     int flipped = 0;
     for (PWR::Rule& rule : updated) {
-        // Only context-assignment rules are flipped. A window-property rule's
-        // SetEngineMode is a per-window intent, not a context assignment, so a
-        // global autotile disable has no business neutering it.
+        // Context-assignment rules only — a window-property rule that
+        // legitimately carries a SetEngineMode action is not an assignment,
+        // so a global autotile disable has no business neutering it.
         if (!isContextAssignmentRule(rule)) {
             continue;
         }
@@ -64,19 +61,17 @@ int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<QPair<QString, int>>& af
         if (!shouldFlip(entry)) {
             continue;
         }
-        QList<PWR::RuleAction> rebuiltActions = PWR::ContextRuleBridge::makeAssignmentActions(
-            modeToWireString(target), entry.snappingLayout, entry.tilingAlgorithm);
-        for (const PWR::RuleAction& action : std::as_const(rule.actions)) {
-            if (!isAssignmentSlotAction(action)) {
-                rebuiltActions.append(action);
-            }
-        }
-        rule.actions = rebuiltActions;
+        // Rewrite the slot actions to @p target — preserve all three layout
+        // fields so the flip can round-trip, and carry over everything that
+        // is not an assignment slot.
+        const PWR::Rule previous = rule;
+        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(
+            modeToWireString(target), entry.snappingLayout, entry.tilingAlgorithm, entry.scrollingTemplateLayout);
+        carryOverNonAssignmentActions(rule, previous);
         ++flipped;
 
-        // Recover (screen, desktop) for the layoutAssigned signal.
-        const ContextDims dims = decodeDims(rule.match);
-        affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+        // Recover the rule's own context for the layoutAssigned signal.
+        affected.insert(decodeDims(rule.match));
     }
     return flipped;
 }
@@ -85,13 +80,18 @@ int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<QPair<QString, int>>& af
 
 void LayoutRegistry::clearAutotileAssignments()
 {
-    // Flip every Autotile assignment rule to Snapping (preserving both layout
+    // Flip every Autotile assignment rule to Snapping (preserving the layout
     // fields) and drop autotile quick-layout slots.
     QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
-    QSet<QPair<QString, int>> affected;
-
-    // Flip to Snapping — preserve both layout fields so re-enabling
-    // autotile can restore the previous algorithm.
+    // `affected` collects the FULL context dims for the debug log; the EMIT
+    // loop below dedupes on (screen, desktop) only. That collapse is
+    // deliberate and safe: the payload resolves under m_currentActivity and
+    // layoutAssigned carries no activity, so two rules differing only in
+    // activity would produce byte-identical signals, each re-running the
+    // daemon's full engine-screen re-derive. (An older shape resolved the
+    // payload under each rule's OWN activity, and there the per-activity
+    // dedupe key was load-bearing — that payload is gone.)
+    QSet<ContextDims> affected;
     const int flipped =
         flipAssignmentModes(updated, affected, AssignmentEntry::Snapping, [](const AssignmentEntry& entry) {
             return entry.mode == AssignmentEntry::Autotile;
@@ -99,11 +99,12 @@ void LayoutRegistry::clearAutotileAssignments()
     bool changed = flipped > 0;
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
-    // includes the per-mode autotile bindings. Snapping slots are untouched.
-    // This is a ONE-WAY loss: restoreAutotileAssignments rebuilds the assignment
+    // includes the per-mode autotile bindings. The Snapping and Scrolling
+    // slots are untouched: each mode owns a separate array. This is a
+    // ONE-WAY loss: restoreAutotileAssignments rebuilds the assignment
     // rules but has nothing to rebuild these from, and writeQuickLayouts()
     // persists the wipe immediately.
-    auto& autotileSlots = m_quickLayoutSlots[modeIndex(AssignmentEntry::Autotile)];
+    auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();
         changed = true;
@@ -114,22 +115,41 @@ void LayoutRegistry::clearAutotileAssignments()
             qCWarning(lcZonesLib) << "clearAutotileAssignments: rule store refused to persist the flipped assignments";
         }
         writeQuickLayouts();
-        // Advisory emits: the layout pointer is always null, so these say "this
-        // context moved, re-resolve it" rather than carrying the new layout.
+        // The EMIT dedupes on (screen, desktop) only. The payload resolves
+        // under m_currentActivity and layoutAssigned carries no activity, so
+        // two rules differing only in activity would produce two BYTE-IDENTICAL
+        // signals — and each one re-runs updateEngineScreens, updateLayoutFilter
+        // and diffActiveAssignments in the daemon. `affected` keeps the full
+        // dims for the debug log's sake.
         //
         // A context rule with no screen dimension decodes to an empty screenId
         // and is skipped: the per-screen subscribers cannot act on it, and the
-        // LayoutAdaptor would relay a screenLayoutChanged("") onto the bus. The
-        // screen-agnostic subscribers (drag adaptor, overlay refresh) therefore
-        // see nothing when a screenless rule is the ONLY entry a flip touched,
-        // which is what the settings-driven reconcile that follows covers.
-        for (const auto& [sid, desk] : std::as_const(affected)) {
-            if (sid.isEmpty()) {
+        // LayoutAdaptor would relay a screenLayoutChanged("") onto the bus.
+        QSet<QPair<QString, int>> emitted;
+        for (const ContextDims& dims : std::as_const(affected)) {
+            if (dims.screenId.isEmpty()) {
                 continue;
             }
-            qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << sid
-                                << "desktop=" << desk;
-            Q_EMIT layoutAssigned(sid, desk, nullptr);
+            qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << dims.screenId
+                                << "desktop=" << dims.virtualDesktop << "activity=" << dims.activity;
+            const auto emitKey = qMakePair(dims.screenId, dims.virtualDesktop);
+            if (emitted.contains(emitKey)) {
+                continue;
+            }
+            emitted.insert(emitKey);
+            // Route through emitLayoutAssigned rather than a bare
+            // layoutAssigned(…, nullptr): the flip PRESERVED each rule's
+            // snapping layout, so observers should receive the layout the
+            // context now resolves to, not a null pointer that reads as
+            // "no layout here". The PAYLOAD resolves under the CURRENT
+            // activity — layoutAssigned carries only (screen, desktop, layout)
+            // and every consumer reads it as "this screen's layout now" —
+            // requestRecalculate recomputes zone geometry from it, the KCM
+            // renders it, the drag popup selects it. A rule pinned to a
+            // non-current activity changes nothing on screen, so resolving
+            // under its own activity would fan out a layout that is not live.
+            emitLayoutAssigned(dims.screenId, dims.virtualDesktop,
+                               assignmentIdForScreen(dims.screenId, dims.virtualDesktop, m_currentActivity));
         }
         qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
@@ -165,7 +185,7 @@ int LayoutRegistry::restoreAutotileAssignments()
     // snappingLayout is preserved on the way back, symmetric with the disable,
     // so a second disable returns each context to the same snap layout.
     QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
-    QSet<QPair<QString, int>> affected;
+    QSet<ContextDims> affected;
 
     const int restored =
         flipAssignmentModes(updated, affected, AssignmentEntry::Autotile, [](const AssignmentEntry& entry) {
@@ -177,15 +197,24 @@ int LayoutRegistry::restoreAutotileAssignments()
             qCWarning(lcZonesLib)
                 << "restoreAutotileAssignments: rule store refused to persist the restored assignments";
         }
-        // Advisory emits with a null layout pointer, and screenless context
-        // rules skipped — see the sibling loop in clearAutotileAssignments.
-        for (const auto& [sid, desk] : std::as_const(affected)) {
-            if (sid.isEmpty()) {
+        // Same emit shape as clearAutotileAssignments: dedupe on
+        // (screen, desktop), skip screenless context rules, and resolve the
+        // payload under the CURRENT activity so observers receive the layout
+        // the context now resolves to.
+        QSet<QPair<QString, int>> emitted;
+        for (const ContextDims& dims : std::as_const(affected)) {
+            if (dims.screenId.isEmpty()) {
                 continue;
             }
-            qCDebug(lcZonesLib) << "restoreAutotileAssignments: flipped back to Autotile for screen=" << sid
-                                << "desktop=" << desk;
-            Q_EMIT layoutAssigned(sid, desk, nullptr);
+            qCDebug(lcZonesLib) << "restoreAutotileAssignments: flipped back to Autotile for screen=" << dims.screenId
+                                << "desktop=" << dims.virtualDesktop << "activity=" << dims.activity;
+            const auto emitKey = qMakePair(dims.screenId, dims.virtualDesktop);
+            if (emitted.contains(emitKey)) {
+                continue;
+            }
+            emitted.insert(emitKey);
+            emitLayoutAssigned(dims.screenId, dims.virtualDesktop,
+                               assignmentIdForScreen(dims.screenId, dims.virtualDesktop, m_currentActivity));
         }
         qCInfo(lcZonesLib) << "Restored" << restored << "autotile assignments";
     }
@@ -213,15 +242,16 @@ struct BatchContext
 // @p decode maps a hash key to its cascade context; @p valid rejects an
 // ill-formed context (a desktop entry must pin desktop > 0, an activity
 // entry a non-empty activity, else a wrong-family base rule is built);
-// @p familyMatches selects which existing rules to drop; @p emitDesktop /
-// @p emitActivity are the context the closing layoutAssigned is computed
-// under (@p emitDesktop < 0 is the per-output-virtual-desktops sentinel, #648:
-// each screen's own current desktop is resolved at emit time; 0 = base/any);
-// @p label names the family in log output.
+// @p familyMatches selects which existing rules to drop; @p emitDesktop is
+// the desktop the closing layoutAssigned is computed under (@p emitDesktop < 0
+// is the per-output-virtual-desktops sentinel, #648: each screen's own current
+// desktop is resolved at emit time; 0 = base/any). There is no matching
+// activity parameter: the emit payload always resolves under m_currentActivity,
+// because layoutAssigned carries no activity and its consumers read it as the
+// screen's live layout. @p label names the family in log output.
 template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
 void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
-                                           FamilyFn familyMatches, int emitDesktop, const QString& emitActivity,
-                                           const char* label)
+                                           FamilyFn familyMatches, int emitDesktop, const char* label)
 {
     // Step 1 — snapshot existing exact-context entries AND their `enabled`
     // flag for every incoming key. The flag survives the batch rebuild
@@ -238,21 +268,38 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         AssignmentEntry entry;
         bool enabled = true;
         int priority = 0;
-        QList<PWR::RuleAction> survivors;
+        QUuid id;
+        // Every action of the prior rule that is NOT an assignment slot.
+        // makeAssignmentRule emits only the assignment slot actions and the rebuilt
+        // rule carries the deterministic context id, so it lands on the stored
+        // rule whether or not the family drop spared it — a wholesale replace
+        // therefore destroys a mixed rule's extra actions even when the purity
+        // gate deliberately kept the rule. Carried back in at rebuild time.
+        QList<PWR::RuleAction> preservedActions;
+        // The user-facing identity, preserved for the same reason
+        // upsertAssignmentRule preserves it: makeAssignmentRule is handed an
+        // empty name and stamps managed=false, so a batch "apply all" would
+        // blank the name the user gave a context rule in the Rules editor and
+        // clear the managed flag on a built-in, making it user-deletable.
+        QString name;
+        bool managed = false;
     };
     QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
+        // Same validity gate the rebuild loop applies (and the Combined
+        // sibling applies up front): an ill-formed key would otherwise route
+        // through findExactContextRule with a degenerate triple and snapshot
+        // an unrelated rule's entry as this key's prior state.
+        if (!valid(ctx)) {
+            continue;
+        }
         if (const PWR::Rule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
-            QList<PWR::RuleAction> survivors;
-            for (const PWR::RuleAction& action : existing->actions) {
-                if (!isAssignmentSlotAction(action)) {
-                    survivors.append(action);
-                }
-            }
-            oldEntries.insert(
-                it.key(),
-                {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, std::move(survivors)});
+            PWR::Rule carrier;
+            carryOverNonAssignmentActions(carrier, *existing);
+            oldEntries.insert(it.key(),
+                              {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority,
+                               existing->id, carrier.actions, existing->name, existing->managed});
         }
     }
 
@@ -264,17 +311,44 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
     // Step 2 — drop every rule belonging to this family; keep the rest.
+    //
+    // A snapshot rule that is NOT in the family SURVIVES this drop:
+    // findExactContextRule's shape fallback also claims a LAYOUT-ONLY rule
+    // (no SetEngineMode action), and the family predicate below spares
+    // exactly that shape. Step 3 rebuilds such a rule under its own id and
+    // replaces it in place via `keptIndexById`, mirroring
+    // upsertAssignmentRule's reassign-id + updateRule path. Appending the
+    // rebuild instead would leave the old rule in the set at the same
+    // priority, where RuleEvaluator's list-order tie-break hands it the win
+    // and a duplicate accumulates on every apply.
     QList<PWR::Rule> kept;
+    QHash<QUuid, int> keptIndexById;
+    // Contexts whose rules the family drop removed. Any that step 3 does not
+    // rebuild still needs a layoutAssigned at step 4 — the erasure changed
+    // what the context resolves to just as much as a rewrite does.
+    QSet<ContextDims> droppedContexts;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && familyMatches(rule.match)) {
+        // isPureAssignmentRule as well: a MIXED context rule (context-only
+        // match + SetEngineMode + a non-assignment action such as SetOpacity,
+        // LockContext or an animation override) satisfies the two family tests
+        // but is not this batch's to own. Dropping it deleted the rule
+        // outright when the incoming batch had no key for that context, and
+        // rebuilt it through makeAssignmentRule — which emits only the
+        // assignment slot actions — when it did, silently stripping the user's other
+        // actions. Both sibling paths (findExactContextRule's shape fallback
+        // and purgeLayoutIdFromAssignments) guard the same way.
+        if (hasEngineModeAction(rule) && familyMatches(rule.match) && isPureAssignmentRule(rule)) {
+            const ContextDims dims = decodeDims(rule.match);
+            droppedContexts.insert(dims);
             continue;
         }
+        keptIndexById.insert(rule.id, kept.size());
         kept.append(rule);
     }
 
     // Step 3 — rebuild the family from the incoming assignments.
     int count = 0;
-    QSet<QString> storedScreens;
+    QSet<ContextDims> storedContexts;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
         const QString& layoutId = it.value();
@@ -287,49 +361,105 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // stays empty so the settings UI can render a friendly title from
         // resolved screen / activity labels rather than baking the raw ids in.
         const QString logContext = contextRuleName(ctx.screenId, ctx.virtualDesktop, ctx.activity);
-        if (shouldSkipLayoutAssignment(layoutId, logContext)) {
-            continue;
-        }
         const bool hadOld = oldEntries.contains(it.key());
         const OldEntrySnapshot oldSnapshot = oldEntries.value(it.key());
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
+        // An EMPTY incoming id is NOT "no assignment here". It is what a
+        // MODE-ONLY pin looks like on the wire: a Snapping assignment with no
+        // explicit layout has an empty activeLayoutId(), so both the projection
+        // readers (desktopAssignments / activityAssignments) and the KCM's own
+        // per-screen map hand the empty string straight back on an "apply all".
+        // Dropping the entry on that value would ERASE the pin, because step 2
+        // already removed the whole family from `kept`. Rebuild from the prior
+        // snapshot instead, carrying its mode and both layout fields through
+        // untouched. With no prior rule there is genuinely nothing to preserve,
+        // so an empty id is skipped exactly as before.
+        if (layoutId.isEmpty()) {
+            if (!hadOld) {
+                continue;
+            }
+        } else if (shouldSkipLayoutAssignment(layoutId, logContext)) {
+            continue;
+        }
+        const AssignmentEntry entry =
+            layoutId.isEmpty() ? oldSnapshot.entry : AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
         // UPDATE preserves the stored priority; CREATE claims the next winning
         // seed value.
         const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
         PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
             QString(), ctx.screenId, ctx.virtualDesktop, ctx.activity, modeToWireString(entry.mode),
-            entry.snappingLayout, entry.tilingAlgorithm, priority);
+            entry.snappingLayout, entry.tilingAlgorithm, priority, entry.scrollingTemplateLayout);
         // Preserve the prior `enabled` flag — `makeAssignmentRule` always
         // stamps `enabled = true`. Mirrors the upsertAssignmentRule
         // precedent. If there's no prior snapshot (new assignment), the
         // default `enabled = true` from the OldEntrySnapshot ctor wins.
         rebuilt.enabled = oldSnapshot.enabled;
-        rebuilt.actions.append(oldSnapshot.survivors);
-        kept.append(rebuilt);
-        storedScreens.insert(ctx.screenId);
+        // Carry the prior rule's identity, then replace in place if that rule
+        // survived the family drop — see the step-2 note. On a rule the drop
+        // already removed the carry is inert: the id is either the
+        // deterministic one makeAssignmentRule stamps anyway, or the
+        // settings-UI uuid upsertAssignmentRule would have preserved too.
+        if (hadOld && !oldSnapshot.id.isNull()) {
+            rebuilt.id = oldSnapshot.id;
+        }
+        // Merge, never replace. The purity gate on the family drop SPARES a
+        // mixed rule, but sparing it is not enough on its own: the rebuild
+        // carries the same deterministic id, so the kept-index write below
+        // would overwrite the spared rule wholesale and strip exactly the
+        // actions the gate meant to protect. The user-facing identity rides
+        // across for the same reason upsertAssignmentRule preserves it.
+        rebuilt.actions += oldSnapshot.preservedActions;
+        rebuilt.name = oldSnapshot.name;
+        rebuilt.managed = oldSnapshot.managed;
+        if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
+            kept[*keptIt] = rebuilt;
+        } else {
+            keptIndexById.insert(rebuilt.id, kept.size());
+            kept.append(rebuilt);
+        }
+        storedContexts.insert(ContextDims{ctx.screenId, ctx.virtualDesktop, ctx.activity});
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
-    // Step 4 — one commit, then signal per stored screen.
-    //
-    // The emit is UNCONDITIONAL, not value-changed-gated. What the signal
-    // carries is the RESOLVED cascade value for the screen, and the only
-    // per-key state captured before the family drop is each key's own stored
-    // AssignmentEntry (Step 1) — not what the cascade resolved to. Gating would
-    // mean a second full assignmentIdForScreen pass over every incoming key's
-    // screen before the drop, purely to suppress a signal whose subscribers
-    // (geometry recalc, daemon refresh) already no-op on an unchanged value. A
-    // KCM "apply all" is the only caller, so the redundant emits are bounded by
-    // the screen count of one save.
+    // Step 4 — one commit, then signal per affected (screen, desktop).
     m_ruleStore->setAllRules(kept);
-    for (const QString& screenId : storedScreens) {
+    QSet<ContextDims> emitContexts;
+    for (const ContextDims& stored : std::as_const(storedContexts)) {
         // Per-output virtual desktops (#648): a desktop-family batch passes
         // emitDesktop < 0 so each screen refreshes against the desktop it is
         // actually showing, not a single global one. A concrete emitDesktop
         // (including 0 = base/any) is used verbatim.
-        const int ed = emitDesktop < 0 ? currentVirtualDesktopForScreen(screenId) : emitDesktop;
-        emitLayoutAssigned(screenId, ed, assignmentIdForScreen(screenId, ed, emitActivity));
+        const int ed = emitDesktop < 0 ? currentVirtualDesktopForScreen(stored.screenId) : emitDesktop;
+        emitContexts.insert(ContextDims{stored.screenId, ed, stored.activity});
+    }
+    // Union in the erased-only contexts; the set dedupes any that a rebuild
+    // already covers. These keep the DROPPED RULE'S OWN desktop rather than
+    // going through the #648 per-output resolution above, deliberately: the
+    // sentinel rewrite answers "which desktop is this screen showing" for a
+    // context that still exists, whereas an erased rule's observers are the
+    // ones pinned to the desktop it named. Rewriting them to the live desktop
+    // would leave the erased desktop's observers unnotified.
+    emitContexts.unite(droppedContexts);
+    // The PAYLOAD resolves under the CURRENT activity: layoutAssigned carries
+    // no activity of its own and every consumer reads it as "this screen's
+    // layout now", so resolving under a rule's non-current activity would hand
+    // them a layout that is not on screen. Because the payload is therefore
+    // activity-INDEPENDENT, the emit also dedupes on (screen, desktop) only —
+    // otherwise N rules differing solely in activity fan out N byte-identical
+    // signals, each re-running the daemon's full engine-screen re-derive.
+    QSet<QPair<QString, int>> emitted;
+    for (const ContextDims& ctx : std::as_const(emitContexts)) {
+        // ctx.virtualDesktop is the desktop to emit under: the #648 per-output
+        // sentinel was folded in when emitContexts was built for the REBUILT
+        // contexts, and an erased-only context carries the dropped rule's own
+        // desktop (see the unite above).
+        const auto emitKey = qMakePair(ctx.screenId, ctx.virtualDesktop);
+        if (emitted.contains(emitKey)) {
+            continue;
+        }
+        emitted.insert(emitKey);
+        emitLayoutAssigned(ctx.screenId, ctx.virtualDesktop,
+                           assignmentIdForScreen(ctx.screenId, ctx.virtualDesktop, m_currentActivity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << label << "assignments";
 }
@@ -345,7 +475,7 @@ void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assi
             return !ctx.screenId.isEmpty();
         },
         matchIsExactContextBase,
-        /*emitDesktop=*/0, /*emitActivity=*/QString(), "screen");
+        /*emitDesktop=*/0, "screen");
 }
 
 void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
@@ -358,7 +488,7 @@ void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, Q
         [](const BatchContext& ctx) {
             return !ctx.screenId.isEmpty() && ctx.virtualDesktop >= 1;
         },
-        matchIsExactContextDesktop, /*emitDesktop=*/-1, m_currentActivity, "desktop");
+        matchIsExactContextDesktop, /*emitDesktop=*/-1, "desktop");
 }
 
 void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
@@ -376,8 +506,7 @@ void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QStrin
         [](const BatchContext& ctx) {
             return !ctx.screenId.isEmpty() && !ctx.activity.isEmpty();
         },
-        PWR::ContextRuleBridge::matchIsExactContextActivityStrict, /*emitDesktop=*/0, /*emitActivity=*/QString(),
-        "activity");
+        PWR::ContextRuleBridge::matchIsExactContextActivityStrict, /*emitDesktop=*/0, "activity");
 }
 
 void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments)
@@ -394,9 +523,21 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         AssignmentEntry entry;
         bool enabled = true;
         int priority = 0;
-        // Non-slot actions carried across the rebuild — see the
-        // applyBatchAssignments snapshot for the clobber this closes.
-        QList<PWR::RuleAction> survivors;
+        QUuid id;
+        // Every action of the prior rule that is NOT an assignment slot.
+        // makeAssignmentRule emits only the assignment slot actions and the rebuilt
+        // rule carries the deterministic context id, so it lands on the stored
+        // rule whether or not the family drop spared it — a wholesale replace
+        // therefore destroys a mixed rule's extra actions even when the purity
+        // gate deliberately kept the rule. Carried back in at rebuild time.
+        QList<PWR::RuleAction> preservedActions;
+        // The user-facing identity, preserved for the same reason
+        // upsertAssignmentRule preserves it: makeAssignmentRule is handed an
+        // empty name and stamps managed=false, so a batch "apply all" would
+        // blank the name the user gave a context rule in the Rules editor and
+        // clear the managed flag on a built-in, making it user-deletable.
+        QString name;
+        bool managed = false;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
     // Validity gate up front: a malformed key (zero desktop or empty
@@ -415,15 +556,11 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         if (const PWR::Rule* existing = findExactContextRule(key.screenId, key.virtualDesktop, key.activity)) {
-            QList<PWR::RuleAction> survivors;
-            for (const PWR::RuleAction& action : existing->actions) {
-                if (!isAssignmentSlotAction(action)) {
-                    survivors.append(action);
-                }
-            }
-            oldEntries.insert(
-                key,
-                {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, std::move(survivors)});
+            PWR::Rule carrier;
+            carryOverNonAssignmentActions(carrier, *existing);
+            oldEntries.insert(key,
+                              {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority,
+                               existing->id, carrier.actions, existing->name, existing->managed});
         }
     }
 
@@ -431,19 +568,34 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // applyBatchAssignments for the rationale).
     int seedPriority = nextAssignmentPriority(m_ruleStore->ruleSet().rules());
 
+    // Family drop, with the same three carve-outs applyBatchAssignments makes:
+    // an index so a surviving layout-only snapshot rule is replaced in place
+    // rather than shadowed by a same-priority duplicate, a record of the
+    // erased contexts so a drop without a rebuild still signals, and the
+    // isPureAssignmentRule gate so a MIXED rule (context match + SetEngineMode
+    // + SetOpacity or LockContext) is left alone. Without that third gate the
+    // rebuild below emits only the assignment slot actions and the user's extra
+    // action is destroyed with no diagnostic.
     QList<PWR::Rule> kept;
+    QHash<QUuid, int> keptIndexById;
+    QSet<CombinedAssignmentKey> droppedKeys;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
+        if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)
+            && isPureAssignmentRule(rule)) {
+            const ContextDims dims = decodeDims(rule.match);
+            droppedKeys.insert(CombinedAssignmentKey{dims.screenId, dims.virtualDesktop, dims.activity});
             continue;
         }
+        keptIndexById.insert(rule.id, kept.size());
         kept.append(rule);
     }
 
     int count = 0;
-    // Per-(screen, desktop, activity) rule emit — multiple Combined rules
-    // at the same (screen, desktop) but different activities each fire
-    // their own layoutAssigned so observers can refresh against the
-    // exact rule that landed.
+    // The touched Combined keys, collected at full (screen, desktop, activity)
+    // resolution so the erased keys can be united in below. The emit loop that
+    // consumes this set dedupes down to (screen, desktop) — the payload is
+    // activity-independent — so several Combined keys on one screen+desktop
+    // produce a single signal.
     QSet<CombinedAssignmentKey> emittedKeys;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const CombinedAssignmentKey& key = it.key();
@@ -454,82 +606,117 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         const QString logContext = contextRuleName(key.screenId, key.virtualDesktop, key.activity);
-        if (shouldSkipLayoutAssignment(layoutId, logContext)) {
-            continue;
-        }
         const bool hadOld = oldEntries.contains(key);
         const OldEntrySnapshot oldSnapshot = oldEntries.value(key);
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
+        // Empty id = mode-only pin round-tripping back in, not a deletion.
+        // Same hazard and same handling as applyBatchAssignments — see the
+        // full rationale there.
+        if (layoutId.isEmpty()) {
+            if (!hadOld) {
+                continue;
+            }
+        } else if (shouldSkipLayoutAssignment(layoutId, logContext)) {
+            continue;
+        }
+        const AssignmentEntry entry =
+            layoutId.isEmpty() ? oldSnapshot.entry : AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
         const int priority = hadOld ? oldSnapshot.priority : seedPriority++;
         PWR::Rule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
             QString(), key.screenId, key.virtualDesktop, key.activity, modeToWireString(entry.mode),
-            entry.snappingLayout, entry.tilingAlgorithm, priority);
+            entry.snappingLayout, entry.tilingAlgorithm, priority, entry.scrollingTemplateLayout);
         rebuilt.enabled = oldSnapshot.enabled;
-        rebuilt.actions.append(oldSnapshot.survivors);
-        kept.append(rebuilt);
+        if (hadOld && !oldSnapshot.id.isNull()) {
+            rebuilt.id = oldSnapshot.id;
+        }
+        // Merge, never replace — identical reasoning to applyBatchAssignments.
+        rebuilt.actions += oldSnapshot.preservedActions;
+        rebuilt.name = oldSnapshot.name;
+        rebuilt.managed = oldSnapshot.managed;
+        if (const auto keptIt = keptIndexById.constFind(rebuilt.id); keptIt != keptIndexById.cend()) {
+            kept[*keptIt] = rebuilt;
+        } else {
+            keptIndexById.insert(rebuilt.id, kept.size());
+            kept.append(rebuilt);
+        }
         emittedKeys.insert(key);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
     m_ruleStore->setAllRules(kept);
-    // Per-rule emit using the rule's own (screen, desktop, activity) — the
-    // earlier shape passed an empty activity to assignmentIdForScreen, which
-    // never resolved to the just-stored Combined rule (Combined rules pin a
-    // non-empty activity, so the empty-activity cascade query falls through
-    // to a wider Desktop/Monitor rule). Observers would receive
-    // layoutAssigned(screen, desktop, wrongLayoutPtr) for the just-stored
-    // Combined rule. The signal still only carries (screenId, desktop,
-    // layoutPtr), but the layoutPtr we resolve here is now the right one.
-    //
-    // Only the keys that were STORED emit. A context deleted by omission (it was
-    // in the family before this batch and is absent from the incoming map) is
-    // dropped from the rule set with no layoutAssigned of its own. The daemon
-    // still learns about it, through setAllRules → rulesChanged → the assignment
-    // reconcile, so direct layoutAssigned subscribers must not treat this signal
-    // as a complete record of which contexts a batch touched.
+    // The PAYLOAD resolves under the CURRENT activity: layoutAssigned carries only (screenId, desktop,
+    // layoutPtr) and its consumers read that as the screen's live layout, so a
+    // Combined rule pinned to a non-current activity must not fan its layout
+    // out as though it were on screen.
+    emittedKeys.unite(droppedKeys);
+    // Deduped on (screen, desktop): the payload is activity-independent, so
+    // several Combined keys on one screen+desktop would otherwise fan out
+    // byte-identical signals, each re-running the daemon's engine-screen
+    // re-derive. Same reasoning as applyBatchAssignments.
+    QSet<QPair<QString, int>> emitted;
     for (const CombinedAssignmentKey& emitKey : std::as_const(emittedKeys)) {
+        const auto dedupKey = qMakePair(emitKey.screenId, emitKey.virtualDesktop);
+        if (emitted.contains(dedupKey)) {
+            continue;
+        }
+        emitted.insert(dedupKey);
         emitLayoutAssigned(emitKey.screenId, emitKey.virtualDesktop,
-                           assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, emitKey.activity));
+                           assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, m_currentActivity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << "combined assignments";
 }
 
-QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() const
+// NOTE (shared by the three projections below): the value is the decoded
+// AssignmentEntry — mode plus all three payload fields — so the D-Bus
+// getters can expose the scrolling template beside the activeLayoutId()
+// (which for a Scrolling context stays the bare "scrolling:" sentinel).
+// The batch SETTERS remain id-string-keyed; the rebuild seeds the template
+// from the stored entry, so the write round trip is lossless either way.
+QHash<CombinedAssignmentKey, AssignmentEntry> LayoutRegistry::combinedAssignments() const
 {
-    QHash<CombinedAssignmentKey, QString> result;
+    QHash<CombinedAssignmentKey, AssignmentEntry> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Strict Combined-only classifier — Activity-only and Desktop-only
         // rules stay in their own projections.
+        //
+        // NO purity gate. A MIXED rule (context assignment plus, say,
+        // SetOpacity) still assigns a layout to this context, and these three
+        // projections are what the D-Bus assignment getters return to the
+        // settings UI — gating them made such a context render as unassigned
+        // while resolveAssignmentEntry, which is purity-blind, still resolved
+        // its layout. The gate was compensating for a destructive write path;
+        // the rebuild now merges non-assignment actions instead of replacing
+        // them, so the round trip is lossless and the read can be honest.
         if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
         result[CombinedAssignmentKey{dims.screenId, dims.virtualDesktop, dims.activity}] =
-            entryFromRuleMatchActions(rule).activeLayoutId();
+            entryFromRuleMatchActions(rule);
     }
     return result;
 }
 
-QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
+QHash<QPair<QString, int>, AssignmentEntry> LayoutRegistry::desktopAssignments() const
 {
-    QHash<QPair<QString, int>, QString> result;
+    QHash<QPair<QString, int>, AssignmentEntry> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Use the same per-desktop family classifier the batch setter uses,
         // so a window-property rule carrying an engine-mode action plus an
         // incidental VirtualDesktop== predicate cannot leak in.
+        // No purity gate, for the same reason as combinedAssignments.
         if (!hasEngineModeAction(rule) || !matchIsExactContextDesktop(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
-        result[qMakePair(dims.screenId, dims.virtualDesktop)] = entryFromRuleMatchActions(rule).activeLayoutId();
+        result[qMakePair(dims.screenId, dims.virtualDesktop)] = entryFromRuleMatchActions(rule);
     }
     return result;
 }
 
-QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() const
+QHash<QPair<QString, QString>, AssignmentEntry> LayoutRegistry::activityAssignments() const
 {
-    QHash<QPair<QString, QString>, QString> result;
+    QHash<QPair<QString, QString>, AssignmentEntry> result;
     for (const PWR::Rule& rule : m_ruleStore->ruleSet().rules()) {
         // Use the STRICT per-activity classifier (Activity-only, no
         // Combined) so screen+desktop+activity rules are NOT projected
@@ -538,11 +725,12 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
         // vice versa) keyed by the same pair, silently losing one of
         // the rules. Combined rules live outside this projection and
         // are only reachable through the rule editor.
+        // No purity gate, for the same reason as combinedAssignments.
         if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextActivityStrict(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
-        result[qMakePair(dims.screenId, dims.activity)] = entryFromRuleMatchActions(rule).activeLayoutId();
+        result[qMakePair(dims.screenId, dims.activity)] = entryFromRuleMatchActions(rule);
     }
     return result;
 }

@@ -19,6 +19,7 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include "shader_resolve.h"
+#include "tilinghandler/tilinghandler.h"
 #include "window_query.h"
 
 #include <optional>
@@ -28,7 +29,11 @@ namespace PlasmaZones {
 
 void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
 {
-    if (!w || windowId.isEmpty()) {
+    // isDeleted matches the two sibling reconcilers below. Every current
+    // caller pre-checks it, so this is defence in depth: the body reads the
+    // window class and, on the non-shielded arm, walks the rule query — the
+    // exact id-cache re-pollution shouldHandleWindow guards corpses out of.
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
         return;
     }
     // Tri-state override, forwarded to the DecorationManager (Rule is the only
@@ -40,8 +45,29 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     //           contributes a force-show, see resolveEffectiveWindowAppearance)
     // The manager owns the capability gate and the geometry re-assert across
     // veto-driven decoration flips.
-    const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
-    m_decorationManager->setRuleOverride(windowId, ovr.hideTitleBar);
+    //
+    // Windowed-fullscreen hold: skipped outright, mirroring the layer
+    // reconciler below. The manager's veto path re-asserts geometry across a
+    // decoration flip, and mid-hold that re-assert would fight the strip's
+    // committed column rect (the hold's whole contract is that the rect
+    // stays the slot). The un-flag paths all drive updateAllDecorations,
+    // which re-runs this reconciler, so a rule change made during the hold
+    // lands at un-flag time.
+    if (m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
+    // Structural shield, same predicate the layer and open-fullscreen
+    // reconcilers use: hiding a title bar is a persistent window-state write,
+    // so a broad match expression must not reach a dock, the desktop, a
+    // notification, an OSD, or our own overlays. Previously unshielded, which
+    // let a titleBarScope=All config default resolve a hide for plasmashell's
+    // panel — inert only because KWin refuses to unset borders on a dock. A
+    // shielded window resolves to a DISENGAGED override rather than
+    // early-returning, so a window that mutated into a shielded class drains
+    // the override it was holding instead of stranding a hidden title bar.
+    const std::optional<bool> hideTitleBar =
+        isRuleShieldedSurface(w) ? std::nullopt : resolveEffectiveWindowAppearance(w, windowId).hideTitleBar;
+    m_decorationManager->setRuleOverride(windowId, hideTitleBar);
 }
 
 void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w)
@@ -60,31 +86,44 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
         return;
     }
+    // Windowed-fullscreen tiles own their keep flags for the duration of
+    // the hold: the feature keeps keep-below applied to defeat KWin's
+    // active-fullscreen layer promotion (TilingHandler::
+    // applyWindowedFullscreenLayerDemotion), and a rule writing over it
+    // would re-promote the tile above its strip. While flagged the window
+    // is skipped OUTRIGHT — apply and restore both: draining a parked rule
+    // snapshot here would clobber the demotion with the user's flags. The
+    // un-flag paths restore the pre-demotion flags, and the reconcile-driving
+    // ones (the batch un-flag arm's onComplete, the client self-exit arm, the
+    // float cleanups, the mode-swap/desktop-demote sweeps) run
+    // updateAllDecorations on the same edge, so those drain a parked
+    // snapshot at un-flag time. The snap<->snap screen-leave release
+    // (outputchange.cpp) is the one un-flag path that drives no reconcile of
+    // its own — a snapshot parked there drains at the next natural
+    // updateAllDecorations (any focus change), and restoreAllRuleWindowLayers
+    // covers teardown, so the wait is bounded by the next sweep rather than
+    // by the un-flag edge itself.
+    if (m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
     KWin::Window* kw = w->window();
     if (!kw) {
         return;
     }
     // Structural / own-surface shield, extending the SetOpacity paint gate
     // (paint_pipeline.cpp shields only the overlay / plasmashell classes;
-    // the portal and structural entries here are deliberate hardening for a
-    // raw window-state write): a broad match expression must never demote a
-    // dock, pin a notification, or strip the daemon overlay's own
-    // keep-above. Transients / popups are deliberately NOT shielded:
-    // transient utility surfaces are legitimate layer-rule targets, and
-    // transient exclusion is per-feature user opt-in in this project (the
-    // IsTransient match field), never hardcoded policy. A shielded window
-    // resolves as rule-free rather than early-returning — window
-    // classification can mutate mid-session (the Electron/CEF class swap,
-    // an X11 type change), and a window that was rule-held BEFORE mutating
-    // into a shielded class must drain its snapshot through the restore
-    // branch below instead of stranding the rule's flags. Fresh shielded
-    // windows skip the resolve entirely and never enter the map.
-    const QString winClass = w->windowClass();
-    const bool shielded = isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass)
-        || isXdgDesktopPortalSurface(winClass) || w->isDesktop() || w->isDock() || w->isNotification()
-        || w->isCriticalNotification() || w->isOnScreenDisplay();
+    // the portal and structural entries in the shared predicate are
+    // deliberate hardening for a raw window-state write). See
+    // isRuleShieldedSurface for the full rationale, including why transients
+    // are deliberately absent from it. A shielded window resolves as
+    // rule-free rather than early-returning — window classification can
+    // mutate mid-session (the Electron/CEF class swap, an X11 type change),
+    // and a window that was rule-held BEFORE mutating into a shielded class
+    // must drain its snapshot through the restore branch below instead of
+    // stranding the rule's flags. Fresh shielded windows skip the resolve
+    // entirely and never enter the map.
     std::optional<QString> layer;
-    if (!shielded) {
+    if (!isRuleShieldedSurface(w)) {
         layer = resolveWindowLayer(resolveRuleActions(w, windowId));
     }
     const auto it = m_ruleWindowLayerSnapshots.find(windowId);
@@ -119,6 +158,78 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     const bool below = (*layer == PhosphorRules::WindowLayerToken::Below);
     kw->setKeepAbove(above);
     kw->setKeepBelow(below);
+}
+
+void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::EffectWindow* w)
+{
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
+        return;
+    }
+    // No-rules fast path, same shape as the layer reconcile above — no
+    // snapshot map to drain here because the verdict is one-shot: it is
+    // applied exactly once, at windowAdded, and never re-reconciled (a rule
+    // edit mid-session must not yank an open window into or out of
+    // fullscreen; that is niri's open-fullscreen contract too).
+    if (!m_shaderManager.hasOpenFullscreenRules()) {
+        return;
+    }
+    // Same structural shield as the layer reconcile: a broad match must
+    // never fullscreen a dock, a notification, or our own overlay. Shielded
+    // windows skip the resolve entirely — with no snapshot to drain there is
+    // no restore branch to route them through, so the early return that would
+    // be wrong for the other two reconcilers is right here.
+    if (isRuleShieldedSurface(w)) {
+        return;
+    }
+    // Through the VERDICT evaluator, not the animation/appearance one: that
+    // evaluator honours ExcludeAnimations as a walk-stopper, so an
+    // "exclude this app from animations" rule at a higher priority cancelled
+    // the open-fullscreen decision before its slot could fill.
+    const std::optional<bool> verdict = resolveOpenFullscreen(resolveRuleVerdictActions(w, windowId));
+    if (!verdict) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    // Gate on the REQUESTED state (synchronous), not the committed one: at
+    // windowAdded a client that mapped fullscreen already carries the
+    // requested bit while the committed state may lag a round-trip. The flip
+    // runs BEFORE the window is announced to the daemon (this is called from
+    // slotWindowAdded ahead of the routing block), and isEligibleForTilingNotify
+    // rejects on requested-OR-committed fullscreen, so the announce path sees
+    // this window's final state either way.
+    //
+    // Bracketed through TilingHandler: on XWayland setFullScreen emits
+    // windowFullScreenChanged SYNCHRONOUSLY, re-entering
+    // slotWindowFullScreenChanged from inside slotWindowAdded — before this
+    // window has been announced at all. Its never-tracked exit arm then runs
+    // notifyWindowAdded for a window mid-open, releasing the first-frame
+    // restore suppression slotWindowAdded is about to arm and producing a
+    // visible spawn-then-jump. The counter is TilingHandler-private, so the
+    // bracketed write lives there (applyFullScreenSuppressed) rather than
+    // widening access to it.
+    if (*verdict && !kw->isRequestedFullScreen()) {
+        m_tilingHandler->applyFullScreenSuppressed(kw, true);
+    } else if (!*verdict && kw->isRequestedFullScreen()) {
+        m_tilingHandler->applyFullScreenSuppressed(kw, false);
+    }
+}
+
+std::optional<qreal> PlasmaZonesEffect::ruleScrollFactorFor(KWin::EffectWindow* w) const
+{
+    if (!w || w->isDeleted() || !m_shaderManager.hasScrollFactorRules()) {
+        return std::nullopt;
+    }
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    // Verdict evaluator, same reason as applyRuleOpenFullscreen above: a
+    // scroll multiplier is not an animation, so ExcludeAnimations must not
+    // stop the walk that fills its slot.
+    return resolveScrollFactor(resolveRuleVerdictActions(w, windowId));
 }
 
 void PlasmaZonesEffect::restoreAllRuleWindowLayers()

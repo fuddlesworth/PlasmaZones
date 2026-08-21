@@ -29,6 +29,20 @@ AnimationPageScope animationPageScope(const QString& page)
         {QStringLiteral("animations-side-panels"), {{QStringLiteral("panel")}, {}}},
         {QStringLiteral("animations-widgets"), {{QStringLiteral("widget")}, {}}},
         {QStringLiteral("animations-editor"), {{QStringLiteral("editor")}, {}}},
+        // Scopes to the root even though the page shows no card for it, which
+        // is the one place in this table where the scope is wider than the
+        // rows. AnimationsScrollingPage lists `scrolling.view` and
+        // `scrolling.tabSwitch` but no parent row: the two leaves carry
+        // DIFFERENT shader classes (strip vs tab), so no root-level pack
+        // could ever validate for both children and a cascade row would offer
+        // a choice that cannot mean anything for half the page. Scoping to
+        // the root anyway is deliberate: it is what
+        // lets this page's Reset clear an override that a motion set or preset
+        // wrote across the tree onto the bare path, which no other page would
+        // reach. Excluding the root instead would NOT work — the exclude list
+        // is subtree-matched, so it would take `scrolling.view` with it and
+        // leave the page owning nothing.
+        {QStringLiteral("animations-scrolling"), {{QStringLiteral("scrolling")}, {}}},
     };
     const auto it = kEventRoots.constFind(page);
     if (it != kEventRoots.cend())
@@ -39,7 +53,7 @@ AnimationPageScope animationPageScope(const QString& page)
     // WholeTree: that would make a Reset here clear every override across
     // osd/popup/panel/widget/editor as well, none of which this page shows.
     // These roots are held in lockstep with AnimationsSimplePage.qml's
-    // eventModel by test_animations_page_controller's
+    // eventModel by test_animations_qml_contracts'
     // simpleScopeCoversEverySimplePageCard, which parses that file's eventPath
     // entries and asserts each one is in scope here, so a card added there
     // without a root here fails the suite rather than falling silently outside

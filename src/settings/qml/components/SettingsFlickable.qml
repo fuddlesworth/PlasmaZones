@@ -58,7 +58,7 @@ import "../js/SearchAnchorHelpers.js" as SearchAnchors
  *     throw the scroll position away (see the model-swap scroll guard).
  *   - Avoiding nested Flickable / ListView / TextArea scroll surfaces
  *     unless they are intentionally height-clamped to their content
- *     (the `LayoutsPage.qml` pattern). Nested independent scrollers
+ *     (the `LayoutBrowserPage.qml` pattern). Nested independent scrollers
  *     compete with this handler for wheel events and wheel-over-the-
  *     inner produces double-scroll.
  *
@@ -87,10 +87,10 @@ Flickable {
     topMargin: Kirigami.Units.smallSpacing
 
     // ── Model-swap scroll guard ──────────────────────────────────────────
-    // A listing page that swaps its group model (LayoutsPage.rebuildModel and
+    // A listing page that swaps its group model (LayoutBrowserPage.rebuildModel and
     // friends) destroys every card delegate and rebuilds them over the
     // following frames. For that window the page's natural height collapses to
-    // the chrome alone — measured on the Layouts page: 4091 → 671 with a 694 px
+    // the chrome alone — measured on the layout browser: 4091 → 671 with a 694 px
     // viewport — so Flickable sees nothing scrollable, clamps `contentY` to the
     // top, and the cards then re-materialise around a scroll offset that is
     // gone for good. Any edit made while scrolled down (toggling a layout's
@@ -314,10 +314,11 @@ Flickable {
             //     that is on screen — so scroll to and pulse the nearest
             //     ancestor card, whose header carries that toggle, rather than
             //     dead-ending at the top of the page. An advanced-only row
-            //     reached in simple mode also lands here; the search index
-            //     filters those by tier (SearchEntry.advancedOnly), so it is an
-            //     index/row disagreement, and the card is at least a real,
-            //     on-screen destination.
+            //     reached in simple mode also lands here; search switches the
+            //     mode before navigating (SearchEntry.advancedOnly tags the
+            //     result), so reaching one in simple mode is an index/row
+            //     disagreement, and the card is at least a real, on-screen
+            //     destination.
             //   - It has no ancestor card (a bare page-level row): there is
             //     nothing to show it inside, so fall back to the top of the
             //     page, which is at least a real destination.
@@ -457,9 +458,9 @@ Flickable {
                 //     row — the user has to flip a switch on screen. Scroll to
                 //     and pulse the nearest ancestor card, whose header carries
                 //     that toggle. (An advanced-only row in simple mode also
-                //     lands here; the tier index normally filters it, so it is
-                //     an index/row disagreement, and the card is still a real
-                //     destination.)
+                //     lands here; search switches the mode before navigating,
+                //     so it is an index/row disagreement, and the card is
+                //     still a real destination.)
                 //   - It has none (a bare page-level row): nothing to show it
                 //     inside, so fall back to the top of the page.
                 settingsFlickable._revertRevealCards(pendingCards);

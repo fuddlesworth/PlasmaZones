@@ -55,7 +55,7 @@ void releaseOverlaySlotTextures(QQuickItem* slot)
     QImage placeholder(1, 1, QImage::Format_ARGB32);
     placeholder.fill(Qt::transparent);
     const QVariant placeholderVar = QVariant::fromValue(placeholder);
-    writeQmlProperty(slot, QStringLiteral("labelsTexture"), placeholderVar);
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::LabelsTexture), placeholderVar);
     writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), placeholderVar);
 }
 
@@ -361,7 +361,12 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
                     startShaderAnimation();
                 }
             }
-        } else {
+        } else if (!(m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible())) {
+            // m_shaderUpdateTimer is the SHARED iTime clock: it also drives the
+            // editor's shader preview (updateShaderUniforms writes iTime to
+            // m_shaderPreviewWindow), and only showShaderPreview restarts it.
+            // Stopping it here with the preview open would freeze the preview's
+            // animation until the editor re-opens it.
             stopShaderAnimation();
         }
     }
@@ -387,21 +392,32 @@ void OverlayService::updateGeometries()
 
 void OverlayService::highlightZone(const QString& zoneId)
 {
-    // Mark zone data dirty for shader overlay updates
-    m_zoneDataDirty = true;
+    // Mark zone data dirty for shader overlay updates - but never while
+    // warm-idled: setIdleForDragPause marks the blanked data CLEAN with a
+    // CRITICAL note (updateShaderUniforms re-derives the real zones whenever
+    // the flag is set, which would undo the blank and pay a full zone rebuild
+    // per idle screen inside the quiesce grace window).
+    if (!m_overlayIdled) {
+        m_zoneDataDirty = true;
+    }
 
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        if (!it_.value().overlayPhysScreen) {
+            continue; // dismissed slot - matches every sibling loop's gate
+        }
         auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
-            writeQmlProperty(slot, QStringLiteral("highlightedZoneId"), zoneId);
-            writeQmlProperty(slot, QStringLiteral("highlightedZoneIds"), QVariantList());
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), zoneId);
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         }
     }
 }
 
 void OverlayService::highlightZones(const QStringList& zoneIds)
 {
-    m_zoneDataDirty = true;
+    if (!m_overlayIdled) {
+        m_zoneDataDirty = true;
+    }
 
     QVariantList zoneIdList;
     for (const QString& zoneId : zoneIds) {
@@ -409,23 +425,35 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
     }
 
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        if (!it_.value().overlayPhysScreen) {
+            continue;
+        }
         auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
-            writeQmlProperty(slot, QStringLiteral("highlightedZoneIds"), zoneIdList);
-            writeQmlProperty(slot, QStringLiteral("highlightedZoneId"), QString());
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), zoneIdList);
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
         }
     }
 }
 
 void OverlayService::clearHighlight()
 {
-    m_zoneDataDirty = true;
+    if (!m_overlayIdled) {
+        m_zoneDataDirty = true;
+    }
 
+    // No overlayPhysScreen gate here, unlike the two highlight writers above:
+    // clearing is the one operation whose whole job is to leave clean state
+    // behind on a slot that is going away. The drag teardown calls hide()
+    // BEFORE clearHighlight(), and on the synchronous dismiss legs the
+    // callback has already nulled overlayPhysScreen by then — a gated clear
+    // left the last dragged zone's highlight on the slot, and the next show's
+    // patchZonesWithHighlight read it straight back.
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
         auto* slot = it_.value().mainOverlaySlot();
         if (slot) {
-            writeQmlProperty(slot, QStringLiteral("highlightedZoneId"), QString());
-            writeQmlProperty(slot, QStringLiteral("highlightedZoneIds"), QVariantList());
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         }
     }
 }
@@ -437,7 +465,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
     }
 
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value().mainOverlaySlot()) {
+        if (QQuickItem* slot = it.value().mainOverlaySlot()) {
             const QRect targetGeom = it.value().overlayGeometry;
             if (!targetGeom.isValid()) {
                 // Expected-transient: during a virtual-screen reconfigure an
@@ -450,7 +478,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
                 continue;
             }
             const QPointF local(cursorX - targetGeom.x(), cursorY - targetGeom.y());
-            it.value().mainOverlaySlot()->setProperty("mousePosition", local);
+            writeQmlProperty(slot, QStringLiteral("mousePosition"), local);
         }
     }
 }
@@ -480,7 +508,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     }
 
     bool usingShader = useShaderForScreen(screenId);
-    const QRect physScreenGeom = physScreen ? physScreen->geometry() : geometry;
+    const QRect physScreenGeom = physScreen->geometry();
     const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
 
     auto* slot = state->mainOverlaySlot();
@@ -495,7 +523,14 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     if (usingShader) {
         QImage placeholder(1, 1, QImage::Format_ARGB32);
         placeholder.fill(Qt::transparent);
-        writeQmlProperty(slot, QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::LabelsTexture), QVariant::fromValue(placeholder));
+        // Per the releaseOverlaySlotTextures contract above: a placeholder
+        // write MUST reset the hash, or updateLabelsTextureForWindow
+        // short-circuits on unchanged zone/font inputs and the 1x1
+        // placeholder keeps rendering with no labels. The reachable case is
+        // recreateOverlayWindowsOnTypeMismatch (shader->rectangle->shader
+        // flip), which routes here without a destroy/dismiss in between.
+        state->labelsTextureHash = 0;
     }
     writeQmlProperty(slot, QStringLiteral("useShader"), usingShader);
     writeQmlProperty(slot, QStringLiteral("loaded"), false);
@@ -527,6 +562,14 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         }
     }
 
+    // A live overlay can reach this path with a watcher already installed
+    // (type-flip recreate, handleScreenAdded on hotplug bursts) - disconnect
+    // the previous connection before installing the replacement, or duplicate
+    // geometryChanged handlers accumulate without bound and each geometry
+    // event re-runs updateOverlayWindow N times. Mirrors rekey.cpp's
+    // disconnect-before-reinstall.
+    QObject::disconnect(state->overlayGeomConnection);
+    state->overlayGeomConnection = {};
     QMetaObject::Connection geomConn = installOverlayGeometryWatcher(physScreen, screenId, isVS);
     if (usingShader) {
         writeQmlProperty(slot, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
@@ -572,7 +615,11 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
         return;
 
     const bool wasVisible = m_visible;
-    if (wasVisible)
+    // Same shared-clock guard as updateLayout: the editor preview rides
+    // m_shaderUpdateTimer, and the restart below is gated on
+    // anyScreenUsesShader(), which ignores the preview - so stopping with the
+    // preview open would freeze it when every screen flips to non-shader.
+    if (wasVisible && !(m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible()))
         stopShaderAnimation();
 
     for (const QString& screenId : screensToFlip) {
@@ -779,12 +826,27 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         writeQmlProperty(slot, QStringLiteral("bufferShaderPaths"), QVariant::fromValue(QStringList()));
         writeQmlProperty(slot, QStringLiteral("bufferFeedback"), false);
         writeQmlProperty(slot, QStringLiteral("bufferScale"), 1.0);
+        // Parse-default spelling, not a magic value: keep in lockstep with
+        // ShaderRegistry's absent-key default so a future default flip cannot
+        // silently diverge here.
+        writeQmlProperty(slot, QStringLiteral("halfFloatBuffers"), ShaderRegistry::ShaderInfo{}.halfFloatBuffers);
         writeQmlProperty(slot, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
         writeQmlProperty(slot, QStringLiteral("bufferWraps"), QStringList());
         writeQmlProperty(slot, QStringLiteral("bufferFilter"), QStringLiteral("linear"));
         writeQmlProperty(slot, QStringLiteral("bufferFilters"), QStringList());
         writeQmlProperty(slot, QStringLiteral("useDepthBuffer"), false);
         writeQmlProperty(slot, QStringLiteral("shaderParams"), QVariantMap());
+        // The apply path writes these three unconditionally / conditionally
+        // (applyShaderInfoToWindow), so the clear must reset them too or the
+        // slot keeps the old pack's param defines and pins the wallpaper
+        // QImage reference for its whole non-shader session.
+        writeQmlProperty(slot, QStringLiteral("paramPreamble"), QString());
+        writeQmlProperty(slot, QStringLiteral("useWallpaper"), false);
+        {
+            QImage placeholder(1, 1, QImage::Format_ARGB32);
+            placeholder.fill(Qt::transparent);
+            writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), QVariant::fromValue(placeholder));
+        }
     }
 
     QVariantList zones = buildZonesList(screenId, physScreen);
@@ -799,7 +861,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         }
     }
     writeQmlProperty(slot, QStringLiteral("previewZones"), anyZoneUsesPreview ? patched : QVariantList{});
-    writeQmlProperty(slot, QStringLiteral("zones"), patched);
+    writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
 
     if (windowIsShader && screenUsesShader) {
         int highlightedCount = 0;
@@ -808,8 +870,8 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
                 ++highlightedCount;
             }
         }
-        writeQmlProperty(slot, QStringLiteral("zoneCount"), patched.size());
-        writeQmlProperty(slot, QStringLiteral("highlightedCount"), highlightedCount);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::ZoneCount), patched.size());
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), highlightedCount);
         updateLabelsTextureForWindow(slot, patched, physScreen, screenLayout);
         // Note: zoneDataVersion is bumped and broadcast to all windows in
         // updateZonesForAllWindows() after all per-screen updates complete. Do not

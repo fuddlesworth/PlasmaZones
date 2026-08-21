@@ -20,7 +20,8 @@ enum CommandId {
     UpdateShaderId = 6, // UpdateShaderIdCommand
     UpdateShaderParams = 7, // UpdateShaderParamsCommand (single param mode only)
     UpdateGapOverride = 8, // UpdateGapOverrideCommand (same gap type merges)
-    UpdateFixedGeometry = 9 // UpdateFixedGeometryCommand (fixed pixel spinbox edits)
+    UpdateFixedGeometry = 9, // UpdateFixedGeometryCommand (fixed pixel spinbox edits)
+    UpdateTemplate = 10 // UpdateTemplateCommand (scrolling-template edits; merges per mergeKey)
 };
 
 } // namespace PlasmaZones

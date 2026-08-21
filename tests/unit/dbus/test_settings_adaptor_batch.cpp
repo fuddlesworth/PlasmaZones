@@ -14,6 +14,7 @@
  */
 
 #include <QTest>
+#include <QColor>
 #include <QDBusVariant>
 #include <QHash>
 #include <QJsonDocument>
@@ -111,7 +112,7 @@ private Q_SLOTS:
         const QStringList keys{
             QStringLiteral("borderWidth"),
             QStringLiteral("borderRadius"),
-            QStringLiteral("useSystemColors"),
+            QStringLiteral("showZoneNumbers"),
             QStringLiteral("adjacentThreshold"),
             QStringLiteral("pollIntervalMs"),
             QStringLiteral("minimumZoneSizePx"),
@@ -131,7 +132,7 @@ private Q_SLOTS:
         // would be silently replaced by the default. Pin the type here.
         QCOMPARE(result.value(QStringLiteral("borderWidth")).metaType().id(), QMetaType::Int);
         QCOMPARE(result.value(QStringLiteral("adjacentThreshold")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("useSystemColors")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("showZoneNumbers")).metaType().id(), QMetaType::Bool);
         QCOMPARE(result.value(QStringLiteral("overlayDisplayMode")).metaType().id(), QMetaType::Int);
     }
 
@@ -209,12 +210,17 @@ private Q_SLOTS:
     // return-value-only assertions can't distinguish guard-fires from
     // setter-runs-and-returns-true.
     //
-    // StubSettings::adjacentThreshold() returns 20 — supply 20 and the guard fires.
+    // Supply whatever the stub currently answers and the guard fires. Read
+    // rather than hardcoded: a literal here silently stops testing the guard
+    // the day the stub's value changes, because a DIFFERENT value takes the
+    // setter path and the call-count assertion then fails for the wrong
+    // reason — or worse, matches by accident.
     // ─────────────────────────────────────────────────────────────────────
     void testSetSetting_unchangedScalar_guardShortCircuits()
     {
         m_settings->setAdjacentThresholdCalls = 0;
-        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(20)));
+        const int current = m_settings->adjacentThreshold();
+        const bool ok = m_adaptor->setSetting(QStringLiteral("adjacentThreshold"), QDBusVariant(QVariant(current)));
         QVERIFY(ok);
         QCOMPARE(m_settings->setAdjacentThresholdCalls, 0);
     }
@@ -254,7 +260,7 @@ private Q_SLOTS:
     }
 
     // Composite (list-of-map) settings like dragActivationTriggers advertise
-    // schema "stringlist" but actually store QVariantList of QVariantMap.
+    // schema "maplist" and store QVariantList of QVariantMap.
     // The guard is gated on the actual variant type (not the schema string),
     // so list-type writes always fall through to the setter — which must
     // still return true via the registered setter lambda.
@@ -285,6 +291,7 @@ private Q_SLOTS:
         const QStringList keys{
             QStringLiteral("toggleActivation"),
             QStringLiteral("autotileDragInsertToggle"),
+            QStringLiteral("scrollingDragInsertToggle"),
             QStringLiteral("zoneSpanToggleMode"),
         };
 
@@ -299,10 +306,47 @@ private Q_SLOTS:
 
         // Each key resolves to its own ISettings accessor rather than collapsing
         // onto a neighbour.
-        QCOMPARE(result.value(QStringLiteral("toggleActivation")).toBool(), m_settings->toggleActivation());
-        QCOMPARE(result.value(QStringLiteral("autotileDragInsertToggle")).toBool(),
-                 m_settings->autotileDragInsertToggle());
-        QCOMPARE(result.value(QStringLiteral("zoneSpanToggleMode")).toBool(), m_settings->zoneSpanToggleMode());
+        //
+        // Comparing each against its accessor is NOT enough to show that, and
+        // used not to: all four default to false, so every comparison was
+        // false == false and an adaptor that wired all four keys to
+        // toggleActivation() passed unchanged — the exact collapse the claim
+        // denies. Bools give only two values, so no fixed assignment can make
+        // four keys pairwise distinct either. Flip ONE at a time instead and
+        // require the others to stay put; a shared getter moves them together
+        // and fails here.
+        //
+        // The writes go through the stub's TYPED setters rather than the
+        // adaptor, so only the getter half of the registry is under test here.
+        const QStringList toggleKeys{QStringLiteral("toggleActivation"), QStringLiteral("autotileDragInsertToggle"),
+                                     QStringLiteral("scrollingDragInsertToggle"), QStringLiteral("zoneSpanToggleMode")};
+        const auto setAll = [this](bool v) {
+            m_settings->setToggleActivation(v);
+            m_settings->setAutotileDragInsertToggle(v);
+            m_settings->setScrollingDragInsertToggle(v);
+            m_settings->setZoneSpanToggleMode(v);
+        };
+        const auto setOne = [this](const QString& key, bool v) {
+            if (key == QLatin1String("toggleActivation")) {
+                m_settings->setToggleActivation(v);
+            } else if (key == QLatin1String("autotileDragInsertToggle")) {
+                m_settings->setAutotileDragInsertToggle(v);
+            } else if (key == QLatin1String("scrollingDragInsertToggle")) {
+                m_settings->setScrollingDragInsertToggle(v);
+            } else {
+                m_settings->setZoneSpanToggleMode(v);
+            }
+        };
+        for (const QString& flipped : toggleKeys) {
+            setAll(false);
+            setOne(flipped, true);
+            const QVariantMap probe = m_adaptor->getSettings(toggleKeys);
+            for (const QString& k : toggleKeys) {
+                QVERIFY2(probe.value(k).toBool() == (k == flipped),
+                         qPrintable(QStringLiteral("flipping %1 moved %2").arg(flipped, k)));
+            }
+        }
+        setAll(false);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -392,6 +436,80 @@ private Q_SLOTS:
     // getter must not be registered there at all — consumers fall back to
     // the global animation duration.
     // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Theme-fallback colour keys over D-Bus. The three window colour keys are
+    // the only registry entries whose getter does non-trivial work (resolve
+    // the empty sentinel through the zone colour getters before marshalling)
+    // and whose setter has its own validity gate — the effect drops an empty
+    // colour reply as version skew, so an empty value on the wire would make
+    // every window border vanish with a green suite.
+    // ─────────────────────────────────────────────────────────────────────
+    void testResolvedFallbackColors_wireCarriesConcreteDistinctColors()
+    {
+        // Flip the two resolvers apart so the three keys are pairwise
+        // distinguishable — all three collapsing onto one getter is the
+        // wiring mistake this guards against (cf. the dragToggleKeys test).
+        m_settings->setHighlightColor(QColor(QStringLiteral("#80112233")));
+        m_settings->setInactiveColor(QColor(QStringLiteral("#40aabbcc")));
+
+        const QVariantMap result = m_adaptor->getSettings(QStringList{QStringLiteral("windowBorderColorActive"),
+                                                                      QStringLiteral("windowBorderColorInactive"),
+                                                                      QStringLiteral("windowTintColor")});
+        const QString active = result.value(QStringLiteral("windowBorderColorActive")).toString();
+        const QString inactive = result.value(QStringLiteral("windowBorderColorInactive")).toString();
+        const QString tint = result.value(QStringLiteral("windowTintColor")).toString();
+        // Concrete and valid — never the empty sentinel.
+        QVERIFY(!active.isEmpty() && QColor(active).isValid());
+        QVERIFY(!inactive.isEmpty() && QColor(inactive).isValid());
+        QVERIFY(!tint.isEmpty() && QColor(tint).isValid());
+        // Active and tint resolve through the highlight, inactive through the
+        // zone inactive colour.
+        QCOMPARE(QColor(active), m_settings->highlightColor());
+        QCOMPARE(QColor(tint), m_settings->highlightColor());
+        QCOMPARE(QColor(inactive), m_settings->inactiveColor());
+    }
+
+    void testResolvedFallbackColors_setterContract()
+    {
+        // Garbage is refused and nothing is written.
+        QVERIFY(!m_adaptor->setSetting(QStringLiteral("windowBorderColorActive"),
+                                       QDBusVariant(QStringLiteral("not-a-color"))));
+        QCOMPARE(m_settings->windowBorderColorActive(), QString());
+
+        // A concrete pick pins; the raw companion key serves the stored
+        // value verbatim.
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorActive"),
+                                      QDBusVariant(QStringLiteral("#ff123456"))));
+        QCOMPARE(m_settings->windowBorderColorActive(), QStringLiteral("#ff123456"));
+        const QVariantMap raw = m_adaptor->getSettings(QStringList{QStringLiteral("windowBorderColorActiveRaw")});
+        QCOMPARE(raw.value(QStringLiteral("windowBorderColorActiveRaw")).toString(), QStringLiteral("#ff123456"));
+
+        // The empty sentinel (and its legacy "accent" alias) un-pins.
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorActive"), QDBusVariant(QString())));
+        QCOMPARE(m_settings->windowBorderColorActive(), QString());
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowTintColor"), QDBusVariant(QStringLiteral("#ff222222"))));
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowTintColor"), QDBusVariant(QStringLiteral("accent"))));
+        QCOMPARE(m_settings->windowTintColor(), QString());
+    }
+
+    void testResolvedFallbackColors_echoWriteKeepsFollowing()
+    {
+        // Writing back the currently-RESOLVED colour while following is the
+        // get→set echo: the equality guard keeps the key following (returns
+        // true, stores nothing) — the documented non-destructive round-trip.
+        // A caller that wants an exact pin uses the *Raw companion.
+        QCOMPARE(m_settings->windowBorderColorInactive(), QString());
+        const QString resolved = m_settings->inactiveColor().name(QColor::HexArgb);
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorInactive"), QDBusVariant(resolved)));
+        QCOMPARE(m_settings->windowBorderColorInactive(), QString());
+        // The raw companion pins the identical value when that is the intent.
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorInactiveRaw"), QDBusVariant(resolved)));
+        QCOMPARE(m_settings->windowBorderColorInactive(), resolved);
+        // Clean up for later slots (the fixture is rebuilt per test, but be
+        // explicit about the state this test leaves).
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorInactiveRaw"), QDBusVariant(QString())));
+    }
+
     void testMotionProfileTree_absentWhenNoRegistry()
     {
         QVERIFY(!m_adaptor->getSettingKeys().contains(QStringLiteral("motionProfileTree")));

@@ -5,10 +5,10 @@
 
 // Picker-composition helpers for the unified layout list.
 //
-// A "unified layout" is one row in the layout-picker UI - it can back either
-// a manual zone-based layout OR an autotile algorithm, and the composition
-// functions stitch both sources into a single sorted list for the overlay /
-// zone selector / D-Bus layout list.
+// A "unified layout" is one row in the layout-picker UI. It can back a manual
+// zone-based layout, an autotile algorithm, or a native scrolling template,
+// and the composition functions stitch all three sources into a single sorted
+// list for the overlay / zone selector / D-Bus layout list.
 //
 // The canonical entry type is @c PhosphorLayout::LayoutPreview (from
 // phosphor-layout-api). All helpers in this header operate on it directly -
@@ -35,6 +35,7 @@ class ILayoutSource;
 
 namespace PhosphorZones {
 class IZoneLayoutRegistry;
+class ScrollingTemplateStore;
 class Layout;
 }
 
@@ -53,7 +54,8 @@ namespace PhosphorZones::LayoutUtils {
 using ::PlasmaZones::IOrderingSettings;
 
 /**
- * @brief Build list of all available layouts (manual, and optionally autotile)
+ * @brief Build list of all available layouts (manual, optionally autotile,
+ *        and the native scrolling templates when a store is supplied)
  *
  * When @p includeAutotile is true the helper needs a way to enumerate
  * autotile previews. It picks the input as follows:
@@ -67,12 +69,18 @@ using ::PlasmaZones::IOrderingSettings;
  *      registry for this one call. Cache is discarded between calls.
  * Either must be non-null when @p includeAutotile is true; the registry
  * is acceptable for code paths that don't yet hold a bundle reference.
+ *
+ * Scrolling templates have no bool gate on this overload, unlike the
+ * context-filtered one below: they are included exactly when @p templateStore
+ * is non-null. This overload answers "everything that exists", so a caller
+ * that does not want template rows passes no store.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
 buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, bool includeAutotile = false,
                        const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
-                       QSize autotilePreviewCanvas = {});
+                       QSize autotilePreviewCanvas = {},
+                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr);
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -80,12 +88,37 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
  * Filters out layouts that are:
  * - hiddenFromSelector = true
  * - Not allowed on the given screen/desktop/activity (if allow lists are non-empty)
- * - Not matching the screen's aspect ratio class (if layout has an aspectRatioClass tag)
+ * - Not matching the screen's aspect ratio class, when @p filterByAspectRatio
+ *   is true and @p screenAspectRatio is known
  *
- * Layouts tagged with a non-matching aspect ratio class are not removed entirely;
- * they are moved to the end of the list so the selector can show them in a
- * collapsed "Other" section. The `recommended` field in the returned entry
- * indicates whether the layout matches the current screen's aspect ratio.
+ * The context's ACTIVE layout is exempt from every one of these so the selector and
+ * cycling can never lose it.
+ *
+ * @p screenAspectRatio alone only TAGS rows: it sets `recommended` on each
+ * entry, which a caller can use to group the mismatched ones. Rows are dropped
+ * only when @p filterByAspectRatio is also true.
+ *
+ * @p includeScrollingTemplates gates the native ScrollingTemplate rows, and
+ * @p templateStore supplies them — both are needed for template entries to
+ * appear. Unlike the manual layouts above, template rows pass through
+ * unfiltered: no allow lists, no hidden flag and no aspect filter apply to
+ * them (a column vocabulary is not a placement, so screen shape says nothing
+ * about its fit).
+ *
+ * @p includeNoneRow adds the synthetic "None" picker row (the sort pins it
+ * last). On a template list (@p includeScrollingTemplates true) it is the
+ * template-flavoured opt-out, store-independent — it appears even when the
+ * store is empty or null (see appendScrollingTemplatePreviews in the .cpp).
+ * On every other list it is the generic no-layout row: one row however many
+ * families the list mixes, because the opt-out belongs to the context, not
+ * to a family — the apply path resolves which slot it clears from the
+ * context's current mode.
+ *
+ * @p stripVerticalAxis is this screen's strip axis. Template cards are a
+ * picture of the columns the strip will hold, so on a screen whose strip runs
+ * vertically they have to draw their bands stacked rather than in a row. A
+ * caller with no axis source passes false and gets the horizontal depiction,
+ * which is what every non-scrolling screen shows anyway.
  *
  * See the non-filtered overload for @p autotileSource / @p algorithmRegistry
  * semantics - same fallback rules apply.
@@ -96,13 +129,26 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
                        int virtualDesktop, const QString& activity, bool includeManual = true,
                        bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
                        const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
-                       QSize autotilePreviewCanvas = {});
+                       QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
+                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr, bool includeNoneRow = false,
+                       bool stripVerticalAxis = false);
 
 /**
  * @brief Build a combined custom order list from settings
+ *
+ * Each flag mirrors the matching include* argument of the FILTERED
+ * buildUnifiedLayoutList overload: pass the same values so the order list
+ * covers exactly the families the preview list carries. The flat overload
+ * takes only includeAutotile — its manual arm is unconditional and its
+ * template arm is gated on a non-null template store — so a flat-overload
+ * caller mirrors includeAutotile and passes includeManual = true, plus
+ * includeScrollingTemplates = true iff it also passes a store (unmatched ids
+ * in the order are inert either way). Template ids need no namespace prefix
+ * (the order and the previews both use the braced-UUID string), unlike the
+ * tiling arm.
  */
 PLASMAZONES_EXPORT QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual,
-                                                bool includeAutotile);
+                                                bool includeAutotile, bool includeScrollingTemplates = false);
 
 /**
  * @brief Find a preview by ID in the list

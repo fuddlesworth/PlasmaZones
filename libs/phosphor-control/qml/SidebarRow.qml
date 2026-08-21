@@ -59,14 +59,26 @@ QQC2.ItemDelegate {
     // Accessible.name is always the row's title — in compact mode the
     // visible Label is hidden, so a screen reader would otherwise have
     // no announceable content. Divider rows are flagged so AT tools
-    // skip them rather than reading "Button".
-    Accessible.name: rowItem._isDivider ? "" : rowItem.title
+    // skip them rather than reading "Button". Collapsible headers fold
+    // their expand state into the name: Qt Quick's Accessible attached
+    // object exposes no `expanded` state (checked through 6.11), and
+    // without it a header announces as a plain button with no hint
+    // that it toggles a subtree.
+    Accessible.name: {
+        if (rowItem._isDivider)
+            return "";
+        if (rowItem._isCollapsibleHeader)
+            return rowItem._isExpanded ? qsTr("%1 section, expanded").arg(rowItem.title) : qsTr("%1 section, collapsed").arg(rowItem.title);
+        return rowItem.title;
+    }
     Accessible.role: rowItem._isDivider ? Accessible.Separator : Accessible.Button
     // Active row reads as "checked" to AT tools (matches the visual
     // highlight + bold label affordance). Dividers stay
-    // un-checkable — they're ornament with role Separator.
-    Accessible.checkable: !rowItem._isDivider
-    Accessible.checked: !rowItem._isDivider && rowItem.isCurrent
+    // un-checkable — they're ornament with role Separator — and
+    // headers too: a header is never the current page, so a checkable
+    // header would only announce a perpetual "not checked".
+    Accessible.checkable: !rowItem._isDivider && !rowItem._isCollapsibleHeader
+    Accessible.checked: !rowItem._isDivider && !rowItem._isCollapsibleHeader && rowItem.isCurrent
     // Dividers are visual ornament — disable click routing and any
     // focus/hover state so the cursor doesn't change passing over them.
     enabled: !rowItem._isDivider
@@ -168,10 +180,14 @@ QQC2.ItemDelegate {
         visible: !rowItem._isDivider
 
         // Per-row icon. Collapsible-category headers don't have their
-        // own icon (the rotating chevron at the end of the row does
-        // that duty) — they show no leading icon in legacy.
+        // own icon in the wide rail (the rotating chevron at the end of
+        // the row does that duty) — they show no leading icon in
+        // legacy. COMPACT is the exception: it hides the label and the
+        // chevron too, which left a header as a completely blank (but
+        // clickable) row, so a header that registered an icon shows it
+        // there as its only visible content.
         Kirigami.Icon {
-            visible: !rowItem._isCollapsibleHeader && rowItem.iconSource !== ""
+            visible: (!rowItem._isCollapsibleHeader || rowItem.compact) && rowItem.iconSource !== ""
             source: rowItem.iconSource
             Layout.preferredWidth: Kirigami.Units.iconSizes.small
             Layout.preferredHeight: Kirigami.Units.iconSizes.small

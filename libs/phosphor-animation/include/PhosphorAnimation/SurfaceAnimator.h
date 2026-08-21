@@ -322,6 +322,29 @@ public:
     void setEnabled(bool enabled);
     bool isEnabled() const;
 
+    /// Destroy every parked (pending-reuse) shader tower now.
+    ///
+    /// Parking exists so rapid show/hide toggling reuses one ShaderEffect /
+    /// ShaderEffectSource / render-node tower per (surface, target) instead
+    /// of flooding deleteLater — but a parked tower holds its FBOs and
+    /// pipelines for the SURFACE's lifetime, and the keep-alive overlay
+    /// shells outlive every animation (they are destroyed only on screen
+    /// removal), so after the first animated show the towers are effectively
+    /// immortal. A consumer with an idle notion (the daemon's quiesce grace)
+    /// calls this once genuine rest is established: destruction goes through
+    /// the same deleteLater path a superseding non-shader leg uses, active
+    /// tracks are untouched (their pieces live on the track, not in the
+    /// reuse stash), and the next animated leg simply builds a fresh tower —
+    /// the cost parking amortises is per-toggle, not per-rest.
+    void releaseParkedShaders();
+
+    /// Any parked towers currently held? The consumer's idle scheduler
+    /// gates on this: a rest period with towers parked is worth arming a
+    /// reclaim for even when nothing else (render loop, audio capture)
+    /// needs winding down — an OSD-only session parks towers without ever
+    /// starting either.
+    bool hasParkedShaders() const;
+
 private:
     class Private;
     std::unique_ptr<Private> d;

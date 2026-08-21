@@ -27,6 +27,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
+#include <QDBusArgument>
 #include <QDebug>
 #include <QSet>
 #include <QStringList>
@@ -146,6 +147,56 @@ bool SettingsController::pageSupportsDiscard(const QString& page) const
     return pageSupportsReset(page);
 }
 
+bool SettingsController::stageQuickSlotClears(int wireMode, bool& stagedAny)
+{
+    stagedAny = false;
+    // Fetch the whole map in ONE D-Bus call. The per-slot accessors fall through
+    // to the daemon for any slot with no staged value, so a per-slot loop would
+    // block the GUI thread on up to nine sequential round-trips — and an
+    // all-default page would pay all nine to stage nothing.
+    const QDBusMessage slotsReply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                               QStringLiteral("getAllQuickLayoutSlots"), {wireMode});
+    if (slotsReply.type() != QDBusMessage::ReplyMessage) {
+        // An error map is indistinguishable from "all slots already unassigned",
+        // so falling through would stage nothing, reconcile the page CLEAN, and
+        // look exactly like a successful reset of a page that had no
+        // assignments. Report the refusal instead, and let the caller word it.
+        qCWarning(PlasmaZones::lcCore) << "stageQuickSlotClears: could not read quick layout slots from the daemon:"
+                                       << slotsReply.errorMessage();
+        return false;
+    }
+    // a{sv} arrives as a QDBusArgument, and QVariant::toMap() on one yields an
+    // EMPTY map — indistinguishable from "every slot already unassigned", which
+    // would stage nothing and reconcile the page clean. qdbus_cast demarshals it
+    // and degrades to qvariant_cast when the argument is already a QVariantMap
+    // (an in-process caller that never crossed the bus).
+    const QVariantMap allSlots = qdbus_cast<QVariantMap>(slotsReply.arguments().value(0));
+    for (int slot = 1; slot <= QUICK_LAYOUT_SLOT_COUNT; ++slot) {
+        // Staged value wins over the daemon's, matching the per-slot accessors'
+        // precedence.
+        QString current;
+        const bool haveStaged = wireMode == QuickSlotModeSnapping ? m_staging.stagedSnappingQuickSlot(slot, current)
+            : wireMode == QuickSlotModeScrolling                  ? m_staging.stagedScrollingQuickSlot(slot, current)
+                                                                  : m_staging.stagedTilingQuickSlot(slot, current);
+        if (!haveStaged)
+            current = allSlots.value(QString::number(slot)).toString();
+        // An already-empty slot needs no change, so resetting an all-default
+        // page stages nothing (the page stays clean) and Save flushes no no-op
+        // clears.
+        if (current.isEmpty())
+            continue;
+        if (wireMode == QuickSlotModeSnapping)
+            m_staging.stageSnappingQuickSlot(slot, QString());
+        else if (wireMode == QuickSlotModeScrolling)
+            m_staging.stageScrollingQuickSlot(slot, QString());
+        else
+            m_staging.stageTilingQuickSlot(slot, QString());
+        stagedAny = true;
+    }
+    return true;
+}
+
 void SettingsController::resetPage(const QString& page)
 {
     // Manifest-owned pages FIRST, mirroring isPageDirty and discardPage. A page
@@ -166,11 +217,24 @@ void SettingsController::resetPage(const QString& page)
         const auto& manifest = pageOwnedConfigKeys();
         const auto ownedIt = manifest.constFind(page);
         if (ownedIt != manifest.constEnd()) {
+            // The mode enable switches are manifest-owned (for dirty/save/
+            // discard) but a page Reset must not flip the mode itself, and
+            // the two cross-page default selections are manifest-owned the
+            // same way but set from the library pages, which the owner page
+            // shows no row for — strip both exemption lists before handing
+            // the list to resetKeys.
+            Settings::ConfigKeyList keys = *ownedIt;
+            for (const Settings::ConfigKey& exempt : resetExemptModeEnableKeys()) {
+                keys.removeAll(exempt);
+            }
+            for (const Settings::ConfigKey& exempt : resetExemptDefaultSelectionKeys()) {
+                keys.removeAll(exempt);
+            }
             // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;
             // reconcile `page`'s dirty state explicitly below.
             {
                 const ScopedFlag loadingScope(m_loading);
-                m_settings.resetKeys(*ownedIt);
+                m_settings.resetKeys(keys);
             }
             reconcilePageDirty(page);
             return;
@@ -199,14 +263,18 @@ void SettingsController::resetPage(const QString& page)
     }
 
     // Ordering pages: "reset to defaults" means dropping the custom order.
-    // resetSnappingOrder/resetTilingOrder stage the empty (default) order and
-    // mark the active page dirty themselves.
+    // resetSnappingOrder/resetTilingOrder/resetScrollingOrder stage the empty
+    // (default) order and reconcile their own page's dirty membership
+    // themselves.
     switch (orderingPageKind(page)) {
     case OrderingPageKind::Snapping:
         resetSnappingOrder();
         return;
     case OrderingPageKind::Tiling:
         resetTilingOrder();
+        return;
+    case OrderingPageKind::Scrolling:
+        resetScrollingOrder();
         return;
     case OrderingPageKind::None:
         break;
@@ -218,51 +286,20 @@ void SettingsController::resetPage(const QString& page)
     // all-default page stages nothing (stays clean) and Save flushes no no-op
     // clears. quickLayoutSlotsChanged refreshes the slot cards.
     if (isShortcutsPage(page)) {
-        const bool snapping = (page == QLatin1String("snapping-shortcuts"));
-        // Fetch the whole map in ONE D-Bus call. The per-slot accessors fall
-        // through to the daemon for any slot with no staged value, so the
-        // loop below used to block the GUI thread on up to nine sequential
-        // round-trips — and an all-default page paid all nine to stage nothing.
-        const QDBusMessage slotsReply =
-            DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                   QStringLiteral("getAllQuickLayoutSlots"), {snapping ? 0 : 1});
-        if (slotsReply.type() != QDBusMessage::ReplyMessage) {
-            // Every per-slot accessor this replaced guards the reply type. An
-            // error map is indistinguishable from "all slots already
-            // unassigned", so falling through would stage nothing, reconcile
-            // the page CLEAN, and look exactly like a successful reset of a
-            // page that had no assignments. Refuse instead, and say so: this
-            // is the same contract clearAllOverrides() uses for a daemon it
-            // cannot reach.
-            qCWarning(PlasmaZones::lcCore)
-                << "resetPage: could not read quick layout slots from the daemon:" << slotsReply.errorMessage();
+        bool staged = false;
+        const int wireMode = page == QLatin1String("snapping-shortcuts") ? QuickSlotModeSnapping
+            : page == QLatin1String("scrolling-shortcuts")               ? QuickSlotModeScrolling
+                                                                         : QuickSlotModeTiling;
+        if (!stageQuickSlotClears(wireMode, staged)) {
             // Reconcile before leaving so a pre-existing stale dirty entry for
             // this page is cleaned on this exit too, matching every other path.
             reconcilePageDirty(page);
             Q_EMIT pageResetFailed(page, QString(ReasonDaemonUnreachable));
             return;
         }
-        const QVariantMap allSlots = slotsReply.arguments().value(0).toMap();
-        bool staged = false;
-        for (int slot = 1; slot <= QUICK_LAYOUT_SLOT_COUNT; ++slot) {
-            // Staged value wins over the daemon's, matching the per-slot
-            // accessors' precedence.
-            QString current;
-            const bool haveStaged = snapping ? m_staging.stagedSnappingQuickSlot(slot, current)
-                                             : m_staging.stagedTilingQuickSlot(slot, current);
-            if (!haveStaged)
-                current = allSlots.value(QString::number(slot)).toString();
-            if (current.isEmpty())
-                continue;
-            if (snapping)
-                m_staging.stageSnappingQuickSlot(slot, QString());
-            else
-                m_staging.stageTilingQuickSlot(slot, QString());
-            staged = true;
-        }
-        // Only when something actually changed: the comment above already says
-        // an all-default page stages nothing, so firing the NOTIFY regardless
-        // would contradict it and re-run every bound slot card for no edit.
+        // Only when something actually changed: an all-default page stages
+        // nothing, so firing the NOTIFY regardless would re-run every bound
+        // slot card for no edit.
         if (staged)
             Q_EMIT quickLayoutSlotsChanged();
         reconcilePageDirty(page);
@@ -380,7 +417,7 @@ void SettingsController::resetPage(const QString& page)
     // ConfigDefaults::decorationProfileTree at lowest precedence). So a SURFACE
     // page clears only its own root subtree's overrides — the seeds show
     // through again, restoring the default chrome for seeded surfaces and "no
-    // decoration" everywhere else — leaving the other two roots (and the
+    // decoration" everywhere else — leaving the other three roots (and the
     // global baseline) standing; a non-surface leaf (sets/shaders, empty root)
     // resets the whole tree key.
     // Staged like ordinary edits: Save commits, Discard restores the baseline.
@@ -492,6 +529,13 @@ void SettingsController::discardPage(const QString& page)
         }
         reconcilePageDirty(page);
         return;
+    case OrderingPageKind::Scrolling:
+        if (m_stagedScrollingOrder.has_value()) {
+            m_stagedScrollingOrder.reset();
+            Q_EMIT stagedScrollingOrderChanged();
+        }
+        reconcilePageDirty(page);
+        return;
     case OrderingPageKind::None:
         break;
     }
@@ -500,11 +544,15 @@ void SettingsController::discardPage(const QString& page)
     // fall back to the daemon's saved slots.
     if (isShortcutsPage(page)) {
         const bool snapping = (page == QLatin1String("snapping-shortcuts"));
-        const bool hadStaged =
-            snapping ? m_staging.hasStagedSnappingQuickSlots() : m_staging.hasStagedTilingQuickSlots();
+        const bool scrolling = (page == QLatin1String("scrolling-shortcuts"));
+        const bool hadStaged = snapping ? m_staging.hasStagedSnappingQuickSlots()
+            : scrolling                 ? m_staging.hasStagedScrollingQuickSlots()
+                                        : m_staging.hasStagedTilingQuickSlots();
         if (hadStaged) {
             if (snapping)
                 m_staging.clearSnappingQuickSlots();
+            else if (scrolling)
+                m_staging.clearScrollingQuickSlots();
             else
                 m_staging.clearTilingQuickSlots();
             Q_EMIT quickLayoutSlotsChanged();
@@ -602,8 +650,9 @@ void SettingsController::discardPage(const QString& page)
 
     // Decoration pages: discard reverts to the committed baseline. A SURFACE page
     // reverts only its own root subtree — each such path is restored to the
-    // baseline's value (re-added, changed, or removed) while the other two roots'
-    // staged edits stand — so discarding OSDs cannot drop a pending Windows edit.
+    // baseline's value (re-added, changed, or removed) while the other three
+    // roots' staged edits stand — so discarding OSDs cannot drop a pending
+    // Windows edit.
     // A non-surface leaf (sets/shaders, empty root) reverts the whole tree key via
     // discardKeys. Either way the setDecorationProfileTree / discardKeys write
     // re-emits decorationProfileTreeChanged, which DecorationPageController

@@ -19,7 +19,7 @@ SettingsCard {
     required property var settingsBridge
     property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
 
-    headerText: i18n("Zone Span")
+    headerText: i18n("Zone span")
     searchAnchor: "zoneSpan"
     showToggle: true
     toggleChecked: appSettings.zoneSpanEnabled
@@ -38,7 +38,6 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: card.sliderPreferredWidth
-                allowMultiple: true
                 acceptMode: acceptModeAll
                 triggers: card.settingsBridge.zoneSpanTriggers
                 defaultTriggers: card.settingsBridge.defaultZoneSpanTriggers

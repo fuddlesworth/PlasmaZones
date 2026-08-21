@@ -15,9 +15,11 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
+#include <QPair>
 #include <QSet>
 #include <QThreadPool>
 #include <chrono>
+#include <optional>
 #include <memory>
 
 #include "controllers/shortcutmanager.h"
@@ -28,108 +30,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
-namespace PhosphorScreens {
-class PlasmaPanelSource;
-class DBusScreenAdaptor;
-}
-
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/PhosphorProfileRegistry.h>
-#include <PhosphorAnimation/QtQuickClockManager.h>
-#include <PhosphorConfig/IBackend.h>
-
-namespace PhosphorAnimation {
-class CurveLoader;
-class ProfileLoader;
-}
-
-namespace PhosphorAnimationShaders {
-class AnimationShaderRegistry;
-}
-
-namespace PhosphorSurfaceShaders {
-class SurfaceShaderRegistry;
-}
-
-namespace PhosphorEngine {
-class WindowRegistry;
-}
-
-namespace PhosphorWorkspaces {
-class ActivityManager;
-class VirtualDesktopManager;
-}
-
-namespace PhosphorServiceIdle {
-class IdleService;
-}
-
-// PhosphorRules::RuleSet is held as a value member below
-// (m_excludeRuleSet) — needs a complete type, so include the header
-// rather than forward-declare. RuleStore stays in the header by
-// pointer only; including RuleSet.h leaves the store forward
-// declared here.
-#include <PhosphorRules/RuleSet.h>
-
-namespace PhosphorRules {
-class RuleStore;
-}
-
-namespace PhosphorZones {
-class Layout;
-class LayoutComputeService;
-class LayoutRegistry;
-class ZoneDetector;
-} // namespace PhosphorZones
-
-// `AssignmentEntry::Mode` appears in member-function signatures below, so
-// the full struct definition must be visible here (a forward declaration
-// can't surface a nested enum). The header is LGPL-LGPL safe (PhosphorZones
-// to daemon header is the standard direction).
-#include <PhosphorZones/AssignmentEntry.h>
-
-namespace PlasmaZones {
-
-enum class DisabledReason;
-class Settings;
-class OverlayService;
-
-class ShortcutManager;
-class LayoutAdaptor;
-class SettingsAdaptor;
-class ShaderAdaptor;
-class ControlAdaptor;
-class CompositorBridgeAdaptor;
-class OverlayAdaptor;
-class ZoneDetectionAdaptor;
-class WindowTrackingAdaptor;
-class WindowDragAdaptor;
-class RuleAdaptor;
-class ZoneSelectorController;
-class UnifiedLayoutController;
-class AutotileAdaptor;
-class ScreenModeRouter;
-class CrossSurfaceResolver;
-class DaemonScreenModeAdapter;
-class DaemonSettingsGateAdapter;
-class DaemonWorkspaceStateAdapter;
-
-} // namespace PlasmaZones
-
-namespace PhosphorContext {
-class ContextResolver;
-} // namespace PhosphorContext
-
-namespace PlasmaZones {
-class SettingsConfigStore;
-class SnapAdaptor;
-class ShaderRegistry;
-} // namespace PlasmaZones
-
-namespace PhosphorTiles {
-class AlgorithmRegistry;
-class ScriptedAlgorithmLoader;
-}
+#include "daemon/daemon_fwd.h"
 
 namespace PlasmaZones {
 
@@ -233,7 +134,19 @@ public:
 
     // OSD notifications
     void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
+    /// Announce a native scrolling template (picker/slot/cycle/KCM apply,
+    /// or @p locked for the lock-toggle preview): projects the blueprint
+    /// into preview zones and hands the payload to the overlay's
+    /// template OSD. Impl in daemon/osd.cpp.
+    void showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& templ, const QString& screenId,
+                                  bool locked = false);
     void showLockedOsd(const QString& screenId);
+    /// Text counterpart of @ref showLockedOsd for the UNLOCK direction, used
+    /// when the unlocked context resolves nothing to preview (an explicit
+    /// no-layout opt-out, or a scrolling context with no template). Without
+    /// it, unlocking such a screen was the one lock/unlock pairing that gave
+    /// no feedback at all while locking still showed a card.
+    void showUnlockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
     /// OSD shown when a context has no active layout because its default
@@ -242,21 +155,49 @@ public:
     /// the mode is selected but nothing is assigned, instead of silently showing
     /// no OSD.
     void showNotAssignedOsd(const QString& screenId);
+    /// Which user-facing OSD toggle a caller gated its announcement on.
+    /// Carried into the deferred strip-preview dispatch so it re-reads the
+    /// SAME setting the caller checked: the two are gated differently, and
+    /// the settle window is long enough to turn either off inside it.
+    enum class OsdTrigger {
+        LayoutSwitch,
+        DesktopSwitch,
+    };
+    /// Whether an empty strip may defer its card by the settle beat
+    /// (@ref kScrollingOsdAdoptSettleMs) or must render the sketch now.
+    /// Immediate is for the batched multi-screen show, where one deferred
+    /// screen would land ~300 ms after the rest.
+    enum class StripSettle {
+        Defer,
+        Immediate,
+    };
+    /// Mode-switch OSD for a screen entering Scrolling. Preview style shows
+    /// the live strip (deferred one beat when the toggle races the strip
+    /// adoption, unless @p settle forbids it); Text style shows a text card.
+    void showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, StripSettle settle = StripSettle::Defer);
+    /// How long an OSD waits for the effect's re-announce batch to land in
+    /// the scroll engine before rendering the card. Serves every caller that
+    /// can announce Scrolling ahead of adoption: the mode-toggle shortcut,
+    /// the KCM assignment apply, and the desktop-switch batch.
+    static constexpr int kScrollingOsdAdoptSettleMs = 300;
 
-    // Shortcut cheatsheet overlay (impls in daemon/osd.cpp).
+    // Shortcut cheatsheet overlay (impls in daemon/cheatsheet.cpp).
     /// Toggle the cheatsheet on the cursor's screen. Show path resolves the
-    /// screen's tiling mode + the shortcut catalog and pushes both into the
+    /// screen's tiling mode, the two feature gates, the engine layouts
+    /// capability and the shortcut catalog, and pushes them all into the
     /// overlay (daemon-mediated push), dismisses any other Escape-consuming
     /// modal first (picker / snap assist — at most one Escape grab consumer
     /// at a time), then binds the sheet's dedicated Escape ad-hoc grab.
     void toggleCheatsheet();
-    /// Re-push catalog + mode into a visible cheatsheet — live refilter on
-    /// mode switches, rebinds, and the autotile feature gate. No-op when
-    /// hidden. Mode is re-resolved for the screen the sheet is BOUND to
-    /// (not the cursor's current screen).
+    /// Re-push catalog + mode + gates + layouts capability into a visible
+    /// cheatsheet — live refilter on mode switches, rebinds, feature-gate
+    /// flips and context switches. No-op when hidden. Everything is
+    /// re-resolved for the screen the sheet is BOUND to (not the cursor's
+    /// current screen).
     void refreshCheatsheetIfVisible();
     /// Release the cheatsheet's Escape ad-hoc grab. Connected to
-    /// OverlayService::cheatsheetDismissed in start.cpp.
+    /// OverlayService::cheatsheetDismissed in shortcuts_wiring.cpp
+    /// (connectShortcutSignals).
     void onCheatsheetDismissed();
 
 private:
@@ -264,14 +205,56 @@ private:
     /// per-screen mode; dismiss sibling Escape-consuming modals; show and
     /// bind the Escape grab. Only called from toggleCheatsheet().
     void showCheatsheetOnCursorScreen();
+    /// Everything both cheatsheet push sites hand the overlay, resolved in
+    /// one place so show and refresh cannot drift apart.
+    struct CheatsheetPushState
+    {
+        QString modeString;
+        bool autotileAvailable = false;
+        bool scrollingAvailable = false;
+        bool layoutsAvailable = false;
+        /// True when the bound screen's engine consumes layouts as sizing
+        /// TEMPLATES (LayoutSupport::Templates): the sheet swaps the layouts
+        /// rows' tooltips for template wording.
+        bool layoutsAreTemplates = false;
+    };
+    CheatsheetPushState cheatsheetPushStateFor(const QString& screenId) const;
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *
-     * Renders the OSD unconditionally — gating on user OSD toggles
-     * (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch) is the caller's
-     * responsibility. The osdStyle setting controls visual style.
+     * Carries the shouldSuppressOsd gate (shutdown, phantom session,
+     * screen-settling cooldown, per-context SetOsdEnabled rule) and the
+     * osdStyle switch itself. The per-trigger user toggles
+     * (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch) remain the caller's
+     * responsibility, via isOsdTriggerEnabled.
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
+    /// The scrolling strip preview card itself: live visible-tile rects, or
+    /// the representative endless-strip sketch when the strip is empty.
+    /// Carries NO gates of its own, so it stays private and reachable only
+    /// through showScrollingModeOsd, which applies them (and re-applies them
+    /// on the settle dispatch that calls back in here). Advances the
+    /// template-announce ledger, because reaching here means a card renders.
+    void showScrollingStripPreviewOsd(const QString& screenId);
+    /// Record the template currently in force for @p screenId as the one the
+    /// user has now been shown, for the template-only OSD gate. Called from
+    /// the points that actually RENDER a scrolling card, never at request
+    /// time: showScrollingModeOsd's settle arm can lapse without rendering,
+    /// and recording there claimed a card the user never saw.
+    void recordAnnouncedScrollingTemplate(const QString& screenId);
+    /// True when the setting @p trigger names is on, or when a SetOsdEnabled
+    /// rule's true verdict for @p screenId's context forces the trigger past
+    /// an off toggle (the rule's force-ON half; its suppress half lives in
+    /// shouldSuppressOsd). A screenless call reads the toggle alone.
+    bool isOsdTriggerEnabled(OsdTrigger trigger, const QString& screenId = QString()) const;
+    /// Stop @p screenId's armed strip-preview settle timer, if any. Called
+    /// from every showScrollingModeOsd arm that does NOT arm it, so a toggle
+    /// followed by a reconcile cannot land a duplicate card a beat later.
+    void stopScrollingOsdSettleTimer(const QString& screenId);
+    /// Destroy the per-screen strip-preview settle timers. An empty
+    /// @p screenId reaps all of them (stop()); a screen id reaps that
+    /// output's, including every virtual sub-screen of it (screenRemoved).
+    void reapScrollingOsdSettleTimers(const QString& screenId = QString());
     void clearHighlight();
 
     /**
@@ -395,6 +378,57 @@ private:
      */
     PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
 
+    using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+    /**
+     * @brief How the engine owning @p screenId relates to user-selectable
+     * layouts (IPlacementEngine::layoutSupport). Gates the layout picker
+     * and the layout-selection shortcuts (cycle, quick slots, layout lock),
+     * feeds the OverlayService's injected LayoutSupportResolver (the
+     * picker/drag-popup layout lists) and the cheatsheet's layouts-row
+     * filter — so no surface assumes snap semantics on a screen whose
+     * engine has no layout concept or falls through to the manual layout
+     * list. Only a null ROUTER falls back to Placement (the shutdown
+     * window; same Snapping fallback as currentModeFor) — engineFor itself
+     * never returns null for a routed screen.
+     */
+    LayoutSupport layoutSupportForScreen(const QString& screenId) const;
+
+    /**
+     * @brief Whether the LIVE engine on @p screenId asks the drag popup to
+     * render its drag-insert vocabulary (IPlacementEngine::
+     * providesDragInsertSelector) — strip column cards — instead of zone
+     * layouts. Feeds the OverlayService's injected
+     * DragInsertSelectorResolver. Router-resolved like layoutSupportForScreen
+     * so a disabled scrolling assignment downgrades to false; the null-router
+     * fallback is false (popup keeps zone-layout semantics).
+     */
+    bool dragInsertSelectorForScreen(const QString& screenId) const;
+
+    /**
+     * @brief Whether the scroll engine resolves a VERTICAL strip for
+     * @p screenId. The one home for the downcast the accessor needs: the axis
+     * is a scrolling concept and deliberately not on IPlacementEngine, so
+     * every caller would otherwise re-spell the same qobject_cast off the base
+     * engine pointer. An absent or non-scrolling engine answers false, the
+     * horizontal depiction.
+     *
+     * Deliberately UNGATED on liveness: its callers are the effect-behaviour
+     * push and the OSD cards, which already know the screen is in scrolling
+     * mode and want the engine's resolved axis for it. The two providers in
+     * init_engines.cpp keep their own isActiveOnScreen-gated form, because
+     * those answer a PUBLIC overlay query that any screen can reach.
+     */
+    bool stripIsVerticalForScreen(const QString& screenId) const;
+
+    /**
+     * @brief Failure OSD for a layout-selection shortcut pressed on a screen
+     * whose engine does not provide layouts. Gated by navigationOsdAllowed
+     * like the navigationFeedback relay in signals.cpp, so the per-context
+     * SetOsdEnabled rule decides first and the showNavigationOsd setting is
+     * the fallback when no rule matches.
+     */
+    void showLayoutsUnavailableOsd(const QString& screenId);
+
     /**
      * @brief Per-context disable cascade gate for navigation shortcuts.
      *
@@ -409,15 +443,15 @@ private:
     bool isFocusedContextGated(const QString& screenId) const;
 
     /**
-     * @brief Mode-explicit sibling of isFocusedContextGated for autotile-only
-     * shortcuts.
+     * @brief Mode-explicit sibling of isFocusedContextGated for
+     * single-engine shortcuts.
      *
      * Same fail-closed null-resolver semantics, but queries the resolver
      * with an explicit mode (skipping the router-driven mode lookup).
-     * Used by handleRetile / handleIncreaseMasterRatio /
-     * handleDecreaseMasterRatio / HANDLE_AUTOTILE_ONLY — paths that
-     * must gate against the Autotile disable list specifically rather
-     * than the live mode for the screen.
+     * Used by the autotile verbs (handleRetile / master-ratio /
+     * HANDLE_AUTOTILE_ONLY, gating against the Autotile disable list) and
+     * by the scrolling shortcut resolver (scrolling_init.cpp, gating
+     * against the Scrolling disable list).
      */
     bool isFocusedContextGatedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
@@ -433,6 +467,7 @@ private:
     void handleCycle(bool forward);
     void handleResnap();
     void handleSnapAll();
+    void handleSwitchFocusFloatTiling();
     void handleFocusMaster();
     void handleSwapWithMaster();
     void handleIncreaseMasterRatio();
@@ -440,6 +475,11 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
+    /// The mode-toggle shortcut's handler (autotile_init.cpp): cycles the
+    /// cursor's screen Snapping → Tiling → Scrolling → Snapping, skipping
+    /// modes whose master switch is off, and carries the leaving mode's
+    /// window order and snap state across the flip.
+    void handleTilingModeToggle();
     void handleSwapVirtualScreen(NavigationDirection direction);
     void handleRotateVirtualScreens(bool clockwise);
 
@@ -449,11 +489,40 @@ private:
     /** @brief Handle cycle-layout shortcut (previous or next) */
     void handleCycleLayout(const QString& screenId, bool forward);
 
-    // Start-up sub-methods (definitions split across start.cpp and signals.cpp).
+    // Start-up sub-methods. Definitions are split by concern across
+    // start.cpp (screen / desktop / activity wiring), signals.cpp (unified
+    // controller, layout and overlay wiring), shortcuts_wiring.cpp
+    // (connectShortcutSignals), autotile_init.cpp (initializeAutotile),
+    // scrolling_init.cpp (connectScrollingShortcuts) and scrolling.cpp
+    // (the two per-recompute scrolling helpers).
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();
     void initializeAutotile();
+    /// Wire the ShortcutManager's scrolling signals to the scroll engine:
+    /// the column verbs, the edge-stop/wrap focus and top/bottom window
+    /// focus, and the one-way float moves (scrolling_init.cpp).
+    void connectScrollingShortcuts();
+    /// Push the derived scrolling screen set into the scroll engine —
+    /// order seeding, per-context rule params, the TEMPLATE vocabulary
+    /// (each screen's resolved template layout extracted into per-screen
+    /// preset lists), setActiveScreens (scrolling.cpp). Called from
+    /// updateEngineScreens so both engines' sets flip atomically per
+    /// context recompute.
+    ///
+    /// The same pass splits off the params the ENGINE has no use for and
+    /// pushes each to its own consumer, since only presentation depends on
+    /// them: the per-screen tab-indicator PAINT overrides (tabStyle, gaps,
+    /// corner radius and the three tab colours) to the Tiling adaptor, which
+    /// the KWin effect reads to paint the pills; the drop-indicator paint
+    /// overrides to the OverlayService; and the focus-follows-mouse,
+    /// crop-straddlers and vertical-axis screen lists to the Scrolling
+    /// adaptor as one behaviour map.
+    void updateScrollingScreens(const QSet<QString>& scrollingScreens);
+    /// Shared capture phase: store leaving-scrolling screens' column order
+    /// into m_lastEngineOrders BEFORE either engine seeds (see
+    /// updateEngineScreens' capture-all → seed-all ordering).
+    void captureScrollingOrders(const QSet<QString>& scrollingScreens);
     void initializeUnifiedController();
     void connectLayoutSignals();
     void connectOverlaySignals();
@@ -462,15 +531,20 @@ private:
     void migrateStartupScreenAssignments();
 
     /**
-     * @brief Pre-seed autotile engine with zone-ordered windows for one screen.
-     *        Prefers the SAVED order from the last mode toggle
-     *        (m_lastAutotileOrders, deterministic re-entry) and only falls back
-     *        to the zone-ordered window list from WTS. Live filters run before
-     *        seeding (filterAutotileSeedOrder): user floats and durable snap-slot
-     *        floats are dropped, minimized windows stay as positional
-     *        placeholders. The result goes to the autotile engine's
-     *        setInitialWindowOrder(). Used by both per-screen toggle and global
-     *        snapping→autotile transition.
+     * @brief Pre-seed autotile engine with zone-ordered windows for one screen
+     *
+     * Prefers the SAVED order from the last mode toggle
+     * (m_lastEngineOrders, deterministic re-entry) and only falls back to
+     * the zone-ordered window list from WTS. filterEngineSeedOrder runs
+     * before seeding: float is PER MODE, so a non-minimized window always
+     * seeds (a snap-mode float must never make it untileable here), and
+     * minimized windows stay as positional placeholders except the
+     * user-floated-then-minimized case. See that function's contract — this
+     * summary previously claimed the opposite and is exactly what would lead
+     * a future fixer to reintroduce the untileable-by-mode-swap bug.
+     * The result goes to the autotile engine's setInitialWindowOrder(). Used
+     * by both per-screen toggle and global snapping→autotile transition.
+     *
      * @param screenId Screen identifier
      */
     void seedAutotileOrderForScreen(const QString& screenId);
@@ -478,7 +552,7 @@ private:
     /**
      * @brief Flip every autotile assignment to Snapping and restore each
      *        screen's saved snap layout. Caller is responsible for the
-     *        post-conditioning calls (updateAutotileScreens, updateLayoutFilter,
+     *        post-conditioning calls (updateEngineScreens, updateLayoutFilter,
      *        snap resnap). Clears no autotile-floating state of its own: each
      *        window's cross-mode float lives only in its unified WindowPlacement
      *        record, which the resnap at the call site consumes (see the tail
@@ -507,39 +581,54 @@ private:
     void handleSnappingToAutotile();
 
     /**
-     * @brief Pre-save snap-mode floating state before entering autotile.
-     *        Snapshots every non-autotile-floated floating window into the
-     *        unified placement record via captureWindowPlacement (the record's
-     *        snap slot + shared free geometry are the single source of truth;
-     *        there is no parallel saved-float set). When screenId is provided,
-     *        only windows on that screen are captured; when empty, all floating
-     *        windows (global autotile enable). Idempotent — content-identical
-     *        captures no-op.
+     * @brief Pre-save snap-mode floating state before entering a tiling mode
+     *
+     * Captures each floating window's placement into its unified
+     * WindowPlacement record (captureWindowPlacement — the record's snap slot
+     * plus shared free geometry are the single source of truth; there is no
+     * parallel saved-float set), so the snap slot survives the autotile or
+     * scrolling session and the release handler can restore it. When screenId
+     * is provided, only windows on that screen are captured; empty captures
+     * all floating windows (global enable). Idempotent — content-identical
+     * captures no-op.
      */
     void presaveSnapFloats(const QString& screenId = QString());
+    /// Shared windowsReleased handler for both tiling-family engines:
+    /// restores snap float/zone state for windows returning to snapping and
+    /// clears the releasing engine's mode-specific float markers. See the
+    /// definition in engine_release.cpp.
+    void handleEngineWindowsReleased(PhosphorEngine::IPlacementEngine* releasingEngine, const QStringList& windowIds,
+                                     const QSet<QString>& releasedScreenIds);
 
     /**
-     * @brief Capture autotile window order for all autotile screens. Must be
-     *        called BEFORE any mode switch that destroys
-     *        PhosphorTiles::TilingState (e.g. applyLayoutById,
-     *        handleAutotileDisabled, updateAutotileScreens).
-     * @return Map of (screen, desktop, activity) -> ordered window IDs (master
-     *         first)
+     * @brief Capture autotile window order for all autotile screens
+     *
+     * Must be called BEFORE any mode switch that destroys PhosphorTiles::TilingState
+     * (e.g. applyLayoutById, handleAutotileDisabled, updateEngineScreens).
+     *
+     * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
      */
     QHash<TilingStateKey, QStringList> captureAutotileOrders() const;
 
     /**
      * @brief Build pre-tile geometry restore entries for autotile-only windows.
      *
-     * Iterates m_lastAutotileOrders and produces a `ZoneAssignmentEntry` per
-     * autotile-only window (no zone assignment, never manually snapped). Returns
-     * the batch so the caller can feed it to `SnapEngine::emitBatchedResnap` —
-     * one batched signal per autotile toggle instead of per-window D-Bus
-     * chatter. Zone-snapped windows are already handled by
-     * `SnapAdaptor::resnapCurrentAssignments`.
-     * @param onlyScreenId When non-empty, restrict to that screen's saved orders
-     *        — the per-screen toggle must not emit restores for windows still
-     *        tiled on other screens.
+     * Iterates m_lastEngineOrders and produces a `ZoneAssignmentEntry` per
+     * autotile-only window (no zone assignment, never manually snapped).
+     * Returns the batch so the caller can feed it to
+     * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
+     * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
+     * already handled by `SnapAdaptor::resnapCurrentAssignments`.
+     *
+     * @param excludeWindows Window ids to leave out of the entries (already
+     *        handled elsewhere in the calling flow).
+     * @param desktop,activity Together restrict to ONE context: when desktop
+     *        is -1 BOTH are ignored (any context, activity included); when
+     *        desktop >= 0 the saved key must match both exactly, so an empty
+     *        activity selects the no-activity context, not every activity.
+     * @param onlyScreenId When non-empty, restrict to that screen's saved
+     *        orders — the per-screen toggle must not emit restores for
+     *        windows still tiled on other screens.
      */
     QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
                                                              const QString& activity = QString(),
@@ -561,11 +650,17 @@ private:
     void showDesktopSwitchOsd(const QString& activity);
 
     /**
-     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual
-     *        desktops). Shows the desktop-switch OSD only on @p screenId, using
-     *        that screen's own current virtual desktop. Driven by the per-screen
-     *        screenDesktopChanged handler so a single screen's switch doesn't
-     *        flash every monitor (#648).
+     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual desktops)
+     *
+     * Shows the desktop-switch OSD only on the output @p screenId names, using
+     * that screen's own current virtual desktop. Driven by the per-screen
+     * screenDesktopChanged handler so a single screen's switch doesn't flash
+     * every monitor (#648).
+     *
+     * @p screenId is the PHYSICAL output id the effect reports; it expands to
+     * that output's effective screen ids (its vs:N children when subdivided,
+     * itself otherwise) and gates each on its own context, because a
+     * subdivided output has no context of its own.
      */
     void showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity);
 
@@ -588,11 +683,15 @@ private:
     void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
-     * @brief Recompute which screens use autotile from layout assignments. Reads
-     *        all screen assignments via assignmentIdForScreen(), computes which
-     *        screens have autotile IDs, calls setActiveScreens() on engine.
+     * @brief Recompute BOTH tiling-family engines' screen sets from the cascade
+     *
+     * Reads every screen's assignment, derives the autotile and scrolling
+     * sets in one walk, and pushes them through the shared
+     * capture-all → seed-all → apply-all phase (captureScrollingOrders /
+     * updateScrollingScreens run in the same pass so a same-flip
+     * autotile↔scrolling transition replays window order deterministically).
      */
-    void updateAutotileScreens();
+    void updateEngineScreens();
 
     /**
      * @brief React to a rule change that may have altered active assignments.
@@ -602,7 +701,7 @@ private:
      * the diff reports drive the legacy resnap/OSD path via
      * LayoutAdaptor::applyAssignmentChangesFor, which carries that set
      * explicitly rather than staging into the bus client's save-batch buffer.
-     * updateAutotileScreens() runs on EVERY call regardless: gap and
+     * updateEngineScreens() runs on EVERY call regardless: gap and
      * tiling-parameter rules move tiled geometry without moving any assignment
      * id, and it force-retiles the already-active autotile screens for exactly
      * that case. Only the resnap / OSD apply is gated on the diff result.
@@ -638,8 +737,19 @@ private:
     QSet<QString> diffActiveAssignments();
 
     /**
-     * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a
-     *        physical screen.
+     * @brief The KCM assignment-apply pass (init_assignment_apply.cpp).
+     *
+     * Runs on LayoutAdaptor::assignmentChangesApplied, AFTER the KCM's batch
+     * save has committed every assignment and setting. Classifies each
+     * effective screen by LIVE router mode, resnaps the snapping ones in
+     * @p changedScreenIdsList, and announces the outcome per screen (disabled
+     * / not-assigned / locked / mode / layout). An empty list means "every
+     * screen may have changed".
+     */
+    void handleAssignmentChangesApplied(const QStringList& changedScreenIdsList);
+
+    /**
+     * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
      *
      * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs
      * the post-change fan-out: clears stale resnap buffer, migrates window
@@ -655,7 +765,7 @@ private:
      * @brief Lightweight handler for regions-only VS config changes.
      *
      * Fires on swap/rotate/boundary-resize where the VS ID set is unchanged.
-     * Skips migrate/prune/updateAutotileScreens (all no-ops for regions-only)
+     * Skips migrate/prune/updateEngineScreens (all no-ops for regions-only)
      * and only recalculates zone geometries and triggers a snap-mode resnap
      * tagged with the vs_reconfigure action so the kwin-effect does not fire
      * snap-assist. The autotile retile is driven by the engine's own handler on
@@ -679,12 +789,39 @@ private:
      * snap-FLOATED before passing through autotile would therefore lose its
      * float-back position on a picker/KCM flip. Floating windows are excluded
      * from the resnap buffer, so these float restores are a disjoint set the
-     * buffer path cannot cover; emit them as a separate batch. The snap-ZONE
-     * restores in the buffer reference the OLD layout and are intentionally
-     * left to resnapToNewLayout (which re-snaps to the NEW layout's zones).
-     * Consumes (clears) m_pendingSnapFloatRestores.
+     * buffer path cannot cover; emit them as a separate batch.
+     *
+     * Two consume modes: with @p preserveZoneEntries (the
+     * updateEngineScreens tail drain) only the float half is consumed and
+     * the snap-ZONE entries stay in m_pendingSnapFloatRestores for the
+     * mode-toggle / autotile-disable consumers that run after the
+     * recompute. Without it (resnap-buffer consumers, prune-origin drains)
+     * the whole buffer is consumed — remaining zone entries are handed to
+     * an in-flight resnapToNewLayout when one exists, else dropped.
      */
-    void emitPendingSnapFloatRestoresForResnapBuffer();
+    void emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntries = false);
+
+    /**
+     * @brief Consume the snap-ZONE half of m_pendingSnapFloatRestores on a
+     *        context-switch recompute that has no downstream zone consumer.
+     *
+     * updateEngineScreens' tail drain preserves the zone half for the
+     * mode-toggle and autotile-disable paths, which feed it into
+     * preClaimedZoneIds and their batched restore. The context-switch
+     * recomputes (per-screen desktop switch, activity switch, virtual-screen
+     * reconfigure, the tiled-count gates, the rule reconcile) have no such
+     * consumer, so a tiling→snapping demotion there left windows sitting at
+     * their tile rects and the entries lingering for an unrelated later
+     * consumer to replay. The entries are complete (window, zones, geometry,
+     * screen, desktop), so they are emitted directly as their own batch
+     * rather than routed through the resnap buffer — that keeps the move
+     * scoped to the windows the recompute actually released instead of
+     * resnapping every window on the screen.
+     *
+     * No-op while a recompute is in progress: the batch then belongs to the
+     * outer pass, whose own consumer owns the zone half.
+     */
+    void flushPendingSnapZoneRestores();
 
     /**
      * @brief Update layout filter on overlay service and unified layout controller
@@ -711,8 +848,9 @@ private:
     // rule-backed assignment cascade — construction order must build the
     // store first. The RuleAdaptor borrows it too.
     std::unique_ptr<PhosphorRules::RuleStore> m_ruleStore;
-    // Filtered slice of m_ruleStore — only rules with a terminal `Exclude`
-    // action, built via `PhosphorRules::ExclusionRules::excludeRulesFrom` and
+    // Filtered slice of m_ruleStore — only rules carrying an `Exclude` or
+    // `ExcludePlacement` action (a kept rule may carry other actions too),
+    // built via `PhosphorRules::ExclusionRules::excludePlacementRulesFrom` and
     // kept in lockstep with the store via the rulesChanged subscription wired
     // in init(). SnapEngine borrows a pointer into this set for isAppIdExcluded;
     // the WindowTrackingAdaptor's pruneExcludedPendingRestores receives the
@@ -720,13 +858,41 @@ private:
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
+    /// Coalescing latch for the all-windows tab-colour broadcast. A KCM batch
+    /// save emits rulesChanged once per committed rule, and every emission
+    /// would otherwise make the effect re-query scrollTabColors for every tab
+    /// it paints. Consumed by the 0 ms single shot armed in init_engines.cpp,
+    /// which fires the one broadcast for the whole batch.
+    bool m_scrollTabColorsBroadcastPending = false;
+    /// Last TabColor* slice of m_ruleStore (rules carrying at least one of the
+    /// three per-window tab-colour actions), the equality guard for that
+    /// broadcast. Rules changes outside that surface (a rename of a rule the
+    /// slice does not hold, a snapping rule edit) leave this equal and are
+    /// dropped instead of invalidating every tab's colours; any edit to a
+    /// held rule, including its name or priority, trips it. The slice also
+    /// holds the terminal Exclude / ExcludePlacement rules, since those cut
+    /// the evaluator's walk ahead of a TabColor rule. Only the rules LIST is
+    /// compared, the same semantics as the exclude refilter's guard just
+    /// above it.
+    QList<PhosphorRules::Rule> m_tabColorRuleSlice;
+    /// Native scrolling-template store. Created in the Daemon constructor,
+    /// deliberately before the layout-source bundle is built so the template
+    /// provider has a store to register against. initServices then injects it
+    /// into m_layoutManager for the template-backed assignment cascade, and
+    /// stop() clears that injection before this unique_ptr resets.
+    ///
+    /// Declared BEFORE m_layoutManager for the same reason m_ruleStore is:
+    /// the registry borrows it, so reverse-order destruction must tear the
+    /// registry down first or the borrow dangles.
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_scrollingTemplateStore;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry, replacing the old
     // AlgorithmRegistry::instance() singleton: plugins can't share
     // process-global state safely, so the composition root owns it.
     // DECLARATION ORDER INVARIANT: every FactoryContext service the bundle
     // borrows (m_layoutManager → IZoneLayoutRegistry, m_algorithmRegistry
-    // → ITileAlgorithmRegistry) MUST precede m_layoutSources, so
+    // → ITileAlgorithmRegistry, m_scrollingTemplateStore →
+    // ScrollingTemplateSource) MUST precede m_layoutSources, so
     // reverse-order destruction tears the bundle and its ZonesLayoutSource
     // / AutotileLayoutSource children down before the registries they
     // borrow. See the LayoutSourceBundle contract
@@ -892,7 +1058,15 @@ private:
     /// AFTER initializeAutotile() — sharing one list would drop these handles
     /// the moment after they were installed.
     QList<QMetaObject::Connection> m_autotileShortcutConnections;
-    /// Handles for every connection installed by initLayoutAndSettingsWiring().
+    /// Scrolling twin of the list above, cleared and refilled on the same
+    /// schedule and kept separate for the same reason.
+    QList<QMetaObject::Connection> m_scrollingShortcutConnections;
+    /// Handles for every connection installed by initLayoutAndSettingsWiring(),
+    /// plus the settings-driven wiring initEnginesAndWiring() installs later in
+    /// the SAME init() pass (the system colour-scheme re-resolve). One list is
+    /// correct for both because the drop happens at the top of
+    /// initLayoutAndSettingsWiring, which runs first — every handle in here is
+    /// therefore from the previous cycle by the time it is severed.
     /// The senders (m_settings, m_layoutManager, the three value-member
     /// timers) all survive stop(), and init() CAN re-run (stop() -> init() ->
     /// start()), so a bare re-wire would stack duplicate handlers — double
@@ -928,6 +1102,11 @@ private:
     // borrows the store, so stop() calls detach() before the store unique_ptr
     // is destroyed.
     RuleAdaptor* m_ruleAdaptor = nullptr;
+    /// Scrolling-engine wire surface (org.plasmazones.Scrolling) — the
+    /// scroll-specific screen set; lifecycle traffic rides the shared
+    /// tiling adaptor. Qt-parented; stop() clears its engine pointer
+    /// before the engine unique_ptr resets.
+    ScrollingAdaptor* m_scrollingAdaptor = nullptr;
     // Compositor bridge adaptor (KWin effect ↔ daemon protocol endpoint).
     // Parented to `this`; holds only plain state, so it needs no detach().
     CompositorBridgeAdaptor* m_compositorBridge = nullptr;
@@ -949,12 +1128,30 @@ private:
     // Window engines (held as base class; concrete types known only in daemon.cpp/enginefactory.cpp)
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_scrollEngine;
     /// Single source of truth for "which engine owns screen X". Used by
     /// WindowTrackingAdaptor and the daemon's navigation handlers (via
     /// `navigatorForShortcut` in navigation.cpp). Owns no state of its
     /// own — just delegates to the layout manager and engine pointers it
     /// was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// The engine screen sets DERIVED by the last updateEngineScreens
+    /// recompute (post context-disable exclusion), snapshotted before any
+    /// setActiveScreens applies. The shared windowsReleased handler gates
+    /// its "headed to the other engine" skip on these — the live sets lag
+    /// mid-pass and the raw cascade cannot see the exclusions.
+    ///
+    /// VALIDITY: windowsReleased also fires OUTSIDE updateEngineScreens
+    /// (desktop/activity/removed-screen prunes). The handler prefers the
+    /// live isActiveOnScreen answer when the recompute latch is NOT held —
+    /// these snapshots are only authoritative mid-pass, where the live sets
+    /// are the stale side.
+    QSet<QString> m_derivedAutotileScreens;
+    QSet<QString> m_derivedScrollingScreens;
+    /// Re-entrancy latch + coalesced re-run flag for updateEngineScreens
+    /// (see its head comment).
+    bool m_updateEngineScreensInProgress = false;
+    bool m_updateEngineScreensQueued = false;
     /// PhosphorContext::ContextResolver wiring.
     ///
     /// DECLARATION ORDER INVARIANT: the three adapter members must be
@@ -975,6 +1172,11 @@ private:
     /// handlers don't need to know about its dependencies.
     std::unique_ptr<PhosphorScreens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
+    TilingAdaptor* m_tilingAdaptor = nullptr;
+    /// Autotile-engine wire surface (org.plasmazones.Autotile) — algorithm
+    /// selection, master ops, and autotile config; lifecycle traffic rides
+    /// the shared tiling adaptor. Qt-parented; stop() clears its engine
+    /// pointer before the engine unique_ptr resets.
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     /// Phase 6: animation shader effect discovery. Scans
@@ -1026,6 +1228,10 @@ private:
     /// autotile layout. Reads the per-screen desktop (per-output virtual
     /// desktops, #648) and current activity fresh on every call.
     bool isAnyScreenAutotile() const;
+    /// True when @p geometry overlaps at least one currently-connected
+    /// effective screen. Used to reject restore targets that resolve onto an
+    /// output that has gone away (monitor unplug).
+    bool intersectsAnyLiveScreen(const QRect& geometry) const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**
@@ -1051,30 +1257,51 @@ private:
     void syncAutotileFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
 
     /**
-     * @brief Batch-update daemon-side float state for overflow-floated windows.
-     *        Updates WTS state directly without emitting per-window D-Bus
-     *        signals (the effect already processed the float from the
-     *        windowsTileRequested batch).
+     * @brief Scroll twin of syncAutotileFloatStatePassive.
+     *
+     * Handler for ScrollEngine::windowFloatingStateSynced. The scroll engine
+     * emits that signal (rather than windowFloatingChanged) for every float
+     * transition it makes on its OWN initiative: the rule/oversize float at
+     * open, the record-restore float at open, the cross-context and stale-key
+     * migration drops, the unfloat-by-adoption, and the handoffReceive
+     * re-float. None of those is a user float action, so none may restore the
+     * stored free geometry (it would teleport a window that already has a
+     * valid position — discussion #271) or raise a navigation OSD.
+     *
+     * It also carries the cross-engine eviction the autotile twin performs:
+     * scroll adoption must release any stale snap or autotile tracking, or a
+     * window re-announced onto a scrolling screen leaves a permanent ghost in
+     * the engine that still tracks it.
+     */
+    void syncScrollFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
+
+    /**
+     * @brief Batch-update daemon-side float state for overflow-floated windows
+     *
+     * Updates WTS state directly without emitting per-window D-Bus signals
+     * (the effect already processed the float from the windowsTileRequested batch).
      */
     void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
 
-    /** @brief Prune m_lastAutotileOrders for stale desktops */
+    /** @brief Prune m_lastEngineOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);
     /** @brief Prune context maps for removed activities */
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
-    /** @brief Prune m_lastAutotileOrders for old virtual screen IDs that no longer exist */
-    void pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId);
+    /** @brief Prune m_lastEngineOrders for old virtual screen IDs that no longer exist */
+    void pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId);
     /**
-     * @brief Drop a closed window from every saved autotile order.
+     * @brief Drop a closed window from every saved TILING-FAMILY order
+     * (autotile stack orders and scrolling column orders share
+     * m_lastEngineOrders).
      *
      * Without this, a window that closes while the screen is in manual mode
-     * stays in m_lastAutotileOrders. On the next manual→autotile toggle,
-     * seedAutotileOrderForScreen feeds the stale id back through
-     * setInitialWindowOrder; setActiveScreens replays it into the TilingState
-     * and recalculateLayout tiles a phantom window. Match by instance id —
-     * saved entries are canonical "appId|instanceId" composites.
+     * stays in m_lastEngineOrders. On the next manual→tiling toggle, the
+     * order seeding feeds the stale id back through setInitialWindowOrder;
+     * setActiveScreens replays it into the engine state and the retile
+     * places a phantom window. Match by instance id — saved entries are
+     * canonical "appId|instanceId" composites.
      */
-    void pruneAutotileOrdersForWindow(const QString& instanceId);
+    void pruneEngineOrdersForWindow(const QString& instanceId);
 
     /// Arm OSD suppression for @p count upcoming resnap feedback signals. ADDS
     /// to the running count (never clobbers) so overlapping async resnap streams
@@ -1108,7 +1335,33 @@ private:
     /// D-Bus object path for `plasma-workspace.target`, resolved by GetUnit.
     QString m_plasmaWorkspaceTargetPath;
 
-    bool shouldSuppressOsd() const;
+    /// The screen-independent OSD suppressors alone: shutdown, phantom
+    /// session, screen-settling cooldown. Split out of shouldSuppressOsd so
+    /// navigationOsdAllowed can apply them without paying a second
+    /// contextOsdRuleVerdict resolve for the rule half it reads itself.
+    bool globalOsdSuppressed() const;
+
+    /// Global OSD suppression (shutdown, phantom session, screen-settling
+    /// cooldown), plus — when @p screenId is given — the per-context
+    /// SetOsdEnabled rule: an explicit false verdict for the screen's
+    /// current context suppresses. A screenless call keeps the global
+    /// checks only, so the rule is inert there (fail-open by design). The
+    /// force-ON half of the rule lives in isOsdTriggerEnabled /
+    /// navigationOsdAllowed, which layer it over the per-trigger toggles.
+    bool shouldSuppressOsd(const QString& screenId = QString()) const;
+
+    /// The SetOsdEnabled rule verdict for @p screenId's current context, or
+    /// nullopt with no matching rule (or no screen / registry). Normalizes
+    /// the screen name to the canonical id form itself.
+    std::optional<bool> contextOsdRuleVerdict(const QString& screenId) const;
+
+    /// The navigation-OSD gate: `overlay service && !globalOsdSuppressed() &&
+    /// osdStyle() != None && (rule ?? showNavigationOsd())`. A SetOsdEnabled
+    /// rule's true verdict forces navigation feedback past a global
+    /// showNavigationOsd() off, and
+    /// a false verdict suppresses it — both halves off the ONE verdict read,
+    /// which is why this does not route through shouldSuppressOsd.
+    bool navigationOsdAllowed(const QString& screenId) const;
 
     /// Async query of systemd's user bus for `plasma-workspace.target` state.
     /// Fail-open on all D-Bus errors. Called once from `start()`.
@@ -1139,23 +1392,34 @@ private:
     // between swap and rotate is not a user pattern.
     QElapsedTimer m_virtualScreenDebounce;
     /// Per-start connections outside stop()'s per-sender sweep and outside
-    /// m_restartScopedConnections: the m_settings→this autotile-enabled
-    /// cheatsheet refilter. m_settings is swept only by teardownIdleConnections,
-    /// whose ctor/init connections must survive, so this per-start one is
-    /// severed here by handle. The WTA-to-drag-adaptor fan-out is instead kept
-    /// unique with Qt::UniqueConnection, and the layout/overlay connections are
-    /// tracked in m_restartScopedConnections and cleared at the top of
-    /// connectLayoutSignals().
+    /// m_restartScopedConnections: the two m_settings→this cheatsheet
+    /// refilters, on autotileEnabled and scrollingEnabled. m_settings is
+    /// swept only by teardownIdleConnections, whose ctor/init connections
+    /// must survive, so these per-start ones are severed here by handle. The WTA-to-drag-adaptor fan-out is instead
+    /// kept unique with Qt::UniqueConnection, and the layout/overlay connections are tracked in
+    /// m_restartScopedConnections and cleared at the top of connectLayoutSignals().
     QVector<QMetaObject::Connection> m_perStartConnections;
 
-    // Last autotile window order per (screen, desktop, activity), captured when
-    // leaving autotile. Used to re-seed the autotile engine with the same order
-    // on re-entry, producing deterministic arrangements across mode toggles.
-    // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
-    // don't overwrite each other's ordering.
-    QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
+    // Last TILING-FAMILY window order per (screen, desktop, activity),
+    // captured when a screen leaves autotile OR scrolling and shared by
+    // both engines' seeding (captureScrollingOrders / updateScrollingScreens
+    // and the autotile capture/seed) — a same-pass flip replays one
+    // engine's order into the other. Keyed by TilingStateKey (not plain
+    // screen name) so cross-desktop toggles don't overwrite each other.
+    QHash<TilingStateKey, QStringList> m_lastEngineOrders;
 
-    // Last-applied active assignment id per effective screen (resolved for that
+    /// One screen's last-applied assignment state: the resolved assignment
+    /// id. (A resolved templateId used to ride along "for the KCM apply's
+    /// template-only OSD gate", but that gate keys on
+    /// m_lastAnnouncedTemplateByScreen and re-resolves the template itself —
+    /// the snapshot field was write-only dead state costing a
+    /// scrollingTemplateForContext resolve per screen per diff.)
+    struct ActiveAssignmentSnapshot
+    {
+        QString assignmentId;
+        bool operator==(const ActiveAssignmentSnapshot&) const = default;
+    };
+    // Last-applied active assignment per effective screen (resolved for that
     // screen's current desktop/activity). Diffed on rulesChanged to find the
     // screens a rule edit actually moved; refreshed on context switches and
     // after any apply so a later edit doesn't falsely re-resnap. See
@@ -1165,7 +1429,42 @@ private:
     // diffActiveAssignments hands it to publishActiveAssignments, which is what
     // getActiveLayoutsForScreens returns and what activeLayoutForScreenChanged
     // reports. Writing it outside that function would desync the bus view.
-    QHash<QString, QString> m_activeAssignmentByScreen;
+    QHash<QString, ActiveAssignmentSnapshot> m_activeAssignmentByScreen;
+
+    /// Per effective screen, the scrolling template id the LAST OSD card shown
+    /// for that screen announced (empty value = announced with no template).
+    /// A screen is absent when the last card it showed was not a scrolling one,
+    /// or when it has shown none yet.
+    ///
+    /// Separate from m_activeAssignmentByScreen on purpose: that snapshot is
+    /// refreshed by diffActiveAssignments, which the rule-driven setter runs
+    /// synchronously BEFORE handleAssignmentChangesApplied, so a gate reading it
+    /// can never see a pre-apply value. This map advances inside
+    /// showScrollingModeOsd / showScrollingTemplateOsd — the funnels every
+    /// scrolling-card producer routes through — plus the announce loop's
+    /// silent-clear record (no card shows for a template clear). The apply
+    /// loop's up-front remove() covers non-scrolling cards, and the
+    /// screenRemoved tail drops unplugged screens.
+    QHash<QString, QString> m_lastAnnouncedTemplateByScreen;
+
+    // Compression latch for the deferred rulesChanged → reconcile pass. The
+    // store emits rulesChanged synchronously from inside every mutation, and
+    // the daemon's own assignment writes (mode toggle, quick layouts, KCM
+    // batch) are stored as rules — reconciling inline re-entered the full
+    // assignment-apply path mid-toggle (double OSDs, a resnap racing the
+    // engine flip). Deferring to the next event-loop pass lets the write's
+    // own layoutAssigned tail re-prime the snapshot first, so self-inflicted
+    // edits diff empty and only external rule edits actually apply.
+    bool m_reconcileAssignmentsPending = false;
+
+    // Compression latch for the deferred colour-scheme overlay refresh
+    // (init_engines.cpp). Separate from m_reconcileAssignmentsPending on
+    // purpose: the two coalesce independent work off different signals, and
+    // sharing one flag let whichever fired first in an event-loop turn swallow
+    // the other's pass. The refresh is deferred rather than run inline because
+    // it can recreate QQuickWindows while the palette-change event that
+    // triggered it is still being delivered.
+    bool m_colorSchemeRefreshPending = false;
 
     // Raised (RAII, via QScopedValueRollback) around the bulk assignment writes
     // in autotile.cpp so reconcileActiveAssignments early-returns instead of
@@ -1179,11 +1478,18 @@ private:
     // placementChanged stream only re-resolves the per-screen tiling algorithm
     // when the count actually changes (a Field::TiledWindowCount rule keys on
     // it). Without this gate every retile (drag, resize) would re-walk the
-    // assignment cascade.
-    QHash<QString, int> m_lastTiledCountByScreen;
+    // assignment cascade. The value carries the ENGINE that recorded it: both
+    // the autotile and scrolling gates write here, and after a mode flip the
+    // incoming engine's first count must not compare against the outgoing
+    // engine's cache (an equal count would swallow the re-resolve). The key
+    // stays the bare screenId so the physical-id prune in start.cpp keeps
+    // matching.
+    QHash<QString, QPair<const void*, int>> m_lastTiledCountByScreen;
 
-    // Snap-float restore entries collected by the windowsReleased handler.
-    // Consumed by the toggle handler to batch geometry restores into the resnap signal.
+    // Snap-float restore entries collected by handleEngineWindowsReleased
+    // (either tiling engine's windowsReleased). Cleared once per
+    // updateEngineScreens recompute; consumed by the toggle handler to
+    // batch geometry restores into the resnap signal.
     QVector<ZoneAssignmentEntry> m_pendingSnapFloatRestores;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
@@ -1192,6 +1498,7 @@ private:
     // first settingsChanged won't detect a spurious toggle.
     bool m_prevSnappingEnabled = false;
     bool m_prevAutotileEnabled = false;
+    bool m_prevScrollingEnabled = false;
 
     QTimer m_previewNotifyTimer;
     PhosphorTiles::AlgorithmPreviewParams m_preRetilePreviewParams;

@@ -147,6 +147,14 @@ void SnapAssistHandler::resetRecentlyPostedThumbnails()
 {
     if (m_capture) {
         m_capture->resetRecentlyPosted();
+        m_capture->rearmDmabufPath();
+    }
+}
+
+void SnapAssistHandler::slotSnapAssistThumbnailCacheTrimmed()
+{
+    if (m_capture) {
+        m_capture->resetRecentlyPosted();
     }
 }
 
@@ -160,7 +168,7 @@ SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString
     // KWin-specific: fill compositorHandle (internal UUID) for overlay window identification.
     //
     // Earlier revisions also dropped autotile-tracked candidates here via
-    // @c AutotileHandler::isTrackedWindow, but that flag tracks "we have notified
+    // @c TilingHandler::isTrackedWindow, but that flag tracks "we have notified
     // autotile about this window at some point" — it is NOT a live "this window
     // currently lives on an autotile screen" check. After a window moves from an
     // autotile monitor to a manual-mode screen, the flag stays set until autotile's
@@ -171,7 +179,7 @@ SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString
     // The screen-membership question is now answered authoritatively in
     // SnapAssistFilter via @c VirtualScreenId::samePhysical(info.screenId, screenId):
     // candidates are restricted to the target's physical monitor, and trigger
-    // sites gate on @c !isAutotileScreen(screenId), so by transitivity no
+    // sites gate on @c !isManagedScreen(screenId), so by transitivity no
     // surviving candidate is on an autotile monitor in normal flow.
     //
     // Sibling-VS inclusion (windows on the other VS of the same physical monitor

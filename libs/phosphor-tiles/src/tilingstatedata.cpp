@@ -120,7 +120,8 @@ void TilingState::clear()
     const qreal oldSplitRatio = m_splitRatio;
 
     if (!hadWindows && !hadFocused && m_calculatedZones.isEmpty() && oldMasterCount == DefaultMasterCount
-        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio) && !m_splitTree && m_scriptState.isEmpty()) {
+        && qFuzzyCompare(1.0 + oldSplitRatio, 1.0 + DefaultSplitRatio) && !m_splitTree && m_scriptState.isEmpty()
+        && m_lastTiledFocus.isEmpty() && m_lastFloatingFocus.isEmpty()) {
         return; // Already at defaults, nothing to do
     }
 
@@ -128,6 +129,8 @@ void TilingState::clear()
     m_windowOrder.clear();
     m_floatingWindows.clear();
     m_focusedWindow.clear();
+    m_lastTiledFocus.clear();
+    m_lastFloatingFocus.clear();
     m_calculatedZones.clear();
     m_masterCount = DefaultMasterCount;
     m_splitRatio = DefaultSplitRatio;
@@ -229,6 +232,23 @@ void TilingState::rebuildSplitTree()
         }
         if (clamped.size() != m_windowOrder.size()) {
             m_windowOrder = clamped;
+            // Truncation drops windows without routing through removeWindow,
+            // so clear any focus bookkeeping naming a dropped id — the same
+            // invariant removeWindow keeps. (The clamp keeps every floating
+            // window, so only tiled ids can be dropped here. addWindow caps
+            // tiled GROWTH, but setFloating(id, false) has no cap check, so
+            // an unfloat that pushes the tiled count past the cap is the
+            // live route into this branch.)
+            if (!m_focusedWindow.isEmpty() && !clamped.contains(m_focusedWindow)) {
+                m_focusedWindow.clear();
+                Q_EMIT focusedWindowChanged();
+            }
+            if (!m_lastTiledFocus.isEmpty() && !clamped.contains(m_lastTiledFocus)) {
+                m_lastTiledFocus.clear();
+            }
+            if (!m_lastFloatingFocus.isEmpty() && !clamped.contains(m_lastFloatingFocus)) {
+                m_lastFloatingFocus.clear();
+            }
             Q_EMIT windowCountChanged();
             Q_EMIT windowOrderChanged();
         }

@@ -34,6 +34,12 @@ ColumnLayout {
     /// allocates a fresh list per call, so it is cached once at the root and
     /// threaded down rather than re-invoked here.
     required property var matchFieldOptions
+    /// Widest operator label in pixels, measured once in RuleEditorBody and
+    /// threaded down for the same reason `matchFieldOptions` is: the answer is
+    /// field-independent, so every leaf measuring it produced one identical
+    /// sweep per condition row. MatchLeafEditor sizes its operator dropdown to
+    /// it, which is what keeps the operator column aligned across rows.
+    required property real widestOperatorTextWidth
     /// True when this node may be removed (the root cannot).
     property bool removable: false
     readonly property bool _isLeaf: matchEditor.node && matchEditor.node.field !== undefined
@@ -117,6 +123,7 @@ ColumnLayout {
             controller: matchEditor.controller
             appSettings: matchEditor.appSettings
             fieldOptions: matchEditor.matchFieldOptions
+            widestOperatorTextWidth: matchEditor.widestOperatorTextWidth
             onLeafChanged: function (updated) {
                 matchEditor.nodeEdited(updated);
             }
@@ -237,6 +244,9 @@ ColumnLayout {
                                     "controller": matchEditor.controller,
                                     "appSettings": matchEditor.appSettings,
                                     "matchFieldOptions": matchEditor.matchFieldOptions,
+                                    "widestOperatorTextWidth": Qt.binding(function () {
+                                        return matchEditor.widestOperatorTextWidth;
+                                    }),
                                     "removable": true
                                 });
                             }

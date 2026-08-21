@@ -23,8 +23,13 @@ namespace PhosphorControl {
  * @brief Derives the sidebar's visible row list from the page registry.
  *
  * Three walks over the tier-filtered tree, one per rail mode:
- *   - FLAT: every visible navigable page as one depth-0 list, no headers or
- *     drill steps. Only TOP-LEVEL entries contribute section seams.
+ *   - FLAT: every visible navigable page in registration order, with no drill
+ *     steps. Collapsible CATEGORY headers dissolve into their surroundings,
+ *     but a no-QML drill parent with two or more navigable descendants stays
+ *     as a collapsible header row (consulting `expandedCategories`) with its
+ *     subtree indented one step; one descendant dissolves the parent and the
+ *     leaf emits under its own title. Only TOP-LEVEL entries contribute
+ *     section seams.
  *   - TREE: the children of the current drill scope, with collapsible
  *     accordion headers, drill parents, and per-entry seams.
  *   - SEARCH: a flat match list from every scope, each row titled with its
@@ -71,9 +76,12 @@ public:
     /**
      * Build the visible row list.
      *
-     * @param flattenTree   Render one flat depth-0 list instead of the tree.
-     *                      Still honoured while searching: a flat-mode search
-     *                      returns flat rows with their overridden titles.
+     * @param flattenTree   Render the flat list instead of the tree (see the
+     *                      class doc: multi-leaf drill parents stay as
+     *                      expandable header rows there, everything else is
+     *                      depth 0). Still honoured while searching: a
+     *                      flat-mode search returns flat rows with their
+     *                      overridden titles.
      * @param searchText    Filter needle. Filtering is disabled when it is
      *                      empty AFTER trimming and search-folding, so a query
      *                      of only whitespace or only combining marks falls
@@ -108,9 +116,11 @@ public:
      *  empty string when it must fall back to the top level. A scope stops
      *  being renderable in three ways, and the rail is wrong differently for
      *  each: the tier filter hides the parent itself, so the rail renders a
-     *  scope the mode has abolished; the filter leaves the parent but hides
-     *  every navigable descendant, so the rail collapses to a lone Back button
-     *  over an empty list; or exactly ONE navigable descendant remains, which
+     *  scope the mode has abolished; the filter leaves the parent standing
+     *  (the mode gate walks the tier chain only) but hides its whole visible
+     *  subtree, so the child list comes back empty and the rail would
+     *  collapse to a lone Back button over an empty list; or exactly ONE
+     *  navigable descendant remains, which
      *  build() flattens into a direct row one level up rather than offering as
      *  a drill target, so the rail would be sitting in a scope its own rows do
      *  not present as enterable. The node must also HAVE visible children and

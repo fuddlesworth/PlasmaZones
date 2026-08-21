@@ -150,23 +150,24 @@ private Q_SLOTS:
     void testModeConditionResolvesPerMode()
     {
         // The flagship per-mode behavior, end-to-end through resolve(): a
-        // `Mode Equals "tiling"` gap rule fills its slot only when the query's
-        // placement mode is "tiling", and stays inert for "snapping" / no mode.
+        // `Mode Equals ModeToken::Tiling` gap rule fills its slot only when the
+        // query's placement mode is that token, and stays inert for Snapping /
+        // no mode.
         RuleSet set;
         set.addRule(makeRule(QStringLiteral("tiling inner gap"), 100,
-                             MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+                             MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QString(ModeToken::Tiling)),
                              {innerGap(14)}));
         RuleEvaluator eval(set);
 
         WindowQuery tiled = konsoleQuery();
-        tiled.mode = QStringLiteral("tiling");
+        tiled.mode = QString(ModeToken::Tiling);
         const ResolvedActions tiledResult = eval.resolve(tiled);
         QVERIFY(tiledResult.hasSlot(QString(ActionSlot::InnerGap)));
         QCOMPARE(tiledResult.slot(QString(ActionSlot::InnerGap))->params.value(QString(ActionParam::Value)).toInt(),
                  14);
 
         WindowQuery snapped = konsoleQuery();
-        snapped.mode = QStringLiteral("snapping");
+        snapped.mode = QString(ModeToken::Snapping);
         QVERIFY(!eval.resolve(snapped).hasSlot(QString(ActionSlot::InnerGap)));
 
         // No placement mode (floating / mode-agnostic) → also inert.
@@ -304,6 +305,84 @@ private Q_SLOTS:
         const ResolvedActions result = eval.resolve(konsoleQuery());
         QVERIFY(result.isExcluded());
         QVERIFY(result.hasSlot(QString(ActionSlot::EngineMode)));
+    }
+
+    // ── Terminal-action scope (full-store evaluators) ──
+
+    void testTerminalScope_outOfScopeTerminalDoesNotStopWalk()
+    {
+        // The WTA/full-store shape: a decoration-only opt-out at high
+        // priority must NOT cancel a lower-priority rule's placement policy
+        // when the evaluator honours only the placement family. The
+        // out-of-scope terminal is inert — no exclusion, no slot fill, walk
+        // continues.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("deco-optout"), 500, MatchExpression{}, {excludeDecorationsAction()}));
+        set.addRule(makeRule(QStringLiteral("restore"), 100, MatchExpression{}, {restorePosition(true)}));
+        RuleEvaluator eval(set);
+        eval.setTerminalActionScope({QString(ActionType::Exclude), QString(ActionType::ExcludePlacement)});
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(!result.isExcluded());
+        QVERIFY(result.hasSlot(QString(ActionSlot::RestorePosition)));
+        QVERIFY(!result.hasSlot(QString(ActionSlot::DecorationExclude)));
+    }
+
+    void testTerminalScope_outOfScopeTerminalOnMixedRuleKeepsSiblingActions()
+    {
+        // A hand-edited mixed rule (scoped exclusion + a non-terminal
+        // action): with the exclusion out of scope, the rule's OTHER actions
+        // still apply — the terminal is skipped, not the rule.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("mixed"), 100, MatchExpression{},
+                             {excludeDecorationsAction(), restorePosition(true)}));
+        RuleEvaluator eval(set);
+        eval.setTerminalActionScope({QString(ActionType::Exclude), QString(ActionType::ExcludePlacement)});
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(!result.isExcluded());
+        QVERIFY(result.hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
+    void testTerminalScope_inScopeTerminalStillStops()
+    {
+        // The scope narrows which terminal actions fire, never whether an
+        // in-scope one does: ExcludePlacement inside the placement scope
+        // behaves exactly like the unscoped evaluator's Exclude.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("placement-optout"), 500, MatchExpression{}, {excludePlacementAction()}));
+        set.addRule(makeRule(QStringLiteral("restore"), 100, MatchExpression{}, {restorePosition(true)}));
+        RuleEvaluator eval(set);
+        eval.setTerminalActionScope({QString(ActionType::Exclude), QString(ActionType::ExcludePlacement)});
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(result.isExcluded());
+        QVERIFY(!result.hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
+    void testTerminalScope_unsetHonoursEveryTerminal()
+    {
+        // The sliced-evaluator default: with no scope set, ANY terminal
+        // action stops the walk — the pre-scope behaviour every dedicated
+        // exclusion evaluator relies on.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("deco-optout"), 500, MatchExpression{}, {excludeDecorationsAction()}));
+        set.addRule(makeRule(QStringLiteral("restore"), 100, MatchExpression{}, {restorePosition(true)}));
+        RuleEvaluator eval(set);
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(result.isExcluded());
+        QVERIFY(!result.hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
+    void testTerminalScope_setterDropsMatchCache()
+    {
+        // The per-window memo caches verdicts computed under the scope in
+        // force at resolve time — setting a scope afterwards must not serve
+        // the stale verdict.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("deco-optout"), 500, MatchExpression{}, {excludeDecorationsAction()}));
+        RuleEvaluator eval(set);
+        const QString windowId = QStringLiteral("app|1");
+        QVERIFY(eval.resolveCached(windowId, konsoleQuery()).isExcluded());
+        eval.setTerminalActionScope({QString(ActionType::Exclude)});
+        QVERIFY(!eval.resolveCached(windowId, konsoleQuery()).isExcluded());
     }
 
     // ── Animation event-scoped slots ──

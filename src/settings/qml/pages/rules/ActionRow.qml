@@ -90,8 +90,11 @@ ColumnLayout {
         if (effectId.length === 0)
             return [];
 
-        var controller = row.appSettings ? row.appSettings.animationsController : null;
-        return controller ? controller.shaderParameters(effectId) : [];
+        // Named for the registry it comes from: a bare `controller` here shadows
+        // the row's own required `controller` property (the RuleController),
+        // which is a different object entirely.
+        var animationsController = row.appSettings ? row.appSettings.animationsController : null;
+        return animationsController ? animationsController.shaderParameters(effectId) : [];
     }
     /// Shader-uniform schema for OverrideOverlayShader — same shape as
     /// `_shaderParamSchema` but sourced from the overlay/snapping shader
@@ -104,11 +107,12 @@ ColumnLayout {
         if (effectId.length === 0)
             return [];
 
-        var controller = row.appSettings ? row.appSettings.snappingShadersPage : null;
-        if (!controller)
+        // Named for its registry, for the same shadowing reason as above.
+        var overlayShadersController = row.appSettings ? row.appSettings.snappingShadersPage : null;
+        if (!overlayShadersController)
             return [];
 
-        var effects = controller.availableShaderEffects() || [];
+        var effects = overlayShadersController.availableShaderEffects() || [];
         for (var i = 0; i < effects.length; ++i) {
             if (effects[i].id === effectId)
                 return effects[i].parameters || [];
@@ -209,6 +213,12 @@ ColumnLayout {
     // keys once here keeps the two halves from drifting onto different literals.
     readonly property string _decorationChainKey: "chain"
     readonly property string _decorationParamsKey: "params"
+    // The SnapToZone action payload has two target lists, ordinals under
+    // "zones" and names under "zoneNames" (PhosphorRules::ActionParam). Each
+    // editor's empty guard has to read the OTHER list to know whether clearing
+    // its own still leaves a target, so both keys are named once here.
+    readonly property string _zoneOrdinalsKey: "zones"
+    readonly property string _zoneNamesKey: "zoneNames"
     // Param-editor Components — one per param `kind`, keyed off `parent.modelData`
     // (the hosting Loader's descriptor). They live in ActionParamEditors.qml
     // (instantiated below as `paramEditors`) so this file stays under the
@@ -217,17 +227,6 @@ ColumnLayout {
     // read `row.*` for state through the `row: row` handle.
     property ActionParamEditors paramEditors: ActionParamEditors {
         row: row
-    }
-
-    /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
-    /// the border-colour validator accepts and the consumer parses back via
-    /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
-    function _toHexArgb(c) {
-        function h(v) {
-            var s = Math.round(v * 255).toString(16);
-            return s.length < 2 ? "0" + s : s;
-        }
-        return "#" + h(c.a) + h(c.r) + h(c.g) + h(c.b);
     }
 
     // `actionEdited`, not `actionChanged`, because `property var action`
@@ -271,8 +270,18 @@ ColumnLayout {
             // key AND the kind — anything looser risks slotting a value
             // typed for one picker into a slot for another (e.g. dropping
             // a layoutId into a tilingAlgorithm field).
-            if (oldKindByKey[newParam.key] === newParam.kind && row.action[newParam.key] !== undefined)
-                payload[newParam.key] = row.action[newParam.key];
+            if (oldKindByKey[newParam.key] !== newParam.kind || row.action[newParam.key] === undefined)
+                continue;
+            // Colour params share key+kind across the accent-capable trio
+            // and the plain-hex actions, but the "accent" sentinel (the
+            // frozen BorderColorToken wire spelling) is only valid where the
+            // descriptor says so — carrying it into a hasHexColor action
+            // would produce a payload its validator rejects while the editor
+            // shows a healthy "Accent" state with no Reset to escape it.
+            // Keep the new type's seeded hex instead.
+            if (newParam.kind === "color" && newParam.acceptsAccent !== true && row.action[newParam.key] === "accent")
+                continue;
+            payload[newParam.key] = row.action[newParam.key];
         }
         return payload;
     }
@@ -370,6 +379,33 @@ ColumnLayout {
             }
         }
 
+        // Info icon — per-action hover help, the WHAT-side mirror of the WHEN
+        // leaf editor's field info icon (MatchLeafEditor's fieldInfoIcon).
+        // The description comes off the actionTypeOptions entry for the
+        // row's current type; an unknown / legacy type yields no text, so
+        // the icon simply hides rather than showing an empty bubble.
+        Kirigami.Icon {
+            // Off the row's own resolved descriptor rather than a second
+            // hand-rolled scan of actionTypeOptions — `_typeEntry` already is
+            // that lookup, and every other consumer on the row reads it.
+            readonly property string _actionDesc: row._typeEntry !== undefined ? (row._typeEntry.description || "") : ""
+
+            visible: _actionDesc !== ""
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-information"
+            color: Kirigami.Theme.highlightColor
+            Accessible.name: _actionDesc
+            ToolTip.text: _actionDesc
+            ToolTip.visible: actionInfoHover.hovered && _actionDesc !== ""
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+
+            HoverHandler {
+                id: actionInfoHover
+            }
+        }
+
         // Per-row warning chip — surfaces when the action's current type is
         // incompatible with the rule's match. The full message lives in the
         // RuleEditorSheet's InlineMessage (which lists every issue across
@@ -427,6 +463,9 @@ ColumnLayout {
                     if (modelData.kind === "snappingLayout")
                         return paramEditors._snappingLayoutEditor;
 
+                    if (modelData.kind === "scrollingTemplate")
+                        return paramEditors._scrollingTemplateEditor;
+
                     if (modelData.kind === "tilingAlgorithm")
                         return paramEditors._tilingAlgorithmEditor;
 
@@ -453,6 +492,9 @@ ColumnLayout {
 
                     if (modelData.kind === "zoneOrdinals")
                         return paramEditors._zoneOrdinalsEditor;
+
+                    if (modelData.kind === "zoneNames")
+                        return paramEditors._zoneNamesEditor;
 
                     if (modelData.kind === "screenId")
                         return paramEditors._screenIdEditor;

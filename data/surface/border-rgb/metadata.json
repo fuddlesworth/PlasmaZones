@@ -3,7 +3,7 @@
     "name": "RGB Cycle",
     "description": "Rounded corners and a window border painted as a full colour wheel wrapped around the frame, slowly rotating. The classic gaming-rig ring. Set the speed to zero for a still rainbow. Width, corner radius, cycle speed, rainbow count, saturation and brightness are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "animated": true,
@@ -24,7 +24,7 @@
             "type": "int",
             "default": 8,
             "min": 0,
-            "max": 32,
+            "max": 64,
             "description": "Roundness of the corners (px, 0 for square)"
         },
         {

@@ -1,0 +1,215 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <QColor>
+#include <QHash>
+#include <QPair>
+#include <QRect>
+#include <QRectF>
+#include <QSet>
+#include <QString>
+#include <QVector>
+
+namespace PhosphorCompositor {
+
+/**
+ * @brief Compositor-agnostic engine-managed (tiling-family) border state
+ *
+ * Tracks which windows are tile-managed (drives border RENDERING). Title-bar/
+ * borderless state lives in the DecorationManager's owner model, not here, and
+ * per-window border appearance (width / radius / colour / show) is resolved
+ * from rules in the effect.
+ * Per-screen keyed so per-VS retiles can update tracking in isolation
+ * without cross-contaminating with windows on sibling virtual screens.
+ * Shared across compositor plugins to avoid duplicating state management.
+ */
+struct BorderState
+{
+    /// windowId → screen bucket of tile-managed windows (drives border
+    /// RENDERING). QHash keyed by screen id so per-VS retiles update only
+    /// their own bucket and don't touch windows managed by a sibling VS's
+    /// retile. Title-bar (borderless) state is NOT tracked here — that is
+    /// the DecorationManager's owner model.
+    QHash<QString, QSet<QString>> tiledWindowsByScreen;
+};
+
+/**
+ * @brief Compositor-agnostic tiling-family state accessors and pure helpers
+ *
+ * These functions operate on BorderState and other pure data structures
+ * without touching any compositor APIs. Shared by all compositor plugins.
+ */
+namespace TilingStateHelpers {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Border state accessors (pure data queries)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief The screen a tiled window is tracked on, or empty if it is not tiled.
+ *
+ * Membership and screen come from the SAME entry here, so they cannot
+ * disagree. That matters wherever a consumer needs both facts: the sibling
+ * per-window screen map is written under a narrower condition than
+ * tiled-membership is, so a window can be a tiled member that map has no entry
+ * for, and a consumer requiring both then silently gets "unknown".
+ */
+inline QString screenForTiledWindow(const BorderState& border, const QString& windowId)
+{
+    for (auto it = border.tiledWindowsByScreen.constBegin(); it != border.tiledWindowsByScreen.constEnd(); ++it) {
+        if (it.value().contains(windowId)) {
+            return it.key();
+        }
+    }
+    return QString();
+}
+
+// Deliberately its OWN loop rather than screenForTiledWindow(...).isEmpty():
+// membership must stay a pure "is it in any bucket" test. Routing it through
+// the screen lookup would make a window held under an empty screen key read as
+// untiled, and this predicate has far more callers than that refactor is worth.
+inline bool isTiledWindow(const BorderState& border, const QString& windowId)
+{
+    for (auto it = border.tiledWindowsByScreen.constBegin(); it != border.tiledWindowsByScreen.constEnd(); ++it) {
+        if (it.value().contains(windowId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window closed cleanup (pure state bookkeeping)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Bundles per-window state maps for cleanup operations.
+ *
+ * Avoids passing 8+ individual references to cleanupClosedWindowState().
+ * The caller constructs this from their member variables.
+ */
+struct TilingWindowState
+{
+    QSet<QString>& notifiedWindows;
+    QHash<QString, QString>& notifiedWindowScreens;
+    QSet<QString>& minimizeFloatedWindows;
+    QHash<QString, QRect>& tileTargetZones;
+    QHash<QString, QRect>& centeredWaylandZones;
+    QSet<QString>& monocleMaximizedWindows;
+    QHash<QString, QHash<QString, QRectF>>& preTileGeometries;
+};
+
+/**
+ * @brief Clean up all state tracking for a closed window.
+ *
+ * Removes the window from all QSet/QHash state maps.
+ * Does NOT handle D-Bus calls or compositor-specific cleanup.
+ */
+inline void cleanupClosedWindowState(const QString& windowId, BorderState& border, TilingWindowState& state)
+{
+    state.notifiedWindows.remove(windowId);
+    state.notifiedWindowScreens.remove(windowId);
+    state.minimizeFloatedWindows.remove(windowId);
+    state.tileTargetZones.remove(windowId);
+    state.centeredWaylandZones.remove(windowId);
+    state.monocleMaximizedWindows.remove(windowId);
+    // Closed windows must be removed from every screen bucket — the effect
+    // may have stale entries if the window crossed screens before closing.
+    for (auto it = border.tiledWindowsByScreen.begin(); it != border.tiledWindowsByScreen.end();) {
+        it.value().remove(windowId);
+        if (it.value().isEmpty()) {
+            it = border.tiledWindowsByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Sweep the pre-tile geometry out of EVERY screen bucket — the same
+    // cross-screen-stale scenario the tiled sweep above defends against
+    // (the window crossed screens before closing) would otherwise leak a
+    // geometry entry in the old screen's bucket forever.
+    for (auto it = state.preTileGeometries.begin(); it != state.preTileGeometries.end();) {
+        it->remove(windowId);
+        if (it->isEmpty()) {
+            it = state.preTileGeometries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-screen BorderState mutators
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Add a window to a screen's tiled bucket. Idempotent.
+inline void addTiledOnScreen(BorderState& border, const QString& screenId, const QString& windowId)
+{
+    border.tiledWindowsByScreen[screenId].insert(windowId);
+}
+
+/// Remove a window from a specific screen's tiled bucket.
+/// Returns true if it was present. Erases the bucket if it becomes empty.
+inline bool removeTiledOnScreen(BorderState& border, const QString& screenId, const QString& windowId)
+{
+    auto it = border.tiledWindowsByScreen.find(screenId);
+    if (it == border.tiledWindowsByScreen.end()) {
+        return false;
+    }
+    const bool removed = it.value().remove(windowId);
+    if (it.value().isEmpty()) {
+        border.tiledWindowsByScreen.erase(it);
+    }
+    return removed;
+}
+
+/// Remove a window from every screen's tiled bucket EXCEPT @p keepScreenId
+/// (cross-screen transfer: a window is tile-managed by one screen at a time,
+/// so re-recording on a new screen first strips any stale sibling claim).
+inline void removeFromOtherScreens(BorderState& border, const QString& windowId, const QString& keepScreenId)
+{
+    for (auto it = border.tiledWindowsByScreen.begin(); it != border.tiledWindowsByScreen.end();) {
+        if (it.key() != keepScreenId) {
+            it.value().remove(windowId);
+        }
+        // The keep-bucket exclusion below is defensive symmetry only: this
+        // function never mutates the keep bucket, so an empty keep bucket
+        // could only pre-exist (and every other mutator erases empty
+        // buckets on the way out).
+        if (it.value().isEmpty() && it.key() != keepScreenId) {
+            it = border.tiledWindowsByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+/// Remove a window from every screen's tiled bucket.
+/// Returns true if any bucket contained it.
+inline bool removeFromAllScreens(BorderState& border, const QString& windowId)
+{
+    bool any = false;
+    for (auto it = border.tiledWindowsByScreen.begin(); it != border.tiledWindowsByScreen.end();) {
+        if (it.value().remove(windowId)) {
+            any = true;
+        }
+        if (it.value().isEmpty()) {
+            it = border.tiledWindowsByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return any;
+}
+
+/// Detached copy of the set of tiled windows on a given screen (QHash::value
+/// copy, not a reference). Empty if none.
+inline QSet<QString> tiledOnScreen(const BorderState& border, const QString& screenId)
+{
+    return border.tiledWindowsByScreen.value(screenId);
+}
+
+} // namespace TilingStateHelpers
+} // namespace PhosphorCompositor

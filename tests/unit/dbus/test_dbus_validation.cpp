@@ -173,18 +173,18 @@ private Q_SLOTS:
     void dragPolicy_autotileBypassRequiresScreenId()
     {
         PhosphorProtocol::DragPolicy p;
-        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         p.captureGeometry = true;
         // screenId empty
         const QString err = p.validationError();
         QVERIFY(!err.isEmpty());
-        QVERIFY(err.contains(QStringLiteral("AutotileScreen bypass requires non-empty screenId")));
+        QVERIFY(err.contains(QStringLiteral("EngineOwnedScreen bypass requires non-empty screenId")));
     }
 
     void dragPolicy_autotileBypass_valid()
     {
         PhosphorProtocol::DragPolicy p;
-        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         p.screenId = QStringLiteral("HP-1");
         p.captureGeometry = true;
         QVERIFY(p.validationError().isEmpty());
@@ -307,6 +307,102 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void tileRequestEntry_invalidScrollEdge_rejected()
+    {
+        // The effect treats any non-"left" value as right, so an unvalidated
+        // unknown string would silently flip an entry's side — the whitelist
+        // is what makes that a dropped entry instead.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.scrollEdge = QStringLiteral("up");
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("scrollEdge")));
+    }
+
+    void tileRequestEntry_scrollEdgeValues_tolerated()
+    {
+        // Empty (no strip motion) and the two screen edges are the only
+        // legal values.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("left");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("right");
+        QVERIFY(e.validationError().isEmpty());
+    }
+
+    void tileRequestEntry_tabFromSelfReference_rejected()
+    {
+        // tabFrom is a paint hint naming the OTHER window of a tab swap. A
+        // foreign id is accepted as-is (the effect resolves or drops ids it
+        // cannot find), but a self-reference would cross-fade a window
+        // against a snapshot of itself, so the boundary rejects it as
+        // garbling.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.tabFrom = QStringLiteral("win-2");
+        QVERIFY(e.validationError().isEmpty());
+        e.tabFrom = QStringLiteral("win-1");
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("tabFrom")));
+    }
+
+    void tileRequestEntry_windowedFullscreenOnFloating_rejected()
+    {
+        // The pair is contradictory (the flag means "keeps its column slot")
+        // and the effect would flip KWin fullscreen state on a free window.
+        // The engine never emits it, so its presence is garbling.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.floating = true;
+        e.windowedFullscreen = true;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // On a tiled entry the flag is legal.
+        e.floating = false;
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+    }
+
+    void tileRequestEntry_windowedFullscreenOnMonocle_rejected()
+    {
+        // Monocle and windowed fullscreen both claim the window's KWin
+        // presentation state, in opposite directions (maximize vs
+        // fullscreen), so a producer emitting both is garbled. Mirrors the
+        // floating pair above.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.monocle = true;
+        e.windowedFullscreen = true;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // Discriminating substring: "windowedFullscreen" is shared with the
+        // floating rejection, so also pin which message fired.
+        QVERIFY(err.contains(QStringLiteral("monocle")));
+        // Without the monocle claim the flag is legal.
+        e.monocle = false;
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     // PhosphorProtocol::BridgeRegistrationResult
     // ═════════════════════════════════════════════════════════════════════
@@ -381,7 +477,7 @@ private Q_SLOTS:
         // Every enum value must round-trip through the wire format.
         const QVector<PhosphorProtocol::DragBypassReason> all{
             PhosphorProtocol::DragBypassReason::None,
-            PhosphorProtocol::DragBypassReason::AutotileScreen,
+            PhosphorProtocol::DragBypassReason::EngineOwnedScreen,
             PhosphorProtocol::DragBypassReason::SnappingDisabled,
             PhosphorProtocol::DragBypassReason::ContextDisabled,
             PhosphorProtocol::DragBypassReason::LayoutSuppressed,
@@ -401,7 +497,8 @@ private Q_SLOTS:
         // still passes if a value's string is typo'd (both directions use the
         // same constant), so pin the literals themselves.
         QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::None), QString());
-        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::AutotileScreen), QStringLiteral("autotile_screen"));
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::EngineOwnedScreen),
+                 QStringLiteral("autotile_screen"));
         QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::SnappingDisabled),
                  QStringLiteral("snapping_disabled"));
         QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::ContextDisabled), QStringLiteral("context_disabled"));

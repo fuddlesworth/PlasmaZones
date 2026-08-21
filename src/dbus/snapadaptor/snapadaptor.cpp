@@ -107,6 +107,12 @@ void SnapAdaptor::clearEngine()
     // a possibly-stale pointer; the existing per-slot null guards now
     // catch the cleared state instead.
     m_contextResolver = nullptr;
+    // The cross-screen reclaim hook is a late-bound dependency like the
+    // others above (it captures the two tiling engines), so it is cleared
+    // here too. Daemon::stop() also clears it explicitly; both exist so the
+    // teardown contract holds whichever path runs and stays
+    // grep-discoverable.
+    m_crossScreenTileReclaim = {};
 }
 
 PhosphorSnapEngine::SnapEngine* SnapAdaptor::engine() const

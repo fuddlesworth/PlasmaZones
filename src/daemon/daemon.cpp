@@ -31,6 +31,7 @@
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include "config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -69,7 +70,7 @@
 #include "dbus/zonedetectionadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
-#include "dbus/autotileadaptor/autotileadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/shaderadaptor.h"
 #include "dbus/compositorbridgeadaptor.h"
@@ -239,14 +240,20 @@ Daemon::Daemon(QObject* parent)
     // FactoryContext and calls buildFromRegistered (both steps are
     // wrapped in buildStandardLayoutSourceBundle — shared with editor
     // + settings so service additions touch one helper rather than
-    // three near-identical blocks). Adding a new engine library
-    // (the planned scrolling engine) is purely a library-side change
-    // — daemon source only edits if the new engine demands a service
-    // the daemon doesn't already publish here. ZonesLayoutSource and
+    // three near-identical blocks). Adding a new engine library is
+    // purely a library-side change — the scrolling engine landed this
+    // way — and daemon source only edits if the new engine demands a
+    // service the daemon doesn't already publish here. ZonesLayoutSource and
     // AutotileLayoutSource both self-wire to their registry's
     // ILayoutSourceRegistry::contentsChanged signal, so no manual
     // bridging is required after build.
-    buildStandardLayoutSourceBundle(m_layoutSources, m_layoutManager.get(), m_algorithmRegistry.get());
+    // The native scrolling-template store is created here (before the
+    // bundle build so the template provider registers) and injected into
+    // the registry in initServices.
+    m_scrollingTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_scrollingTemplateStore->loadTemplates();
+    buildStandardLayoutSourceBundle(m_layoutSources, m_layoutManager.get(), m_algorithmRegistry.get(),
+                                    m_scrollingTemplateStore.get());
     // Cache the bundle's autotile source once so the four init() wiring
     // sites that need it don't each re-call source(QStringLiteral("autotile"))
     // (one literal typo away from silently breaking preview-cache reuse).

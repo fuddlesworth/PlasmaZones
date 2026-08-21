@@ -29,7 +29,8 @@ import org.kde.kirigami as Kirigami
  *   fills need alpha to keep the desktop visible underneath.
  * - `preview*` — zone cards that sit ON A PANEL (settings previews AND
  *   the PopupFrame-hosted picker/selector/OSD contents), resolved
- *   opaquely against the View color set so the same card renders
+ *   opaquely (against the ambient theme roles a singleton can read; see
+ *   the note above the preview properties) so the same card renders
  *   identically in every context. Translucent fills on a panel
  *   composited differently per host and read as a different theme.
  *   The two FILL colors are therefore alpha-stripped at this boundary;
@@ -57,16 +58,21 @@ QtObject {
     // film; panel-hosted previews keep the softer separator recipe.
     readonly property color zoneBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.5)
 
-    // Non-visual scope pinned to the View color set so the preview
-    // defaults resolve against View roles regardless of the caller.
-    readonly property Item _viewScope: Item {
-        Kirigami.Theme.colorSet: Kirigami.Theme.View
-        Kirigami.Theme.inherit: false
-
-        readonly property color highlight: Kirigami.Theme.highlightColor
-        readonly property color alternateBackground: Kirigami.Theme.alternateBackgroundColor
-        readonly property color separator: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-    }
+    // The preview fallbacks read Kirigami.Theme ON THIS SINGLETON, not through
+    // a child Item pinned to the View colour set. A singleton QtObject is never
+    // parented into a scene, and Kirigami's platform theme does not resolve for
+    // an Item that belongs to no window: every role on such a child reads
+    // black, permanently (measured, not assumed). The attached properties on
+    // the singleton itself DO resolve, against the ambient (Window) set. The
+    // View pin that the old `_viewScope` Item was meant to provide is
+    // therefore not available to a singleton at all. What that costs:
+    // highlight (Selection set either way) and text coincide across the
+    // Window and View sets, so the tab fallbacks below and their C++ mirror
+    // still agree; background and alternateBackground do NOT (View is the
+    // lighter pair in Breeze and most schemes), so the preview inactive fill
+    // and the preview border now resolve into the Window family rather than
+    // View. Accepted as the price of non-black fallbacks; every host with a
+    // settings object injects the pipeline colours over these anyway.
 
     // Effective zone colors from the SETTINGS PIPELINE. Hosts that have a
     // settings object INJECT it here (the settings app assigns
@@ -77,18 +83,36 @@ QtObject {
     // resolve engine root context properties like `appSettings` by name
     // (tried; it silently fell back and settings previews mismatched the
     // popups). A preview must show what a zone will actually look like:
-    // with useSystemColors on, the pipeline follows the theme anyway; with
-    // custom colors it shows the user's picks. The theme-role expressions
-    // below are the fallback for engines with no injection and no push.
+    // the pipeline's resolved colors follow the palette while a color's
+    // stored theme-fallback value is empty, and show the user's picks
+    // otherwise. The theme-role expressions below are the fallback for
+    // engines with no injection and no push.
     // Lifetime: the injected object must outlive the engine; if it is
     // deleted externally QML nulls this property and the previews fall
     // back to the theme defaults (or go stale), without crashing.
     property QtObject settingsSource: null
 
     // Settings-embedded preview defaults (effective settings colors,
-    // falling back to View color set roles). Fills are opaque; the border
+    // falling back to the ambient theme roles). Fills are opaque; the border
     // deliberately carries the pipeline's alpha to match the live overlay.
-    readonly property color previewActiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.highlightColor : root._viewScope.highlight)
-    readonly property color previewInactiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.inactiveColor : root._viewScope.alternateBackground)
-    readonly property color previewZoneBorderColor: root.settingsSource ? root.settingsSource.borderColor : root._viewScope.separator
+    readonly property color previewActiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.highlightColor : Kirigami.Theme.highlightColor)
+    readonly property color previewInactiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.inactiveColor : Kirigami.Theme.alternateBackgroundColor)
+    readonly property color previewZoneBorderColor: root.settingsSource ? root.settingsSource.borderColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+
+    // Scroll tab-indicator theme fallbacks — what an EMPTY tab colour key
+    // resolves to, as the settings page's swatch previews (ScrollingTabsPage)
+    // show them. The compositor-drawn pills cannot read this singleton (the
+    // KWin effect has no QML engine), so the SAME four fallbacks are
+    // MIRRORED BY HAND in resolveTabColor() in
+    // kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp, resolved
+    // there from KColorScheme's View and Selection sets: active = highlight,
+    // urgent = negativeText, inactive bar = text at 0.35, inactive chip =
+    // transparent. Change one, change both. The inactive fallback differs
+    // per style ON PURPOSE: a chip carries its title, so its resting state
+    // is no fill at all; a bar segment has nothing but its fill, so an
+    // unfilled one would under-report the tab count.
+    readonly property color tabActiveColor: Kirigami.Theme.highlightColor
+    readonly property color tabInactiveChipColor: "transparent"
+    readonly property color tabInactiveBarColor: Qt.alpha(Kirigami.Theme.textColor, 0.35)
+    readonly property color tabUrgentColor: Kirigami.Theme.negativeTextColor
 }

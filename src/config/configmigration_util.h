@@ -3,8 +3,9 @@
 
 // Dot-path JSON helpers shared across the per-version migration steps. These
 // walk a nested QJsonObject by a dot-separated group path, preserving sibling
-// sub-groups at every ancestor. Inline so each migration TU
-// (configmigration_v2/v4/v5.cpp) gets one definition without an ODR clash.
+// sub-groups at every ancestor. Inline so each consumer TU (the migration
+// steps configmigration_v2/v4/v5/v6.cpp, plus ProfileStore's delta
+// translation) gets one definition without an ODR clash.
 
 #pragma once
 
@@ -42,6 +43,13 @@ inline QJsonObject groupObjectAtPath(const QJsonObject& root, const QString& dot
 /// ancestor are preserved and intermediate objects are created on demand.
 inline void setGroupAtSegments(QJsonObject& root, const QStringList& segments, const QJsonObject& value)
 {
+    // Empty-segment guard: the chain logic below assumes at least one
+    // segment (chain.last()/segments.last() on an empty list read out of
+    // bounds in release builds). ProfileStore feeds this user-editable
+    // dot-path keys, so the contract must be defensive, not assert-only.
+    if (segments.isEmpty()) {
+        return;
+    }
     // Materialise the chain of ancestor objects top-down so each can be
     // rewritten bottom-up with its mutated child (QJsonObject is a value type;
     // value() returns copies, so we must reassign back up the chain).
@@ -69,6 +77,10 @@ inline void setGroupAtSegments(QJsonObject& root, const QStringList& segments, c
 /// Behavior/Effects remain).
 inline void removeGroupAtSegments(QJsonObject& root, const QStringList& segments)
 {
+    // Same empty-segment guard as setGroupAtSegments, for the same reason.
+    if (segments.isEmpty()) {
+        return;
+    }
     QList<QJsonObject> chain;
     chain.reserve(segments.size());
     QJsonObject node = root;

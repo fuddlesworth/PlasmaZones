@@ -1,0 +1,94 @@
+{
+    "id": "phosphor-transfer",
+    "name": "Phosphor Transfer",
+    "description": "Switching tabs in a scrolling column breaks the old tab up into embers that re-settle as the new one. A ragged frontier climbs the column and the material comes apart along it, brightest right where the handover is happening, with the brand gradient from cyan to rose riding the sparks. Both tabs stay fully covered the whole way, so the column never shows the desktop behind it.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Particle",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "grain",
+            "name": "Frontier Grain",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 3.0,
+            "step": 0.1,
+            "description": "Size of the ragged detail along the frontier. Higher values break it into finer fingers.",
+            "group": "Frontier"
+        },
+        {
+            "id": "softness",
+            "name": "Handover Width",
+            "type": "float",
+            "default": 0.18,
+            "min": 0.05,
+            "max": 0.4,
+            "step": 0.01,
+            "description": "How wide the band is where the old tab is coming apart and the new one has not settled yet. Narrow values give a crisp edge, wide ones spread the transfer across most of the column.",
+            "group": "Frontier"
+        },
+        {
+            "id": "unlitDim",
+            "name": "Unlit Dim",
+            "type": "float",
+            "default": 0.55,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the picture sinks toward the dark navy tint inside the handover band, where the material is loose and belongs to neither tab yet. Zero keeps a plain blend and lets the embers do all the work.",
+            "group": "Frontier"
+        },
+        {
+            "id": "glow",
+            "name": "Frontier Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "step": 0.05,
+            "description": "Brightness of the gradient light along the frontier itself.",
+            "group": "Frontier"
+        },
+        {
+            "id": "embers",
+            "name": "Ember Intensity",
+            "type": "float",
+            "default": 0.8,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Strength of the sparks that carry the material from one tab to the other.",
+            "group": "Embers"
+        },
+        {
+            "id": "density",
+            "name": "Ember Density",
+            "type": "float",
+            "default": 26.0,
+            "min": 8.0,
+            "max": 60.0,
+            "step": 1.0,
+            "description": "How many columns of sparks cross the tab. More columns also means smaller sparks, since each one is sized to its column.",
+            "group": "Embers"
+        },
+        {
+            "id": "carry",
+            "name": "Colour Carry",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How much colour the sparks take from the tab they came off. Raise it to make the embers read as the old picture's own material, or drop it to zero for pure gradient sparks.",
+            "group": "Embers"
+        },
+        { "id": "colorCyan", "name": "Gradient Cyan", "type": "color", "default": "#22D3EE" },
+        { "id": "colorBlue", "name": "Gradient Blue", "type": "color", "default": "#3B82F6" },
+        { "id": "colorPurple", "name": "Gradient Purple", "type": "color", "default": "#A855F7" },
+        { "id": "colorRose", "name": "Gradient Rose", "type": "color", "default": "#F43F5E" },
+        { "id": "colorTint", "name": "Unlit Tint", "type": "color", "default": "#0B1730" }
+    ]
+}

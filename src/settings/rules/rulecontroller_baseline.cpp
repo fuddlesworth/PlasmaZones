@@ -95,11 +95,21 @@ void RuleController::stageUserRules(const QList<PhosphorRules::Rule>& userRules)
     renormalizePriorities();
 
     // Deliberately NOT captureSavedSnapshot(): the staged rules must read dirty
-    // so the Rules page badges and the global Save commits them. setRules fires
-    // modelReset, which SettingsController does NOT wire to the dirty reconcile
-    // (see the comment there), so emit dirtyChanged to drive
-    // reconcileRuleBackedDirty and update the footer.
-    Q_EMIT dirtyChanged();
+    // so the Rules page badges AND the global Save commits them. Badging and
+    // committing ride two different mechanisms and BOTH need driving here:
+    // reconcileRuleBackedDirty derives the badge from the value-based
+    // userRulesDirty(), but asyncCommit gates the actual setAllRules push on
+    // m_dirty, and reload() overwrites the model from the daemon whenever
+    // m_dirty is false — so a bare dirtyChanged emit badged the page while the
+    // Save silently pushed nothing and the next rulesChanged broadcast erased
+    // the staged rules. setDirty(true) flips the commit gate and emits on the
+    // transition; the re-stage-while-already-dirty case still needs its own
+    // emit so the reconcile re-runs against the new model contents.
+    const bool wasDirty = m_dirty;
+    setDirty(true);
+    if (wasDirty) {
+        Q_EMIT dirtyChanged();
+    }
 }
 
 void RuleController::resetManagedDefaults()

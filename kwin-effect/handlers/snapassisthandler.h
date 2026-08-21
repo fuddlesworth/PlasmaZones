@@ -62,12 +62,26 @@ public:
         return m_snapAssistEnabled;
     }
 
-    /// Forwards to @c SnapAssistThumbnailCapture::resetRecentlyPosted on the
-    /// underlying capture instance (no-op if capture wasn't lazily
-    /// constructed yet). Called from @c PlasmaZonesEffect's daemon-ready
-    /// path so the kwin-effect's view of "the daemon already holds these
-    /// thumbnails" is invalidated whenever the daemon's cache might be cold.
+    /// Forwards to @c SnapAssistThumbnailCapture::resetRecentlyPosted AND
+    /// @c rearmDmabufPath on the underlying capture instance (no-op if
+    /// capture wasn't lazily constructed yet). Called from
+    /// @c PlasmaZonesEffect's daemon-ready path so the kwin-effect's view of
+    /// "the daemon already holds these thumbnails" is invalidated whenever
+    /// the daemon's cache might be cold — and so a dma-buf fallback latched
+    /// by restart-window transport errors is undone once the daemon is back.
     void resetRecentlyPostedThumbnails();
+
+public Q_SLOTS:
+    /// D-Bus slot for the daemon's Overlay.snapAssistThumbnailCacheTrimmed
+    /// signal: the idle-grace trim just emptied BOTH daemon-side thumbnail
+    /// stores, so every handle in the capture's recently-posted dedup set now
+    /// names an entry the daemon no longer holds. Drop the set (only — no
+    /// dma-buf re-arm; trims fire repeatedly in healthy sessions) so the next
+    /// snap-assist re-captures instead of stranding on icons. Before this
+    /// signal existed the trim desynchronised the two sides permanently:
+    /// the dedup skip re-promoted its stale handles on every show, so they
+    /// never FIFO'd out and only a daemon restart recovered thumbnails.
+    void slotSnapAssistThumbnailCacheTrimmed();
 
 private:
     PhosphorProtocol::SnapAssistCandidateList buildCandidates(const QString& excludeWindowId, const QString& screenId,

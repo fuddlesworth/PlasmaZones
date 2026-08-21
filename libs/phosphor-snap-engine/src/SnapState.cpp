@@ -144,10 +144,15 @@ void SnapState::assignWindowToZones(const QString& rawWindowId, const QStringLis
         Q_EMIT windowAssigned(windowId, validZoneIds.first());
     }
     if (wasFloating) {
-        // Snapping clears the float bit; the dedicated signal must fire like
-        // setFloating/setFloatingOnScreen do, or an exported-API subscriber
-        // tracking float state via floatingChanged misses every
-        // snap-clears-float transition.
+        // Snapping clears the float bit — a layer change, so a float-side
+        // focus memory naming this window is now stale (same rule as
+        // setFloating's arms).
+        if (m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
+        // The dedicated signal must fire like setFloating/setFloatingOnScreen
+        // do, or an exported-API subscriber tracking float state via
+        // floatingChanged misses every snap-clears-float transition.
         Q_EMIT floatingChanged(windowId, false);
     }
     if (zoneChanged || screenChanged || desktopChanged || wasFloating) {
@@ -160,6 +165,18 @@ SnapState::UnassignResult SnapState::unassignWindow(const QString& rawWindowId)
     return clearZoneAssignment(canonicalizeForLookup(rawWindowId), /*preserveScreenAndDesktop=*/false);
 }
 
+bool SnapState::clearScreenAndDesktop(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Both removals run unconditionally, in their own statements. Folding
+    // them into one `a.remove(...) || b.remove(...)` would let short-circuit
+    // evaluation skip the desktop removal whenever the screen one succeeded,
+    // silently leaking the desktop entry.
+    const bool screenRemoved = m_windowScreenAssignments.remove(windowId) > 0;
+    const bool desktopRemoved = m_windowDesktopAssignments.remove(windowId) > 0;
+    return screenRemoved || desktopRemoved;
+}
+
 SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindowId, bool preserveScreenAndDesktop)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
@@ -169,6 +186,12 @@ SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindo
         return result;
     }
     result.wasAssigned = true;
+    // Unsnapping is a layer departure: a snapped-side focus memory naming
+    // this window is now stale (the eligibility filter would reject it
+    // anyway, but the header promises the memories clear on layer changes).
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
     if (!preserveScreenAndDesktop) {
         m_windowScreenAssignments.remove(windowId);
         m_windowDesktopAssignments.remove(windowId);
@@ -189,6 +212,26 @@ QString SnapState::screenForWindow(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowScreenAssignments.value(windowId);
+}
+
+void SnapState::recordResidence(const QString& rawWindowId, const QString& screenId, int virtualDesktop)
+{
+    if (rawWindowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool changed = false;
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
 }
 
 int SnapState::desktopForWindow(const QString& rawWindowId) const
@@ -272,6 +315,21 @@ bool SnapState::isWindowSnapped(const QString& rawWindowId) const
     return m_windowZoneAssignments.contains(windowId);
 }
 
+void SnapState::noteFocused(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    if (windowId.isEmpty()) {
+        return;
+    }
+    if (m_floatingWindows.contains(windowId)) {
+        m_lastFloatingFocus = windowId;
+    } else if (m_windowZoneAssignments.contains(windowId)) {
+        m_lastSnappedFocus = windowId;
+    }
+    // Residence-only windows touch neither memory: they are on no layer the
+    // switch verb can target.
+}
+
 // ── Floating State ──────────────────────────────────────────────────────────
 
 void SnapState::setFloating(const QString& rawWindowId, bool floating)
@@ -287,6 +345,14 @@ void SnapState::setFloating(const QString& rawWindowId, bool floating)
         changed = m_floatingWindows.remove(windowId);
     }
     if (changed) {
+        // The window changed layers: a focus memory naming it on the OLD
+        // side is now stale.
+        if (floating && m_lastSnappedFocus == windowId) {
+            m_lastSnappedFocus.clear();
+        }
+        if (!floating && m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
         Q_EMIT floatingChanged(windowId, floating);
         Q_EMIT stateChanged();
     }
@@ -301,6 +367,9 @@ void SnapState::setFloatingOnScreen(const QString& rawWindowId, const QString& s
     bool changed = false;
     if (!m_floatingWindows.contains(windowId)) {
         m_floatingWindows.insert(windowId);
+        if (m_lastSnappedFocus == windowId) {
+            m_lastSnappedFocus.clear();
+        }
         changed = true;
     }
     if (m_windowScreenAssignments.value(windowId) != screenId) {
@@ -409,6 +478,12 @@ bool SnapState::removeWindowData(const QString& rawWindowId)
     removed |= m_preFloatZoneAssignments.remove(windowId);
     removed |= m_preFloatScreenAssignments.remove(windowId);
     removed |= m_autoSnappedWindows.remove(windowId);
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
+    if (m_lastFloatingFocus == windowId) {
+        m_lastFloatingFocus.clear();
+    }
     return removed;
 }
 
@@ -464,6 +539,15 @@ void SnapState::migrateWindowTo(SnapState* target, const QString& rawWindowId, c
         target->m_autoSnappedWindows.insert(windowId);
         moved = true;
     }
+    // Focus memories stay behind and clear rather than migrate: the target
+    // store's memories re-arm on the next focus report there, and seeding
+    // them would claim a focus that context never saw.
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
+    if (m_lastFloatingFocus == windowId) {
+        m_lastFloatingFocus.clear();
+    }
 
     if (moved) {
         Q_EMIT stateChanged();
@@ -476,8 +560,14 @@ bool SnapState::isEmpty() const
     return m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty()
         && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preFloatZoneAssignments.isEmpty()
         && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty() && m_lastUsedScreenId.isEmpty()
-        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0 && m_userSnappedClasses.isEmpty()
-        && m_autoSnappedWindows.isEmpty();
+        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0
+        && m_userSnappedClasses.isEmpty()
+        // The two focus-memory terms are defence in depth: every public
+        // path that empties the layer sets also clears the matching
+        // memory, so a memories-only store is unreachable today — but
+        // clear()'s early return keys off this predicate, and a future
+        // write path must not let it skip a live memory.
+        && m_autoSnappedWindows.isEmpty() && m_lastSnappedFocus.isEmpty() && m_lastFloatingFocus.isEmpty();
 }
 
 void SnapState::clear()
@@ -498,6 +588,8 @@ void SnapState::clear()
     m_lastUsedSeq = 0;
     m_userSnappedClasses.clear();
     m_autoSnappedWindows.clear();
+    m_lastSnappedFocus.clear();
+    m_lastFloatingFocus.clear();
     Q_EMIT stateChanged();
 }
 

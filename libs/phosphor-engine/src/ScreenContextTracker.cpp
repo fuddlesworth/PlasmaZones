@@ -49,8 +49,24 @@ ContextChange ScreenContextTracker::setCurrentDesktopForScreen(const QString& sc
     if (screenId.isEmpty() || desktop < 1) {
         return {};
     }
-    const int previous = m_screenCurrentDesktop.value(screenId, m_currentDesktop);
-    if (previous == desktop) {
+    const auto perOut = m_screenCurrentDesktop.constFind(screenId);
+    if (perOut == m_screenCurrentDesktop.constEnd()) {
+        // FIRST per-output push for this screen: establish the pin even when
+        // it happens to equal the global desktop. Presence, not value — the
+        // old value-compare against the global fell into the same-desktop
+        // bail and never inserted the entry, so the screen stayed unpinned
+        // and a later GLOBAL setCurrentDesktop dragged its key onto a
+        // desktop the screen was not showing (its state then read as
+        // untracked until a re-push healed it, order-dependently).
+        // `changed` reports whether the key's EFFECTIVE desktop moved (a
+        // first push equal to the global changes nothing observable);
+        // establishing is never a switch, so armSwitch stays false either
+        // way.
+        m_desktopContextEverSet = true;
+        m_screenCurrentDesktop.insert(screenId, desktop);
+        return {desktop != m_currentDesktop, false};
+    }
+    if (perOut.value() == desktop) {
         // Same per-screen desktop still establishes the context (mirrors the
         // same-desktop branch of setCurrentDesktop for the startup push).
         m_desktopContextEverSet = true;
@@ -103,6 +119,16 @@ void ScreenContextTracker::removeScreensIf(const std::function<bool(const QStrin
 
 void ScreenContextTracker::pruneDesktop(int removedDesktop)
 {
+    // COUNT-based semantics, deliberately: the daemon's desktopCountChanged
+    // handler calls this for every desktop NUMBER now above the new count —
+    // it does not know which desktop identity was removed. Values are dropped,
+    // never renumbered, and that is consistent with every sibling per-desktop
+    // store (engine states, assignment maps), which all treat numbers as
+    // positional and rely on the daemon's next desktop pushes to re-establish
+    // shifted positions. Renumbering only these maps would desync them from
+    // the stores they key into. A surviving in-range pin whose CONTENT
+    // shifted heals on the next setCurrentDesktopForScreen push, which KWin
+    // triggers when it relocates the screen off the removed desktop.
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
         if (it.value() == removedDesktop) {
             it = m_screenDesktopOverride.erase(it);

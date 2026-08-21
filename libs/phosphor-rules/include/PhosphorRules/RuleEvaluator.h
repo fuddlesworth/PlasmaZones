@@ -48,7 +48,8 @@ public:
     /// same as an unfilled slot.
     std::optional<RuleAction> slot(const QString& slot) const;
 
-    /// True if a terminal Exclude action matched — the window is unmanaged.
+    /// True if an in-scope terminal exclusion action matched — the window is
+    /// excluded from the resolving consumer's concern.
     bool isExcluded() const
     {
         return m_excluded;
@@ -79,7 +80,7 @@ public:
     /// Returns true if it filled the slot, false if the slot was already filled.
     bool fillSlot(const QString& slot, const RuleAction& action);
 
-    /// Marks the result excluded (a terminal Exclude action matched).
+    /// Marks the result excluded (an in-scope terminal exclusion matched).
     void markExcluded()
     {
         m_excluded = true;
@@ -101,7 +102,9 @@ private:
  *
  * `resolve()` walks the rule set in **descending priority** (ties broken by
  * list order via a stable sort), accumulating the first action that fills
- * each slot. A matching rule with a terminal `Exclude` action stops the walk
+ * each slot. A matching rule with a terminal exclusion action in the
+ * evaluator's terminal-action scope (any terminal action when no scope is
+ * set — see setTerminalActionScope) stops the walk
  * and the result is marked excluded. The descending-priority index is
  * computed once per rule-set revision and reused, so back-to-back resolves
  * against an unchanged set do not re-sort.
@@ -144,11 +147,35 @@ public:
     /// Resolve @p query against the bound rule set. Always recomputes.
     ResolvedActions resolve(const WindowQuery& query) const;
 
+    /// Resolve as above, but consider only rules @p admit accepts.
+    ///
+    /// For resolvers that leave a field UNSTAMPED: an absent field makes a
+    /// leaf false, so a positive predicate correctly never matches — but a
+    /// NEGATED one (`None{Field Equals X}`) matches precisely because the leaf
+    /// failed. A caller that cannot answer for a field must therefore exclude
+    /// rules referencing it structurally rather than rely on the empty-value
+    /// coincidence. An empty @p admit behaves exactly like resolve().
+    ResolvedActions resolveFiltered(const WindowQuery& query, const std::function<bool(const Rule&)>& admit) const;
+
     /// Resolve with a `(windowId, revision)` cache. @p windowId is the
     /// caller's stable per-window key (the `appId|instanceId` composite id).
     /// A cache entry from a stale revision is discarded on access. The cache
     /// is bounded — see the class doc for the eviction policy.
     ResolvedActions resolveCached(const QString& windowId, const WindowQuery& query) const;
+
+    /// Cached resolve that narrows the candidate set, combining
+    /// @ref resolveCached's `(windowId, revision)` memo with
+    /// @ref resolveFiltered's structural admission test. For resolvers that
+    /// leave a field unstamped and must therefore exclude rules referencing it
+    /// (see the resolveFiltered doc for the negation-polarity reason) but still
+    /// want the per-window memo.
+    ///
+    /// PRECONDITION: the memo is keyed on `(windowId, revision)` ALONE, so
+    /// @p admit is IGNORED on a cache hit exactly as @p query is. Every caller
+    /// sharing an evaluator must therefore pass an EQUIVALENT @p admit, or the
+    /// first caller to resolve a window decides which rules the rest see.
+    ResolvedActions resolveCachedFiltered(const QString& windowId, const WindowQuery& query,
+                                          const std::function<bool(const Rule&)>& admit) const;
 
     /// Peek the match cache without resolving: returns the cached verdict for
     /// @p windowId iff one exists at the CURRENT rule-set revision, else nullopt.
@@ -202,6 +229,43 @@ public:
     /// rule-set revision does not reflect.
     void clearCache() const;
 
+    /// Drop ONE window's cache entry. The targeted sibling of clearCache()
+    /// for high-frequency per-window edges (frame-geometry ticks): a change
+    /// that can only alter this window's verdict must not cold-start every
+    /// other window's. No-op when the window has no entry.
+    void evictCached(const QString& windowId) const
+    {
+        m_cache.remove(windowId);
+    }
+
+    /**
+     * @brief Restrict which terminal action TYPES this evaluator honours.
+     *
+     * With no scope set (the default), any terminal action in a matching rule
+     * marks the result excluded and stops the walk — correct for the sliced
+     * exclusion evaluators, whose bound sets contain only rules of their own
+     * exclusion family. An evaluator bound to the FULL rule store must narrow
+     * this: the Exclude family is scoped by consumer concern (placement /
+     * decorations / animations), and honouring an out-of-scope terminal action
+     * would let, say, a decoration-only opt-out cancel placement resolution
+     * for every lower-priority rule — the exact leak the scoped actions'
+     * documentation promises cannot happen.
+     *
+     * With a scope set, a terminal action whose type is NOT in @p honoredTypes
+     * is skipped entirely during resolution: it fills no slot (its slot ids are
+     * declared for registry completeness only) and does not stop the walk, so
+     * the rule's other actions and all lower-priority rules still apply.
+     *
+     * Set the scope immediately after construction, before the first resolve —
+     * the per-window match cache memoises verdicts computed under the scope in
+     * force at resolve time, so this call defensively drops the cache.
+     */
+    void setTerminalActionScope(QSet<QString> honoredTypes)
+    {
+        m_terminalScope = std::move(honoredTypes);
+        clearCache();
+    }
+
     /// Number of live cache entries — for tests / benchmarks.
     int cacheSize() const
     {
@@ -221,6 +285,11 @@ public:
 
 private:
     const RuleSet& m_ruleSet;
+
+    /// When engaged, only terminal action types in this set stop the walk —
+    /// see @ref setTerminalActionScope. Disengaged = honour every terminal
+    /// action (the sliced-evaluator default).
+    std::optional<QSet<QString>> m_terminalScope;
 
     struct CacheEntry
     {

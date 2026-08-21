@@ -3,20 +3,16 @@
 
 #pragma once
 
-#include <PhosphorEngine/JsonKeys.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorEngine/EngineTypes.h>
 
-#include <QColor>
 #include <QLatin1String>
-#include <QMetaType>
 #include <QString>
-#include <limits>
 
 // Shared shapes (per-side gap struct + aspect-ratio classification) live in
 // libs/phosphor-layout-api so every layout/tile provider can consume them
-// without forcing them to depend on PlasmaZones internals.  Re-aliased into
-// namespace PlasmaZones below.
+// without forcing them to depend on PlasmaZones internals.  Referenced
+// qualified below — no aliases here.
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorLayoutApi/LayoutId.h>
@@ -32,6 +28,23 @@
 // directly.
 
 namespace PlasmaZones {
+
+/// Dynamic QCoreApplication property carrying the GPU-preference environment
+/// variable names this process exported (a QStringList; see
+/// daemon/rendering/vulkansupport.h). Spawn sites remove these names from a
+/// child's environment so an inherited export cannot trip the child's
+/// pre-set-value guards and freeze it on this process's stale GPU pin. The
+/// constant lives here (not in vulkansupport.h) so plasmazones_core spawn
+/// sites can read the property without a link dependency on the executables
+/// that compile vulkansupport.cpp.
+inline constexpr const char* PGpuExportedVarsProperty = "_p_gpuExportedVars";
+
+/// Companion property: environment variables this process CLEARED for the GPU
+/// preference (a QVariantMap of name to the original value). A session-wide
+/// NVIDIA offload export is cleared in-process when the pinned GPU is not
+/// NVIDIA; children have no stake in that clear, so spawn sites restore these
+/// into the child environment after scrubbing the exported names.
+inline constexpr const char* PGpuClearedVarsProperty = "_p_gpuClearedVars";
 
 // PhosphorZones::ZoneGeometryMode lives in libs/phosphor-zones —
 // `PhosphorZones::Zone.h` declares it inside `namespace PlasmaZones` so it's
@@ -101,6 +114,19 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
 inline constexpr int MaxLayoutNameLength = 40;
 
 /**
+ * @brief Maximum length for a scrolling template's free-text description.
+ *
+ * The sibling of @ref MaxLayoutNameLength for the one template field that
+ * has no name-length counterpart. Three points enforce it: the editor's
+ * TemplatePropertyPanel.qml mirrors the cap client-side via
+ * @c maximumLength, EditorTemplateModel::setDescription clamps at the model
+ * setter, and the layout adaptor's D-Bus boundary re-applies it via
+ * @ref clampName — a direct D-Bus caller can hand us an unbounded string
+ * that then lands in the store's JSON file and in every picker tooltip.
+ */
+inline constexpr int MaxTemplateDescriptionLength = 500;
+
+/**
  * @brief Clamp a user-visible name to @p maxLength UTF-16 code units without
  * splitting a surrogate pair.
  *
@@ -118,7 +144,10 @@ inline constexpr int MaxLayoutNameLength = 40;
  * lone (a well-formed pair ends in a LOW surrogate), so dropping it is always
  * correct. Trailing whitespace goes with it, whether the cut exposed it or the
  * name arrived that way: a stored name ending in a space is never what a user
- * meant, and the D-Bus boundary has no other trim. Leading whitespace is the
+ * meant, and the D-Bus boundary has no other trim. The template DESCRIPTION
+ * callers (the adaptor boundary and EditorTemplateModel::setDescription)
+ * route free text through the same trim; that is accepted for them too,
+ * since the description is trimmed at save anyway. Leading whitespace is the
  * callers' sanitizers' concern, not the clamp's. Names that are within the
  * limit and already end well-formed are returned unchanged, without a copy.
  *
@@ -190,47 +219,22 @@ namespace JsonKeys {
 // (libs/phosphor-zones).  All in-tree callers reference them qualified
 // directly — no using-aliases here.
 //
-// PlasmaZones-side JSON keys below aren't part of the zone/layout file
-// format proper — assignment runtime state, screen-info enumeration,
-// virtual-screen configuration, pywal colour ingestion.
-
-// Assignment keys
-inline constexpr QLatin1String Assignments{"assignments"};
+// What remains below is the part of the screen-info D-Bus reply that this
+// namespace owns: fields `fetchScreens()` (src/settings/utils/screenprovider.cpp)
+// parses out of getScreenInfo.  It does not cover the whole reply — the
+// connector name and the geometry sub-keys come from ZoneJsonKeys.
+//
+// Only the fields with a caller are kept. Dropping the unread ones is safe
+// because the producer does not consume these: PhosphorScreens deliberately
+// keeps its own private copy of the key strings
+// (libs/phosphor-screens/src/dbusscreenadaptor.cpp) so the library stays
+// self-contained.
 inline constexpr QLatin1String ScreenId{"screenId"};
-inline constexpr QLatin1String Screen{"screen"};
-inline constexpr QLatin1String Desktop{"desktop"};
-inline constexpr QLatin1String Activity{"activity"};
-inline constexpr QLatin1String LayoutId{"layoutId"};
-inline constexpr QLatin1String QuickShortcuts{"quickShortcuts"};
-
-// Screen info keys
 inline constexpr QLatin1String Geometry{"geometry"};
 inline constexpr QLatin1String Manufacturer{"manufacturer"};
 inline constexpr QLatin1String Model{"model"};
-inline constexpr QLatin1String PhysicalSize{"physicalSize"};
-inline constexpr QLatin1String Depth{"depth"};
-inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
-inline constexpr QLatin1String RefreshRate{"refreshRate"};
-
-// Pywal color file keys
-inline constexpr QLatin1String Colors{"colors"};
-
-// PhosphorZones::Zone assignment serialization keys — authoritative definitions
-// live in PhosphorEngine::JsonKeys (LGPL); imported here for daemon callers.
-using PhosphorEngine::JsonKeys::SourceZoneId;
-using PhosphorEngine::JsonKeys::TargetZoneId;
-using PhosphorEngine::JsonKeys::TargetZoneIds;
-using PhosphorEngine::JsonKeys::WindowId;
-
-// Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
-inline constexpr QLatin1String PhysicalScreenId{"physicalScreenId"};
-inline constexpr QLatin1String SerialNumber{"serialNumber"};
-inline constexpr QLatin1String Index{"index"};
-inline constexpr QLatin1String DisplayName{"displayName"};
-inline constexpr QLatin1String Region{"region"};
-inline constexpr QLatin1String Screens{"screens"};
 }
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;

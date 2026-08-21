@@ -663,6 +663,11 @@ PlasmaZonesEffect::compileOrLoadAnimationShader(const QString& effectId,
         // AnimationShaderContract::kIWindowOpacity.
         cached.iWindowOpacityLoc =
             shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIWindowOpacity);
+        // The old side's own opacity (old_content.glsl's oldColor multiply).
+        // Linked only by packs including that module; -1 elsewhere, exactly
+        // like iOldWindowLoc.
+        cached.iOldWindowOpacityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIOldWindowOpacity);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color

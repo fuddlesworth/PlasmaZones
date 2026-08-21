@@ -199,6 +199,7 @@ set(phosphorwayland_layershell_SRCS
     src/topleveldrag.cpp
     src/foreigntoplevel.cpp
     src/idleinhibitor.cpp
+    src/surfaceidentity.cpp
     src/clipboarddevice.cpp
     src/sessionlock.cpp
     src/compositorlost.cpp
@@ -358,10 +359,21 @@ install(FILES
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorWayland
 )
 
-# Public headers
+# Public headers.
+#
+# The extensionless Qt-style forwarding headers are named explicitly because
+# FILES_MATCHING PATTERN "*.h" does not match them. Without this a consumer
+# writing #include <PhosphorWayland/LayerSurface> builds in-tree, where
+# BUILD_INTERFACE points at the source include directory and the file is
+# present, and then fails against the installed package.
 install(DIRECTORY include/PhosphorWayland/
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorWayland
-    FILES_MATCHING PATTERN "*.h"
+    FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "IdleNotifier"
+        PATTERN "LayerSurface"
+        PATTERN "SinglePixelBuffer"
+        PATTERN "ToplevelDrag"
 )
 
 # Export header

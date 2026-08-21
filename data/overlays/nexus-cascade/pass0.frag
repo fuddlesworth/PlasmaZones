@@ -86,8 +86,11 @@ void main() {
 
     vec3 col = mix(c1, c2, p);
     col = mix(col, c3, f * 0.5);
-    float mod = 0.65 + 0.35 * (p * f + sin(t + uvPlasma.x * TAU + uvFlow.y * 4.0) * 0.15);
-    col *= mod;
+    // Not named `mod`: that shadows the GLSL built-in, and any future edit
+    // calling mod() below this line would break into a swallowed compile
+    // error rendering the pack flat gray.
+    float modulate = 0.65 + 0.35 * (p * f + sin(t + uvPlasma.x * TAU + uvFlow.y * 4.0) * 0.15);
+    col *= modulate;
 
     // ── Bass = Plasma ERUPTION Bursts ─────────────────────────────────
     // Localized solar-flare-like hot spots that bloom outward on bass hits.

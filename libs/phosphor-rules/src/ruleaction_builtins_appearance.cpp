@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Built-in action descriptor table, per-window appearance / gap / autotile-param
-// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls
-// registerBuiltinsEngine() then this, in that order. Shared param validators and
-// slot helpers live in ruleaction_builtins_p.h.
+// / scrolling-param half. Split from ruleaction.cpp for file-size;
+// registerBuiltins() calls registerBuiltinsEngine(), then this, then
+// registerBuiltinsIndicators() (the tab- and drop-indicator families, split off
+// here for the same reason), in that order. Shared param validators and slot
+// helpers live in ruleaction_builtins_p.h.
 
 #include <PhosphorRules/RuleAction.h>
 
@@ -39,22 +41,31 @@ void ActionRegistry::registerBuiltinsAppearance()
         .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("windowManagement"),
-        .displayOrder = 5,
+        // 9, not 5: ExcludePlacement already holds 5 in this category
+        // (ruleaction_builtins_engine.cpp), and displayOrder is meant to be
+        // unique per category.
+        .displayOrder = 9,
     });
 
-    // Two more per-window restore-policy overrides, same shape as RestorePosition
-    // (bool, seeds FALSE because both governing settings default ON — the only
-    // meaningful fresh-rule value is "opt this window OUT"). Consumed daemon-side
-    // (the managed-restore predicate / the drag-out unsnap paths), not the effect.
+    // Three more per-window snap-policy overrides, same bool shape as
+    // RestorePosition, consumed daemon-side (the managed-restore predicate /
+    // the drag-out unsnap paths / the unfloat-fallback predicate), not the
+    // effect. The SEED differs per row: the two restore policies seed FALSE
+    // (their governing settings default ON, so the meaningful fresh rule is
+    // "opt this window OUT"), while the unfloat fallback seeds TRUE (its
+    // global `snapUnfloatFallbackToZone` defaults OFF, so the meaningful
+    // fresh rule is "opt this window IN").
     struct RestorePolicy
     {
         QLatin1StringView type;
         QLatin1StringView slot;
         int order;
+        double seed;
     };
     for (const RestorePolicy& rp : {
-             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6},
-             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7},
+             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6, 0.0},
+             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7, 0.0},
+             RestorePolicy{ActionType::SetUnfloatFallbackToZone, ActionSlot::UnfloatFallbackToZone, 10, 1.0},
          }) {
         const QString slot = QString(rp.slot);
         registerAction(ActionDescriptor{
@@ -70,7 +81,9 @@ void ActionRegistry::registerBuiltinsAppearance()
             .terminal = false,
             .allowedKeys = {QString(ActionParam::Value)},
             .domain = ActionDomain::Window,
-            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+            .params = {P{.key = QString(ActionParam::Value),
+                         .kind = QStringLiteral("bool"),
+                         .defaultDisplay = rp.seed}},
             .category = QStringLiteral("windowManagement"),
             .displayOrder = rp.order,
         });
@@ -100,6 +113,51 @@ void ActionRegistry::registerBuiltinsAppearance()
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 8,
         .tags = {QString(Tag::Effect)},
+    });
+
+    // Per-window scroll-speed multiplier (niri's scroll-factor window rule).
+    // Effect-consumed: the input filter rescales axis events in place while
+    // the pointer hovers the matched window. Wayland sessions only.
+    //
+    // Tag::EffectVerdict, not Tag::Effect: this is a one-shot input verdict,
+    // not an appearance override, and a user's "no animations" rule must not
+    // cancel it — see the Tag::EffectVerdict doc in RuleAction.h.
+    //
+    // The wire value is the MULTIPLIER itself ([MinScrollFactor,
+    // MaxScrollFactor], a fraction below 1), so the editor renders it as a
+    // PERCENT with the usual 0.01 scale — the split-ratio / column-width
+    // shape. A plain `number` kind would hand the fractional range to the
+    // integer spin box, where every value below 1 is unreachable and the
+    // floored 0 it saves instead fails this validator on the next load.
+    //
+    // Category stays "windowManagement" even though its three niri
+    // window-rule siblings (OpenFullscreen / OpenFocused / OpenMaximized) are
+    // "layoutEngine": the settings picker's layoutEngine branch buckets by
+    // explicit type lists and its fall-through lands in the CONTEXT-domain
+    // "Engine" group, so moving this window-domain action there without the
+    // matching settings-side row would put it on the wrong side of the
+    // picker's context/window divider.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ScrollFactor),
+        .slotFor = constantSlot(ActionSlot::ScrollFactor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinScrollFactor, kMaxScrollFactor);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        // defaultDisplay 100 %: a fresh rule starts at "no visible change" and
+        // the user deliberately moves off it — SetOpacity's 100% rationale.
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinScrollFactorPercent,
+                     .max = kMaxScrollFactorPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 100.0}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 11,
+        .tags = {QString(Tag::EffectVerdict)},
     });
 
     // ── per-window border / title-bar appearance slots (domain Window) ──
@@ -291,6 +349,27 @@ void ActionRegistry::registerBuiltinsAppearance()
         .tags = {QString(Tag::Border), QString(Tag::Effect)},
     });
 
+    // ── decoration-exclude slot — the decoration mirror of ExcludeAnimations.
+    // A rule with `ExcludeDecorations` suppresses the border + surface-pack
+    // chain for matched windows via the effect's shouldDecorateWindow gate,
+    // which binds the Exclude ∪ ExcludeDecorations slice
+    // (ExclusionRules::excludeDecorationsRulesFrom). Terminal for the same
+    // reason ExcludeAnimations is; deliberately NOT Tag::Effect so it never
+    // enters the effect's animation rule set (whose any-match gate
+    // force-animates — wrong for a decoration opt-out). Tag::Border is
+    // classification only (no in-tree tag reader).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludeDecorations),
+        .slotFor = constantSlot(ActionSlot::DecorationExclude),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+        .category = QStringLiteral("borderAppearance"),
+        .displayOrder = 9,
+        .tags = {QString(Tag::Border)},
+    });
+
     // ── per-context gap slots (domain Context) ──
     // Resolved daemon-side at zone-geometry time (DaemonGeometryResolver) as
     // the highest-precedence gap layer. Per-property to mirror the
@@ -433,12 +512,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .validate =
             [](const QJsonObject& p) {
                 // Wire is the [kMinSplitRatio, kMaxSplitRatio] ratio; edited as a percent.
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinSplitRatio && d <= kMaxSplitRatio;
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinSplitRatio, kMaxSplitRatio);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -556,6 +630,356 @@ void ActionRegistry::registerBuiltinsAppearance()
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 16,
         .tags = {QString(Tag::LayoutEngine)},
+    });
+
+    // ── per-context scrolling parameter slots (domain Context) ──
+    // Resolved daemon-side by LayoutRegistry::resolveContextScrollingParams and
+    // layered onto the scrolling engine's per-screen parameters, exactly as the
+    // autotile family above is layered onto the tiling override map.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollDefaultColumnWidth),
+        .slotFor = constantSlot(ActionSlot::ScrollDefaultColumnWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                // Wire is the [kMinColumnWidthRatio, kMaxColumnWidthRatio] fraction of
+                // the work area; edited as a percent (mirrors SetSplitRatio).
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 17,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetCenterFocusedColumn),
+        .slotFor = constantSlot(ActionSlot::CenterFocusedColumn),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == CenterFocusedColumnToken::Never || v == CenterFocusedColumnToken::Always
+                    || v == CenterFocusedColumnToken::OnOverflow;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(CenterFocusedColumnToken::Never),
+                                        QString(CenterFocusedColumnToken::Always),
+                                        QString(CenterFocusedColumnToken::OnOverflow)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 18,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollDefaultColumnDisplay),
+        .slotFor = constantSlot(ActionSlot::ScrollDefaultColumnDisplay),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == ColumnDisplayToken::Normal || v == ColumnDisplayToken::Tabbed;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(ColumnDisplayToken::Normal), QString(ColumnDisplayToken::Tabbed)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 19,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollInsertPosition),
+        .slotFor = constantSlot(ActionSlot::ScrollInsertPosition),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == ScrollInsertPositionToken::RightOfActive || v == ScrollInsertPositionToken::LeftOfActive
+                    || v == ScrollInsertPositionToken::First || v == ScrollInsertPositionToken::Last
+                    || v == ScrollInsertPositionToken::IntoActiveColumn;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(ScrollInsertPositionToken::RightOfActive),
+                                        QString(ScrollInsertPositionToken::LeftOfActive),
+                                        QString(ScrollInsertPositionToken::First),
+                                        QString(ScrollInsertPositionToken::Last),
+                                        QString(ScrollInsertPositionToken::IntoActiveColumn)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 23,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollDefaultWindowHeight),
+        .slotFor = constantSlot(ActionSlot::ScrollDefaultWindowHeight),
+        .validate =
+            [](const QJsonObject& p) {
+                // Same wire shape as the width pair — a work-area fraction
+                // sharing the same shared bounds (a height may take the
+                // whole column, so the 1.0 ceiling is right here too).
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 24,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
+    // ── per-context scrolling BEHAVIOUR overrides (domain Context) ──
+    // The six boolean toggles that had no rule seam until now. Same shape as
+    // the sizing slots above: five ride the per-screen override map and the
+    // engine reads each through an `effective*` accessor falling back to the
+    // global config value, while focus-follows-mouse is resolved per screen
+    // and pushed to the compositor instead (its consumer lives there).
+    // Each seeds the polarity a user reaches for: the three whose global
+    // default is ON seed FALSE (the meaningful rule is "turn it off here"),
+    // and the three whose global default is OFF — cropStraddlers,
+    // alwaysCenterSingleColumn and focusFollowsMouse — seed TRUE.
+    struct ScrollBehaviourToggle
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+        double seed;
+    };
+    for (const ScrollBehaviourToggle& t : {
+             ScrollBehaviourToggle{ActionType::SetScrollAlwaysCenterSingleColumn,
+                                   ActionSlot::ScrollAlwaysCenterSingleColumn, 30, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollRespectMinimumSize, ActionSlot::ScrollRespectMinimumSize, 31,
+                                   0.0},
+             ScrollBehaviourToggle{ActionType::SetScrollCropStraddlers, ActionSlot::ScrollCropStraddlers, 32, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollFocusNewWindows, ActionSlot::ScrollFocusNewWindows, 33, 0.0},
+             ScrollBehaviourToggle{ActionType::SetScrollSmartGaps, ActionSlot::ScrollSmartGaps, 34, 0.0},
+             // Effect-consumed rather than engine-consumed, but structurally
+             // the same context bool, so it registers with its neighbours.
+             ScrollBehaviourToggle{ActionType::SetScrollFocusFollowsMouse, ActionSlot::ScrollFocusFollowsMouse, 36,
+                                   1.0},
+         }) {
+        const QString slot = QString(t.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(t.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasBool(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = t.seed}},
+            .category = QStringLiteral("layoutEngine"),
+            .displayOrder = t.order,
+            .tags = {QString(Tag::LayoutEngine)},
+        });
+    }
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollStickyWindowHandling),
+        .slotFor = constantSlot(ActionSlot::ScrollStickyWindowHandling),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == StickyWindowHandlingToken::TreatAsNormal || v == StickyWindowHandlingToken::RestoreOnly
+                    || v == StickyWindowHandlingToken::IgnoreAll;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(StickyWindowHandlingToken::TreatAsNormal),
+                                        QString(StickyWindowHandlingToken::RestoreOnly),
+                                        QString(StickyWindowHandlingToken::IgnoreAll)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 35,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // The strip axis: a closed three-token vocabulary in the config INTENT
+    // space (auto resolves from the work-area shape at relayout, so a rule
+    // can put a pinned monitor back on shape-matching for one context).
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollStripAxis),
+        .slotFor = constantSlot(ActionSlot::ScrollStripAxis),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == StripAxisToken::Auto || v == StripAxisToken::Horizontal || v == StripAxisToken::Vertical;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     // Vertical FIRST, deliberately out of config-intent
+                     // order: the editor seeds a fresh enum action with the
+                     // first wire value, and Auto is the global default, so
+                     // an Auto-seeded rule looked like it did nothing on any
+                     // setup without a per-screen pin to override. Forcing
+                     // an axis (portrait monitors are the feature's whole
+                     // point) is what a fresh axis rule is for; Auto stays
+                     // available as the put-it-back-on-shape-matching arm.
+                     .enumWireValues = {QString(StripAxisToken::Vertical), QString(StripAxisToken::Horizontal),
+                                        QString(StripAxisToken::Auto)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 37,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
+    // ── per-window scrolling open overrides (domain Window) ──
+    // Read on the open path for the matched window and layered over the context /
+    // config defaults above, so one application opens wide, tabbed, or into the
+    // focused column without changing the engine's defaults.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenColumnWidth),
+        .slotFor = constantSlot(ActionSlot::OpenColumnWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                // Same wire shape as SetScrollDefaultColumnWidth — a work-area fraction.
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 20,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenTabbed),
+        .slotFor = constantSlot(ActionSlot::OpenTabbed),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 21,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenColumnPlacement),
+        .slotFor = constantSlot(ActionSlot::OpenColumnPlacement),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == ColumnPlacementToken::NewColumn || v == ColumnPlacementToken::Consume;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{
+            .key = QString(ActionParam::Value),
+            .kind = QStringLiteral("enum"),
+            .enumWireValues = {QString(ColumnPlacementToken::NewColumn), QString(ColumnPlacementToken::Consume)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 22,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenWindowHeight),
+        .slotFor = constantSlot(ActionSlot::OpenWindowHeight),
+        .validate =
+            [](const QJsonObject& p) {
+                // Same wire shape as the width slots — a work-area fraction
+                // against the shared column-width bounds, applied to the height.
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinColumnWidthPercent,
+                     .max = kMaxColumnWidthPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 25,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenMaximized),
+        .slotFor = constantSlot(ActionSlot::OpenMaximized),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 26,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenFocused),
+        .slotFor = constantSlot(ActionSlot::OpenFocused),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        // defaultDisplay 0.0: the global focus-new-windows setting defaults ON,
+        // so the meaningful fresh-rule value is "do not steal focus".
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 27,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Effect-consumed, unlike its Open* siblings: Tag::EffectVerdict (not
+    // LayoutEngine) admits the rule into the KWin effect's rule set, where
+    // the open-time fullscreen flip lives. The VERDICT tag rather than
+    // Tag::Effect because this is a one-shot open verdict, not an appearance
+    // override, and an ExcludeAnimations rule must not cancel it — see the
+    // Tag::EffectVerdict doc in RuleAction.h. See also the ActionType doc.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenFullscreen),
+        .slotFor = constantSlot(ActionSlot::OpenFullscreen),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 28,
+        .tags = {QString(Tag::EffectVerdict)},
     });
 }
 

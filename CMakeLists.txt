@@ -278,7 +278,6 @@ endif()
 # ---------------------------------------------------------------------------
 include(cmake/PhosphorTranslations.cmake)
 
-
 # Generate version header with compile-time version info
 configure_file(
     "${CMAKE_SOURCE_DIR}/src/core/version.h.in"
@@ -376,7 +375,7 @@ add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + w
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
-
+add_subdirectory(libs/phosphor-scroll-engine) # niri-style scrolling placement engine (strip model + engine)
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 
@@ -387,6 +386,7 @@ set(PHOSPHOR_ENGINE_TARGETS
     PhosphorZones
     PhosphorSnapEngine
     PhosphorTileEngine
+    PhosphorScrollEngine
     PhosphorEngine
     PhosphorWorkspaces
     PhosphorPlacement
@@ -516,13 +516,15 @@ install(FILES
     dbus/org.plasmazones.EditorApp.xml
     dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
+    dbus/org.plasmazones.Rules.xml
     dbus/org.plasmazones.Screen.xml
+    dbus/org.plasmazones.Scrolling.xml
     dbus/org.plasmazones.Settings.xml
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.Snap.xml
+    dbus/org.plasmazones.Tiling.xml
     dbus/org.plasmazones.WindowDrag.xml
-    dbus/org.plasmazones.Rules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
@@ -531,6 +533,12 @@ install(FILES
 # Install default layouts
 install(DIRECTORY data/layouts/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/layouts
+    FILES_MATCHING PATTERN "*.json"
+)
+
+# Install bundled scrolling templates
+install(DIRECTORY data/scrolling-templates/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/scrolling-templates
     FILES_MATCHING PATTERN "*.json"
 )
 
@@ -834,7 +842,25 @@ endif()
 
 endif() # examples/ present (Nix strips it; see the guard above)
 
-# Custom uninstall target that cleans up directories properly
+# Custom uninstall target that cleans up directories properly.
+# QT6_INSTALL_PLUGINS repeats phosphor-wayland's QPA install-path derivation
+# (a subdirectory-scope variable there, so re-derived here for the configure
+# below). The fallback there spells the libdir relative and here absolute,
+# which resolves to the same place: install() roots a relative DESTINATION at
+# the prefix, and the absolute branch below prepends the prefix itself.
+if(NOT DEFINED QT6_INSTALL_PLUGINS)
+    get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
+    if(NOT QT6_INSTALL_PLUGINS)
+        set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_FULL_LIBDIR}/qt6/plugins")
+    endif()
+endif()
+# The Qt property can be prefix-relative; the uninstall script needs an
+# absolute path (matching how install() resolves relative DESTINATIONs).
+if(IS_ABSOLUTE "${QT6_INSTALL_PLUGINS}")
+    set(PZ_UNINSTALL_QT_PLUGINS "${QT6_INSTALL_PLUGINS}")
+else()
+    set(PZ_UNINSTALL_QT_PLUGINS "${CMAKE_INSTALL_PREFIX}/${QT6_INSTALL_PLUGINS}")
+endif()
 configure_file(
     "${CMAKE_SOURCE_DIR}/cmake/uninstall.cmake.in"
     "${CMAKE_BINARY_DIR}/cmake_uninstall.cmake"

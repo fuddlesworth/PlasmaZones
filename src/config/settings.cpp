@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settings.h"
-#include "colorimporter.h"
 #include "configdefaults.h"
 #include "configbackends.h"
 #include "configmigration.h"
@@ -22,12 +21,8 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
-#include <QEvent>
-#include <QGuiApplication>
-#include <QScopedValueRollback>
 #include <QMetaMethod>
 #include <QMetaProperty>
-#include <QPalette>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -209,6 +204,11 @@ void Settings::load()
 
     m_configBackend->reparseConfiguration();
 
+    // Whatever the reparse just brought in may have bypassed the kind-aware
+    // width setter, and the schema clamp cannot catch it (its bounds span both
+    // kinds). Coerce before anything reads the pair.
+    normalizeScrollingColumnWidthValue();
+
     // Per-mode disable lists live in rules.json, a separate file the
     // config backend's reparseConfiguration() does not touch. Reload the
     // rule store explicitly so a cross-process write (daemon shortcut, KCM
@@ -240,13 +240,18 @@ void Settings::load()
     // daemon reloads the maps but its settingsChanged-driven retile never runs,
     // so per-monitor gaps never take effect on save (discussion #661).
     const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
+    const QHash<QString, QVariantMap> perScreenScrollingZoneSelectorBefore = m_perScreenScrollingZoneSelectorSettings;
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
+    const QHash<QString, QVariantMap> perScreenScrollingBefore = m_perScreenScrollingSettings;
 
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
+    const bool perScreenScrollingZoneSelectorChanged =
+        perScreenScrollingZoneSelectorBefore != m_perScreenScrollingZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
+    const bool perScreenScrollingChanged = perScreenScrollingBefore != m_perScreenScrollingSettings;
     // Per-monitor gaps are config-backed and live in the per-screen autotile store.
     // A gap change must resnap already-snapped windows, the same way a global gap
     // change or a context gap rule does; the daemon binds that resnap to
@@ -255,20 +260,8 @@ void Settings::load()
     // gap resnap.
     const bool perScreenGapChanged =
         Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
-    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged;
-
-    if (useSystemColors()) {
-        // The derive routes through the public color setters. Squelch their
-        // per-setter NOTIFY + settingsChanged emissions for this call only:
-        // emitChangedNotifyProperties() below compares the post-derive values
-        // against the pre-reparse snapshot and fires each changed NOTIFY
-        // exactly once, and the aggregate settingsChanged fires once at the
-        // end of load(). eventFilter()'s palette re-derive batches with the
-        // same flag; only setUseSystemColors relies on the setters emitting
-        // normally.
-        QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
-        applySystemColorScheme();
-    }
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenScrollingZoneSelectorChanged
+        || perScreenAutotileChanged || perScreenScrollingChanged;
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -311,8 +304,12 @@ void Settings::load()
     // on reloads that left the maps untouched.
     if (perScreenZoneSelectorChanged)
         Q_EMIT perScreenZoneSelectorSettingsChanged();
+    if (perScreenScrollingZoneSelectorChanged)
+        Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
+    if (perScreenScrollingChanged)
+        Q_EMIT perScreenScrollingSettingsChanged();
     if (perScreenGapChanged)
         Q_EMIT perScreenSnappingSettingsChanged();
 
@@ -334,23 +331,29 @@ void Settings::load()
 QStringList Settings::managedGroupNames()
 {
     return {
-        ConfigDefaults::generalGroup(), // "General"
+        // "General" is deliberately ABSENT: it is the backend's root-group
+        // CONTAINER (configbackends.cpp anchors setRootGroupName on it), the
+        // reserved name groupList() never enumerates and purgeStaleKeys
+        // documents as protected. Listing it here would have reset() delete
+        // the root container wholesale. No schema group lives there.
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
+        ConfigDefaults::scrollingGroup(), // "Scrolling"
         ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to rules.json);
                                         // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
         ConfigDefaults::shadersGroup(), // "Shaders"
-        ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling
+        ConfigDefaults::shortcutsGroup(), // "Shortcuts" — covers Shortcuts.Global + Shortcuts.Tiling +
+                                          // Shortcuts.Scrolling
         ConfigDefaults::animationsGroup(), // "Animations"
         ConfigDefaults::animationsWindowFilteringGroup(), // "Animations.WindowFiltering"
         ConfigDefaults::editorGroup(), // "Editor" — covers Editor.Shortcuts + Editor.Snapping + Editor.FillOnDrop
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
-        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — idle/focused-only animation gating
+        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — animation gating + blur density
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups
@@ -497,8 +500,11 @@ void Settings::purgeStaleKeys()
     // claimed by the Store, and isn't a per-screen / virtual-screen group
     // gets blanket-deleted. save*Config runs next and rewrites unmigrated
     // managed groups from their cached members.
+    // One dedup set only: groupList() cannot repeat a name (JSON keys are
+    // unique per object and resolver names exit at the per-screen continue),
+    // so sub-paths need no tracking — the top-level set exists because many
+    // sub-paths share one top level.
     QSet<QString> deletedTopLevels;
-    QSet<QString> deletedSubPaths;
     for (const QString& groupName : m_configBackend->groupList()) {
         if (PerScreenPathResolver::isPerScreenPrefix(groupName)) {
             continue;
@@ -517,11 +523,7 @@ void Settings::purgeStaleKeys()
         // When the top-level itself is a Store ancestor, we can't delete
         // the whole thing — descend and delete only the non-claimed child.
         if (isStoreClaimed(topLevel)) {
-            if (deletedSubPaths.contains(groupName)) {
-                continue;
-            }
             m_configBackend->deleteGroup(groupName);
-            deletedSubPaths.insert(groupName);
         } else {
             m_configBackend->deleteGroup(topLevel);
             deletedTopLevels.insert(topLevel);
@@ -529,15 +531,17 @@ void Settings::purgeStaleKeys()
     }
 }
 
-void Settings::save()
+bool Settings::save()
 {
     purgeStaleKeys();
 
-    // Flush every Store-declared key so the on-disk file always carries
-    // the complete declared set after save, not just the keys a user
-    // happened to mutate. Keys that haven't been written yet fall back to
-    // the schema default via Store::readVariant, and the write path runs
-    // the validator so clamped/normalized values land as the canonical form.
+    // Flush every Store-declared key through write() so clamp /
+    // canonicalization applies to whatever the file holds. Persistence is
+    // SPARSE: write() stores a default-equal value as absence, so this loop
+    // also prunes frozen defaults (values an older version's save stamped
+    // that still equal the current default) — a later default retune then
+    // reaches existing installs instead of being shadowed. Only values that
+    // differ from their schema default land on disk.
     //
     // INVARIANT: this loop iterates schema-declared keys only. Any key
     // present in the backing store but NOT in the schema is ignored here
@@ -571,12 +575,13 @@ void Settings::save()
         // discard them.
         qCWarning(lcConfig) << "save: failed to write the configuration to disk — keeping the previous baseline so "
                                "the unsaved values stay discardable; the next save retries";
-        return;
+        return false;
     }
 
     // Disk now holds the flushed store — the just-saved values become the new
     // committed baseline for per-page Discard / dirty checks.
     captureBaseline();
+    return true;
 }
 
 bool Settings::exportTo(const QString& filePath)
@@ -646,12 +651,11 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     // captureBaseline() — the store must diverge from the committed baseline so
     // the settings app reports the staged keys as unsaved edits.
     //
-    // Also deliberately no applySystemColorScheme() re-derivation: a profile
-    // captures the zone colours it was saved with, and activation stages those
-    // captured values even when UseSystemColors is on. The live palette is
-    // re-derived on the next load() or palette-change event (app restart, a
-    // Discard-triggered reload, or a theme switch) — save() itself only
-    // commits, it does not re-run the palette derivation.
+    // Zone colours need no special handling here: a profile captures the
+    // STORED theme-fallback strings (concrete hex, or the empty
+    // follow-the-palette sentinel), and the resolved getters re-read the live
+    // palette on every call, so staged sentinel values track the current
+    // theme immediately.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
     // importFromJson is additive/overwriting over declared keys; a
@@ -664,6 +668,15 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
                             << "— nothing was staged";
         return false;
     }
+
+    // Same repair load() runs, for the same reason and with the same
+    // snapshot/re-emit contract: a shared or hand-edited profile blob can
+    // carry an inconsistent width pair (kind=Fixed with value 0.5), and the
+    // engine's Fixed branch would then compute qMax(1, qRound(0.5)) = ONE
+    // PIXEL for every new column, for the whole session — the repair would
+    // otherwise not land until the next restart or Discard. The normalizer
+    // does not emit on its own, so it composes here unchanged.
+    normalizeScrollingColumnWidthValue();
 
     const bool anyChanged = emitChangedNotifyProperties(propSnapshot);
     if (anyChanged)
@@ -727,41 +740,6 @@ void Settings::captureBaseline()
     }
 }
 
-void Settings::rebaselineDerivedColorKeys()
-{
-    // System-colors mode owns the four zone-color keys: applySystemColorScheme()
-    // DERIVES them from the application palette, so a runtime palette change
-    // writes them through m_store AFTER the settings app captured its baseline
-    // — without this refresh, isKeyModified() reports a phantom unsaved edit
-    // and Discard reverts to the stale pre-switch colors.
-    //
-    // Callable ONLY from the ApplicationPaletteChange path (eventFilter) —
-    // and even there only when the useSystemColors toggle is COMMITTED
-    // (!isKeyModified on the useSystem key). If the toggle is a pending
-    // unsaved edit, the toggle and the colors it derived are ONE user edit
-    // and must stay discardable together; rebaselining mid-edit would let
-    // Discard revert the toggle to off while pinning the palette-derived
-    // colors as the new baseline.
-    //
-    // applySystemColorScheme() is not Q_INVOKABLE (no QML caller), so its
-    // call sites are exactly three; the other two must not rebaseline:
-    // - setUseSystemColors(true) is a USER edit; the toggle and the colors it
-    //   derives must stay discardable together. Rebaselining there would let
-    //   Discard revert the toggle to off while pinning the system-derived
-    //   colors as the new baseline.
-    // - load() derives BEFORE captureBaseline(), so the full baseline already
-    //   carries the derived values.
-    const ConfigKeyList derivedKeys{
-        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()},
-        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()},
-        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()},
-        {ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()},
-    };
-    for (const ConfigKey& gk : derivedKeys) {
-        m_baseline[gk.first].insert(gk.second, m_store->readVariant(gk.first, gk.second));
-    }
-}
-
 bool Settings::isKeyModified(const QString& group, const QString& key) const
 {
     return m_store->readVariant(group, key) != m_baseline.value(group).value(key);
@@ -787,6 +765,7 @@ void Settings::discardKeys(const ConfigKeyList& keys)
         if (m_store->readVariant(gk.first, gk.second) != *keyIt)
             m_store->write(gk.first, gk.second, *keyIt);
     }
+    normalizeScrollingColumnWidthValue();
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
@@ -797,15 +776,16 @@ void Settings::resetKeys(const ConfigKeyList& keys)
     for (const ConfigKey& gk : keys) {
         m_store->reset(gk.first, gk.second);
     }
+    normalizeScrollingColumnWidthValue();
     if (emitChangedNotifyProperties(before))
         Q_EMIT settingsChanged();
 }
 
 void Settings::connectRuleStoreGapReactivity()
 {
-    if (m_ruleStore == nullptr) {
-        return;
-    }
+    // No null guard: every constructor sets m_ruleStore to either the
+    // injected store or the owned fallback, so null is unreachable (reset()
+    // and the other consumers deref it unguarded for the same reason).
     // The global and per-screen gaps are config-backed now, so nothing here
     // seeds them. Only the context (per-mode / per-desktop / per-activity) gap
     // rules remain rule-backed and feed the geometry cascade — seed their
@@ -826,7 +806,7 @@ void Settings::onRuleStoreChanged()
     // Gaps folds config per-monitor gaps under these rule overrides). Re-sync the
     // geometry consumers — the daemon's perScreenSnappingSettingsChanged handler
     // reschedules the gap resnap, and its settingsChanged handler re-runs the
-    // per-screen autotile config (updateAutotileScreens) plus
+    // per-screen autotile config (updateEngineScreens) plus
     // refreshConfigFromSettings — but ONLY when a gap action somewhere in the rule
     // set actually changed. Emitting on every rulesChanged made a mode/assignment
     // toggle (also a rule write) fire settingsChanged, which drove the daemon to
@@ -848,9 +828,8 @@ void Settings::onRuleStoreChanged()
 // border rule write.
 QString Settings::gapRulesFingerprint() const
 {
-    if (m_ruleStore == nullptr) {
-        return QString();
-    }
+    // No null guard — same constructor invariant connectRuleStoreGapReactivity
+    // documents.
     static const QSet<QString> gapTypes = {
         QString(PhosphorRules::ActionType::SetInnerGap),           QString(PhosphorRules::ActionType::SetOuterGap),
         QString(PhosphorRules::ActionType::SetUsePerSideOuterGap), QString(PhosphorRules::ActionType::SetOuterGapTop),
@@ -900,16 +879,31 @@ P_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, s
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
-void Settings::reset()
+bool Settings::reset()
 {
     // Delete all managed groups (reset nukes everything). The explicit
     // "Updates" sweep scrubs the retired legacy group from configs written by
     // older builds — nothing writes or reads it anymore (dismissed-update-
     // version lives in the settings app's QSettings).
+    // Snapshot every NOTIFY-carrying Q_PROPERTY BEFORE the groups go, for the
+    // same reason the disable lists are snapshotted below: load()'s own
+    // snapshot is taken after this clear, by which point the store already
+    // answers with defaults, so its diff sees no change and fires nothing.
+    // Without this a factory reset restored every value silently and QML
+    // bindings kept painting the old ones until the app was restarted — the
+    // user-visible shape of that bug is "Reset to Defaults did nothing".
+    const QVector<QVariant> propsBeforeReset = snapshotNotifyProperties();
     for (const QString& groupName : managedGroupNames()) {
         m_configBackend->deleteGroup(groupName);
     }
     m_configBackend->deleteGroup(ConfigDefaults::updatesGroup());
+    // The root-group container ("General") is deliberately NOT in
+    // managedGroupNames (it is the reserved root groupList() never
+    // enumerates), but an INI-migrated install can carry legacy ungrouped
+    // keys in it (ConfigMigration::iniMapToJson routes them there) that
+    // purgeStaleKeys cannot reach. A factory reset is the one sweep that
+    // may clear that husk.
+    m_configBackend->deleteGroup(ConfigDefaults::generalGroup());
     deletePerScreenGroups(m_configBackend);
     // commit(), not sync(), for the same reason save() uses it: sync() is
     // allowed to return true for a write it merely scheduled (JsonBackend's
@@ -926,12 +920,25 @@ void Settings::reset()
     if (!m_configBackend->commit()) {
         qCWarning(lcConfig) << "reset: failed to write the cleared configuration to disk — the deletions were "
                                "dropped and the previous values remain";
-        // Reparse from disk so the in-memory store stops reporting the dropped
-        // deletions, and re-baseline onto what disk actually holds. The session
-        // file and the rule store were never touched, so there is nothing else
-        // to undo.
+        // Reparse BEFORE load(): load()'s property snapshot must see the
+        // RESTORED values, not the wiped in-memory root — otherwise its
+        // post-reparse diff reads defaults-vs-restored and fires a NOTIFY
+        // plus settingsChanged round (a daemon retile) for values that never
+        // observably changed. load() repeats the reparse harmlessly. The
+        // session file and the rule store were never touched, so there is
+        // nothing else to undo.
+        m_configBackend->reparseConfiguration();
         load();
-        return;
+        // The reparse also DISCARDS any unsaved in-memory edits (they were
+        // never committed), and load()'s internal diff cannot see that (its
+        // snapshot already reads the restored values). Diff against the true
+        // pre-reset observable state instead: silent when the restore was a
+        // no-op, one NOTIFY round when unsaved edits were dropped, so QML
+        // stops painting a value the store no longer holds.
+        if (emitChangedNotifyProperties(propsBeforeReset)) {
+            Q_EMIT settingsChanged();
+        }
+        return false;
     }
     if (!QFile::remove(ConfigDefaults::sessionFilePath()) && QFile::exists(ConfigDefaults::sessionFilePath())) {
         qCWarning(lcConfig) << "Failed to remove session file:" << ConfigDefaults::sessionFilePath();
@@ -967,6 +974,7 @@ void Settings::reset()
         resetDesktopsBefore.insert(mode, canonicalDisableEntries(DisableAxis::Desktop, disabledDesktops(mode)));
         resetActivitiesBefore.insert(mode, canonicalDisableEntries(DisableAxis::Activity, disabledActivities(mode)));
     }
+    bool ruleStorePersisted = true;
     {
         namespace CRB = PhosphorRules::ContextRuleBridge;
         QList<PhosphorRules::Rule> kept;
@@ -977,6 +985,7 @@ void Settings::reset()
         }
         if (kept.size() != m_ruleStore->count()) {
             if (!m_ruleStore->setAllRules(kept)) {
+                ruleStorePersisted = false;
                 // Persistence failed — the in-memory store advanced but the
                 // on-disk file is stale. Roll back the in-memory state by
                 // reloading from disk so the per-mode re-emit loop below
@@ -1012,7 +1021,10 @@ void Settings::reset()
     // aggregate) also holds for the reset path; otherwise a reset that only
     // cleared disable rules would fire the per-mode signals but not the
     // aggregate.
-    bool anyDisableChanged = false;
+    // The Q_PROPERTY twin of the per-mode loop below, against the snapshot
+    // taken before the clear. Folded into the same aggregate so a reset that
+    // only moved Q_PROPERTYs still fires settingsChanged exactly once.
+    bool anyDisableChanged = emitChangedNotifyProperties(propsBeforeReset);
     for (const Mode mode : PhosphorZones::allModes()) {
         if (canonicalDisableEntries(DisableAxis::Monitor, disabledMonitors(mode)) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
@@ -1033,6 +1045,11 @@ void Settings::reset()
     }
 
     qCInfo(lcConfig) << "Settings reset to defaults";
+    // False when the rule-store arm failed to persist (the config arm already
+    // returned false on its own failure above): the caller must be able to
+    // tell "everything reset" from "config reset, per-mode disable rules
+    // survive on disk and reappear next launch".
+    return ruleStorePersisted;
 }
 
 } // namespace PlasmaZones

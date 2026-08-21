@@ -3,16 +3,20 @@
 
 #include "plasmazoneseffect.h"
 
+#include "handlers/dragtracker.h"
+#include "handlers/snaphandler.h"
+#include "compositor/scrolltabindicatorpainter.h"
+#include "compositor/stripviewanimator.h"
+#include "compositor/windowanimator.h"
+#include "tilinghandler/tilinghandler.h"
+
+#include <effect/effect.h>
+#include <input_event.h>
+
 #include <QEvent>
 #include <QKeyEvent>
 #include <QLoggingCategory>
 #include <QTimer>
-
-#include <effect/effect.h>
-
-#include "handlers/dragtracker.h"
-#include "handlers/snaphandler.h"
-#include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 
@@ -136,22 +140,100 @@ bool PlasmaZonesEffect::isActive() const
     // DesktopTransitionManager::paintOutput never gets a frame, and the blend
     // sits unrendered until its own wall-clock reap. Also O(1) (an
     // unordered_map emptiness check).
+    // `m_stripViewAnimator->hasActiveAnimations()` is the clause the strip
+    // VIEW SPRING itself needs, and it must be here regardless of the shader
+    // pass. A pure-residual scroll batch on a default config can leave the
+    // spring as the ONLY live animation: every carried column's per-window
+    // leg is PolicyRejected (the residual origin is below the snap
+    // threshold), no shader transition installs, and with no strip pack
+    // assigned m_stripTransition holds no entry either. Without this clause
+    // that scroll drops the effect from the chain entirely — prePaintScreen
+    // never runs, so the spring neither advances nor settles and the view
+    // offset is never applied. O(monitor count).
+    //
+    // `m_stripTransition.isRunning()` covers the strip SHADER PASS, which is
+    // a strict subset of the spring clause while a leg is live but survives
+    // it during the pass's settle fade (the fade outlives the spring by
+    // design — see StripTransitionManager::paintOutput). Keep both: the
+    // spring clause is not a substitute for the fade tail, and the pass
+    // clause is not a substitute for the pack-less spring.
+    // The compositor-drawn tab pills exist only while this effect is in the
+    // paint chain: they are blitted from paintWindow (at the anchor slot) or
+    // paintScreen (the post-walk fallback), so on an
+    // otherwise idle default-config desktop (no drag, no decorations, no
+    // transition) this clause is what keeps KWin calling us. Without it the
+    // next damage in the pill band recomposited without the blit and erased
+    // the pills.
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
-        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning();
+        || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
+        || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning()
+        || m_scrollTabPainter->hasAnyIndicators();
+}
+
+void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)
+{
+    // Only ever reached under the pill interception (see the header). Hover
+    // tracking decides whether the pointer is still over a pill and releases
+    // the interception when it is not, which is what hands the pointer back
+    // to the window underneath without a dead zone.
+    if (event && m_tilingHandler->scrollTabInterceptionHeld()) {
+        // Self-heal for a lost release: filters ordered before Effects (lock
+        // screen, drag-and-drop, tab box, global shortcuts) can swallow the
+        // release of a press we latched on, and the latch alone would then
+        // hold the interception (and the hand cursor) until the next click.
+        // The motion event carries the live button state, so a motion with
+        // the left button up is proof the release happened.
+        if (!(event->buttons & Qt::LeftButton)) {
+            m_tilingHandler->noteScrollTabRelease(event->position);
+        }
+        m_tilingHandler->updateScrollTabHover(event->position);
+    }
+}
+
+void PlasmaZonesEffect::pointerButton(KWin::PointerButtonEvent* event)
+{
+    if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
+        return;
+    }
+    if (event->button != Qt::LeftButton) {
+        return; // consumed by the interception; nothing to route (see the header)
+    }
+    if (event->state == KWin::PointerButtonState::Pressed) {
+        // Hold the interception through the press regardless of where the
+        // pointer goes next: the release must land here too, or the window
+        // underneath receives a release for a press it never saw.
+        m_tilingHandler->noteScrollTabPress();
+        m_tilingHandler->activateScrollTabAt(event->position);
+        return;
+    }
+    if (event->state == KWin::PointerButtonState::Released) {
+        m_tilingHandler->noteScrollTabRelease(event->position);
+    }
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
 {
     if (e->type() == QEvent::KeyPress && e->key() == Qt::Key_Escape && m_dragTracker->isDragging()) {
         // The keyboard grab ensures this runs before KWin's MoveResizeFilter,
-        // so Escape never reaches the interactive move handler. The daemon
-        // hides the overlay and sets snapCancelled; the drag continues as
-        // a plain window move without zone snapping.
-        qCInfo(lcEffect) << "Drag escape: overlay hidden, drag continues";
+        // so Escape never reaches the interactive move handler. In every case
+        // the DRAG CONTINUES as a plain window move; only the placement
+        // machinery is dismissed.
+        //
+        // One call serves both kinds of drag, because cancelSnap already does
+        // the right thing for each. On a SNAP drag it hides the overlay and
+        // sets snapCancelled. On an ENGINE drag (which now grabs under
+        // always-on re-insert) it cancels the drag-insert preview, clears the
+        // drop indicator, stops the edge-scroll timer, and drops the reorder
+        // and toggle latches — that last part is what stops the very next tick
+        // re-arming the preview Escape just cancelled.
+        qCInfo(lcEffect) << "Drag escape: placement dismissed, drag continues";
         m_snapHandler->callCancelSnap();
     }
     // All other keys are silently consumed by the grab. Modifier state is
-    // unaffected because mouseChanged reads xkb state directly.
+    // unaffected because KWin's ModifiersChangedSpy runs BEFORE input
+    // filters (processSpies precedes processFilters in processKey), so a
+    // grabbed drag still receives keyboardModifiersChanged-driven
+    // mouseChanged events with live xkb state.
 }
 
 } // namespace PlasmaZones

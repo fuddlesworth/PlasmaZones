@@ -19,16 +19,6 @@ SettingsFlickable {
     // the CONSTANT slider bounds.
     readonly property var ctl: settingsController.windowAppearancePage
 
-    // "Follow the system accent" sentinel. The effect resolves it to the live
-    // system accent colour at paint time, so a border colour stored as this token
-    // tracks Plasma accent changes without an edit. Sourced from the controller so
-    // it stays in lockstep with the config layer, the schema validator, and the
-    // effect.
-    readonly property string accentToken: root.ctl.accentColorToken
-    // Concrete fallback colour written when the user turns the accent toggle off
-    // (KDE accent blue, opaque). Also controller-sourced for the same reason.
-    readonly property string defaultBorderHex: root.ctl.defaultBorderColorHex
-
     // The border detail controls (width, radius, colours) are hidden while the
     // border is off so the user cannot edit values that would not apply.
     readonly property bool borderVisible: root.ctl.showWindowBorder
@@ -54,6 +44,47 @@ SettingsFlickable {
     // table, so a picker cannot offer a scope the effect would reject.
     readonly property var scopeOptions: settingsController.valueOptions("Windows", "BorderScope")
 
+    // Blur-quality tiers for the Blur card: a multiplier on the buffer-pass
+    // resolution each decoration pack declares. Fixed tiers rather than a free
+    // slider, because the useful values cluster at halve / keep / double and
+    // the effect clamps the product into its allocator band anyway. The
+    // schema's legal band is deliberately wider than these tiers (down to
+    // 0.25, hand-edit headroom); blurQualityIndex() highlights the nearest
+    // tier for an off-tier stored value. i18nc contexts because the single
+    // app-wide translation catalogue would otherwise share these bare
+    // adjectives with any future "Low"/"High" elsewhere.
+    readonly property var blurQualityOptions: [
+        {
+            text: i18nc("@item:inlistbox decoration blur quality", "Low"),
+            value: 0.5
+        },
+        {
+            text: i18nc("@item:inlistbox decoration blur quality", "Balanced"),
+            value: 1.0
+        },
+        {
+            text: i18nc("@item:inlistbox decoration blur quality", "High"),
+            value: 2.0
+        }
+    ]
+
+    // Nearest tier for the stored multiplier, so a hand-edited config value
+    // still highlights the closest option instead of a blank combo. A
+    // non-finite value (nothing produces one today) falls back to the
+    // Balanced tier, the shipped default, rather than accidentally reading
+    // as "Low" out of the comparison seeding.
+    function blurQualityIndex(value) {
+        if (!isFinite(value))
+            return 1;
+        var best = 0;
+        for (var i = 1; i < root.blurQualityOptions.length; ++i) {
+            if (Math.abs(root.blurQualityOptions[i].value - value) < Math.abs(root.blurQualityOptions[best].value - value)) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
     // Index of @p scope in scopeOptions, or -1 when it is not a listed token.
     function scopeIndex(scope) {
         for (var i = 0; i < root.scopeOptions.length; ++i) {
@@ -64,23 +95,14 @@ SettingsFlickable {
         return -1;
     }
 
-    // Always emit the full 8-digit #AARRGGBB form so the stored value matches
-    // what the effect resolves (it parses #AARRGGBB / #RRGGBB / #RGB).
-    function colorToHex(c) {
-        function pad(v) {
-            return Math.round(v * 255).toString(16).padStart(2, '0');
-        }
-        return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
-    }
-
     // The tint colour is always stored opaque. The opacity-tint shader ignores
     // the colour's own alpha and uses the tint strength slider as the sole
     // control, so storing a translucent colour would silently discard
     // information the user thought they set. Scaling the wash by both was the
     // double-apply the shader was changed to avoid, so do not reintroduce it
-    // here by storing alpha.
-    function colorToOpaqueHex(c) {
-        return "#FF" + root.colorToHex(c).slice(3);
+    // here by storing alpha. Takes the row's 8-digit #AARRGGBB string.
+    function hexToOpaqueHex(hex) {
+        return "#FF" + hex.slice(3);
     }
 
     // Scope-aware gap values for the Gaps card. gapValue() reads C++ state (the
@@ -264,80 +286,53 @@ SettingsFlickable {
                 }
 
                 // ── Border colours — a border concern, so they live in this
-                // card: system accent toggle (writes the "accent" sentinel)
-                // with explicit active/inactive pickers when it is off.
-                SettingsRow {
+                // card. Theme-fallback keys with the standard EMPTY sentinel;
+                // the DAEMON resolves the sentinel before the value crosses
+                // D-Bus, so the effect only ever sees concrete colours. (The
+                // rules vocabulary still spells its sentinel "accent", because
+                // a rule param's empty slot already means "unset".)
+                ThemeFallbackColorRow {
                     visible: root.borderVisible
-                    title: i18n("Use system accent color")
-                    searchAnchor: "useSystemAccentColor"
-                    description: i18n("Follow the system color scheme for the border color")
-
-                    SettingsSwitch {
-                        id: useAccentSwitch
-
-                        // True when the focused colour carries the accent sentinel.
-                        checked: root.ctl.windowBorderColorActive === root.accentToken
-                        accessibleName: i18n("Use system accent color")
-                        onToggled: function (newValue) {
-                            const colorValue = newValue ? root.accentToken : root.defaultBorderHex;
-                            root.ctl.windowBorderColorActive = colorValue;
-                            root.ctl.windowBorderColorInactive = colorValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: root.borderVisible && !useAccentSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: root.borderVisible && !useAccentSwitch.checked
                     title: i18n("Active border color")
+                    // Overridden because the title already says "color".
+                    swatchAccessibleName: i18nc("@action:button", "Active border color")
                     searchAnchor: "activeBorderColor"
-                    description: i18n("Border color for the focused window")
+                    description: i18n("Border color for the focused window. Follows the color scheme unless you pick one.")
 
-                    ColorSwatchRow {
-                        accessibleName: i18n("Active border color")
-                        color: {
-                            // Map the accent sentinel to the live system highlight
-                            // colour (alpha included) — the colour the focused border
-                            // actually draws. A stored "accent" value would otherwise
-                            // coerce to black.
-                            const raw = root.ctl.windowBorderColorActive;
-                            return raw === root.accentToken ? appSettings.highlightColor : raw;
-                        }
-                        onClicked: {
-                            const raw = root.ctl.windowBorderColorActive;
-                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
-                            activeBorderColorDialog.open();
-                        }
+                    storedColor: root.ctl.windowBorderColorActive
+                    // The colour the focused border actually draws while it
+                    // follows the scheme: the live zone highlight, alpha
+                    // included — which is the scheme accent unless the user
+                    // pinned the zone colour. The "Color scheme" fallback
+                    // label stays deliberately loose; the swatch preview is
+                    // the truthful part.
+                    themeColor: appSettings.highlightColor
+                    picker: borderColorDialog
+                    onColorChosen: function (hex) {
+                        root.ctl.windowBorderColorActive = hex;
                     }
                 }
 
                 SettingsSeparator {
-                    visible: root.borderVisible && !useAccentSwitch.checked
+                    visible: root.borderVisible
                 }
 
-                SettingsRow {
-                    visible: root.borderVisible && !useAccentSwitch.checked
+                ThemeFallbackColorRow {
+                    visible: root.borderVisible
                     title: i18n("Inactive border color")
+                    // See the active row above.
+                    swatchAccessibleName: i18nc("@action:button", "Inactive border color")
                     searchAnchor: "inactiveBorderColor"
-                    description: i18n("Border color for unfocused windows")
+                    description: i18n("Border color for unfocused windows. Follows the color scheme unless you pick one.")
 
-                    ColorSwatchRow {
-                        accessibleName: i18n("Inactive border color")
-                        color: {
-                            // The unfocused border follows the system INACTIVE colour
-                            // (alpha included), not the accent, matching what the
-                            // border actually draws.
-                            const raw = root.ctl.windowBorderColorInactive;
-                            return raw === root.accentToken ? appSettings.inactiveColor : raw;
-                        }
-                        onClicked: {
-                            const raw = root.ctl.windowBorderColorInactive;
-                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.inactiveColor : raw;
-                            inactiveBorderColorDialog.open();
-                        }
+                    storedColor: root.ctl.windowBorderColorInactive
+                    // The unfocused border follows the system INACTIVE colour
+                    // (alpha included), not the accent, matching what the
+                    // border actually draws.
+                    themeColor: appSettings.inactiveColor
+                    picker: borderColorDialog
+                    onColorChosen: function (hex) {
+                        root.ctl.windowBorderColorInactive = hex;
                     }
                 }
             }
@@ -433,51 +428,30 @@ SettingsFlickable {
                     visible: root.opacityTintVisible
                 }
 
-                SettingsRow {
+                ThemeFallbackColorRow {
+                    id: tintColorRow
+
                     visible: root.opacityTintVisible
-                    title: i18n("Use system accent color")
-                    searchAnchor: "useSystemAccentTint"
-                    description: i18n("Follow the system color scheme for the tint color")
-
-                    SettingsSwitch {
-                        id: useAccentTintSwitch
-
-                        checked: root.ctl.windowTintColor === root.accentToken
-                        accessibleName: i18n("Use system accent color for the tint")
-                        onToggled: function (newValue) {
-                            // The tint colour's config default IS the border
-                            // default (ConfigDefaults::windowTintColor returns
-                            // windowBorderColorActive), so toggling accent off
-                            // restores the same fallback the border swatches use.
-                            root.ctl.windowTintColor = newValue ? root.accentToken : root.defaultBorderHex;
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: root.opacityTintVisible && !useAccentTintSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: root.opacityTintVisible && !useAccentTintSwitch.checked
                     title: i18n("Tint color")
+                    // Overridden because the title already says "color".
+                    swatchAccessibleName: i18nc("@action:button", "Tint color")
                     searchAnchor: "tintColor"
-                    description: i18n("Color the window is washed with when the tint strength is above zero")
+                    description: i18n("Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.")
 
-                    ColorSwatchRow {
-                        accessibleName: i18n("Tint color")
-                        color: {
-                            // Same accent-sentinel mapping as the border swatches:
-                            // preview the live highlight instead of coercing the
-                            // token to black.
-                            const raw = root.ctl.windowTintColor;
-                            return raw === root.accentToken ? appSettings.highlightColor : raw;
-                        }
-                        onClicked: {
-                            const raw = root.ctl.windowTintColor;
-                            tintColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
-                            tintColorDialog.open();
-                        }
+                    storedColor: root.ctl.windowTintColor
+                    // Preview the live highlight the tint follows — with its
+                    // alpha stripped, because the tint contract on this page
+                    // is "stored opaque, strength is the sole alpha" and the
+                    // shader ignores the colour's own alpha. Showing the
+                    // highlight's zone alpha would make the swatch jump from
+                    // half-transparent to solid the moment a colour is picked.
+                    themeColor: Qt.rgba(appSettings.highlightColor.r, appSettings.highlightColor.g, appSettings.highlightColor.b, 1)
+                    picker: tintColorDialog
+                    onColorChosen: function (hex) {
+                        // Stored opaque unless it is the row's own sentinel;
+                        // the tint strength slider is the sole alpha (see
+                        // hexToOpaqueHex).
+                        root.ctl.windowTintColor = hex === tintColorRow.sentinel ? hex : root.hexToOpaqueHex(hex);
                     }
                 }
             }
@@ -599,6 +573,53 @@ SettingsFlickable {
             }
         }
 
+        // =====================================================================
+        // BLUR CARD
+        // =====================================================================
+        // The base blur every glass-family decoration pack builds on renders at
+        // the pack's declared buffer resolution. This card scales that
+        // resolution globally, which is the per-frame cost lever (the
+        // Performance card below gates WHEN the chain animates instead). Stays
+        // in simple mode: on an integrated GPU this single knob is the
+        // difference between affordable and expensive blur, and it changes
+        // what the user sees. Placed with the decoration cards rather than
+        // after Gaps, since it only affects decoration shader packs.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Blur")
+            searchAnchor: "decorationBlur"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                // Same caveat pattern as the border card's shader note above:
+                // this knob only does anything for windows wearing a
+                // decoration shader pack.
+                Label {
+                    Layout.fillWidth: true
+                    text: i18n("This applies to windows that use decoration shader packs with blur.")
+                    font.italic: true
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.WordWrap
+                }
+
+                SettingsRow {
+                    title: i18n("Blur quality")
+                    searchAnchor: "decorationBlurQuality"
+                    description: i18n("How sharply decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Blur quality")
+                        textRole: "text"
+                        model: root.blurQualityOptions
+                        currentIndex: root.blurQualityIndex(appSettings.decorationBlurScaleMultiplier)
+                        onActivated: index => appSettings.decorationBlurScaleMultiplier = root.blurQualityOptions[index].value
+                    }
+                }
+            }
+        }
+
         // =================================================================
         // Gaps Card — the unified inner/outer gap model, config-backed. Smart
         // gaps is tiling-only and lives on the Tiling → Window page, so it is
@@ -664,7 +685,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Animate only the active window")
                     searchAnchor: "decorationAnimateFocusedOnly"
-                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.")
+                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.")
 
                     SettingsSwitch {
                         checked: appSettings.decorationAnimateFocusedOnly
@@ -715,22 +736,16 @@ SettingsFlickable {
     }
 
     // =====================================================================
-    // Color Dialogs
+    // Color Dialogs — page-level and shared, like the scrolling pages: a page
+    // rebuild while a row-scoped dialog is open would tear the popup down
+    // under the user. The rows connect transiently and write on accept, so no
+    // onAccepted lives here.
     // =====================================================================
     ColorDialog {
-        id: activeBorderColorDialog
+        id: borderColorDialog
 
         options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Active Border Color")
-        onAccepted: root.ctl.windowBorderColorActive = root.colorToHex(selectedColor)
-    }
-
-    ColorDialog {
-        id: inactiveBorderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Inactive Border Color")
-        onAccepted: root.ctl.windowBorderColorInactive = root.colorToHex(selectedColor)
+        title: i18n("Choose Border Color")
     }
 
     ColorDialog {
@@ -739,6 +754,22 @@ SettingsFlickable {
         // No alpha channel here. Tint strength already controls how strongly
         // the wash lands, and the shader ignores the colour's own alpha.
         title: i18n("Choose Tint Color")
-        onAccepted: root.ctl.windowTintColor = root.colorToOpaqueHex(selectedColor)
+    }
+
+    // Publish the open state so Ctrl+PgUp/PgDown page-stepping cannot swap
+    // the page out from under an open page-level dialog — the exact teardown
+    // hosting the dialogs at page level exists to prevent. Same pattern
+    // (including the standalone-host guard) as RulesPage.
+    readonly property bool anyModalOpen: borderColorDialog.visible || tintColorDialog.visible
+    onAnyModalOpenChanged: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = anyModalOpen;
+    }
+    // Clear a latched true on page swap (RulesPage's own teardown pattern):
+    // _pageOwnedModalOpen is a single global flag, and a page destroyed with
+    // its dialog up would otherwise leave nav shortcuts dead for the session.
+    Component.onDestruction: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = false;
     }
 }

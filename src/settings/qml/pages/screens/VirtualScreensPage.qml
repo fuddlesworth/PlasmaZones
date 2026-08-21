@@ -826,7 +826,7 @@ SettingsFlickable {
 
         // Custom split editor
         SettingsCard {
-            headerText: i18n("Custom Split")
+            headerText: i18n("Custom split")
             collapsible: true
 
             contentItem: ColumnLayout {

@@ -93,10 +93,12 @@ BuildRequires:  qt6-qtsvg-devel
 %if 0%{?suse_version}
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6GlobalAccel)
+BuildRequires:  cmake(KF6ColorScheme)
 BuildRequires:  cmake(KF6Kirigami)
 %else
 BuildRequires:  kf6-kcmutils-devel >= 6.26.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.26.0
+BuildRequires:  kf6-kcolorscheme-devel >= 6.26.0
 BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
@@ -154,6 +156,9 @@ Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
 Requires:       kf6-kirigami >= 6.26.0
 Requires:       kf6-kcmutils >= 6.26.0
+# The KWin effect links KColorScheme. Soname autoreq already pulls the
+# library in; this line only states the 6.26.0 parity floor.
+Requires:       kf6-kcolorscheme >= 6.26.0
 Requires:       qt6-qtwayland >= 6.10.0
 # KWin: minimum version, NOT an exact patch pin.
 #
@@ -175,6 +180,10 @@ Requires:       qt6-qtwayland >= 6.10.0
 Requires:       kwin >= 6.7.0
 %endif
 Requires:       hicolor-icon-theme
+# Soft dependency, unconditional (Fedora and openSUSE both name it hwdata):
+# readable GPU names in the rendering device picker
+# (/usr/share/hwdata/pci.ids); the picker degrades to vendor labels without it.
+Recommends:     hwdata
 
 # Post-install scriptlet dependencies — must be in preamble (rpmbuild
 # parses Requires(post) only here; placing them after %%install is
@@ -265,7 +274,10 @@ echo ""
 %doc README.md
 
 # Executables — globbed by the plasmazones prefix (plasmazonesd plus
-# plasmazones-editor / -report / -settings). phosphor-shell is
+# plasmazones-editor / -report / -settings / -shader-validate).
+# plasmazones-shader-render shares the prefix but never reaches the
+# buildroot: it needs BUILD_TOOLS=ON plus INSTALL_SHADER_RENDER_TOOL=ON
+# and both default to OFF. phosphor-shell is
 # deliberately NOT matched: it is gated behind the BUILD_PHOSPHOR_SHELL
 # CMake option (work in progress, default OFF), so packaging builds
 # never produce it and listing it explicitly would fail rpmbuild.

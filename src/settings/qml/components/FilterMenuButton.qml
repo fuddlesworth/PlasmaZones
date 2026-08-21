@@ -8,13 +8,13 @@ import org.kde.kirigami as Kirigami
 
 /**
  * @brief A "view-filter" tool button whose menu is groups of multi-select
- *        checkboxes, modeled on the Layouts page filter button.
+ *        checkboxes, modeled on the library pages' filter button.
  *
  * Data-driven via `groups`: an array of groups, each an array of
  * `{ key, label, count? }` entries. Each group is rendered as a run of
  * checkable items, with a separator between groups and a separator + Reset
  * action at the bottom. Used directly by the Rules page and shader browser,
- * and hosted invisibly by LayoutFilterBar for the Layouts page menus.
+ * and hosted invisibly by LayoutFilterBar for the library pages' menus.
  *
  * `excluded` holds the keys the user has unchecked (empty = everything shown),
  * so options default to checked and a newly-appearing option shows up checked

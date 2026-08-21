@@ -4,9 +4,10 @@
 /**
  * @file test_rule_controller_overview.cpp
  * @brief Coverage for RuleController's read-only projection surfaces —
- *        the per-monitor overview summary and the authoring vocabulary
- *        (engine-mode picker, templates, action domains, input hints,
- *        default payloads, and the curve-label resolver bridge).
+ *        the per-monitor overview summary and the curve-label resolver
+ *        bridge. The authoring vocabulary (engine-mode picker, templates,
+ *        action domains, input hints, default payloads) lives in
+ *        test_rule_controller_vocabulary.cpp, split from here for file-size.
  *
  * Split out of test_rule_controller.cpp; the staging CRUD / dirty-tracking
  * contract stays with TestRuleController. Like that suite, every test here
@@ -16,9 +17,6 @@
  */
 
 #include <QJSEngine>
-#include <QJsonObject>
-#include <QSet>
-#include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
 
@@ -42,16 +40,13 @@ private Q_SLOTS:
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
     void monitorOverviewLayoutFollowsWinnerMode();
     void monitorOverviewIgnoresBareLayoutRules();
+    void monitorOverviewIgnoresNonMonitorAxisDisableRules();
+    void monitorOverviewScreenKeyFallback();
     void monitorOverviewLayoutFromSingleWinningRule();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void monitorOverviewDisableEngineUnionsEveryMode();
     void monitorOverviewReportsLock();
     void monitorOverviewLockPriorityResolution();
-    void engineModePickerExposesAllVocabularyTokens();
-    void inputHints();
-    void templatesProduceSeededRules();
-    void actionTypesCarryDomain();
-    void defaultPayloadForSeedsParams();
     void curveLabelResolverBridgesQmlNaming();
 };
 
@@ -104,6 +99,10 @@ void TestRuleControllerOverview::monitorOverviewReportsLock()
     // presence), mirroring resolveContextLocked.
     RuleController controller;
 
+    // The helper RETURNS the new id rather than asserting on it: a QVERIFY
+    // inside a void lambda returns from the lambda, not from the slot, so a
+    // failed add would let the rest of the slot go on asserting against a
+    // model it already knew was wrong.
     const auto lockRule = [&](const QString& screenId, bool locked) {
         QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
         QVariantMap match = rule.value(QStringLiteral("match")).toMap();
@@ -111,10 +110,10 @@ void TestRuleControllerOverview::monitorOverviewReportsLock()
         rule[QStringLiteral("match")] = match;
         rule[QStringLiteral("actions")] = QVariantList{
             QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
-        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+        return controller.addRuleFromJson(rule);
     };
-    lockRule(QStringLiteral("DP-2"), true);
-    lockRule(QStringLiteral("DP-3"), false);
+    QVERIFY(!lockRule(QStringLiteral("DP-2"), true).isEmpty());
+    QVERIFY(!lockRule(QStringLiteral("DP-3"), false).isEmpty());
 
     const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}},
                                QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}},
@@ -162,15 +161,18 @@ void TestRuleControllerOverview::monitorOverviewLockPriorityResolution()
         rule[QStringLiteral("match")] = match;
         rule[QStringLiteral("actions")] = QVariantList{
             QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
-        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+        return controller.addRuleFromJson(rule);
     };
     // DP-A: lock=true added FIRST (higher priority) over a later unlock → locked.
-    lockRule(QStringLiteral("DP-A"), true);
-    lockRule(QStringLiteral("DP-A"), false);
+    // The adds are asserted at the CALL SITE, not inside the helper: a QVERIFY
+    // in a void lambda returns from the lambda and lets the slot carry on
+    // against a model it knows is short a rule.
+    QVERIFY(!lockRule(QStringLiteral("DP-A"), true).isEmpty());
+    QVERIFY(!lockRule(QStringLiteral("DP-A"), false).isEmpty());
     // DP-B: the inverse — unlock added first (higher priority) over a later
     // lock → not locked. Proves the winner is priority, not the value.
-    lockRule(QStringLiteral("DP-B"), false);
-    lockRule(QStringLiteral("DP-B"), true);
+    QVERIFY(!lockRule(QStringLiteral("DP-B"), false).isEmpty());
+    QVERIFY(!lockRule(QStringLiteral("DP-B"), true).isEmpty());
 
     const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
                                QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
@@ -351,16 +353,121 @@ void TestRuleControllerOverview::monitorOverviewIgnoresBareLayoutRules()
     QCOMPARE(overview.size(), 2);
 
     const QVariantMap dp1 = overview.at(0).toMap();
+    // Pin the tile identity before asserting against it, matching the
+    // sibling winner-mode test's idiom.
+    QCOMPARE(dp1.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-1"));
     QCOMPARE(dp1.value(QStringLiteral("ruleCount")).toInt(), 1);
     QCOMPARE(dp1.value(QStringLiteral("assigned")).toBool(), true);
     QVERIFY2(dp1.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(dp1.value(QStringLiteral("layoutName")).toString()));
 
     const QVariantMap dp2 = overview.at(1).toMap();
+    QCOMPARE(dp2.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
     QCOMPARE(dp2.value(QStringLiteral("ruleCount")).toInt(), 1);
     QCOMPARE(dp2.value(QStringLiteral("assigned")).toBool(), true);
     QVERIFY2(dp2.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(dp2.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestRuleControllerOverview::monitorOverviewIgnoresNonMonitorAxisDisableRules()
+{
+    // Mutation coverage for the DisableEngine narrowing gate
+    // (rulecontroller_views.cpp: disableRuleMode + matchIsExactContextBase).
+    // Both rejected shapes must leave tilingEnabled TRUE while the rule
+    // still counts toward ruleCount — deleting either half of the gate
+    // turns one of these tiles off and fails here.
+    RuleController controller;
+
+    // DP-A: a rule carrying TWO disableEngine actions — disableRuleMode
+    // returns nullopt for the ambiguous shape.
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-A");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-A");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}},
+                         QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("snapping")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+
+    // DP-B: a single disable action whose match pairs the screen leaf with a
+    // second context leaf — contextAxisFor is not Monitor, so the gate
+    // rejects it (the daemon does not honour it as a monitor disable).
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-B");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        // Composite wire shape: `{"all": [leaf, leaf]}` (matchexpression.cpp
+        // kKeyAll), not a kind/children pair.
+        disableRule[QStringLiteral("match")] =
+            QVariantMap{{QStringLiteral("all"),
+                         QVariantList{QVariantMap{{QStringLiteral("field"), QStringLiteral("screenId")},
+                                                  {QStringLiteral("op"), QStringLiteral("equals")},
+                                                  {QStringLiteral("value"), QStringLiteral("DP-B")}},
+                                      QVariantMap{{QStringLiteral("field"), QStringLiteral("virtualDesktop")},
+                                                  {QStringLiteral("op"), QStringLiteral("equals")},
+                                                  {QStringLiteral("value"), 2}}}}};
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+    bool sawA = false;
+    bool sawB = false;
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString screenId = tile.value(QStringLiteral("screenId")).toString();
+        if (screenId == QLatin1String("DP-A")) {
+            sawA = true;
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), true);
+        } else if (screenId == QLatin1String("DP-B")) {
+            sawB = true;
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), true);
+        }
+    }
+    QVERIFY(sawA);
+    QVERIFY(sawB);
+}
+
+void TestRuleControllerOverview::monitorOverviewScreenKeyFallback()
+{
+    // The tile loop's two-step key resolution: "name" wins, an entry with
+    // only "screenId" falls back to it, and an entry with neither is
+    // DROPPED — which silently changes overview.size(), so pin all three
+    // shapes in one call.
+    RuleController controller;
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-1")}},
+                               QVariantMap{{QStringLiteral("screenId"), QStringLiteral("DP-2")}}, QVariantMap{}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+    QCOMPARE(overview.at(0).toMap().value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-1"));
+    QCOMPARE(overview.at(1).toMap().value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-2"));
 }
 
 void TestRuleControllerOverview::monitorOverviewLayoutFromSingleWinningRule()
@@ -514,339 +621,6 @@ void TestRuleControllerOverview::monitorOverviewDisableEngineUnionsEveryMode()
     QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 2);
 }
 
-void TestRuleControllerOverview::engineModePickerExposesAllVocabularyTokens()
-{
-    // Pin that the SetEngineMode + DisableEngine pickers expose exactly
-    // three options — snapping / autotile / scrolling — with non-empty
-    // localised labels. A regression that dropped the Scrolling enum
-    // option from `engineModeOptions()` or the GPL settings-layer label
-    // map would surface here.
-    RuleController controller;
-    const QVariantList types = controller.actionTypes();
-    // Each entry in `actionTypes()` carries its own `params` list (see the
-    // descriptor docstring in rulecontroller.h:330-344). For each
-    // param of kind="enum", the `options` list contains `{value, label}`
-    // pairs. We walk to the `mode` param of each action and extract its
-    // options to verify the closed engine-mode vocabulary.
-    const auto findModeOptions = [&](const QString& typeWire) -> QVariantList {
-        for (const QVariant& t : types) {
-            const QVariantMap tm = t.toMap();
-            if (tm.value(QStringLiteral("value")).toString() != typeWire) {
-                continue;
-            }
-            for (const QVariant& p : tm.value(QStringLiteral("params")).toList()) {
-                const QVariantMap pm = p.toMap();
-                if (pm.value(QStringLiteral("key")).toString() == QLatin1String("mode")) {
-                    return pm.value(QStringLiteral("options")).toList();
-                }
-            }
-        }
-        return {};
-    };
-    for (const QString& actionWire : {QStringLiteral("setEngineMode"), QStringLiteral("disableEngine")}) {
-        const QVariantList options = findModeOptions(actionWire);
-        QCOMPARE(options.size(), 3);
-        QStringList wireValues;
-        for (const QVariant& opt : options) {
-            const QVariantMap om = opt.toMap();
-            wireValues.append(om.value(QStringLiteral("value")).toString());
-            QVERIFY2(!om.value(QStringLiteral("label")).toString().isEmpty(),
-                     qPrintable(QStringLiteral("empty label for %1 / %2")
-                                    .arg(actionWire, om.value(QStringLiteral("value")).toString())));
-        }
-        QVERIFY2(wireValues.contains(QStringLiteral("snapping")), qPrintable(wireValues.join(QLatin1Char(','))));
-        QVERIFY2(wireValues.contains(QStringLiteral("autotile")), qPrintable(wireValues.join(QLatin1Char(','))));
-        QVERIFY2(wireValues.contains(QStringLiteral("scrolling")), qPrintable(wireValues.join(QLatin1Char(','))));
-    }
-}
-
-void TestRuleControllerOverview::inputHints()
-{
-    RuleController controller;
-
-    // Match-condition value hints are keyed on the operator wire token: the
-    // operators whose value editor is a plain text box AND whose syntax /
-    // matching semantics aren't obvious carry a hint; the self-explanatory ones
-    // (and the picker / spin-box operators) carry none. Pins the QML contract —
-    // MatchLeafEditor calls matchValueHint(node.op) and shows the result beneath
-    // the value field — so a regression that drops or widens it is caught.
-    QVERIFY2(!controller.matchValueHint(QStringLiteral("regex")).isEmpty(),
-             "the regex operator must carry an input hint");
-    QVERIFY2(!controller.matchValueHint(QStringLiteral("appIdMatches")).isEmpty(),
-             "the app-id-match operator must carry an input hint");
-    QVERIFY2(controller.matchValueHint(QStringLiteral("equals")).isEmpty(),
-             "equals is self-explanatory and must carry no hint");
-    QVERIFY2(controller.matchValueHint(QStringLiteral("contains")).isEmpty(),
-             "contains is self-explanatory and must carry no hint");
-    QVERIFY2(controller.matchValueHint(QString()).isEmpty(), "an empty operator token yields no hint");
-
-    // The SnapToZone action's `zones` param carries an input hint (its free-text
-    // ordinal-list syntax isn't discoverable from the field). The hint rides on
-    // the param descriptor in actionTypes() — ActionRow reads `param.hint`.
-    const QVariantList actions = controller.actionTypes();
-    bool sawSnapToZoneZones = false;
-    for (const QVariant& a : actions) {
-        const QVariantMap action = a.toMap();
-        if (action.value(QStringLiteral("value")).toString() != QLatin1String("snapToZone")) {
-            continue;
-        }
-        for (const QVariant& p : action.value(QStringLiteral("params")).toList()) {
-            const QVariantMap param = p.toMap();
-            if (param.value(QStringLiteral("key")).toString() != QLatin1String("zones")) {
-                continue;
-            }
-            sawSnapToZoneZones = true;
-            QVERIFY2(!param.value(QStringLiteral("hint")).toString().isEmpty(),
-                     "SnapToZone's zones param must carry an input hint");
-        }
-    }
-    QVERIFY2(sawSnapToZoneZones, "actionTypes() must expose the SnapToZone zones param");
-}
-
-void TestRuleControllerOverview::templatesProduceSeededRules()
-{
-    RuleController controller;
-
-    // The catalogue surfaced to the AddRuleSheet — every template entry
-    // must carry the four UI fields the QML grid binds against. A missing
-    // field would render a tile with a blank label or no icon.
-    const QVariantList templates = controller.ruleTemplates();
-    QVERIFY(!templates.isEmpty());
-    for (const QVariant& v : templates) {
-        const QVariantMap t = v.toMap();
-        QVERIFY(!t.value(QStringLiteral("id")).toString().isEmpty());
-        QVERIFY(!t.value(QStringLiteral("label")).toString().isEmpty());
-        QVERIFY(!t.value(QStringLiteral("description")).toString().isEmpty());
-        QVERIFY(!t.value(QStringLiteral("icon")).toString().isEmpty());
-    }
-
-    // `layoutOnMonitor` mirrors the old MonitorStatePage assignment flow:
-    // ScreenId leaf + SetEngineMode("snapping") + SetSnappingLayout (empty
-    // layoutId — the user fills it in the editor). The seeded action shape
-    // is the rule editor's contract; regression there silently breaks the
-    // quick-start flow.
-    const QVariantMap layoutRule = controller.newRuleFromTemplate(QStringLiteral("layoutOnMonitor"));
-    QVERIFY(!layoutRule.value(QStringLiteral("id")).toString().isEmpty());
-    QCOMPARE(layoutRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("screenId"));
-    const QVariantList layoutActions = layoutRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(layoutActions.size(), 2);
-    QCOMPARE(layoutActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setEngineMode"));
-    QCOMPARE(layoutActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
-    QCOMPARE(layoutActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setSnappingLayout"));
-
-    // `algorithmOnMonitor` is the autotile mirror — same screen leaf,
-    // SetEngineMode("autotile") + SetTilingAlgorithm.
-    const QVariantMap algoRule = controller.newRuleFromTemplate(QStringLiteral("algorithmOnMonitor"));
-    const QVariantList algoActions = algoRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(algoActions.size(), 2);
-    QCOMPARE(algoActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("autotile"));
-    QCOMPARE(algoActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setTilingAlgorithm"));
-
-    // `excludeApp` is the per-app exclusion template (Application subject +
-    // Exclude action). Single action, no params required.
-    const QVariantMap excludeRule = controller.newRuleFromTemplate(QStringLiteral("excludeApp"));
-    QCOMPARE(excludeRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("appId"));
-    const QVariantList excludeActions = excludeRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(excludeActions.size(), 1);
-    QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("exclude"));
-
-    // `excludeSmallFromAnimations` showcases the new Width numeric match field:
-    // a `Width LessThan 300` leaf + a single terminal ExcludeAnimations action.
-    // Regression here means the quick-start that demonstrates the new fields is
-    // broken or silently authoring the wrong predicate.
-    const QVariantMap smallRule = controller.newRuleFromTemplate(QStringLiteral("excludeSmallFromAnimations"));
-    const QVariantMap smallMatch = smallRule.value(QStringLiteral("match")).toMap();
-    QCOMPARE(smallMatch.value(QStringLiteral("field")).toString(), QStringLiteral("width"));
-    QCOMPARE(smallMatch.value(QStringLiteral("op")).toString(), QStringLiteral("lessThan"));
-    QCOMPARE(smallMatch.value(QStringLiteral("value")).toInt(), 300);
-    const QVariantList smallActions = smallRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(smallActions.size(), 1);
-    QCOMPARE(smallActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludeAnimations"));
-
-    // `lockLayoutOnMonitor` is the lock template: ScreenId leaf + a single
-    // LockContext action seeded to lock (value == true). The seeded value is
-    // the contract — a regression that drops/inverts it would author a rule
-    // that silently doesn't lock, or doesn't surface in the picker's
-    // value-on default.
-    const QVariantMap lockRule = controller.newRuleFromTemplate(QStringLiteral("lockLayoutOnMonitor"));
-    QVERIFY(!lockRule.value(QStringLiteral("id")).toString().isEmpty());
-    QCOMPARE(lockRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("screenId"));
-    const QVariantList lockActions = lockRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(lockActions.size(), 1);
-    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
-    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("value")).toBool(), true);
-
-    // `layoutOnDesktop` is the desktop twin of layoutOnMonitor: a
-    // `VirtualDesktop == 1` leaf (0 is the all-desktops sentinel, so the seed
-    // must be a real desktop number) + the same SetEngineMode("snapping") +
-    // SetSnappingLayout pair.
-    const QVariantMap desktopRule = controller.newRuleFromTemplate(QStringLiteral("layoutOnDesktop"));
-    const QVariantMap desktopMatch = desktopRule.value(QStringLiteral("match")).toMap();
-    QCOMPARE(desktopMatch.value(QStringLiteral("field")).toString(), QStringLiteral("virtualDesktop"));
-    QCOMPARE(desktopMatch.value(QStringLiteral("value")).toInt(), 1);
-    const QVariantList desktopActions = desktopRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(desktopActions.size(), 2);
-    QCOMPARE(desktopActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
-    QCOMPARE(desktopActions.at(1).toMap().value(QStringLiteral("type")).toString(),
-             QStringLiteral("setSnappingLayout"));
-
-    // `portraitLayout` showcases the ScreenOrientation context field: a
-    // `screenOrientation == "portrait"` leaf + the snapping assignment pair.
-    const QVariantMap portraitRule = controller.newRuleFromTemplate(QStringLiteral("portraitLayout"));
-    const QVariantMap portraitMatch = portraitRule.value(QStringLiteral("match")).toMap();
-    QCOMPARE(portraitMatch.value(QStringLiteral("field")).toString(), QStringLiteral("screenOrientation"));
-    QCOMPARE(portraitMatch.value(QStringLiteral("value")).toString(), QStringLiteral("portrait"));
-    const QVariantList portraitActions = portraitRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(portraitActions.size(), 2);
-    QCOMPARE(portraitActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
-    QCOMPARE(portraitActions.at(1).toMap().value(QStringLiteral("type")).toString(),
-             QStringLiteral("setSnappingLayout"));
-
-    // `snapAppToZone` is the flagship per-app placement rule: AppId leaf +
-    // SnapToZone seeded with ordinal 1 (the validator requires a non-empty
-    // zones list, so the seed must survive the round-trip).
-    const QVariantMap snapRule = controller.newRuleFromTemplate(QStringLiteral("snapAppToZone"));
-    QCOMPARE(snapRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("appId"));
-    const QVariantList snapActions = snapRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(snapActions.size(), 1);
-    QCOMPARE(snapActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("snapToZone"));
-    const QVariantList seededZones = snapActions.at(0).toMap().value(QStringLiteral("zones")).toList();
-    QCOMPARE(seededZones.size(), 1);
-    QCOMPARE(seededZones.at(0).toInt(), 1);
-
-    // `routeAppToScreen`: AppId leaf + RouteToScreen with an empty target
-    // (the user picks the monitor in the editor).
-    const QVariantMap routeRule = controller.newRuleFromTemplate(QStringLiteral("routeAppToScreen"));
-    QCOMPARE(routeRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("appId"));
-    const QVariantList routeActions = routeRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(routeActions.size(), 1);
-    QCOMPARE(routeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("routeToScreen"));
-
-    // `floatApp`: AppId leaf + a single param-less Float action.
-    const QVariantMap floatRule = controller.newRuleFromTemplate(QStringLiteral("floatApp"));
-    QCOMPARE(floatRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("appId"));
-    const QVariantList floatActions = floatRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(floatActions.size(), 1);
-    QCOMPARE(floatActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("float"));
-
-    // An unknown id must return an empty map — the AddRuleSheet would
-    // otherwise commit a UUID-less rule on a typo in the template id.
-    const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));
-    QVERIFY(bogus.isEmpty());
-}
-
-void TestRuleControllerOverview::actionTypesCarryDomain()
-{
-    // The action row keys off this field to flag context-domain actions when
-    // the match references window-property leaves — a regression that drops
-    // the domain would silently lose the warning for the silently-never-fires
-    // combination.
-    RuleController controller;
-    const QVariantList actions = controller.actionTypes();
-    QVERIFY(!actions.isEmpty());
-    QHash<QString, QString> domainOf;
-    for (const QVariant& v : actions) {
-        const QVariantMap m = v.toMap();
-        const QString id = m.value(QStringLiteral("value")).toString();
-        const QString domain = m.value(QStringLiteral("domain")).toString();
-        QVERIFY2(domain == QLatin1String("context") || domain == QLatin1String("window"),
-                 qPrintable(QStringLiteral("action %1 has unexpected domain %2").arg(id, domain)));
-        domainOf.insert(id, domain);
-    }
-    // Spot-check the canonical pairs — the context actions and a sample of
-    // window actions. A typo in the descriptor would flip these.
-    QCOMPARE(domainOf.value(QStringLiteral("setEngineMode")), QStringLiteral("context"));
-    QCOMPARE(domainOf.value(QStringLiteral("setSnappingLayout")), QStringLiteral("context"));
-    QCOMPARE(domainOf.value(QStringLiteral("setTilingAlgorithm")), QStringLiteral("context"));
-    QCOMPARE(domainOf.value(QStringLiteral("disableEngine")), QStringLiteral("context"));
-    QCOMPARE(domainOf.value(QStringLiteral("lockContext")), QStringLiteral("context"));
-    QCOMPARE(domainOf.value(QStringLiteral("float")), QStringLiteral("window"));
-    QCOMPARE(domainOf.value(QStringLiteral("exclude")), QStringLiteral("window"));
-}
-
-void TestRuleControllerOverview::defaultPayloadForSeedsParams()
-{
-    // The QML action row uses `defaultPayloadFor` when the user switches the
-    // type picker to a new action — a stale regression that returned a bare
-    // `{type: X}` map would leave SpinBoxes anchored at 0 and `canSave`
-    // would gate the rule on params the user never had a chance to fill.
-    RuleController controller;
-
-    // Float carries no params — payload is exactly `{type: float}`.
-    const QVariantMap floatPayload = controller.defaultPayloadFor(QStringLiteral("float"));
-    QCOMPARE(floatPayload.value(QStringLiteral("type")).toString(), QStringLiteral("float"));
-    QCOMPARE(floatPayload.size(), 1);
-
-    // SetOpacity stores `display * scale`; the descriptor declares
-    // defaultDisplay=100 with scale=0.01, so the seeded wire value is
-    // 1.0 (100% — no visible change). A future change to the descriptor's
-    // defaultDisplay would automatically flow through here. The earlier
-    // seed-at-`min`=0 behaviour was a bug: a SetOpacity rule was savable
-    // immediately at 0% (invisible window) before the user adjusted.
-    const QVariantMap opacityPayload = controller.defaultPayloadFor(QStringLiteral("setOpacity"));
-    QCOMPARE(opacityPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setOpacity"));
-    QVERIFY(opacityPayload.contains(QStringLiteral("value")));
-    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toDouble(), 1.0);
-
-    // SetEngineMode's `mode` is an enum — seeded to the first option's wire
-    // value. The engineModeOptions list begins with snapping, so the default
-    // pre-selects that. Changing the order in the descriptor would
-    // automatically change this default.
-    const QVariantMap modePayload = controller.defaultPayloadFor(QStringLiteral("setEngineMode"));
-    QCOMPARE(modePayload.value(QStringLiteral("type")).toString(), QStringLiteral("setEngineMode"));
-    QCOMPARE(modePayload.value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
-
-    // SetSnappingLayout uses the `snappingLayout` picker kind — no implicit
-    // default (the user must pick a layout), so the seeded value is an
-    // empty string. `canSave` will then explicitly surface "layout missing".
-    const QVariantMap layoutPayload = controller.defaultPayloadFor(QStringLiteral("setSnappingLayout"));
-    QVERIFY(layoutPayload.contains(QStringLiteral("layoutId")));
-    QCOMPARE(layoutPayload.value(QStringLiteral("layoutId")).toString(), QString());
-
-    // OverrideAnimationCurve has two picker-kind params — both empty.
-    const QVariantMap curvePayload = controller.defaultPayloadFor(QStringLiteral("overrideAnimationCurve"));
-    QVERIFY(curvePayload.contains(QStringLiteral("event")));
-    QVERIFY(curvePayload.contains(QStringLiteral("curve")));
-    QCOMPARE(curvePayload.value(QStringLiteral("event")).toString(), QString());
-    QCOMPARE(curvePayload.value(QStringLiteral("curve")).toString(), QString());
-
-    // SetBorderColorActive / SetBorderColorInactive each carry a single
-    // `color`-kind param keyed `value`, seeded with the accent sentinel so a
-    // fresh border-colour rule follows the system accent until the user picks a
-    // concrete colour.
-    const QVariantMap borderColorActivePayload = controller.defaultPayloadFor(QStringLiteral("setBorderColorActive"));
-    QCOMPARE(borderColorActivePayload.value(QStringLiteral("type")).toString(), QStringLiteral("setBorderColorActive"));
-    QCOMPARE(borderColorActivePayload.value(QStringLiteral("value")).toString(), QStringLiteral("accent"));
-    const QVariantMap borderColorInactivePayload =
-        controller.defaultPayloadFor(QStringLiteral("setBorderColorInactive"));
-    QCOMPARE(borderColorInactivePayload.value(QStringLiteral("type")).toString(),
-             QStringLiteral("setBorderColorInactive"));
-    QCOMPARE(borderColorInactivePayload.value(QStringLiteral("value")).toString(), QStringLiteral("accent"));
-
-    // LockContext's `value` is a bool with defaultDisplay=1.0, so a freshly
-    // type-switched lock action seeds to `value: true` — the picker opens
-    // value-on (the meaningful "lock" default). A descriptor regression that
-    // dropped defaultDisplay would seed `false` here, silently authoring a
-    // lock action that doesn't lock.
-    const QVariantMap lockPayload = controller.defaultPayloadFor(QStringLiteral("lockContext"));
-    QCOMPARE(lockPayload.value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
-    QVERIFY(lockPayload.contains(QStringLiteral("value")));
-    QCOMPARE(lockPayload.value(QStringLiteral("value")).toBool(), true);
-
-    // Unknown type → bare `{type: X}` map. The QML side will never call this
-    // with an unknown wire (the picker only offers registered types), but
-    // returning a sane shape keeps the contract total.
-    const QVariantMap unknownPayload = controller.defaultPayloadFor(QStringLiteral("bogusActionType"));
-    QCOMPARE(unknownPayload.value(QStringLiteral("type")).toString(), QStringLiteral("bogusActionType"));
-    QCOMPARE(unknownPayload.size(), 1);
-}
-
 void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()
 {
     // The rule-list summary resolves OverrideAnimationCurve wire strings to
@@ -854,6 +628,12 @@ void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()
     // in production). Exercise the actual QJSValue bridge end-to-end: install a
     // real engine-backed resolver and confirm the summary renders its output,
     // and that a non-callable value clears the resolver back to the raw value.
+    //
+    // The engine is declared BEFORE the controller so it outlives it: the
+    // controller holds the installed QJSValue, and destruction runs in reverse
+    // declaration order, so the other order would tear the engine down while
+    // one of its values was still held by the controller.
+    QJSEngine engine;
     RuleController controller;
 
     Rule curveRule;
@@ -873,7 +653,6 @@ void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()
     // No resolver wired yet → the raw wire string round-trips behind the label.
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 
-    QJSEngine engine;
     QJSValue resolver = engine.evaluate(
         QStringLiteral("(function(c){ return c === '0.33,1.00,0.68,1.00' ? 'Standard (Cubic)' : c; })"));
     QVERIFY(resolver.isCallable());

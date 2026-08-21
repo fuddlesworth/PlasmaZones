@@ -54,13 +54,47 @@ SettingsFlickable {
                 spacing: Kirigami.Units.smallSpacing
 
                 SettingsRow {
+                    title: i18n("Rendering device")
+                    description: i18n("GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.")
+                    searchAnchor: "gpuDevice"
+
+                    WideComboBox {
+                        enabled: !settingsController.daemonRunning
+                        // Device names are unbounded machine data and the
+                        // SettingsRow control slot is a plain Row positioner
+                        // (no Layout.* sizing, no clipping), so cap the
+                        // collapsed field width; the popup still sizes to the
+                        // widest item.
+                        width: Kirigami.Units.gridUnit * 14
+                        Accessible.name: i18n("Rendering device")
+                        textRole: "text"
+                        valueRole: "value"
+                        // Machine-dependent, so enumerated by the page
+                        // controller instead of declared in the schema.
+                        model: settingsController.generalPage.availableGpus
+                        storedValue: appSettings.gpuDevice
+                        // Guard the write: `enabled` does not reach an
+                        // already-open popup (it re-parents to the Overlay),
+                        // so a daemon that starts while the popup is up could
+                        // otherwise still commit a rendering change. The
+                        // refusal branch must revert the display — the combo
+                        // committed currentIndex before activated() fired.
+                        onActivated: {
+                            if (settingsController.daemonRunning) {
+                                revertToStoredValue();
+                                return;
+                            }
+                            appSettings.gpuDevice = currentValue;
+                        }
+                    }
+                }
+
+                SettingsRow {
                     title: i18n("Rendering backend")
                     description: i18n("Graphics API used for overlay rendering")
                     searchAnchor: "renderingBackend"
 
                     WideComboBox {
-                        id: renderingBackendCombo
-
                         enabled: !settingsController.daemonRunning
                         Accessible.name: i18n("Rendering backend")
                         // One list of {text, value} pairs rather than two
@@ -69,7 +103,15 @@ SettingsFlickable {
                         valueRole: "value"
                         model: settingsController.valueOptions("Rendering", "Backend")
                         storedValue: appSettings.renderingBackend
-                        onActivated: appSettings.renderingBackend = currentValue
+                        // Same open-popup guard and display revert as the
+                        // device combo above.
+                        onActivated: {
+                            if (settingsController.daemonRunning) {
+                                revertToStoredValue();
+                                return;
+                            }
+                            appSettings.renderingBackend = currentValue;
+                        }
                     }
                 }
 
@@ -81,8 +123,8 @@ SettingsFlickable {
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     type: Kirigami.MessageType.Information
-                    text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
-                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend
+                    text: settingsController.daemonRunning ? i18n("Stop the daemon to change rendering settings.") : i18n("Rendering changes take effect after restarting the daemon.")
+                    visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend || appSettings.gpuDevice !== settingsController.generalPage.startupGpuDevice
                 }
             }
         }
@@ -118,11 +160,9 @@ SettingsFlickable {
                         from: root.effectsBridge.shaderFrameRateMin
                         to: root.effectsBridge.shaderFrameRateMax
                         value: appSettings.shaderFrameRate
-                        valueSuffix: " fps"
+                        valueSuffix: " " + i18nc("frames per second, unit appended to a slider value", "fps")
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.shaderFrameRate = Math.round(value);
-                        }
+                        onMoved: value => appSettings.shaderFrameRate = Math.round(value)
                     }
                 }
             }
@@ -200,9 +240,7 @@ SettingsFlickable {
                             value: appSettings.audioSpectrumBarCount
                             valueSuffix: ""
                             labelWidth: Kirigami.Units.gridUnit * 4
-                            onMoved: value => {
-                                return appSettings.audioSpectrumBarCount = Math.round(value);
-                            }
+                            onMoved: value => appSettings.audioSpectrumBarCount = Math.round(value)
                         }
                     }
                 }
@@ -245,9 +283,7 @@ SettingsFlickable {
                         value: appSettings.audioNoiseReduction
                         valueSuffix: ""
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.audioNoiseReduction = Math.round(value);
-                        }
+                        onMoved: value => appSettings.audioNoiseReduction = Math.round(value)
                     }
                 }
 
@@ -263,9 +299,7 @@ SettingsFlickable {
                         value: appSettings.audioExtraSmoothing
                         valueSuffix: "%"
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.audioExtraSmoothing = Math.round(value);
-                        }
+                        onMoved: value => appSettings.audioExtraSmoothing = Math.round(value)
                     }
                 }
 
@@ -299,9 +333,7 @@ SettingsFlickable {
                         value: appSettings.audioSensitivity
                         valueSuffix: "%"
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.audioSensitivity = Math.round(value);
-                        }
+                        onMoved: value => appSettings.audioSensitivity = Math.round(value)
                     }
                 }
 
@@ -317,11 +349,9 @@ SettingsFlickable {
                         from: root.effectsBridge.audioLowerCutoffHzMin
                         to: root.effectsBridge.audioLowerCutoffHzMax
                         value: appSettings.audioLowerCutoffHz
-                        valueSuffix: " Hz"
+                        valueSuffix: " " + i18nc("hertz, unit appended to a slider value", "Hz")
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.audioLowerCutoffHz = Math.round(value);
-                        }
+                        onMoved: value => appSettings.audioLowerCutoffHz = Math.round(value)
                     }
                 }
 
@@ -335,11 +365,9 @@ SettingsFlickable {
                         from: root.effectsBridge.audioHigherCutoffHzMin
                         to: root.effectsBridge.audioHigherCutoffHzMax
                         value: appSettings.audioHigherCutoffHz
-                        valueSuffix: " Hz"
+                        valueSuffix: " " + i18nc("hertz, unit appended to a slider value", "Hz")
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: value => {
-                            return appSettings.audioHigherCutoffHz = Math.round(value);
-                        }
+                        onMoved: value => appSettings.audioHigherCutoffHz = Math.round(value)
                     }
                 }
 
@@ -424,7 +452,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Audio source")
                     searchAnchor: "audioInputSource"
-                    description: i18n("Capture device or monitor source. Keep \"auto\" to follow the default output.")
+                    description: i18n("Capture device or monitor source. Keep it set to auto to follow the default output.")
 
                     TextField {
                         id: audioSourceField

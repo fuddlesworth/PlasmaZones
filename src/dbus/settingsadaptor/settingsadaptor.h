@@ -126,7 +126,8 @@ public Q_SLOTS:
 
     QStringList getSettingKeys();
 
-    // Per-screen settings (categories: "autotile", "snapping", "zoneSelector")
+    // Per-screen settings (categories: "autotile", "scrolling", "snapping",
+    // "zoneSelector", "scrollingZoneSelector")
     void setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                              const QDBusVariant& value);
     void clearPerScreenSettings(const QString& screenId, const QString& category);
@@ -150,9 +151,9 @@ public Q_SLOTS:
      * setSettings) — consistent with single-key behavior.
      *
      * @param screenId Virtual or physical screen identifier
-     * @param category "autotile" | "snapping" | "zoneSelector". NOTE: "snapping" is
-     *                 READ-ONLY (it projects the config's per-monitor gaps), so a write to
-     *                 it is rejected and does nothing. Write those through "autotile".
+     * @param category "autotile" | "scrolling" | "snapping" | "zoneSelector" | "scrollingZoneSelector". NOTE:
+     * "snapping" is READ-ONLY (it projects the config's per-monitor gaps), so a write to it is rejected and does
+     * nothing. Write those through "autotile".
      * @param values   Map of key -> value. QDBusArgument-wrapped values
      *                 from the wire are unwrapped via DBusVariantUtils
      *                 before reaching the setter.
@@ -246,7 +247,7 @@ public Q_SLOTS:
     /**
      * @brief Get metadata for a single setting
      * @param key Setting key name
-     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"|"map"
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"themeColor"|"stringlist"|"map"
      */
     QString getSettingSchema(const QString& key);
 
@@ -311,6 +312,16 @@ Q_SIGNALS:
 
 private:
     void initializeRegistry();
+    /// The per-mode slices of the registry, split into
+    /// settingsadaptor_registry_snapping.cpp,
+    /// settingsadaptor_registry_autotile.cpp and
+    /// settingsadaptor_registry_scrolling.cpp for file size. Each is called
+    /// only by initializeRegistry and fills the same getter / setter / schema
+    /// maps; which key lives in which slice follows the boundary rule
+    /// documented in those files' banners.
+    void initializeRegistrySnapping();
+    void initializeRegistryAutotile();
+    void initializeRegistryScrolling();
 
     /**
      * @brief Schedule a debounced save
@@ -339,7 +350,8 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
-    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist"|"map")
+    QHash<QString, QString>
+        m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"themeColor"|"stringlist"|"map")
 
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;
@@ -367,6 +379,12 @@ private:
     bool m_cachedAvailableShadersValid = false;
     QHash<QString, QVariantMap> m_cachedShaderInfo;
     QHash<QString, QVariantMap> m_cachedShaderDefaults;
+    /// Memoized JSON array of animation-shader search paths. A member, not a
+    /// function-local static: as a static it lived for the whole process, so a
+    /// mid-session XDG_DATA_HOME change was never picked up, it survived
+    /// detach(), and neither refreshShaders() nor invalidateShaderCaches()
+    /// could clear it. Empty means "not yet resolved".
+    QString m_cachedShaderSearchPaths;
 };
 
 } // namespace PlasmaZones

@@ -24,9 +24,12 @@ namespace {
 // a tree (depth scales with nesting) while that one walks a single chain.
 constexpr int MaxWalkDepth = 64;
 
-// The one place a flat-mode title override is applied. Both the flat rail walk
-// and the Q_INVOKABLE Breadcrumbs calls go through here, so the rail and the
-// crumb can never disagree about a leaf's flat title.
+// The one place a flat-mode override is applied as a plain title lookup — the
+// flat rail walk and the Q_INVOKABLE Breadcrumbs calls both go through here,
+// so the rail and the crumb cannot disagree about a leaf's flat title. The
+// SEARCH walk is the deliberate exception: it needs the found/not-found
+// distinction (an overridden id drops its breadcrumb), so it reads the map
+// directly at its flatOverridden branch.
 QString flatTitleOf(const QString& pageId, const QString& registeredTitle, const QVariantMap& flatTitleOverrides)
 {
     const auto it = flatTitleOverrides.constFind(pageId);
@@ -71,6 +74,16 @@ bool rowIsDivider(const QVariantMap& row)
     return row.value(IsDividerKey).toBool();
 }
 
+// Shared by the flat and tree walks: the rows a trailing seam was meant to
+// separate can filter out, leaving the divider as the last row and the rail
+// drawing a separator under nothing.
+void trimTrailingDividers(QVariantList& out)
+{
+    while (!out.isEmpty() && rowIsDivider(out.last().toMap())) {
+        out.removeLast();
+    }
+}
+
 // An absent id counts as EXPANDED: the rail starts open, so only an explicit
 // false collapses. Mirrors Sidebar's _isExpanded.
 bool isExpanded(const QVariantMap& expandedCategories, const QString& id)
@@ -83,17 +96,26 @@ bool isExpanded(const QVariantMap& expandedCategories, const QString& id)
 }
 
 // The single shared "up to two navigable descendants" walk, taking the scope's
-// already-fetched visible children so neither caller pays for the
-// subtree-descending visibility test twice. Both real callers — build()'s
-// drill-row decision and resolveDrillScope — reach it directly, so there is one
-// implementation and they cannot disagree about what "enterable" means. It
-// stops at TWO because both only need zero / exactly-one / more-than-one:
-//   0  -> the drill leads nowhere (a row whose only content would be a Back
-//         button), so build() does not offer it and resolveDrillScope evicts
-//         the rail out of it,
-//   1  -> the drill step is pure friction, so build() flattens the row to that
-//         descendant and it is NOT a drill target,
-//   2+ -> a real drill target.
+// already-fetched visible children so no caller pays for the
+// subtree-descending visibility test twice. All three callers — the flat
+// walk's kept-header decision, the tree walk's drill-row decision and
+// resolveDrillScope — reach it directly, so there is one implementation and
+// they cannot disagree about what "enterable" means. It stops at TWO because
+// all three only need zero / exactly-one / more-than-one:
+//   0  -> reachable only through MaxWalkDepth truncation: PageRegistry's
+//         visibility rule hides a virtual node unless a navigable descendant
+//         is visible, so every entry visibleChildPages hands back has at
+//         least one. The guard stays because it is cheap and stays correct
+//         if that rule ever loosens; if it DID fire, the tree walk drops the
+//         row, resolveDrillScope evicts the rail out of the scope, and the
+//         flat walk falls through to the dissolve branch.
+//   1  -> the drill step is pure friction: the tree walk flattens the row to
+//         that descendant (under the PARENT's title and icon), the flat walk
+//         dissolves the parent and the lone leaf emits under ITS OWN title
+//         (flatTitleOverrides is how a caller retitles it), and it is NOT a
+//         drill target.
+//   2+ -> a real drill target; the flat walk keeps the parent as a
+//         collapsible header row.
 // (The lib has no QML test harness, so two copies of this walk would ship green
 // the moment they diverged, which is exactly what happened when resolveDrillScope
 // was first written with its own copy that counted to one.)
@@ -112,11 +134,18 @@ QList<PageRegistry::Entry> firstTwoNavigableUnder(const PageRegistry* registry, 
                         return;
                     }
                 }
-                // Warn like the other four walks in this file. A truncated
-                // count is not a cosmetic omission here: it flips a real drill
-                // target into "not enterable", so build() drops the row and
-                // resolveDrillScope evicts the rail out of the scope. Silence
-                // would leave nothing in the log explaining either.
+                const QList<PageRegistry::Entry> grandKids = registry->visibleChildPages(g.id);
+                if (grandKids.isEmpty()) {
+                    continue;
+                }
+                // Warn like the other four walks in this file, but only when
+                // there ARE descendants going uncounted — a childless entry at
+                // the boundary loses nothing, and one warning per such leaf
+                // was pure noise. A truncated count is not a cosmetic
+                // omission: it flips a real drill target into "not
+                // enterable", so build() drops the row and resolveDrillScope
+                // evicts the rail out of the scope. Silence would leave
+                // nothing in the log explaining either.
                 if (d + 1 > MaxWalkDepth) {
                     qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
                                << g.id
@@ -124,7 +153,7 @@ QList<PageRegistry::Entry> firstTwoNavigableUnder(const PageRegistry* registry, 
                                   "as a drill target";
                     continue;
                 }
-                gather(registry->visibleChildPages(g.id), d + 1);
+                gather(grandKids, d + 1);
             }
         };
     gather(kids, 0);
@@ -190,7 +219,22 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
 
     // ── FLAT ────────────────────────────────────────────────────────────
     // One list of every visible navigable page, walked from the ROOT (drill
-    // scope is meaningless here), depth 0 throughout, in registration order. A
+    // scope is meaningless here), in registration order. Collapsible CATEGORY
+    // headers dissolve — their leaves hoist to the surrounding depth — but a
+    // no-QML DRILL parent applies the tree walk's own 0/1/2+ distinction
+    // (via the same firstTwoNavigableUnder): zero visible descendants emits
+    // nothing, exactly one dissolves the parent so the lone leaf emits in its
+    // place UNDER ITS OWN TITLE (deliberately unlike the tree walk, which
+    // promotes the leaf under the parent's title and icon — a flat rail has
+    // no drill context to disambiguate a generic parent name, and
+    // flatTitleOverrides is the caller's tool for retitling the leaf), and
+    // two or more keep the parent as a collapsible header row with its
+    // subtree indented one step under it. Dissolving those too used to strand
+    // sibling leaves as orphaned rows with no parent to bind them to their
+    // section. A parent that carries a QML page of its own never becomes a
+    // header — it emits its own navigable row and its children follow at the
+    // same indent; no such node is registered today, so if one appears,
+    // decide then whether it should indent its subtree instead. A
     // TOP-LEVEL entry's hasDividerAfter fires after the last row its SUBTREE
     // emitted, so the tree's section seams survive flattening; leaf-level flags
     // are ignored because they are tuned for the tree rail's within-category
@@ -200,37 +244,62 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
         QSet<QString> seen;
         seen.insert(QString());
 
-        const std::function<void(const QString&, int)> emitLeaves = [&](const QString& parentId, int depth) {
-            if (depth > MaxWalkDepth) {
-                qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
-                           << parentId << "— rows below this point are omitted from the rail";
-                return;
-            }
-            const QList<PageRegistry::Entry> kids = m_registry->visibleChildPages(parentId);
-            for (const PageRegistry::Entry& child : kids) {
-                if (seen.contains(child.id)) {
-                    continue;
-                }
-                seen.insert(child.id);
-                const int before = out.size();
-                if (!child.qmlSource.isEmpty()) {
-                    out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
-                                       child.iconSource, true, 0, false, false, false, false));
-                }
-                emitLeaves(child.id, depth + 1);
+        // `depth` bounds the registry walk; `rowDepth` is the emitted indent,
+        // which only steps under a kept drill-parent header (dissolved
+        // categories add registry depth but no visual depth). Each child's
+        // visible-children list is fetched ONCE and handed to both the
+        // header decision and the recursion, matching the tree and search
+        // walks — visibleChildPages runs the subtree-descending visibility
+        // test per child, so a second fetch doubles the walk for nothing.
+        const std::function<void(const QList<PageRegistry::Entry>&, int, int)> emitLeaves =
+            [&](const QList<PageRegistry::Entry>& kids, int depth, int rowDepth) {
+                for (const PageRegistry::Entry& child : kids) {
+                    if (seen.contains(child.id)) {
+                        continue;
+                    }
+                    seen.insert(child.id);
+                    const int before = out.size();
 
-                const bool emittedAny = out.size() > before;
-                const bool lastIsDivider = !out.isEmpty() && rowIsDivider(out.last().toMap());
-                if (depth == 0 && child.hasDividerAfter && emittedAny && !lastIsDivider) {
-                    out.append(makeDivider(prefix + QStringLiteral("flat/") + child.id, 0));
-                }
-            }
-        };
-        emitLeaves(QString(), 0);
+                    const QList<PageRegistry::Entry> childKids = m_registry->visibleChildPages(child.id);
+                    const bool asHeader = child.qmlSource.isEmpty() && !child.isCollapsible
+                        && firstTwoNavigableUnder(m_registry, childKids).size() > 1;
+                    const bool expanded = asHeader && isExpanded(expandedCategories, child.id);
+                    // Whether the subtree should render at all: children
+                    // exist, and a kept header is expanded (a collapsed
+                    // header HIDES its subtree — that is not truncation).
+                    const bool wantDescend = !childKids.isEmpty() && (!asHeader || expanded);
+                    if (wantDescend && depth + 1 > MaxWalkDepth) {
+                        qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
+                                   << child.id << "— rows below this point are omitted from the rail";
+                    }
+                    if (asHeader) {
+                        out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
+                                           child.iconSource, false, rowDepth, true, false, expanded, false));
+                        if (wantDescend && depth + 1 <= MaxWalkDepth) {
+                            emitLeaves(childKids, depth + 1, rowDepth + 1);
+                        }
+                    } else {
+                        if (!child.qmlSource.isEmpty()) {
+                            out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
+                                               child.iconSource, true, rowDepth, false, false, false, false));
+                        }
+                        if (wantDescend && depth + 1 <= MaxWalkDepth) {
+                            emitLeaves(childKids, depth + 1, rowDepth);
+                        }
+                    }
 
-        while (!out.isEmpty() && rowIsDivider(out.last().toMap())) {
-            out.removeLast();
-        }
+                    // `out.size() > before` implies out is non-empty, so the
+                    // divider probe on out.last() only runs when it is safe —
+                    // and only for the rare top-level seam candidate at all.
+                    if (depth == 0 && child.hasDividerAfter && out.size() > before
+                        && !rowIsDivider(out.last().toMap())) {
+                        out.append(makeDivider(prefix + QStringLiteral("flat/") + child.id, 0));
+                    }
+                }
+            };
+        emitLeaves(m_registry->visibleChildPages(QString()), 0, 0);
+
+        trimTrailingDividers(out);
         return out;
     }
 
@@ -306,14 +375,11 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
             };
         walk(currentParentId, 0, m_registry->visibleChildPages(currentParentId));
 
-        // Same trailing-divider trim the flat walk applies, for the same
-        // reason: the rows a seam was meant to separate can filter out. Under
-        // `animations` the simple-mode page carries the seam and every sibling
-        // after it is advanced-only, so in simple mode the divider is the last
-        // row emitted and the rail would draw a separator under nothing.
-        while (!out.isEmpty() && rowIsDivider(out.last().toMap())) {
-            out.removeLast();
-        }
+        // Under `animations` the simple-mode page carries the seam and every
+        // sibling after it is advanced-only, so in simple mode the divider is
+        // the last row emitted and the rail would draw a separator under
+        // nothing.
+        trimTrailingDividers(out);
         return out;
     }
 

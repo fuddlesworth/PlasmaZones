@@ -8,6 +8,7 @@
 #include <QStringView>
 
 #include <optional>
+#include <utility> // std::pair (kTable)
 
 namespace PhosphorProtocol {
 
@@ -33,25 +34,45 @@ enum class WindowType : int {
     Desktop = 10,
     OnScreenDisplay = 11,
     Popup = 12, ///< generic override-redirect popup
+    /// A Plasma applet's popup: Kickoff, the system-tray flyouts, any widget's
+    /// expanded view. `NET::AppletPopup`, a Plasma-specific type that matches
+    /// none of KWin's generic isMenu()/isPopupWindow()/isDialog() predicates —
+    /// so before this value existed every one of those surfaces resolved as
+    /// Unknown and could not be named by a rule at all.
+    ///
+    /// APPENDED, never inserted: these underlying ints are the D-Bus wire
+    /// representation. A peer built before this value range-checks 13 through
+    /// windowTypeFromInt and gets Unknown, which is exactly what it resolved
+    /// for these surfaces anyway — so the addition is backward-compatible in
+    /// both directions. Keep that property: append new types, never renumber.
+    AppletPopup = 13,
 };
 
 /// Inclusive bounds of the valid WindowType underlying values — used to
-/// range-check an int that crossed D-Bus before casting it back.
+/// range-check an int that crossed D-Bus before casting it back. The max MUST
+/// track the last enumerator, or a freshly added type is rejected on arrival
+/// and silently degrades to Unknown.
 inline constexpr int windowTypeMinValue = static_cast<int>(WindowType::Unknown);
-inline constexpr int windowTypeMaxValue = static_cast<int>(WindowType::Popup);
+inline constexpr int windowTypeMaxValue = static_cast<int>(WindowType::AppletPopup);
 
 /// True if @p value is a valid WindowType underlying value.
-inline bool isValidWindowType(int value)
+inline constexpr bool isValidWindowType(int value)
 {
     return value >= windowTypeMinValue && value <= windowTypeMaxValue;
 }
 
 /// Cast an int that crossed D-Bus to a WindowType; out-of-range values
 /// (version skew, a malformed caller) fall back to WindowType::Unknown.
-inline WindowType windowTypeFromInt(int value)
+inline constexpr WindowType windowTypeFromInt(int value)
 {
     return isValidWindowType(value) ? static_cast<WindowType>(value) : WindowType::Unknown;
 }
+
+// Pin the bounds invariants beside the enum they describe: constexpr lets the
+// compiler enforce what the runtime test also checks.
+static_assert(windowTypeMinValue == 0);
+static_assert(!isValidWindowType(windowTypeMinValue - 1) && !isValidWindowType(windowTypeMaxValue + 1));
+static_assert(windowTypeFromInt(windowTypeMaxValue + 1) == WindowType::Unknown);
 
 /// Canonical lowercase wire string for a WindowType.
 inline QString windowTypeToString(WindowType type)
@@ -83,6 +104,8 @@ inline QString windowTypeToString(WindowType type)
         return QStringLiteral("onscreendisplay");
     case WindowType::Popup:
         return QStringLiteral("popup");
+    case WindowType::AppletPopup:
+        return QStringLiteral("appletpopup");
     }
     return QStringLiteral("unknown");
 }
@@ -105,6 +128,7 @@ inline std::optional<WindowType> windowTypeFromString(QStringView s)
         {QLatin1StringView("desktop"), WindowType::Desktop},
         {QLatin1StringView("onscreendisplay"), WindowType::OnScreenDisplay},
         {QLatin1StringView("popup"), WindowType::Popup},
+        {QLatin1StringView("appletpopup"), WindowType::AppletPopup},
     };
     for (const auto& [token, type] : kTable) {
         if (s.compare(token, Qt::CaseInsensitive) == 0) {

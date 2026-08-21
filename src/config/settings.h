@@ -3,6 +3,18 @@
 
 #pragma once
 
+// SANCTIONED FILE-SIZE EXCEPTION. This header is far past the 1150-line
+// ceiling and stays that way deliberately: it is one class declaration whose
+// bulk is the Q_PROPERTY / getter / setter / signal quadruple that every
+// setting must carry. moc requires the whole Q_OBJECT class in one
+// translation unit's header, so the only way to "split" it is to fragment one
+// class across several headers, which buys nothing and costs every reader the
+// hunt for where a property lives. The DEFINITIONS are already split by domain
+// under src/config/settings/ (scrolling.cpp, and siblings), which is where the
+// real per-concern boundary is. Do not add a second exception here without the
+// same reasoning: growth of the accessor surface is expected, new
+// non-accessor logic in this header is not.
+
 #include "core/types/constants.h"
 #include "core/interfaces/interfaces.h"
 #include "configbackends.h"
@@ -14,11 +26,14 @@
 #include <PhosphorConfig/Store.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 
 #include <QFont>
 #include <QHash>
+
+#include <array>
 #include <QJsonValue>
 #include <QList>
 #include <QPair>
@@ -43,13 +58,15 @@ namespace PlasmaZones {
  */
 class PLASMAZONES_EXPORT Settings : public ISettings,
                                     public PhosphorEngine::IAutotileSettings,
-                                    public PhosphorEngine::ISnapSettings
+                                    public PhosphorEngine::ISnapSettings,
+                                    public PhosphorEngine::IScrollSettings
 {
     Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings)
+    Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings PhosphorEngine::IScrollSettings)
 
 public:
-    /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
+    /** Maximum number of activation triggers per action (drag activation, zone span,
+     *  snap assist, autotile drag-insert, scrolling drag-insert).
      *  Source of truth lives in ConfigDefaults::maxTriggersPerAction() so both this
      *  public accessor and the schema-side validator (canonicalTriggerList) read
      *  from the same constant without either side depending on the other. */
@@ -130,12 +147,25 @@ public:
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
                    overlayDisplayModeChanged)
 
-    // Appearance (ricer-friendly)
-    Q_PROPERTY(bool useSystemColors READ useSystemColors WRITE setUseSystemColors NOTIFY useSystemColorsChanged)
+    // Appearance (ricer-friendly). The four zone colours are theme-fallback
+    // keys: stored as strings where the EMPTY string means "follow the system
+    // palette". The QColor properties read RESOLVED — palette-derived while
+    // the stored value is empty — so every consumer keeps seeing a concrete
+    // colour. The *Raw string twins expose the stored value for the settings
+    // UI's theme-fallback rows and carry their own NOTIFY: a store write
+    // fires both (the resolved view reads through the same stored value),
+    // while a palette change fires only the resolved signal, since the raw
+    // value did not move.
     Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
     Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
     Q_PROPERTY(QColor labelFontColor READ labelFontColor WRITE setLabelFontColor NOTIFY labelFontColorChanged)
+    Q_PROPERTY(
+        QString highlightColorRaw READ highlightColorRaw WRITE setHighlightColorRaw NOTIFY highlightColorRawChanged)
+    Q_PROPERTY(QString inactiveColorRaw READ inactiveColorRaw WRITE setInactiveColorRaw NOTIFY inactiveColorRawChanged)
+    Q_PROPERTY(QString borderColorRaw READ borderColorRaw WRITE setBorderColorRaw NOTIFY borderColorRawChanged)
+    Q_PROPERTY(
+        QString labelFontColorRaw READ labelFontColorRaw WRITE setLabelFontColorRaw NOTIFY labelFontColorRawChanged)
     Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
@@ -236,6 +266,8 @@ public:
                    snappingLayoutOrderChanged)
     Q_PROPERTY(QStringList tilingAlgorithmOrder READ tilingAlgorithmOrder WRITE setTilingAlgorithmOrder NOTIFY
                    tilingAlgorithmOrderChanged)
+    Q_PROPERTY(QStringList scrollingTemplateOrder READ scrollingTemplateOrder WRITE setScrollingTemplateOrder NOTIFY
+                   scrollingTemplateOrderChanged)
 
     // Window filtering — the global knobs. The per-application /
     // per-class exclusion list Q_PROPERTYs (excludedApplications,
@@ -298,6 +330,24 @@ public:
     Q_PROPERTY(int zoneSelectorGridColumns READ zoneSelectorGridColumns WRITE setZoneSelectorGridColumns NOTIFY
                    zoneSelectorGridColumnsChanged)
 
+    // Strip-Mode Selector — the Scrolling.ZoneSelector peer of the block
+    // above, minus LayoutMode / GridColumns / MaxRows (the strip popup is one
+    // card row along the strip, so it has no grid to arrange).
+    Q_PROPERTY(bool scrollingZoneSelectorEnabled READ scrollingZoneSelectorEnabled WRITE setScrollingZoneSelectorEnabled
+                   NOTIFY scrollingZoneSelectorEnabledChanged)
+    Q_PROPERTY(int scrollingZoneSelectorTriggerDistance READ scrollingZoneSelectorTriggerDistance WRITE
+                   setScrollingZoneSelectorTriggerDistance NOTIFY scrollingZoneSelectorTriggerDistanceChanged)
+    Q_PROPERTY(int scrollingZoneSelectorPosition READ scrollingZoneSelectorPositionInt WRITE
+                   setScrollingZoneSelectorPositionInt NOTIFY scrollingZoneSelectorPositionChanged)
+    Q_PROPERTY(int scrollingZoneSelectorSizeMode READ scrollingZoneSelectorSizeModeInt WRITE
+                   setScrollingZoneSelectorSizeModeInt NOTIFY scrollingZoneSelectorSizeModeChanged)
+    Q_PROPERTY(int scrollingZoneSelectorPreviewWidth READ scrollingZoneSelectorPreviewWidth WRITE
+                   setScrollingZoneSelectorPreviewWidth NOTIFY scrollingZoneSelectorPreviewWidthChanged)
+    Q_PROPERTY(int scrollingZoneSelectorPreviewHeight READ scrollingZoneSelectorPreviewHeight WRITE
+                   setScrollingZoneSelectorPreviewHeight NOTIFY scrollingZoneSelectorPreviewHeightChanged)
+    Q_PROPERTY(bool scrollingZoneSelectorPreviewLockAspect READ scrollingZoneSelectorPreviewLockAspect WRITE
+                   setScrollingZoneSelectorPreviewLockAspect NOTIFY scrollingZoneSelectorPreviewLockAspectChanged)
+
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
     Q_PROPERTY(QString defaultAutotileAlgorithm READ defaultAutotileAlgorithm WRITE setDefaultAutotileAlgorithm NOTIFY
@@ -324,6 +374,134 @@ public:
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
+    // The scrolling drag-insert pair sits HERE, beside its autotile twin,
+    // rather than under the Scrolling banner below — the two features are
+    // maintained in lockstep (same rationale as their ConfigDefaults
+    // placement note).
+    Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
+                   setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
+    Q_PROPERTY(bool scrollingDragInsertToggle READ scrollingDragInsertToggle WRITE setScrollingDragInsertToggle NOTIFY
+                   scrollingDragInsertToggleChanged)
+
+    // Scrolling Settings (Scrolling)
+    Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
+    Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
+                   NOTIFY scrollingCenterFocusedColumnChanged)
+    Q_PROPERTY(
+        int scrollingStripAxis READ scrollingStripAxis WRITE setScrollingStripAxis NOTIFY scrollingStripAxisChanged)
+    Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
+                   setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
+    Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
+                   scrollingCropStraddlersChanged)
+    Q_PROPERTY(bool scrollingDragScrollEnabled READ scrollingDragScrollEnabled WRITE setScrollingDragScrollEnabled
+                   NOTIFY scrollingDragScrollEnabledChanged)
+    Q_PROPERTY(int scrollingDragScrollTriggerWidth READ scrollingDragScrollTriggerWidth WRITE
+                   setScrollingDragScrollTriggerWidth NOTIFY scrollingDragScrollTriggerWidthChanged)
+    Q_PROPERTY(int scrollingDragScrollDelayMs READ scrollingDragScrollDelayMs WRITE setScrollingDragScrollDelayMs NOTIFY
+                   scrollingDragScrollDelayMsChanged)
+    Q_PROPERTY(int scrollingDragScrollMaxSpeed READ scrollingDragScrollMaxSpeed WRITE setScrollingDragScrollMaxSpeed
+                   NOTIFY scrollingDragScrollMaxSpeedChanged)
+    Q_PROPERTY(int scrollingDefaultColumnWidthKind READ scrollingDefaultColumnWidthKind WRITE
+                   setScrollingDefaultColumnWidthKind NOTIFY scrollingDefaultColumnWidthKindChanged)
+    Q_PROPERTY(qreal scrollingDefaultColumnWidthValue READ scrollingDefaultColumnWidthValue WRITE
+                   setScrollingDefaultColumnWidthValue NOTIFY scrollingDefaultColumnWidthValueChanged)
+    Q_PROPERTY(int scrollingDefaultColumnDisplay READ scrollingDefaultColumnDisplay WRITE
+                   setScrollingDefaultColumnDisplay NOTIFY scrollingDefaultColumnDisplayChanged)
+    Q_PROPERTY(int scrollingDefaultColumnWidthPresetIndex READ scrollingDefaultColumnWidthPresetIndex WRITE
+                   setScrollingDefaultColumnWidthPresetIndex NOTIFY scrollingDefaultColumnWidthPresetIndexChanged)
+    Q_PROPERTY(int scrollingDefaultWindowHeightKind READ scrollingDefaultWindowHeightKind WRITE
+                   setScrollingDefaultWindowHeightKind NOTIFY scrollingDefaultWindowHeightKindChanged)
+    Q_PROPERTY(qreal scrollingDefaultWindowHeightValue READ scrollingDefaultWindowHeightValue WRITE
+                   setScrollingDefaultWindowHeightValue NOTIFY scrollingDefaultWindowHeightValueChanged)
+    Q_PROPERTY(int scrollingDefaultWindowHeightPresetIndex READ scrollingDefaultWindowHeightPresetIndex WRITE
+                   setScrollingDefaultWindowHeightPresetIndex NOTIFY scrollingDefaultWindowHeightPresetIndexChanged)
+    // The template an unassigned screen resolves to, empty for none.
+    Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
+                   defaultScrollingTemplateChanged)
+    // Input knobs on the plain Scrolling group beside the sizing defaults above,
+    // not on Scrolling.Behavior: they say how a wheel event over the strip moves
+    // the focus, not how the strip behaves once a window is placed.
+    Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
+                   NOTIFY scrollingWheelFocusEnabledChanged)
+    Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
+                   NOTIFY scrollingWheelFocusInvertedChanged)
+    // Scrolling.TabIndicator
+    Q_PROPERTY(bool scrollingTabIndicatorEnabled READ scrollingTabIndicatorEnabled WRITE setScrollingTabIndicatorEnabled
+                   NOTIFY scrollingTabIndicatorEnabledChanged)
+    Q_PROPERTY(int scrollingTabIndicatorStyle READ scrollingTabIndicatorStyle WRITE setScrollingTabIndicatorStyle NOTIFY
+                   scrollingTabIndicatorStyleChanged)
+    Q_PROPERTY(int scrollingTabIndicatorPosition READ scrollingTabIndicatorPosition WRITE
+                   setScrollingTabIndicatorPosition NOTIFY scrollingTabIndicatorPositionChanged)
+    Q_PROPERTY(bool scrollingTabIndicatorHideWhenSingleTab READ scrollingTabIndicatorHideWhenSingleTab WRITE
+                   setScrollingTabIndicatorHideWhenSingleTab NOTIFY scrollingTabIndicatorHideWhenSingleTabChanged)
+    Q_PROPERTY(bool scrollingTabIndicatorPlaceWithinColumn READ scrollingTabIndicatorPlaceWithinColumn WRITE
+                   setScrollingTabIndicatorPlaceWithinColumn NOTIFY scrollingTabIndicatorPlaceWithinColumnChanged)
+    Q_PROPERTY(int scrollingTabIndicatorGap READ scrollingTabIndicatorGap WRITE setScrollingTabIndicatorGap NOTIFY
+                   scrollingTabIndicatorGapChanged)
+    Q_PROPERTY(int scrollingTabIndicatorWidth READ scrollingTabIndicatorWidth WRITE setScrollingTabIndicatorWidth NOTIFY
+                   scrollingTabIndicatorWidthChanged)
+    Q_PROPERTY(qreal scrollingTabIndicatorLengthProportion READ scrollingTabIndicatorLengthProportion WRITE
+                   setScrollingTabIndicatorLengthProportion NOTIFY scrollingTabIndicatorLengthProportionChanged)
+    Q_PROPERTY(int scrollingTabIndicatorGapsBetweenTabs READ scrollingTabIndicatorGapsBetweenTabs WRITE
+                   setScrollingTabIndicatorGapsBetweenTabs NOTIFY scrollingTabIndicatorGapsBetweenTabsChanged)
+    Q_PROPERTY(int scrollingTabIndicatorCornerRadius READ scrollingTabIndicatorCornerRadius WRITE
+                   setScrollingTabIndicatorCornerRadius NOTIFY scrollingTabIndicatorCornerRadiusChanged)
+    Q_PROPERTY(QString scrollingTabIndicatorActiveColor READ scrollingTabIndicatorActiveColor WRITE
+                   setScrollingTabIndicatorActiveColor NOTIFY scrollingTabIndicatorActiveColorChanged)
+    Q_PROPERTY(QString scrollingTabIndicatorInactiveColor READ scrollingTabIndicatorInactiveColor WRITE
+                   setScrollingTabIndicatorInactiveColor NOTIFY scrollingTabIndicatorInactiveColorChanged)
+    Q_PROPERTY(QString scrollingTabIndicatorUrgentColor READ scrollingTabIndicatorUrgentColor WRITE
+                   setScrollingTabIndicatorUrgentColor NOTIFY scrollingTabIndicatorUrgentColorChanged)
+    // Scrolling.DropIndicator
+    Q_PROPERTY(bool scrollingDropIndicatorEnabled READ scrollingDropIndicatorEnabled WRITE
+                   setScrollingDropIndicatorEnabled NOTIFY scrollingDropIndicatorEnabledChanged)
+    // The two indicator colours are theme-fallback keys with the same resolved
+    // + Raw pair as the zone quartet above, and for the same reason: the
+    // overlay paints a concrete colour while the settings UI edits the stored
+    // sentinel.
+    Q_PROPERTY(QColor scrollingDropIndicatorColor READ scrollingDropIndicatorColor WRITE setScrollingDropIndicatorColor
+                   NOTIFY scrollingDropIndicatorColorChanged)
+    Q_PROPERTY(QColor scrollingDropIndicatorBorderColor READ scrollingDropIndicatorBorderColor WRITE
+                   setScrollingDropIndicatorBorderColor NOTIFY scrollingDropIndicatorBorderColorChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorColorRaw READ scrollingDropIndicatorColorRaw WRITE
+                   setScrollingDropIndicatorColorRaw NOTIFY scrollingDropIndicatorColorRawChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorBorderColorRaw READ scrollingDropIndicatorBorderColorRaw WRITE
+                   setScrollingDropIndicatorBorderColorRaw NOTIFY scrollingDropIndicatorBorderColorRawChanged)
+    Q_PROPERTY(double scrollingDropIndicatorOpacity READ scrollingDropIndicatorOpacity WRITE
+                   setScrollingDropIndicatorOpacity NOTIFY scrollingDropIndicatorOpacityChanged)
+    Q_PROPERTY(int scrollingDropIndicatorBorderWidth READ scrollingDropIndicatorBorderWidth WRITE
+                   setScrollingDropIndicatorBorderWidth NOTIFY scrollingDropIndicatorBorderWidthChanged)
+    Q_PROPERTY(int scrollingDropIndicatorBorderRadius READ scrollingDropIndicatorBorderRadius WRITE
+                   setScrollingDropIndicatorBorderRadius NOTIFY scrollingDropIndicatorBorderRadiusChanged)
+    // QML-facing STRING facade: the Q_PROPERTY shares its name with the
+    // C++ QStringList accessor (the IScrollSettings surface the engine
+    // consumes). Deliberate — QML edits the raw comma-joined text while the
+    // engine gets the parsed list; moc and the compiler resolve the two
+    // unambiguously.
+    Q_PROPERTY(QString scrollingPresetColumnWidths READ scrollingPresetColumnWidthsString WRITE
+                   setScrollingPresetColumnWidths NOTIFY scrollingPresetColumnWidthsChanged)
+    Q_PROPERTY(QString scrollingPresetWindowHeights READ scrollingPresetWindowHeightsString WRITE
+                   setScrollingPresetWindowHeights NOTIFY scrollingPresetWindowHeightsChanged)
+
+    // Scrolling Behavior Settings (Scrolling.Behavior)
+    Q_PROPERTY(int scrollingInsertPosition READ scrollingInsertPosition WRITE setScrollingInsertPosition NOTIFY
+                   scrollingInsertPositionChanged)
+    Q_PROPERTY(bool scrollingFocusNewWindows READ scrollingFocusNewWindows WRITE setScrollingFocusNewWindows NOTIFY
+                   scrollingFocusNewWindowsChanged)
+    Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
+                   NOTIFY scrollingFocusFollowsMouseChanged)
+    Q_PROPERTY(int scrollingStickyWindowHandling READ scrollingStickyWindowHandling WRITE
+                   setScrollingStickyWindowHandling NOTIFY scrollingStickyWindowHandlingChanged)
+    Q_PROPERTY(bool scrollingRespectMinimumSize READ scrollingRespectMinimumSize WRITE setScrollingRespectMinimumSize
+                   NOTIFY scrollingRespectMinimumSizeChanged)
+    Q_PROPERTY(bool scrollingRestoreStripsOnLogin READ scrollingRestoreStripsOnLogin WRITE
+                   setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
+    Q_PROPERTY(bool scrollingRestoreFloatedWindowsOnLogin READ scrollingRestoreFloatedWindowsOnLogin WRITE
+                   setScrollingRestoreFloatedWindowsOnLogin NOTIFY scrollingRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(int scrollingColumnWidthStepPercent READ scrollingColumnWidthStepPercent WRITE
+                   setScrollingColumnWidthStepPercent NOTIFY scrollingColumnWidthStepPercentChanged)
+    Q_PROPERTY(int scrollingWindowHeightStepPercent READ scrollingWindowHeightStepPercent WRITE
+                   setScrollingWindowHeightStepPercent NOTIFY scrollingWindowHeightStepPercentChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -347,13 +525,16 @@ public:
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
                    NOTIFY decorationProfileTreeChanged)
 
-    // Decorations.Performance — bounds on WHEN the decoration chain animates.
+    // Decorations.Performance — three bounds on WHEN the decoration chain
+    // animates, plus the blur-scale multiplier that shrinks the per-frame work.
     Q_PROPERTY(bool decorationAnimateFocusedOnly READ decorationAnimateFocusedOnly WRITE setDecorationAnimateFocusedOnly
                    NOTIFY decorationAnimateFocusedOnlyChanged)
     Q_PROPERTY(bool decorationPauseWhenIdle READ decorationPauseWhenIdle WRITE setDecorationPauseWhenIdle NOTIFY
                    decorationPauseWhenIdleChanged)
     Q_PROPERTY(int decorationIdleTimeoutSec READ decorationIdleTimeoutSec WRITE setDecorationIdleTimeoutSec NOTIFY
                    decorationIdleTimeoutSecChanged)
+    Q_PROPERTY(double decorationBlurScaleMultiplier READ decorationBlurScaleMultiplier WRITE
+                   setDecorationBlurScaleMultiplier NOTIFY decorationBlurScaleMultiplierChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -388,8 +569,77 @@ public:
     Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
                    autotileRetileShortcutChanged)
 
+    // Scrolling Shortcuts — Q_PROPERTY presence is load-bearing:
+    // Settings::load()'s change detection and the per-page reset/discard
+    // snapshot walk the metaobject property table, so a shortcut without a
+    // property is invisible to reload, profile activation, and batch
+    // NOTIFY replay.
+    Q_PROPERTY(QString scrollingFocusColumnFirstShortcut READ scrollingFocusColumnFirstShortcut WRITE
+                   setScrollingFocusColumnFirstShortcut NOTIFY scrollingFocusColumnFirstShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnLastShortcut READ scrollingFocusColumnLastShortcut WRITE
+                   setScrollingFocusColumnLastShortcut NOTIFY scrollingFocusColumnLastShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveColumnToFirstShortcut READ scrollingMoveColumnToFirstShortcut WRITE
+                   setScrollingMoveColumnToFirstShortcut NOTIFY scrollingMoveColumnToFirstShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveColumnToLastShortcut READ scrollingMoveColumnToLastShortcut WRITE
+                   setScrollingMoveColumnToLastShortcut NOTIFY scrollingMoveColumnToLastShortcutChanged)
+    Q_PROPERTY(QString scrollingConsumeWindowShortcut READ scrollingConsumeWindowShortcut WRITE
+                   setScrollingConsumeWindowShortcut NOTIFY scrollingConsumeWindowShortcutChanged)
+    Q_PROPERTY(QString scrollingExpelWindowShortcut READ scrollingExpelWindowShortcut WRITE
+                   setScrollingExpelWindowShortcut NOTIFY scrollingExpelWindowShortcutChanged)
+    Q_PROPERTY(QString scrollingConsumeOrExpelLeftShortcut READ scrollingConsumeOrExpelLeftShortcut WRITE
+                   setScrollingConsumeOrExpelLeftShortcut NOTIFY scrollingConsumeOrExpelLeftShortcutChanged)
+    Q_PROPERTY(QString scrollingConsumeOrExpelRightShortcut READ scrollingConsumeOrExpelRightShortcut WRITE
+                   setScrollingConsumeOrExpelRightShortcut NOTIFY scrollingConsumeOrExpelRightShortcutChanged)
+    Q_PROPERTY(QString scrollingCenterColumnShortcut READ scrollingCenterColumnShortcut WRITE
+                   setScrollingCenterColumnShortcut NOTIFY scrollingCenterColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingToggleColumnTabbedShortcut READ scrollingToggleColumnTabbedShortcut WRITE
+                   setScrollingToggleColumnTabbedShortcut NOTIFY scrollingToggleColumnTabbedShortcutChanged)
+    Q_PROPERTY(QString scrollingToggleWindowedFullscreenShortcut READ scrollingToggleWindowedFullscreenShortcut WRITE
+                   setScrollingToggleWindowedFullscreenShortcut NOTIFY scrollingToggleWindowedFullscreenShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleColumnWidthShortcut READ scrollingCycleColumnWidthShortcut WRITE
+                   setScrollingCycleColumnWidthShortcut NOTIFY scrollingCycleColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleColumnWidthBackShortcut READ scrollingCycleColumnWidthBackShortcut WRITE
+                   setScrollingCycleColumnWidthBackShortcut NOTIFY scrollingCycleColumnWidthBackShortcutChanged)
+    Q_PROPERTY(QString scrollingIncreaseColumnWidthShortcut READ scrollingIncreaseColumnWidthShortcut WRITE
+                   setScrollingIncreaseColumnWidthShortcut NOTIFY scrollingIncreaseColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingDecreaseColumnWidthShortcut READ scrollingDecreaseColumnWidthShortcut WRITE
+                   setScrollingDecreaseColumnWidthShortcut NOTIFY scrollingDecreaseColumnWidthShortcutChanged)
+    Q_PROPERTY(QString scrollingMaximizeColumnShortcut READ scrollingMaximizeColumnShortcut WRITE
+                   setScrollingMaximizeColumnShortcut NOTIFY scrollingMaximizeColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingExpandColumnShortcut READ scrollingExpandColumnShortcut WRITE
+                   setScrollingExpandColumnShortcut NOTIFY scrollingExpandColumnShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleWindowHeightShortcut READ scrollingCycleWindowHeightShortcut WRITE
+                   setScrollingCycleWindowHeightShortcut NOTIFY scrollingCycleWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingCycleWindowHeightBackShortcut READ scrollingCycleWindowHeightBackShortcut WRITE
+                   setScrollingCycleWindowHeightBackShortcut NOTIFY scrollingCycleWindowHeightBackShortcutChanged)
+    Q_PROPERTY(QString scrollingIncreaseWindowHeightShortcut READ scrollingIncreaseWindowHeightShortcut WRITE
+                   setScrollingIncreaseWindowHeightShortcut NOTIFY scrollingIncreaseWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingDecreaseWindowHeightShortcut READ scrollingDecreaseWindowHeightShortcut WRITE
+                   setScrollingDecreaseWindowHeightShortcut NOTIFY scrollingDecreaseWindowHeightShortcutChanged)
+    Q_PROPERTY(QString scrollingResetWindowHeightsShortcut READ scrollingResetWindowHeightsShortcut WRITE
+                   setScrollingResetWindowHeightsShortcut NOTIFY scrollingResetWindowHeightsShortcutChanged)
+    Q_PROPERTY(QString scrollingCenterVisibleColumnsShortcut READ scrollingCenterVisibleColumnsShortcut WRITE
+                   setScrollingCenterVisibleColumnsShortcut NOTIFY scrollingCenterVisibleColumnsShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusWindowTopShortcut READ scrollingFocusWindowTopShortcut WRITE
+                   setScrollingFocusWindowTopShortcut NOTIFY scrollingFocusWindowTopShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusWindowBottomShortcut READ scrollingFocusWindowBottomShortcut WRITE
+                   setScrollingFocusWindowBottomShortcut NOTIFY scrollingFocusWindowBottomShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnLeftShortcut READ scrollingFocusColumnLeftShortcut WRITE
+                   setScrollingFocusColumnLeftShortcut NOTIFY scrollingFocusColumnLeftShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnRightShortcut READ scrollingFocusColumnRightShortcut WRITE
+                   setScrollingFocusColumnRightShortcut NOTIFY scrollingFocusColumnRightShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnLeftOrLastShortcut READ scrollingFocusColumnLeftOrLastShortcut WRITE
+                   setScrollingFocusColumnLeftOrLastShortcut NOTIFY scrollingFocusColumnLeftOrLastShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnRightOrFirstShortcut READ scrollingFocusColumnRightOrFirstShortcut WRITE
+                   setScrollingFocusColumnRightOrFirstShortcut NOTIFY scrollingFocusColumnRightOrFirstShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveToFloatingShortcut READ scrollingMoveToFloatingShortcut WRITE
+                   setScrollingMoveToFloatingShortcut NOTIFY scrollingMoveToFloatingShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveToTilingShortcut READ scrollingMoveToTilingShortcut WRITE
+                   setScrollingMoveToTilingShortcut NOTIFY scrollingMoveToTilingShortcutChanged)
+
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
+    Q_PROPERTY(QString gpuDevice READ gpuDevice WRITE setGpuDevice NOTIFY gpuDeviceChanged)
 
     // Shader Effects
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
@@ -467,6 +717,8 @@ public:
                    NOTIFY restoreWindowSizeShortcutChanged)
     Q_PROPERTY(QString toggleWindowFloatShortcut READ toggleWindowFloatShortcut WRITE setToggleWindowFloatShortcut
                    NOTIFY toggleWindowFloatShortcutChanged)
+    Q_PROPERTY(QString switchFocusFloatTilingShortcut READ switchFocusFloatTilingShortcut WRITE
+                   setSwitchFocusFloatTilingShortcut NOTIFY switchFocusFloatTilingShortcutChanged)
 
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     Q_PROPERTY(QString swapWindowLeftShortcut READ swapWindowLeftShortcut WRITE setSwapWindowLeftShortcut NOTIFY
@@ -644,8 +896,12 @@ public:
     // Appearance — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store on demand with validator-driven
     // clamping; setters go through the store so persistence is immediate.
-    bool useSystemColors() const override;
-    void setUseSystemColors(bool use) override;
+    // The four zone colours resolve their empty theme-fallback sentinel to
+    // palette-derived colours (see resolvedSystemColor) — on that branch the
+    // QColor getter returns a palette value the store validator never sees;
+    // only the Raw string surface is validator-covered. The QColor setters
+    // store the concrete colour as an #AARRGGBB string, and the Raw accessors
+    // read/write the stored string itself, including the empty sentinel.
     QColor highlightColor() const override;
     void setHighlightColor(const QColor& color) override;
     QColor inactiveColor() const override;
@@ -654,6 +910,14 @@ public:
     void setBorderColor(const QColor& color) override;
     QColor labelFontColor() const override;
     void setLabelFontColor(const QColor& color) override;
+    QString highlightColorRaw() const;
+    void setHighlightColorRaw(const QString& color);
+    QString inactiveColorRaw() const;
+    void setInactiveColorRaw(const QString& color);
+    QString borderColorRaw() const;
+    void setBorderColorRaw(const QString& color);
+    QString labelFontColorRaw() const;
+    void setLabelFontColorRaw(const QString& color);
     qreal activeOpacity() const override;
     void setActiveOpacity(qreal opacity) override;
     qreal inactiveOpacity() const override;
@@ -786,6 +1050,8 @@ public:
     void setSnappingLayoutOrder(const QStringList& order) override;
     QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
+    QStringList scrollingTemplateOrder() const override;
+    void setScrollingTemplateOrder(const QStringList& order) override;
 
     // Window filtering — PhosphorConfig::Store-backed. The per-app /
     // per-class exclusion list accessors retired in v4 — see the
@@ -855,6 +1121,50 @@ public:
                                                      const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
+    // Per-card sub-domains of the selector map (the autotile Algorithm pair's
+    // invariant: a card's scope-chip dot/reset only touches its own keys).
+    // Position = Position + TriggerDistance; Arrangement = LayoutMode +
+    // GridColumns + MaxRows; Size = SizeMode + Preview{Width,Height,LockAspect}.
+    bool hasPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName);
+    bool hasPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName);
+    bool hasPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName);
+
+    // Strip-Mode Selector — PhosphorConfig::Store-backed.
+    bool scrollingZoneSelectorEnabled() const override;
+    void setScrollingZoneSelectorEnabled(bool enabled) override;
+    int scrollingZoneSelectorTriggerDistance() const override;
+    void setScrollingZoneSelectorTriggerDistance(int distance) override;
+    ZoneSelectorPosition scrollingZoneSelectorPosition() const override;
+    void setScrollingZoneSelectorPosition(ZoneSelectorPosition position) override;
+    int scrollingZoneSelectorPositionInt() const;
+    void setScrollingZoneSelectorPositionInt(int position);
+    ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const override;
+    void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode mode) override;
+    int scrollingZoneSelectorSizeModeInt() const;
+    void setScrollingZoneSelectorSizeModeInt(int mode);
+    int scrollingZoneSelectorPreviewWidth() const override;
+    void setScrollingZoneSelectorPreviewWidth(int width) override;
+    int scrollingZoneSelectorPreviewHeight() const override;
+    void setScrollingZoneSelectorPreviewHeight(int height) override;
+    bool scrollingZoneSelectorPreviewLockAspect() const override;
+    void setScrollingZoneSelectorPreviewLockAspect(bool locked) override;
+
+    // Per-screen strip selector config (override > global fallback)
+    ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& screenIdOrName) const override;
+    Q_INVOKABLE QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenScrollingZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
+                                                              const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override;
+    // Per-card sub-domains, mirroring the snapping selector's pairs above
+    // (the strip store never holds an arrangement key, so no third pair).
+    bool hasPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName);
+    bool hasPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName);
 
     // Per-screen autotile config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override;
@@ -868,11 +1178,32 @@ public:
     bool hasPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName) const;
     void clearPerScreenAutotileAlgorithmSettings(const QString& screenIdOrName);
 
+    // Per-screen scrolling config (override > global fallback). Keys are the
+    // PerScreenScrollingKey namespace — engine-spelled, no prefix asymmetry.
+    Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenIdOrName, const QString& key,
+                                                  const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    // Sizing sub-domain: the New-columns card's chip surface. The strip axis
+    // shares the same per-screen entry but is NOT a sizing default, so the
+    // card must not report or clear it. Plain members rather than ISettings
+    // virtuals, matching the autotile Algorithm twins above: the D-Bus
+    // per-screen dispatch only needs get/set/clear, which are unchanged.
+    bool hasPerScreenScrollingSizingSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingSizingSettings(const QString& screenIdOrName);
+    // Axis sub-domain: the Strip direction card's chip surface, the sizing
+    // pair's complement — one key, disjoint from the sizing set by
+    // construction (isPerScreenScrollingAxisKey).
+    bool hasPerScreenScrollingAxisSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingAxisSettings(const QString& screenIdOrName);
+
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
     // this is the sole accessor; writes go through setPerScreenAutotileSetting /
-    // the perScreenGap* helpers, and the ISettings set/clear/has snapping triplet
-    // stays as no-op defaults.
+    // the perScreenGap* helpers. ISettings carries no set/clear/has snapping
+    // triplet at all, unlike the autotile, scrolling, zone-selector and
+    // strip-selector blocks — see the note above the getter in isettings.h.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // Per-monitor gap overrides (config-backed, unified — one value per monitor
@@ -959,6 +1290,246 @@ public:
     void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
+
+    // Beside the autotile twin on purpose — see the Q_PROPERTY note above.
+    QVariantList scrollingDragInsertTriggers() const override;
+    void setScrollingDragInsertTriggers(const QVariantList& triggers) override;
+    bool scrollingDragInsertToggle() const override;
+    void setScrollingDragInsertToggle(bool enable) override;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Settings (IScrollSettings + Scrolling group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Store-backed scalars; the enum int values rely on the schema
+    // validators (validIntOr), like every other stored scalar. The width
+    // VALUE is the exception: its clamp is kind-aware and lives in the
+    // hand-written setter below.
+    bool scrollingEnabled() const;
+    void setScrollingEnabled(bool enabled);
+    int scrollingCenterFocusedColumn() const override;
+    void setScrollingCenterFocusedColumn(int mode);
+    int scrollingStripAxis() const override;
+    void setScrollingStripAxis(int value);
+    bool scrollingAlwaysCenterSingleColumn() const override;
+    void setScrollingAlwaysCenterSingleColumn(bool center);
+    bool scrollingCropStraddlers() const override;
+    void setScrollingCropStraddlers(bool crop);
+    bool scrollingDragScrollEnabled() const override;
+    void setScrollingDragScrollEnabled(bool enabled);
+    int scrollingDragScrollTriggerWidth() const override;
+    void setScrollingDragScrollTriggerWidth(int px);
+    int scrollingDragScrollDelayMs() const override;
+    void setScrollingDragScrollDelayMs(int ms);
+    int scrollingDragScrollMaxSpeed() const override;
+    void setScrollingDragScrollMaxSpeed(int pxPerSecond);
+    int scrollingDefaultColumnWidthKind() const override;
+    void setScrollingDefaultColumnWidthKind(int value);
+    qreal scrollingDefaultColumnWidthValue() const override;
+    void setScrollingDefaultColumnWidthValue(qreal value);
+    int scrollingDefaultColumnDisplay() const override;
+    void setScrollingDefaultColumnDisplay(int display);
+    int scrollingDefaultColumnWidthPresetIndex() const override;
+    void setScrollingDefaultColumnWidthPresetIndex(int index);
+    int scrollingDefaultWindowHeightKind() const override;
+    void setScrollingDefaultWindowHeightKind(int kind);
+    qreal scrollingDefaultWindowHeightValue() const override;
+    void setScrollingDefaultWindowHeightValue(qreal value);
+    int scrollingDefaultWindowHeightPresetIndex() const override;
+    void setScrollingDefaultWindowHeightPresetIndex(int index);
+    int scrollingInsertPosition() const override;
+    void setScrollingInsertPosition(int position);
+    // Scrolling.TabIndicator. The geometry half also satisfies IScrollSettings
+    // (the engine reads it to size and place the indicator, and to shrink the
+    // column when PlaceWithinColumn is set); the paint half satisfies ISettings
+    // for the overlay service. Hence the mixed `override` marking.
+    bool scrollingTabIndicatorEnabled() const override;
+    void setScrollingTabIndicatorEnabled(bool enabled) override;
+    int scrollingTabIndicatorStyle() const override;
+    void setScrollingTabIndicatorStyle(int style) override;
+    int scrollingTabIndicatorPosition() const override;
+    void setScrollingTabIndicatorPosition(int position);
+    bool scrollingTabIndicatorHideWhenSingleTab() const override;
+    void setScrollingTabIndicatorHideWhenSingleTab(bool hide);
+    bool scrollingTabIndicatorPlaceWithinColumn() const override;
+    void setScrollingTabIndicatorPlaceWithinColumn(bool within);
+    int scrollingTabIndicatorGap() const override;
+    void setScrollingTabIndicatorGap(int px);
+    int scrollingTabIndicatorWidth() const override;
+    void setScrollingTabIndicatorWidth(int px);
+    qreal scrollingTabIndicatorLengthProportion() const override;
+    void setScrollingTabIndicatorLengthProportion(qreal proportion);
+    int scrollingTabIndicatorGapsBetweenTabs() const override;
+    void setScrollingTabIndicatorGapsBetweenTabs(int px) override;
+    int scrollingTabIndicatorCornerRadius() const override;
+    void setScrollingTabIndicatorCornerRadius(int px) override;
+    QString scrollingTabIndicatorActiveColor() const override;
+    void setScrollingTabIndicatorActiveColor(const QString& color) override;
+    QString scrollingTabIndicatorInactiveColor() const override;
+    void setScrollingTabIndicatorInactiveColor(const QString& color) override;
+    QString scrollingTabIndicatorUrgentColor() const override;
+    void setScrollingTabIndicatorUrgentColor(const QString& color) override;
+    // Scrolling.DropIndicator. Paint-only, so ISettings alone — the engine
+    // never reads these (it resolves the indicator's rect from the same layout
+    // math the drop uses).
+    bool scrollingDropIndicatorEnabled() const override;
+    void setScrollingDropIndicatorEnabled(bool enabled) override;
+    // Theme-fallback pair, same split as the zone quartet: the QColor getters
+    // resolve (palette-derived while the stored string is empty) and the QColor
+    // setters store the concrete #AARRGGBB form, while the Raw accessors
+    // read/write the stored string itself, including the empty sentinel.
+    QColor scrollingDropIndicatorColor() const override;
+    void setScrollingDropIndicatorColor(const QColor& color) override;
+    QColor scrollingDropIndicatorBorderColor() const override;
+    void setScrollingDropIndicatorBorderColor(const QColor& color) override;
+    QString scrollingDropIndicatorColorRaw() const;
+    void setScrollingDropIndicatorColorRaw(const QString& color);
+    QString scrollingDropIndicatorBorderColorRaw() const;
+    void setScrollingDropIndicatorBorderColorRaw(const QString& color);
+    double scrollingDropIndicatorOpacity() const override;
+    void setScrollingDropIndicatorOpacity(double opacity) override;
+    int scrollingDropIndicatorBorderWidth() const override;
+    void setScrollingDropIndicatorBorderWidth(int px) override;
+    int scrollingDropIndicatorBorderRadius() const override;
+    void setScrollingDropIndicatorBorderRadius(int px) override;
+    QString defaultScrollingTemplate() const;
+    void setDefaultScrollingTemplate(const QString& templateId);
+    bool scrollingWheelFocusEnabled() const;
+    void setScrollingWheelFocusEnabled(bool enabled);
+    bool scrollingWheelFocusInverted() const;
+    void setScrollingWheelFocusInverted(bool inverted);
+    // Preset lists: comma-joined string on disk (canonicalProportionList
+    // schema validator — a numeric filter, not the plain comma-list),
+    // QStringList through IScrollSettings, raw string for QML.
+    QStringList scrollingPresetColumnWidths() const override;
+    QString scrollingPresetColumnWidthsString() const;
+    void setScrollingPresetColumnWidths(const QString& presets);
+    QStringList scrollingPresetWindowHeights() const override;
+    QString scrollingPresetWindowHeightsString() const;
+    void setScrollingPresetWindowHeights(const QString& presets);
+    // IScrollSettings gap/behaviour forwards — the strip reads the shared
+    // Tiling gap model and the shared focus-new-windows behaviour.
+    int scrollingInnerGap() const override
+    {
+        return innerGap();
+    }
+    bool scrollingUsePerSideOuterGap() const override
+    {
+        return usePerSideOuterGap();
+    }
+    int scrollingOuterGap() const override
+    {
+        return outerGap();
+    }
+    int scrollingOuterGapTop() const override
+    {
+        return outerGapTop();
+    }
+    int scrollingOuterGapBottom() const override
+    {
+        return outerGapBottom();
+    }
+    int scrollingOuterGapLeft() const override
+    {
+        return outerGapLeft();
+    }
+    int scrollingOuterGapRight() const override
+    {
+        return outerGapRight();
+    }
+    // Smart gaps stays a forward: the gaps model is shared, so the tiling
+    // toggle governs both engines (IScrollSettings documents this).
+    bool scrollingSmartGaps() const override
+    {
+        return autotileSmartGaps();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Scrolling Behavior Settings (Scrolling.Behavior group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Store-backed scalars under Scrolling.Behavior; shared leaf key names
+    // (FocusNewWindows, StickyWindowHandling, …) disambiguated by group.
+    bool scrollingFocusNewWindows() const override;
+    void setScrollingFocusNewWindows(bool focus);
+    bool scrollingFocusFollowsMouse() const;
+    void setScrollingFocusFollowsMouse(bool follows);
+    int scrollingStickyWindowHandling() const override;
+    void setScrollingStickyWindowHandling(int handling);
+    bool scrollingRespectMinimumSize() const override;
+    void setScrollingRespectMinimumSize(bool respect);
+    bool scrollingRestoreStripsOnLogin() const;
+    void setScrollingRestoreStripsOnLogin(bool restore);
+    bool scrollingRestoreFloatedWindowsOnLogin() const override;
+    void setScrollingRestoreFloatedWindowsOnLogin(bool restore) override;
+    int scrollingColumnWidthStepPercent() const;
+    void setScrollingColumnWidthStepPercent(int percent);
+    int scrollingWindowHeightStepPercent() const;
+    void setScrollingWindowHeightStepPercent(int percent);
+
+    // Scrolling Shortcuts — PhosphorConfig::Store-backed.
+    QString scrollingFocusColumnFirstShortcut() const;
+    void setScrollingFocusColumnFirstShortcut(const QString& shortcut);
+    QString scrollingFocusColumnLastShortcut() const;
+    void setScrollingFocusColumnLastShortcut(const QString& shortcut);
+    QString scrollingMoveColumnToFirstShortcut() const;
+    void setScrollingMoveColumnToFirstShortcut(const QString& shortcut);
+    QString scrollingMoveColumnToLastShortcut() const;
+    void setScrollingMoveColumnToLastShortcut(const QString& shortcut);
+    QString scrollingConsumeWindowShortcut() const;
+    void setScrollingConsumeWindowShortcut(const QString& shortcut);
+    QString scrollingExpelWindowShortcut() const;
+    void setScrollingExpelWindowShortcut(const QString& shortcut);
+    QString scrollingConsumeOrExpelLeftShortcut() const;
+    void setScrollingConsumeOrExpelLeftShortcut(const QString& shortcut);
+    QString scrollingConsumeOrExpelRightShortcut() const;
+    void setScrollingConsumeOrExpelRightShortcut(const QString& shortcut);
+    QString scrollingCenterColumnShortcut() const;
+    void setScrollingCenterColumnShortcut(const QString& shortcut);
+    QString scrollingToggleColumnTabbedShortcut() const;
+    void setScrollingToggleColumnTabbedShortcut(const QString& shortcut);
+    QString scrollingToggleWindowedFullscreenShortcut() const;
+    void setScrollingToggleWindowedFullscreenShortcut(const QString& shortcut);
+    QString scrollingCycleColumnWidthShortcut() const;
+    void setScrollingCycleColumnWidthShortcut(const QString& shortcut);
+    QString scrollingCycleColumnWidthBackShortcut() const;
+    void setScrollingCycleColumnWidthBackShortcut(const QString& shortcut);
+    QString scrollingIncreaseColumnWidthShortcut() const;
+    void setScrollingIncreaseColumnWidthShortcut(const QString& shortcut);
+    QString scrollingDecreaseColumnWidthShortcut() const;
+    void setScrollingDecreaseColumnWidthShortcut(const QString& shortcut);
+    QString scrollingMaximizeColumnShortcut() const;
+    void setScrollingMaximizeColumnShortcut(const QString& shortcut);
+    QString scrollingExpandColumnShortcut() const;
+    void setScrollingExpandColumnShortcut(const QString& shortcut);
+    QString scrollingCycleWindowHeightShortcut() const;
+    void setScrollingCycleWindowHeightShortcut(const QString& shortcut);
+    QString scrollingCycleWindowHeightBackShortcut() const;
+    void setScrollingCycleWindowHeightBackShortcut(const QString& shortcut);
+    QString scrollingIncreaseWindowHeightShortcut() const;
+    void setScrollingIncreaseWindowHeightShortcut(const QString& shortcut);
+    QString scrollingDecreaseWindowHeightShortcut() const;
+    void setScrollingDecreaseWindowHeightShortcut(const QString& shortcut);
+    QString scrollingResetWindowHeightsShortcut() const;
+    void setScrollingResetWindowHeightsShortcut(const QString& shortcut);
+    QString scrollingCenterVisibleColumnsShortcut() const;
+    void setScrollingCenterVisibleColumnsShortcut(const QString& shortcut);
+    QString scrollingFocusWindowTopShortcut() const;
+    void setScrollingFocusWindowTopShortcut(const QString& shortcut);
+    QString scrollingFocusWindowBottomShortcut() const;
+    void setScrollingFocusWindowBottomShortcut(const QString& shortcut);
+    QString scrollingFocusColumnLeftShortcut() const;
+    void setScrollingFocusColumnLeftShortcut(const QString& shortcut);
+    QString scrollingFocusColumnRightShortcut() const;
+    void setScrollingFocusColumnRightShortcut(const QString& shortcut);
+    QString scrollingFocusColumnLeftOrLastShortcut() const;
+    void setScrollingFocusColumnLeftOrLastShortcut(const QString& shortcut);
+    QString scrollingFocusColumnRightOrFirstShortcut() const;
+    void setScrollingFocusColumnRightOrFirstShortcut(const QString& shortcut);
+    QString scrollingMoveToFloatingShortcut() const;
+    void setScrollingMoveToFloatingShortcut(const QString& shortcut);
+    QString scrollingMoveToTilingShortcut() const;
+    void setScrollingMoveToTilingShortcut(const QString& shortcut);
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;
@@ -1047,6 +1618,8 @@ public:
     void setDecorationPauseWhenIdle(bool value) override;
     int decorationIdleTimeoutSec() const override;
     void setDecorationIdleTimeoutSec(int value) override;
+    double decorationBlurScaleMultiplier() const override;
+    void setDecorationBlurScaleMultiplier(double value) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
@@ -1080,6 +1653,23 @@ private:
     /// the already-merged list.
     void writeLockedScreens(const QStringList& screens);
 
+    /// Coerce the shared scrolling column-width VALUE into the range its
+    /// current KIND allows. Called from load(), from applyConfigOverlayStaged,
+    /// and from the per-page mutators discardKeys() / resetKeys() — between
+    /// them, every path by which a value can reach the store without passing
+    /// the kind-aware setter (hand edit, config import, Discard reload,
+    /// profile staging, per-page Discard and Reset).
+    ///
+    /// The per-page pair matters even though the two width keys are co-owned
+    /// by one page manifest today: relying on that co-ownership would make a
+    /// manifest split (moving the kind to another page) silently reintroduce
+    /// the inconsistent pair, and nothing enforces it. Normalizing here costs
+    /// one read and is called before the re-emit, so a coerced value is
+    /// announced by the same NOTIFY sweep.
+    ///
+    /// See the definition for why this is not done on read.
+    void normalizeScrollingColumnWidthValue();
+
 public:
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
@@ -1111,6 +1701,10 @@ public:
     // unknown strings are coerced to a valid choice.
     QString renderingBackend() const override;
     void setRenderingBackend(const QString& backend) override;
+    // GPU pin ("auto" or "vendor:device" hex) — schema validator runs
+    // normalizeGpuDevice so malformed strings coerce to "auto".
+    QString gpuDevice() const override;
+    void setGpuDevice(const QString& gpu) override;
 
     // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store (validator clamps FrameRate and BarCount
@@ -1204,6 +1798,8 @@ public:
     void setRestoreWindowSizeShortcut(const QString& shortcut);
     QString toggleWindowFloatShortcut() const;
     void setToggleWindowFloatShortcut(const QString& shortcut);
+    QString switchFocusFloatTilingShortcut() const;
+    void setSwitchFocusFloatTilingShortcut(const QString& shortcut);
 
     QString swapWindowLeftShortcut() const;
     void setSwapWindowLeftShortcut(const QString& shortcut);
@@ -1303,8 +1899,13 @@ public:
 
     // Persistence
     void load() override;
-    void save() override;
-    void reset() override;
+    bool save() override;
+    /// Restore factory defaults. Returns false when the cleared configuration
+    /// could not be written to disk — in that case NOTHING was reset: the
+    /// deletions are dropped, the store is reparsed from disk, and the session
+    /// file and rule store are left untouched. Callers must gate the rest of
+    /// their reset sequence on this rather than assuming it landed.
+    bool reset() override;
 
     /// Write the current settings to @p filePath as a standalone config file,
     /// without touching the live config or the per-page Discard baseline.
@@ -1385,33 +1986,51 @@ public:
     /// — in that case nothing was staged and no signal fired.
     bool applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
 
-    // Additional methods
-    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-    /// Derives the four zone-color keys from the current application palette.
-    /// Deliberately NOT Q_INVOKABLE: there is no QML caller, and an ad-hoc
-    /// QML invocation would write the derived keys without the baseline /
-    /// dirty-tracking bookkeeping its three C++ call sites provide (see the
-    /// ownership rule at rebaselineDerivedColorKeys()).
-    void applySystemColorScheme();
+    /// The system colour scheme as a "light" / "dark" token, derived from
+    /// the live application palette's window-background lightness. Empty
+    /// with no GUI application (headless tools) and off the GUI thread
+    /// (QGuiApplication::palette() is not documented thread-safe, matching
+    /// resolvedSystemColor's refusal), so a ColorScheme match predicate stays
+    /// inert in both cases and the resolvers' negation guards hold rules that
+    /// negate it out. Static: it is the one place the palette is classified.
+    ///
+    /// Callers: eventFilter()'s flip detection and the seed in
+    /// trackSystemPaletteChanges(), the daemon's registry colour-scheme
+    /// provider, and colorSchemeToken() below — which is the path injected
+    /// consumers (the WindowTrackingAdaptor query builder) take, so a test
+    /// double can substitute a fixed scheme.
+    static QString systemColorSchemeToken();
 
-    /// Re-derives the system-scheme zone colors when the application palette
-    /// changes at runtime (theme switch). Without this, every long-running
-    /// process (daemon, settings app) keeps the palette SNAPSHOT taken at
-    /// load() and serves stale zone colors until restart.
-    bool eventFilter(QObject* watched, QEvent* event) override;
-
-    /// True while eventFilter() is re-deriving the zone colors from a runtime
-    /// ApplicationPaletteChange. The re-derive is palette-driven, not a user
-    /// edit — SettingsController::onSettingsPropertyChanged() checks this to
-    /// avoid flipping the global unsaved-changes footer on a theme switch
-    /// (the baseline rebaseline alone keeps isKeyModified() honest, but the
-    /// controller's NOTIFY-driven dirty flag fires before any value check).
-    bool isApplyingSystemPalette() const
+    /// ISettings' injectable view of systemColorSchemeToken().
+    QString colorSchemeToken() const override
     {
-        return m_applyingSystemPalette;
+        return Settings::systemColorSchemeToken();
+    }
+
+    /// True while eventFilter() is fanning out the palette-change NOTIFYs.
+    /// Those emissions are palette-driven, not user edits —
+    /// SettingsController::onSettingsPropertyChanged() checks this to avoid
+    /// flipping the global unsaved-changes footer on a theme switch. Nothing
+    /// is written during the window, so no baseline bookkeeping rides on it.
+    bool isAnnouncingPaletteChange() const
+    {
+        return m_announcingPaletteChange;
     }
 
 Q_SIGNALS:
+    /// NOTIFYs for the four raw theme-fallback colour strings. Distinct from
+    /// the resolved QColor twins' ISettings signals so a palette change
+    /// (which moves only the resolved view) does not announce a raw change;
+    /// the raw setters emit both.
+    void highlightColorRawChanged();
+    void inactiveColorRawChanged();
+    void borderColorRawChanged();
+    void labelFontColorRawChanged();
+    /// The drop indicator's two raw strings, same pairing with their resolved
+    /// ISettings twins as the four above.
+    void scrollingDropIndicatorColorRawChanged();
+    void scrollingDropIndicatorBorderColorRawChanged();
+
     /// Emitted when the whole animation Profile blob is replaced via
     /// `setAnimationProfile`. Fires alongside every per-field *Changed
     /// signal. Consumers that want to observe the Profile atomically
@@ -1429,9 +2048,24 @@ Q_SIGNALS:
     // virtualScreenConfigs signals live on ISettings and are inherited
     // here — see src/core/interfaces/isettings.h.
 
+protected:
+    /// Re-announces the palette-following colours whose stored value is the
+    /// empty theme-fallback sentinel when the application palette changes at
+    /// runtime (theme switch). That is the zone quartet plus the scrolling
+    /// drop indicator's fill and border. Resolution happens in the getters, so
+    /// nothing is written and no dirty tracking is involved; without the
+    /// re-announce, every long-running process (daemon, settings app) would
+    /// keep serving the palette SNAPSHOT its bindings read last and show stale
+    /// colors until something else re-read them.
+    ///
+    /// Protected, matching QObject's own access: nothing calls this directly —
+    /// Qt dispatches it through the filter installed by
+    /// trackSystemPaletteChanges().
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
     /// Installs the QEvent::ApplicationPaletteChange filter on the application
-    /// object (see eventFilter above). Called once per constructor, after load().
+    /// object (see eventFilter). Called once per constructor, after load().
     void trackSystemPaletteChanges();
 
     /// Member-function-pointer alias used by the indexed shortcut setters
@@ -1443,14 +2077,25 @@ private:
     /// passed into @ref writeTriggerList.
     using TriggerListSignalFn = void (Settings::*)();
 
-    /// Shared trigger-list setter used by the three "plain" setters
-    /// (activation, snap-assist, autotile-insert). Caps at
+    /// Shared trigger-list setter used by the four "plain" setters
+    /// (activation, snap-assist, autotile-insert, scrolling-insert). Caps at
     /// @c MaxTriggersPerAction, round-trips through the schema's validator,
     /// and only emits @p specificSignal + @c settingsChanged on a real change.
     /// @c setZoneSpanTriggers does its own dance because it also synchronises
     /// the legacy single-modifier key.
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
+
+    /// Member-function-pointer alias for the per-order NOTIFY signal passed
+    /// into @ref writeOrderList, peer of @ref TriggerListSignalFn above.
+    using OrderListSignalFn = void (Settings::*)();
+
+    /// Shared comma-list order setter used by the three ordering setters
+    /// (snapping layout / tiling algorithm / scrolling template). Reads the
+    /// canonical stored form before and after the write so the
+    /// canonicalCommaList validator picks the comparison points, and only
+    /// emits @p specificSignal + @c settingsChanged on a real change.
+    void writeOrderList(const QString& key, const QStringList& order, OrderListSignalFn specificSignal);
 
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
     /// signals passed into @ref writeDisableEntries. The signals carry the mode
@@ -1490,7 +2135,11 @@ private:
     // bindings never refresh. snapshotNotifyProperties() captures every own
     // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
     // mutation; emitChangedNotifyProperties() fires the NOTIFY of each property
-    // whose value changed and returns whether any fired.
+    // whose value changed and returns whether any fired. One added
+    // precondition since the theme-fallback colours: the six resolved
+    // QColor properties are palette-derived, so the snapshot/compare span
+    // must stay synchronous — an event-loop spin between the two calls could
+    // let a palette change masquerade as (or mask) a store mutation.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
 
@@ -1499,27 +2148,50 @@ private:
     // points where the in-memory store equals disk); discardKeys() reverts to
     // this baseline and isKeyModified() compares against it. Private: mutating
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
-    // ONE narrow exception: rebaselineDerivedColorKeys() below refreshes just
-    // the four palette-derived zone-color entries after a runtime palette
-    // re-derive — those keys are palette-owned, never user edits.
     void captureBaseline();
 
-    // Refresh the baseline for ONLY the four palette-derived zone-color keys
-    // after a runtime re-derive. System-colors mode owns these keys: they
-    // follow the palette and are never user edits, so a theme switch must not
-    // flip isKeyModified() (phantom unsaved-changes footer) or arm Discard
-    // with the stale pre-switch colors. The one legitimate caller is the
-    // ApplicationPaletteChange path in eventFilter(); see the definition for
-    // why the setUseSystemColors() and load() paths must NOT call it.
-    void rebaselineDerivedColorKeys();
+    // Palette-following colours: resolve one of the theme-fallback roles from
+    // the live application palette (with the ZoneDefaults alphas), falling back
+    // to the ConfigDefaults constants when the process cannot observe a palette
+    // — no GUI application (headless config tools), or a caller off the GUI
+    // thread. The first four are the zone overlay's; DropIndicator is the
+    // scrolling drop target's, which takes the same palette Highlight but
+    // OPAQUE — its fill alpha comes from the opacity slider and its border has
+    // no slider at all.
+    enum class SystemColorRole {
+        Highlight,
+        Inactive,
+        Border,
+        LabelFont,
+        DropIndicator
+    };
+    static QColor resolvedSystemColor(SystemColorRole role);
+
+    // Shared body of the six resolved QColor getters: the stored raw string
+    // when it names a colour Qt can parse, otherwise the palette-derived role.
+    // Unparseable counts as the empty "follow the palette" sentinel — see the
+    // definition in settings/storescalars.cpp for why.
+    static QColor resolveThemeColor(const QString& raw, SystemColorRole role);
 
     // Groups that reset() deletes exhaustively (excludes unmanaged groups like
     // Updates). NOT used by save() — save() iterates the schema and lets
     // purgeStaleKeys() handle cleanup.
     static QStringList managedGroupNames();
-    // Delete all per-screen override groups by prefix (ZoneSelector:*,
-    // AutotileScreen:*, and the legacy SnappingScreen:* which is no longer written
-    // but is still swept to scrub any file an older build left behind).
+    // Delete every per-screen override group, plus the container they nest
+    // under. Three things are swept:
+    //   1. Whatever PerScreenPathResolver::isPerScreenPrefix claims. The
+    //      prefixes are NOT re-spelled here — the resolver's mapping table is
+    //      the one list, so a prefix added there is swept by reset() without
+    //      touching this function. Today that covers ZoneSelector:*,
+    //      AutotileScreen:*, ScrollingScreen:*, ScrollingZoneSelector:*, and
+    //      the legacy SnappingScreen:*
+    //      which is no longer written but is still swept to scrub any file an
+    //      older build left behind.
+    //   2. VirtualScreen:* groups, which are per-screen in the same sense but
+    //      resolve through their own group accessor rather than the resolver.
+    //   3. The resolver's reserved "PerScreen" container key, which groupList()
+    //      hides and which can survive as an empty husk once every descendant
+    //      is gone.
     static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
@@ -1536,11 +2208,17 @@ private:
     // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
     //
     // Hot path: per-field setters fired by settings-UI sliders at ~30 Hz.
-    // The helper consolidates the 5 near-identical animation field setters
-    // (duration / easing-curve / min-distance / sequence-mode / stagger-
-    // interval) so the merge contract (read existing blob → insert one
-    // field → write back, preserving every other on-disk key) is in one
-    // place rather than copy-pasted five times.
+    // The helper consolidates the 4 near-identical animation field setters
+    // (duration / min-distance / sequence-mode / stagger-interval) so the
+    // merge contract (read existing blob → insert one field → write back,
+    // preserving every other on-disk key) is in one place rather than
+    // copy-pasted four times. The easing-curve setter is deliberately NOT
+    // routed through it: its no-op guard compares the RAW CALLER string
+    // against the stored one BEFORE resolution, which this helper's
+    // signature cannot express, so re-routing it would change which writes
+    // emit. It duplicates the merge logic on purpose — see
+    // `setAnimationEasingCurve` in animationprofile.cpp, which documents the
+    // contract in full.
     //
     // T must be comparable (`operator==`) and convertible to QJsonValue
     // (the QJsonObject::insert overload set covers int / double / bool /
@@ -1580,30 +2258,32 @@ private:
 
     // Committed baseline: the last-persisted value of every schema-declared
     // key, keyed group → {key → value}. Refreshed by captureBaseline() at the
-    // end of load() and save() — plus one targeted exception: eventFilter()'s
-    // ApplicationPaletteChange path calls rebaselineDerivedColorKeys() to
-    // refresh ONLY the four palette-derived zone-color entries, so a runtime
-    // theme switch doesn't read as an unsaved edit. Backs per-page Discard
-    // (revert to baseline) and value-based per-page dirty checks
-    // (isKeyModified).
+    // end of load() and save(). Backs per-page Discard (revert to baseline)
+    // and value-based per-page dirty checks (isKeyModified). A runtime theme
+    // switch never touches it: the palette-following zone colours store the
+    // empty sentinel and resolve in their getters, so nothing is written.
     QHash<QString, QVariantMap> m_baseline;
 
-    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s runtime
-    // palette re-derive; surfaced through isApplyingSystemPalette() so
-    // NOTIFY-driven dirty tracking can tell a palette-driven refresh from a
-    // user edit. Never true outside that synchronous window.
-    bool m_applyingSystemPalette = false;
+    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s
+    // palette-change NOTIFY fan-out; surfaced through
+    // isAnnouncingPaletteChange(). Never true outside that synchronous window.
+    bool m_announcingPaletteChange = false;
 
-    // Raised (RAII, via QScopedValueRollback) around the two batched
-    // applySystemColorScheme() call sites: load() and eventFilter()'s runtime
-    // palette re-derive. The derive routes through the public color setters,
-    // whose per-setter NOTIFY + settingsChanged emissions would duplicate the
-    // caller's own snapshot-based announcement (each changed NOTIFY exactly
-    // once plus a single settingsChanged). While true, the color setters
-    // persist silently and the caller remains the sole announcer. Never true
-    // outside those synchronous windows — setUseSystemColors relies on the
-    // setters emitting normally.
-    bool m_suppressDerivedColorEmissions = false;
+    // The last-announced resolved values of the theme-fallback colours
+    // (Highlight, Inactive, Border, LabelFont, then the drop indicator's fill
+    // and border — in that order), seeded by trackSystemPaletteChanges().
+    // eventFilter() compares against these so an ApplicationPaletteChange that
+    // moved no relevant role stays silent instead of re-running the aggregate
+    // consumers. The last two share one role and so always hold the same
+    // colour; they are separate slots because their stored sentinels are
+    // independent, and the gate is per key, not per role.
+    std::array<QColor, 6> m_paletteBaseline{};
+
+    // Last-announced "light" / "dark" token for the systemColorSchemeChanged
+    // signal, seeded from the live palette in trackSystemPaletteChanges so
+    // the first ApplicationPaletteChange only announces a real flip. Not a
+    // config value — it never touches the store or dirty tracking.
+    QString m_lastColorSchemeToken;
 
     static QString normalizeUuidString(const QString& uuidStr);
 
@@ -1692,8 +2372,12 @@ private:
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
 
+    // Per-screen strip selector overrides (screenIdOrName -> settings map)
+    QHash<QString, QVariantMap> m_perScreenScrollingZoneSelectorSettings;
+
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
+    QHash<QString, QVariantMap> m_perScreenScrollingSettings;
 
     // Per-monitor gaps are unified (one value per monitor drives both snap and
     // tile) and live in the map above; the gap-dimension sub-domain is projected

@@ -15,27 +15,44 @@ class WindowTrackingService;
 namespace PlasmaZones {
 
 /**
- * @brief Filter an autotile seed order's entries against live window state.
+ * @brief Filter a tiling-family seed order's entries against live window state.
+ *
+ * Shared by both placing engines: Daemon::seedAutotileOrderForScreen and
+ * Daemon::updateScrollingScreens seed from the same m_lastEngineOrders map and
+ * need the same admission rule, so a window that must not come back as a tile
+ * must not come back as a strip column either.
  *
  * Order sources describe past arrangements (the tiled order captured at
  * toggle-off, or zone assignments) and know nothing about what happened to
- * those windows since. Entries are DROPPED when the window must not be seeded
- * back as tiled:
- *  - it is floating NOW and not minimized (a float set by another mode would
- *    be tiled over — the strict seed only restores floating from the AUTOTILE
- *    placement slot);
- *  - its instance-exact durable placement record carries a floating snap slot
- *    (the mode flips before the second seed, so the live floating resolver
- *    then reads the empty autotile slot; the record preserves the source-mode
- *    user float across that flip).
+ * those windows since.
+ *
+ * Float is PER ENGINE, so a non-minimized window is always admitted: a live
+ * float read at seed time belongs to the mode the screen is leaving, and the
+ * durable snap slot's stateFloating is the window's SNAPPING-mode verdict —
+ * neither is this engine's own float state. (Dropping on them made a
+ * snap-floated window untileable by mode swap; the snap float still restores
+ * on return to snapping because windowsReleased reads the snap slot, which
+ * seeding never mutates.)
+ *
  * Minimized windows are KEPT as positional placeholders — the engine's
  * strict-seed path defers adding them until their windowOpened arrives,
- * preserving position without a hidden window occupying a tile.
+ * preserving position without a hidden window occupying a tile. The one DROP
+ * is a user-floated-then-minimized window: a placeholder would tile it on
+ * unminimize instead of restoring its float.
+ *
+ * @p targetEngineId names the engine being seeded, and the minimized drop
+ * reads THAT engine's durable slot. This parameter is load-bearing, not
+ * cosmetic: reading a fixed slot here would re-break the per-engine float
+ * invariant the non-minimized arm above is careful to honour. Seeding the
+ * scroll engine while the window carries a floating SNAP slot must not drop
+ * it (it has no scrolling float verdict, so it belongs in the strip), and
+ * seeding after a scrolling float must not admit it just because its snap
+ * slot happens to be clean.
  *
  * Extracted from Daemon::seedAutotileOrderForScreen so the predicate is unit
  * testable without a full daemon.
  */
-void filterAutotileSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
-                             const PhosphorEngine::WindowRegistry* registry);
+void filterEngineSeedOrder(QStringList& order, PhosphorPlacement::WindowTrackingService* wts,
+                           const PhosphorEngine::WindowRegistry* registry, const QString& targetEngineId);
 
 } // namespace PlasmaZones

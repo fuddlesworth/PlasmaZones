@@ -73,7 +73,13 @@ namespace PlasmaZones {
 /// bump — the gated resolver already ignored the priority-0 catch-all at
 /// runtime, so the stale rule is pruned from rules.json by finalizeV4Conversion's
 /// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
-inline constexpr int ConfigSchemaVersion = 5;
+/// v5: the per-mode Snapping/Tiling appearance and gap settings fold into the
+///     unified Windows / Gaps groups (see migrateV4ToV5).
+/// v6: the snapping zone colours and the Windows border/tint colours become
+///     theme-fallback strings (EMPTY means "follow the system palette"); the
+///     Snapping.Zones.Colors/UseSystem bool and the "accent" token default
+///     are retired (see migrateV5ToV6).
+inline constexpr int ConfigSchemaVersion = 6;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -121,7 +127,12 @@ public:
     /// ConfigSchemaVersion, writes atomically.
     static bool runMigrationChain(const QString& jsonPath);
 
-    /// Run the migration chain in-memory (for INI→JSON + upgrade in one pass).
+    /// Run the migration chain in-memory. Two callers: ensureJsonConfig's
+    /// INI→JSON + upgrade single pass (a full nested config root), and
+    /// ProfileStore::readProfileFile, which feeds it a profile's SPARSE
+    /// config delta translated into the nested shape — so a step must be
+    /// correct for a sparse input too (write retired values' replacements
+    /// explicitly; removal there means "inherit", not "default").
     static void runMigrationChainInMemory(QJsonObject& root);
 
     // Schema migration functions (one per version bump).
@@ -227,6 +238,24 @@ public:
     /// consumed v4 per-screen gap keys are stripped. Do NOT add a second
     /// per-screen gap migration step — these are already folded.
     static void migrateV4ToV5(QJsonObject& root);
+
+    /// v5 → v6 schema step. The v5 schema stored the four snapping zone
+    /// colours (`Snapping.Zones.Colors/{Highlight,Inactive,Border}` and
+    /// `Snapping.Zones.Labels/FontColor`) as concrete colours gated by one
+    /// `Snapping.Zones.Colors/UseSystem` bool; when the bool was on, the
+    /// settings layer WROTE palette-derived colours into those keys. v6 makes
+    /// them theme-fallback strings (the scrolling colour convention): EMPTY
+    /// means "follow the system palette", resolved in the getters, and the
+    /// bool is gone. This step removes the four colour keys when UseSystem
+    /// was on (or absent — its v5 default was true), since their stored
+    /// values were palette snapshots rather than user picks; keeps the hex
+    /// strings verbatim when it was off; and strips the UseSystem key either
+    /// way. The window-appearance colours
+    /// (`Windows/{BorderColorActive,BorderColorInactive,TintColor}`) adopt
+    /// the same empty sentinel: a stored `"accent"` token (their v5 sentinel)
+    /// is removed so the key falls back to following the system accent.
+    /// Stamps `_version = 6`.
+    static void migrateV5ToV6(QJsonObject& root);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

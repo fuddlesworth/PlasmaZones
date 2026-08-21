@@ -49,6 +49,38 @@ PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& scree
     return PhosphorZones::AssignmentEntry::Snapping;
 }
 
+PhosphorEngine::IPlacementEngine::LayoutSupport Daemon::layoutSupportForScreen(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
+            return engine->layoutSupport();
+        }
+    }
+    // Only the null-ROUTER case (the shutdown window) reaches this line:
+    // engineFor's mode switch is exhaustive over ctor-checked engine
+    // pointers and never returns nullptr for a routed screen (the inner
+    // check above is cheap defence, not a contract). Fall back to
+    // Placement — same Snapping fallback as currentModeFor, and snap's
+    // layouts are placement layouts. Note the three null-router fallbacks
+    // in this file deliberately differ: isAutotileScreen probes the live
+    // engine, currentModeFor answers Snapping, this answers Placement —
+    // each is the safe default for its own consumers.
+    return PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
+}
+
+bool Daemon::dragInsertSelectorForScreen(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
+            return engine->providesDragInsertSelector();
+        }
+    }
+    // Null-router shutdown window only (see layoutSupportForScreen above).
+    // False is the safe default: the drag popup falls back to zone-layout
+    // semantics rather than offering strip targets no engine will commit.
+    return false;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation, dispatched through
 // ScreenModeRouter::engineFor() so there's no mode-branching in the daemon
@@ -82,11 +114,15 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     PhosphorEngine::IPlacementEngine* nav = router->engineFor(outCtx.screenId);
     // Global feature-toggle gate. engineFor() routes purely on the screen's
     // layout mode; it does not consult whether that mode's master toggle is
-    // on. isEnabled() reports the effective on/off state for both engines
-    // (SnapEngine → snappingEnabled, AutotileEngine → any-screen autotiling),
-    // so one check here suppresses every snap- and autotile-mode shortcut
-    // when its feature is globally disabled — the keyboard-nav counterpart of
-    // the auto-snap-on-open kill-switch in SnapEngine::resolveWindowRestore.
+    // on. isEnabled() reports the effective on/off state per engine
+    // (SnapEngine → snappingEnabled, AutotileEngine → any-screen autotiling,
+    // ScrollEngine → any scrolling screen exists, a set-membership fact
+    // rather than a user toggle), so one check here suppresses every
+    // mode shortcut whose feature is globally disabled — for snap and
+    // autotile the keyboard-nav counterpart of the auto-snap-on-open
+    // kill-switch in SnapEngine::resolveWindowRestore. A screen the router
+    // resolves to scrolling is necessarily in the scroll engine's set, so
+    // the gate can never wrongly refuse a scrolling shortcut.
     if (nav && !nav->isEnabled()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: ignored — engine disabled for screen" << outCtx.screenId;
         return nullptr;
@@ -162,6 +198,11 @@ void Daemon::handleFloat()
         }
         // Restart only on actual dispatch — see handleSpan.
         m_floatDebounce.restart();
+        // Dispatch log: performToggleFloat's "now floating" line is emitted
+        // for shortcut and engine paths alike, so without this line a user
+        // Meta+F is indistinguishable in the journal from an engine float.
+        qCInfo(lcDaemon) << "handleFloat: toggling float for focused window" << ctx.windowId << "screen"
+                         << ctx.screenId;
         nav->toggleFocusedFloat(ctx);
     }
 }
@@ -252,9 +293,9 @@ void Daemon::handlePush()
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
-        // Autotile adapter's impl is a deliberate no-op — empty zones don't
-        // exist in autotile mode — so this shortcut is harmlessly absorbed
-        // on autotile screens instead of the daemon branching at entry.
+        // Off snapping, empty zones don't exist; both non-snap engines
+        // answer with a "push"/"not_supported" feedback emit (the policy
+        // the interface documents) instead of the daemon branching at entry.
         nav->pushToEmptyZone(ctx);
     }
 }
@@ -329,6 +370,26 @@ void Daemon::handleResnap()
     }
 }
 
+void Daemon::handleSwitchFocusFloatTiling()
+{
+    // Mode-agnostic since all three engines implement the verb on the
+    // shared resolver; the router picks the focused screen's engine. Snap
+    // resolves its own state for exactly that screen; scroll and autotile
+    // prefer it but may re-resolve (scroll to its active/first scrolling
+    // screen for a non-scrolling id, autotile to the focused screen when
+    // the named screen has no state).
+    //
+    // No isFocusedContextGated() call: this verb only moves focus (all
+    // three engine bodies emit activation + feedback, no geometry), and
+    // per the gate's contract focus-only handlers keep working on a
+    // "disabled" context, matching handleFocus/handleCycle.
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SwitchFocusFloatTiling")) {
+        nav->switchFocusBetweenFloatingAndTiling(ctx.screenId);
+    }
+}
+
 void Daemon::handleSnapAll()
 {
     NavigationContext ctx;
@@ -362,7 +423,19 @@ void Daemon::handleIncreaseMasterRatio()
     // HANDLE_AUTOTILE_ONLY macro sets this hint for every other autotile
     // shortcut; these two handlers exist out-of-line only to thread the
     // per-screen `effectiveSplitRatioStep`, so they must replicate the
-    // hint-setting the macro does.
+    // hint-setting the macro does — and, for the same reason, the
+    // membership gate below it.
+    //
+    // isAutotileScreen above is the ROUTER's answer, which is Autotile for an
+    // explicit algorithm opt-out too — but updateEngineScreens leaves such a
+    // screen out of the engine set, the hint is only honored for a member, and
+    // NavigationController would otherwise fall back to the first
+    // (hash-ordered) entry of that set and move an unrelated screen's ratio.
+    // Membership, not "has a TilingState": a member with no tiled windows yet
+    // still gets the engine's own feedback instead of silence.
+    if (!m_autotileEngine->isActiveOnScreen(screenId)) {
+        return;
+    }
     m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
@@ -377,7 +450,11 @@ void Daemon::handleDecreaseMasterRatio()
         return;
     if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
-    // See handleIncreaseMasterRatio for the active-screen-hint rationale.
+    // See handleIncreaseMasterRatio for the active-screen-hint and
+    // membership rationale.
+    if (!m_autotileEngine->isActiveOnScreen(screenId)) {
+        return;
+    }
     m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
@@ -417,8 +494,16 @@ void Daemon::handleRetile()
     if (isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile)) {
         return;
     }
+    // An autotile-classified screen the engine holds no state for (the
+    // explicit algorithm opt-out, or a transient window) has nothing to
+    // retile: the engine-global retile() iterates active screens and would
+    // no-op for it, and the success card below would claim a retile that
+    // never happened on the screen the user fired from.
+    if (!m_autotileEngine->stateForScreen(focusedScreen)) {
+        return;
+    }
     m_autotileEngine->retile();
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+    if (navigationOsdAllowed(focusedScreen)) {
         // focusedScreen is guaranteed non-empty here — the early-return
         // above the retile call rejects the empty case.
         m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
@@ -431,16 +516,23 @@ void Daemon::resnapIfManualMode()
     if (!m_snapEngine) {
         return;
     }
-    // Only skip resnap when the current screen is in autotile mode.
-    // Per-desktop assignments mean some screens can be autotile while
+    // Only skip resnap when the current screen is engine-managed.
+    // Per-desktop assignments mean some screens can be engine-managed while
     // others are manual — a global check would block manual resnaps.
-    if (m_autotileEngine && m_unifiedLayoutController) {
+    if (m_unifiedLayoutController) {
         const QString screenId = m_unifiedLayoutController->currentScreenName();
         if (screenId.isEmpty()) {
             return; // No screen context — can't determine mode, skip resnap
         }
-        if (isAutotileScreen(screenId)) {
+        if (m_autotileEngine && isAutotileScreen(screenId)) {
             return; // This screen is autotile — engine handles retile
+        }
+        if (currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Scrolling) {
+            // A template apply changes only the strip's preset vocabulary;
+            // no window placement moved, so buffering every OTHER snapping
+            // screen and running resnapToNewLayout would reposition windows
+            // for a no-op and burn an OSD-suppression count.
+            return;
         }
     }
     // Populate the resnap buffer before resnapping. UnifiedLayoutController::applyEntry()
@@ -450,10 +542,15 @@ void Daemon::resnapIfManualMode()
     // screen cycling to the same layout), setActiveLayout is a no-op and no signal fires.
     // Explicitly populating here mirrors the KCM's assignmentChangesApplied path.
     if (m_windowTrackingAdaptor) {
-        QSet<QString> autotileScreens;
+        // Exclude EVERY engine-managed screen, not just autotile: the
+        // resnap's only mode gate is this exclude set, and resnapping a
+        // scroll-owned screen would reposition strip windows to stale zone
+        // rects (the KCM twin in init_engines.cpp builds the same union).
+        QSet<QString> engineManagedScreens;
         if (m_screenModeRouter && m_screenManager) {
             const auto parts = m_screenModeRouter->partitionByMode(m_screenManager->effectiveScreenIds());
-            autotileScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            engineManagedScreens = QSet<QString>(parts.autotile.begin(), parts.autotile.end());
+            engineManagedScreens.unite(QSet<QString>(parts.scrolling.begin(), parts.scrolling.end()));
         }
         // Restrict the resnap to the current virtual desktop. Cycle/picker /
         // zone-selector all change a single (screen, desktop, activity)
@@ -465,11 +562,13 @@ void Daemon::resnapIfManualMode()
         // osd.cpp) for the null-safe VDM read — the same pattern used
         // by every daemon-side site that needs the current desktop
         // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(engineManagedScreens, {},
+                                                                              currentDesktop());
     }
     // Co-locate the suppress pre-arm with the resnap call so a null
     // m_snapAdaptor doesn't leave the counter armed for the next
-    // unrelated navigationFeedback. Mirrors the daemon.cpp:1249 site.
+    // unrelated navigationFeedback. Mirrors the other armResnapOsdSuppression
+    // call sites (a line number into another TU rots on every file split).
     if (m_snapAdaptor) {
         armResnapOsdSuppression(1);
         m_snapAdaptor->resnapToNewLayout();
@@ -480,29 +579,130 @@ void Daemon::resnapIfManualMode()
     emitPendingSnapFloatRestoresForResnapBuffer();
 }
 
-void Daemon::emitPendingSnapFloatRestoresForResnapBuffer()
+void Daemon::emitPendingSnapFloatRestoresForResnapBuffer(bool preserveZoneEntries)
 {
     if (m_pendingSnapFloatRestores.isEmpty()) {
         return;
     }
+    // A snap-float restore is a SNAPPING-mode action. An entry whose screen
+    // currently resolves to a tiling-family mode is HELD, not emitted:
+    // replaying it would float the window out of the live autotile grid or
+    // scroll strip (observed as dolphin popping out of Aligned Grid seconds
+    // after a snapping→autotile toggle — the presave for the RETURN trip
+    // was drained into the mode it was saved against).
+    //
+    // A held entry is DROPPED, not durably queued: updateEngineScreens clears
+    // the whole batch at entry, and the engines' placementChanged count gates
+    // re-enter it within the same adoption burst, so a held float survives
+    // milliseconds at most. That is by design — the durable restore source is
+    // the window's snap slot in its placement record, which
+    // handleEngineWindowsReleased re-reads on the return trip. Holding here
+    // only has to stop the replay landing in the wrong mode.
+    const auto snapOwnsEntryScreen = [this](const ZoneAssignmentEntry& e) {
+        if (e.targetScreenId.isEmpty()) {
+            return true; // unscreened: historical permissive path
+        }
+        // Router-backed (downgrades disabled modes to Snapping) — the same
+        // verdict every shortcut dispatch uses.
+        return currentModeFor(e.targetScreenId) == PhosphorZones::AssignmentEntry::Snapping;
+    };
     QVector<ZoneAssignmentEntry> floatEntries;
+    QVector<ZoneAssignmentEntry> heldFloatEntries;
+    QVector<ZoneAssignmentEntry> zoneEntries;
     for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
         if (e.targetZoneId == RestoreSentinel) {
-            floatEntries.append(e);
+            if (snapOwnsEntryScreen(e)) {
+                floatEntries.append(e);
+            } else {
+                heldFloatEntries.append(e);
+            }
+        } else {
+            zoneEntries.append(e);
         }
     }
-    // Consume the whole buffer: the float entries are emitted below; the
-    // snap-ZONE entries are deliberately handed to the in-flight
-    // resnapToNewLayout (new-layout zones), not re-applied here against the
-    // old layout. Clearing prevents them leaking into the next windowsReleased.
-    m_pendingSnapFloatRestores.clear();
-    if (floatEntries.isEmpty() || !m_snapEngine) {
+    if (preserveZoneEntries) {
+        // Tail-drain mode (updateEngineScreens): the float half is emitted
+        // now — floats are excluded from every downstream resnap, so this
+        // batch's window set is disjoint from anything a consumer emits
+        // later — but the snap-ZONE half MUST survive for the mode-toggle
+        // and autotile-disable consumers, which feed it into
+        // preClaimedZoneIds / the batched restore. Clearing it here was a
+        // regression that left previously-floated-then-toggled windows
+        // stranded off their zones.
+        m_pendingSnapFloatRestores = zoneEntries + heldFloatEntries;
+    } else {
+        // Full consume: the caller is (or stands in for) the final
+        // consumer on its path. Remaining zone entries are deliberately
+        // handed to an in-flight resnapToNewLayout when one exists, else
+        // dropped (a prune-origin batch's zones reference a dead screen).
+        // Held floats are carried past THIS caller for the same reason they
+        // were held — it is not a snapping consumer — but see the note above:
+        // the next recompute clears them, and the record is the durable source.
+        m_pendingSnapFloatRestores = heldFloatEntries;
+    }
+    if (floatEntries.isEmpty()) {
+        return;
+    }
+    if (!m_snapEngine) {
+        qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
+                            << "snap-float restores — no snap engine to apply them";
         return;
     }
     if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
         armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
         concreteSnap->emitBatchedResnap(floatEntries);
+    } else {
+        qCWarning(lcDaemon) << "emitPendingSnapFloatRestoresForResnapBuffer: dropping" << floatEntries.size()
+                            << "snap-float restores — snap engine is not a SnapEngine";
     }
+}
+
+void Daemon::flushPendingSnapZoneRestores()
+{
+    // Nested inside an outer recompute: our updateEngineScreens() call was
+    // deferred to a queued re-run by the re-entrancy latch, so the batch we
+    // would drain here belongs to the OUTER pass and its consumer (the
+    // mode-toggle / autotile-disable paths feed the zone half into
+    // preClaimedZoneIds). Draining it here strands those windows off their
+    // zones — the exact regression the tail drain's preserveZoneEntries mode
+    // was added to avoid.
+    if (m_updateEngineScreensInProgress) {
+        return;
+    }
+    if (m_pendingSnapFloatRestores.isEmpty()) {
+        return;
+    }
+    QVector<ZoneAssignmentEntry> zoneEntries;
+    for (const ZoneAssignmentEntry& e : std::as_const(m_pendingSnapFloatRestores)) {
+        if (e.targetZoneId != RestoreSentinel) {
+            zoneEntries.append(e);
+        }
+    }
+    // The EMITTABLE float half was already emitted by the updateEngineScreens
+    // tail drain on every path that reaches here; HELD float entries (the
+    // RestoreSentinel ones the drain re-queues) are deliberately dropped by
+    // this clear, per the drop policy documented at
+    // emitPendingSnapFloatRestoresForResnapBuffer. Clear wholesale so a
+    // leftover entry can never be replayed by a later unrelated consumer.
+    m_pendingSnapFloatRestores.clear();
+    if (zoneEntries.isEmpty()) {
+        return;
+    }
+    if (!m_snapEngine) {
+        qCWarning(lcDaemon) << "flushPendingSnapZoneRestores: dropping" << zoneEntries.size()
+                            << "snap-zone restores — no snap engine to apply them";
+        return;
+    }
+    auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
+    if (!concreteSnap) {
+        qCWarning(lcDaemon) << "flushPendingSnapZoneRestores: dropping" << zoneEntries.size()
+                            << "snap-zone restores — snap engine is not a SnapEngine";
+        return;
+    }
+    qCInfo(lcDaemon) << "flushPendingSnapZoneRestores: restoring" << zoneEntries.size()
+                     << "windows to their snap zones";
+    armResnapOsdSuppression(1); // the batched emit drives an additional resnap feedback
+    concreteSnap->emitBatchedResnap(zoneEntries);
 }
 
 void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
@@ -540,7 +740,13 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
 
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+    // GATE on the focused EFFECTIVE screen, RENDER on the physical monitor.
+    // The two ids answer different questions: navigationOsdAllowed resolves the
+    // per-context SetOsdEnabled rule, whose contexts are keyed by effective id,
+    // and a subdivided output's physical id matches no context at all — asking
+    // with it made virtual-screen rules unable to match. The card's target
+    // stays physId because the ACTION is monitor-scope.
+    if (navigationOsdAllowed(screenId)) {
         // On success, surface the direction (the OSD style needs a string to
         // render the arrow). On failure, surface the structured reason.
         const QString osdReason = ok ? dirStr : PhosphorScreens::VirtualScreenSwapper::reasonString(result);
@@ -571,7 +777,9 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
 
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+    // Gate on the focused EFFECTIVE screen, render on the physical monitor —
+    // see handleSwapVirtualScreen for why the two ids differ here.
+    if (navigationOsdAllowed(screenId)) {
         // VS rotate is a monitor-scope action — show the OSD on the physical
         // monitor, not inside whichever VS held focus. On success surface the
         // rotation direction; on failure surface the structured reason so the
