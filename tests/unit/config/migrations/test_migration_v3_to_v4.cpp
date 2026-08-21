@@ -54,8 +54,11 @@
 
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/ExclusionRules.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleSet.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include "MigrationV3V4Fixture.h"
 
@@ -603,11 +606,25 @@ private Q_SLOTS:
         }
     }
 
+    /// The seeded premade-Steam rule, located by the name the seeder gives it.
+    /// Its deterministic id is derived by a library-internal helper the tests
+    /// cannot link, so the repair tests read the id back off the seed instead.
+    static std::optional<PhosphorRules::Rule> seededSteamRule(const PhosphorRules::RuleSet& set)
+    {
+        for (const PhosphorRules::Rule& r : set.rules()) {
+            if (r.name == QLatin1String("Steam notifications")) {
+                return r;
+            }
+        }
+        return std::nullopt;
+    }
+
     // ─── Premade Steam rule ───────────────────────────────────────────────
     // Every fresh install and every v3→v4 upgrade is seeded with the built-in
-    // Steam tiling fix: exclude every `steam`-class window whose title is NOT
-    // exactly "Steam" (Friends List, notification toasts, settings, chat),
-    // leaving the main library window tileable.
+    // Steam fix: keep Steam's self-drawn `notificationtoasts_<N>_desktop`
+    // top-levels out of placement. Everything else Steam opens — the library
+    // window, Friends List, chat, Big Picture, Settings — and every
+    // Steam-LAUNCHED GAME places like any other window.
 
     void testSteamDefaultRule_seeded()
     {
@@ -622,57 +639,209 @@ private Q_SLOTS:
         QJsonObject steam;
         for (const QJsonValue& v : rules) {
             const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam")) {
+            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam notifications")) {
                 steam = r;
             }
         }
         QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
         QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
 
-        // Composite match (the None{} guard below makes it non-simple), so
-        // assignBandPrioritiesToZeroRules seeds it in the Advanced band [500,600)
-        // rather than the Application band the simple AppId excludes get.
+        // A flat two-leaf conjunction is a SIMPLE match, so
+        // assignBandPrioritiesToZeroRules seeds it in the Application band
+        // [200,300) beside the other window-property rules. The retired shape
+        // nested a None{} and therefore landed in Advanced [500,600); losing
+        // that nesting is what moved it, and the Application band is the
+        // honest home for what is now a plain per-window rule.
         const int steamPriority = steam.value(QStringLiteral("priority")).toInt();
-        QVERIFY(steamPriority >= 500 && steamPriority < 600);
+        QVERIFY2(steamPriority >= 200 && steamPriority < 300, qPrintable(QString::number(steamPriority)));
 
-        // A single terminal Exclude action — the window is left unmanaged by
-        // snap/tile.
-        QCOMPARE(actionTypes(steam), (QStringList{QStringLiteral("exclude")}));
+        // ExcludePlacement, not the blanket Exclude: a toast has no business
+        // being placed, but stripping its decorations and animations too was
+        // never the point.
+        QCOMPARE(actionTypes(steam), (QStringList{QStringLiteral("excludePlacement")}));
 
-        // Match shape: All{ WindowClass contains "steam", None{ Title equals "Steam" } }.
+        // Match shape: All{ WindowClass endsWith "steam", Title contains "notificationtoasts" }.
         const QJsonObject match = steam.value(QStringLiteral("match")).toObject();
         QVERIFY(match.contains(QStringLiteral("all")));
         const QJsonArray all = match.value(QStringLiteral("all")).toArray();
         QCOMPARE(all.size(), 2);
 
-        // WindowClass contains "steam" (matches KWin's raw "resourceName
-        // resourceClass" string case-insensitively).
-        QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("windowClass"), QStringLiteral("contains")),
+        // endsWith, NOT contains. The field carries KWin's raw "resourceName
+        // resourceClass" pair, and a Steam-launched game reports its own app
+        // id in both halves, so `Contains "steam"` matched every game — see
+        // steamRuleLeavesGamesAndOrdinaryWindowsAlone below, which pins that
+        // regression against the real strings.
+        QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("windowClass"), QStringLiteral("endsWith")),
                  QStringLiteral("steam"));
+        QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("title"), QStringLiteral("contains")),
+                 QStringLiteral("notificationtoasts"));
 
-        // None{ Title equals "Steam" } — the negative guard that keeps the
-        // main library window (title exactly "Steam") tileable.
-        bool foundTitleGuard = false;
+        // No None{} guard any more: the rule names the windows it guards
+        // rather than excluding everything that is not the library window.
         for (const QJsonValue& v : all) {
-            const QJsonObject child = v.toObject();
-            if (!child.contains(QStringLiteral("none"))) {
-                continue;
-            }
-            const QJsonArray none = child.value(QStringLiteral("none")).toArray();
-            QCOMPARE(none.size(), 1);
-            const QJsonObject leaf = none.first().toObject();
-            QCOMPARE(leaf.value(QStringLiteral("field")).toString(), QStringLiteral("title"));
-            QCOMPARE(leaf.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
-            QCOMPARE(leaf.value(QStringLiteral("value")).toVariant().toString(), QStringLiteral("Steam"));
-            foundTitleGuard = true;
+            QVERIFY2(!v.toObject().contains(QStringLiteral("none")),
+                     "the retired title-negation guard must not come back");
         }
-        QVERIFY2(foundTitleGuard, "Steam rule must carry a None{ Title equals \"Steam\" } guard");
 
-        // The rule is sliced into the Exclude rule set the daemon/effect
-        // consume — i.e. it actually participates in the exclusion gate.
+        // The rule is sliced into the placement-exclusion set the daemon and
+        // effect consume — i.e. it actually participates in the gate. The
+        // blanket-Exclude slice is empty: nothing seeded uses that action now.
         const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
         QVERIFY(set.has_value());
-        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*set).count(), 1);
+        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*set).count(), 0);
+        QCOMPARE(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*set).count(), 1);
+    }
+
+    /// The regression the narrowing exists for, evaluated against the exact
+    /// strings a live KWin session reports.
+    ///
+    /// `WindowQuery::windowClass` carries KWin's `windowClass()`, which is the
+    /// raw `"resourceName resourceClass"` pair. Steam's own UI reports
+    /// `"steamwebhelper steam"`, but a game launched THROUGH Steam reports its
+    /// own app id in both halves — `"steam_app_2342813033
+    /// steam_app_2342813033"` for World of Warcraft. The retired
+    /// `Contains "steam"` leaf matched that, and the blanket `Exclude` action
+    /// then left every Steam-launched game unmanaged and undecorated.
+    void steamRuleLeavesGamesAndOrdinaryWindowsAlone()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 3);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
+        QVERIFY(set.has_value());
+        const PhosphorRules::RuleSet placement = PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*set);
+        QCOMPARE(placement.count(), 1);
+        const PhosphorRules::MatchExpression& match = placement.rules().first().match;
+
+        const auto matches = [&match](const QString& windowClass, const QString& title) {
+            PhosphorRules::WindowQuery q;
+            q.windowClass = windowClass;
+            q.title = title;
+            return match.evaluate(q);
+        };
+
+        // The window the rule exists for.
+        QVERIFY2(matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("notificationtoasts_20993166_desktop")),
+                 "a Steam notification toast must still be guarded");
+
+        // The regression: a Steam-launched game must be left alone.
+        QVERIFY2(
+            !matches(QStringLiteral("steam_app_2342813033 steam_app_2342813033"), QStringLiteral("World of Warcraft")),
+            "a Steam-launched game must never be excluded");
+
+        // Steam's other ordinary windows place like anything else.
+        QVERIFY2(!matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("Steam")),
+                 "the Steam library window must place normally");
+        QVERIFY2(!matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("Friends List")),
+                 "the Friends List must place normally");
+        QVERIFY2(!matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("Lilye")),
+                 "a Steam chat window must place normally");
+
+        // The older X11 two-token spelling still resolves, so an upgrading
+        // user on an older Steam keeps the guard.
+        QVERIFY2(matches(QStringLiteral("steam Steam"), QStringLiteral("notificationtoasts_1_desktop")),
+                 "the X11-era \"steam Steam\" class pair must still resolve");
+    }
+
+    /// An already-converted config carrying the RETIRED rule verbatim is
+    /// repaired in place on the next startup, because the seeder only runs on
+    /// the rebuild path and would never otherwise reach it.
+    void steamRuleRepairedInAnAlreadyConvertedConfig()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 3);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Put the retired shape back on disk under the seeded rule's fixed id,
+        // exactly as a config converted before the narrowing carries it.
+        const QString rulesPath = ConfigDefaults::rulesFilePath();
+        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+        QVERIFY(setOpt.has_value());
+        PhosphorRules::RuleSet stale = *setOpt;
+        // Recover the seeded rule's fixed id from the rule itself: the
+        // derivation lives in a library-internal helper, and the point of the
+        // repair is that this id is stable, so reading it back off the seed is
+        // the honest way to exercise it.
+        const auto seeded = seededSteamRule(stale);
+        QVERIFY(seeded.has_value());
+        const QUuid steamId = seeded->id;
+        PhosphorRules::Rule retired = *seeded;
+        retired.name = QStringLiteral("Steam");
+        retired.match = PhosphorRules::MatchExpression::makeAll(
+            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
+                                                      PhosphorRules::Operator::Contains, QStringLiteral("steam")),
+             PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
+                 PhosphorRules::Field::Title, PhosphorRules::Operator::Equals, QStringLiteral("Steam"))})});
+        retired.actions.clear();
+        PhosphorRules::RuleAction blanket;
+        blanket.type = QString(PhosphorRules::ActionType::Exclude);
+        retired.actions.append(blanket);
+        QVERIFY(stale.updateRule(retired));
+        QVERIFY(stale.saveToFile(rulesPath));
+
+        // Re-run the converted path.
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const auto repairedSet = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+        QVERIFY(repairedSet.has_value());
+        // Rewritten IN PLACE: the rule keeps its id, so a second startup finds
+        // the corrected shape and does nothing, and the user's row does not
+        // jump position in the Rules page.
+        const auto repairedRule = repairedSet->ruleById(steamId);
+        QVERIFY2(repairedRule.has_value(), "the repair must rewrite the rule, not replace it with a new id");
+        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*repairedSet).count(), 0);
+        QCOMPARE(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*repairedSet).count(), 1);
+        const PhosphorRules::MatchExpression& match =
+            PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*repairedSet).rules().first().match;
+        PhosphorRules::WindowQuery game;
+        game.windowClass = QStringLiteral("steam_app_2342813033 steam_app_2342813033");
+        game.title = QStringLiteral("World of Warcraft");
+        QVERIFY2(!match.evaluate(game), "the repaired rule must stop excluding Steam-launched games");
+    }
+
+    /// A user who EDITED the seeded rule keeps their edit. The repair only
+    /// reclaims rules that still carry the retired shape verbatim.
+    void steamRuleRepairLeavesAUserEditAlone()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 3);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QString rulesPath = ConfigDefaults::rulesFilePath();
+        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+        QVERIFY(setOpt.has_value());
+        PhosphorRules::RuleSet edited = *setOpt;
+        const auto seeded = seededSteamRule(edited);
+        QVERIFY(seeded.has_value());
+        const QUuid steamId = seeded->id;
+        PhosphorRules::Rule mine = *seeded;
+        // A plausible user edit: keep the id, narrow it to one's own liking.
+        mine.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::Title, PhosphorRules::Operator::Contains, QStringLiteral("Friends"));
+        mine.actions.clear();
+        PhosphorRules::RuleAction blanket;
+        blanket.type = QString(PhosphorRules::ActionType::Exclude);
+        mine.actions.append(blanket);
+        const QJsonObject mineJson = mine.toJson();
+        QVERIFY(edited.updateRule(mine));
+        QVERIFY(edited.saveToFile(rulesPath));
+
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const auto after = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+        QVERIFY(after.has_value());
+        const auto survivor = after->ruleById(steamId);
+        QVERIFY2(survivor.has_value(), "the user's edited rule must survive the repair");
+        QCOMPARE(survivor->toJson(), mineJson);
     }
 
     // ─── Superseding: assignments.json retired to .migrated ───────────────

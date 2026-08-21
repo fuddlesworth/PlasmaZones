@@ -264,9 +264,10 @@ constexpr QLatin1String kLayoutAppRuleTargetScreen{"targetScreen"};
 /// renormalizer (RuleTemplates / sectionFor) would stamp. The Settings
 /// controller only renormalizes on edit, not on load, so without this the
 /// migrated rules would all read "Priority 0" and tie on a fresh load. A
-/// composite match (e.g. the Steam exclude) lands in the Advanced band; the
-/// simple window-property rules (AppId/WindowClass exclude, SnapToZone) land in
-/// Application. One descending offset per band keeps them distinct, mirroring
+/// composite match (one that nests a group) lands in the Advanced band; the
+/// simple window-property rules — a bare leaf or a flat conjunction of leaves,
+/// which covers the AppId/WindowClass excludes, SnapToZone, and the premade
+/// Steam rule — land in Application. One descending offset per band keeps them distinct, mirroring
 /// renormalizePriorities. Managed and already-prioritized rules are untouched.
 /// Past 100 zero-priority rules in one band the offset floors at the band base
 /// (the `qMax(0, ...)` below), so the 100th-onward rules tie there — the same
@@ -382,53 +383,90 @@ void appendExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJso
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString());
 }
 
-/// Seed the premade "Steam" Rule into a freshly-built v4 rule set.
+QUuid steamDefaultRuleId()
+{
+    return QUuid::createUuidV5(exclusionMigrationNamespace(),
+                               PhosphorRules::Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
+}
+
+/// Stamp the CURRENT premade-Steam shape onto @p rule, leaving its id,
+/// enabled flag and priority alone.
 ///
-/// Steam is a CEF/XWayland client that spawns most of its UI — the Friends
-/// List, the self-drawn `notificationtoasts_<N>_desktop` popups, Settings, and
-/// chat windows — as separate top-level windows. They all share the `steam`
-/// window class but report a title other than the main library window's
-/// `Steam`. The transient/popup/menu members are already filtered structurally
-/// by the effect's `shouldHandleWindow()` (see the `transientFor()` /
-/// `isStructurallyUnmanageableWindowType()` net referenced in discussion #461),
-/// but the Normal-type top-levels (Friends List, the notification toasts) slip
-/// that filter and get auto-tiled — the long-standing "Steam breaks tiling"
-/// bug other compositors ship rules for.
+/// Steam draws its own notification toasts as `notificationtoasts_<N>_desktop`
+/// top-level windows. They are Normal-type, so the effect's structural
+/// transient/popup net (`transientFor()` /
+/// `isStructurallyUnmanageableWindowType()`, discussion #461) lets them
+/// through and they get placed like real windows — the "Steam breaks tiling"
+/// bug other compositors ship rules for. This rule is the built-in fix, and
+/// it guards the toasts and nothing else.
 ///
-/// The rule excludes every `steam`-class window whose title is NOT exactly
-/// `Steam`, leaving the main library window tileable (the Hyprland
-/// `title:^(?!Steam$).*` idiom). `Exclude` is enforced at the effect's
-/// `shouldHandleWindow()` gate, which evaluates the FULL WindowQuery
-/// (windowClass + title) — so the composite match resolves there even though
-/// the daemon-side appId-only fast paths (`isAppIdExcluded`, pending-restore
-/// prune) ignore non-AppId leaves; those gate keyboard navigation / state
-/// cleanup, not whether the window is tiled.
+/// `WindowClass EndsWith "steam"` is deliberate, and the earlier
+/// `Contains "steam"` was a bug. The field carries KWin's `windowClass()`,
+/// which is the raw `"resourceName resourceClass"` pair, and a Steam-launched
+/// GAME reports its own app id in both halves — `"steam_app_2342813033
+/// steam_app_2342813033"` for a live World of Warcraft. That string CONTAINS
+/// "steam", so the old rule unmanaged every game launched from Steam.
+/// Anchoring on the suffix pins the class token instead: it holds for both the
+/// modern Wayland pair (`"steamwebhelper steam"`) and the older X11 one
+/// (`"steam Steam"`), and no `steam_app_*` id can end in it. The comparison is
+/// case-insensitive, as is `Contains` on the title (see MatchTypes operator
+/// semantics).
 ///
-/// `WindowClass Contains "steam"` matches KWin's raw `"resourceName
-/// resourceClass"` string (e.g. `"steam Steam"`, `"steamwebhelper Steam"`)
-/// case-insensitively; the `Title Equals "Steam"` guard is likewise
-/// case-insensitive (see MatchTypes operator semantics). The id is a fixed
-/// deterministic UUIDv5 so a re-run never produces a duplicate.
-void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
+/// The action is `ExcludePlacement`, not the blanket `Exclude`: a toast has no
+/// business being placed, but stripping its decorations and animations too was
+/// never the point. `Exclude` was the only exclusion action that existed when
+/// this rule was written; the scoped one landed later.
+///
+/// Everything else Steam opens — the library window, Friends List, chat, Big
+/// Picture, Settings — is an ordinary resizable window that places like any
+/// other. The rule used to exclude all of them via a `Title Equals "Steam"`
+/// negative guard (the Hyprland `title:^(?!Steam$).*` idiom), which decided on
+/// the user's behalf that no Steam window except the library was worth tiling.
+void applySteamDefaultRuleShape(PhosphorRules::Rule& rule)
 {
     using namespace PhosphorRules;
-    Rule rule;
-    rule.id = QUuid::createUuidV5(exclusionMigrationNamespace(),
-                                  Detail::encodeSegment(QStringLiteral("steam-default-exclude")));
-    rule.name = QStringLiteral("Steam");
-    rule.enabled = true;
-    // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
-    // priority once the full list is assembled (composite match → Advanced
-    // band). An Exclude rule's precedence is irrelevant to the boolean exclusion
-    // slice the effect evaluates, but a band value displays better than 0.
-    rule.priority = 0;
+    rule.name = QStringLiteral("Steam notifications");
     rule.match = MatchExpression::makeAll(
+        {MatchExpression::makeLeaf(Field::WindowClass, Operator::EndsWith, QStringLiteral("steam")),
+         MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("notificationtoasts"))});
+    rule.actions.clear();
+    RuleAction action;
+    action.type = QString(ActionType::ExcludePlacement);
+    rule.actions.append(action);
+}
+
+bool isRetiredSteamRuleShape(const PhosphorRules::Rule& rule)
+{
+    using namespace PhosphorRules;
+    // The exact shape seeded between the rule's introduction and this repair:
+    // All{ WindowClass Contains "steam", None{ Title Equals "Steam" } } with a
+    // single blanket Exclude action. Compared structurally rather than by a
+    // stored version stamp, so a user who edited either half keeps their
+    // edit — the repair only reclaims rules that are still verbatim ours.
+    if (rule.actions.size() != 1 || rule.actions.first().type != QLatin1String(ActionType::Exclude)) {
+        return false;
+    }
+    Rule retired;
+    retired.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
          MatchExpression::makeNone(
              {MatchExpression::makeLeaf(Field::Title, Operator::Equals, QStringLiteral("Steam"))})});
-    RuleAction action;
-    action.type = QString(ActionType::Exclude);
-    rule.actions.append(action);
+    return rule.match.toJson() == retired.match.toJson();
+}
+
+/// Seed the premade Steam Rule into a freshly-built v4 rule set. See
+/// `applySteamDefaultRuleShape` for what it matches and why.
+void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
+{
+    PhosphorRules::Rule rule;
+    rule.id = steamDefaultRuleId();
+    rule.enabled = true;
+    // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
+    // priority once the full list is assembled (composite match → Advanced
+    // band). An exclusion rule's precedence is irrelevant to the boolean
+    // slice the effect evaluates, but a band value displays better than 0.
+    rule.priority = 0;
+    applySteamDefaultRuleShape(rule);
     rules.append(rule);
 }
 

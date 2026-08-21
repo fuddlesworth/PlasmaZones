@@ -275,6 +275,29 @@ public:
     /// @return true on success or a clean no-op; false on an I/O failure.
     static bool pruneRetiredProviderDefaultRule(const QString& jsonPath);
 
+    /// Narrow the premade Steam rule in an already-converted rules.json to the
+    /// shape `appendSteamDefaultRule` seeds today.
+    ///
+    /// The rule shipped matching `WindowClass Contains "steam"`, which is
+    /// compared against KWin's `"resourceName resourceClass"` pair — so a
+    /// Steam-launched game ("steam_app_2342813033 steam_app_2342813033")
+    /// matched, and the blanket `Exclude` action left every game unmanaged and
+    /// undecorated. Runs from the same cleanup path as
+    /// `pruneRetiredProviderDefaultRule` because the seeder itself only runs on
+    /// the rebuild path, so an already-converted config would never otherwise
+    /// see the correction.
+    ///
+    /// Only rewrites a rule that still carries the retired shape verbatim (see
+    /// `isRetiredSteamRuleShape`); a user-edited or already-corrected rule is
+    /// left untouched, as is a deleted one. The enabled flag and priority are
+    /// carried across. Idempotent: after the rewrite the shape check no longer
+    /// fires.
+    ///
+    /// @param jsonPath Path to config.json (rules.json is derived as a sibling
+    ///                 via ConfigDefaults).
+    /// @return true on success or a clean no-op; false on an I/O failure.
+    static bool repairSeededSteamRule(const QString& jsonPath);
+
     /// Part of the v4 conversion: read every `*.json` layout in @p layoutsDir,
     /// split its embedded per-layout settings into the @p sidecarPath store
     /// (keyed by layout UUID, in the LayoutSettingsStore format), and rewrite the

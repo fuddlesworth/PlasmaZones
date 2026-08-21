@@ -509,6 +509,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // default resolver already ignores the rule at runtime.
         ok = pruneRetiredProviderDefaultRule(jsonPath) && ok;
 
+        // Repair the premade Steam rule if the config still carries the
+        // retired shape. Same reasoning as the prune above: idempotent, keyed
+        // on a fixed id, and folded here rather than into a schema bump
+        // because it corrects a rule this function seeded, not a schema.
+        ok = repairSeededSteamRule(jsonPath) && ok;
+
         return ok;
     }
 
@@ -995,6 +1001,64 @@ bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)
     }
     qInfo("ConfigMigration::pruneRetiredProviderDefaultRule: removed the provider-default rule from %s",
           qPrintable(rulesPath));
+    return true;
+}
+
+bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
+{
+    // The premade Steam rule shipped with a match that swept up far more than
+    // Steam's notification toasts. `WindowClass Contains "steam"` is compared
+    // against KWin's `"resourceName resourceClass"` pair, and a Steam-launched
+    // game reports its own app id in both halves ("steam_app_2342813033
+    // steam_app_2342813033"), so every game matched — and the blanket
+    // `Exclude` action then stripped it from placement AND decorations. See
+    // `applySteamDefaultRuleShape` for the corrected shape.
+    //
+    // Rewritten in place rather than dropped and re-seeded: the seeder only
+    // runs on the rebuild path, so a config that is already converted would
+    // otherwise keep the broken rule forever. Idempotent — once repaired,
+    // `isRetiredSteamRuleShape` stops recognising it and the re-run is a
+    // no-op.
+    if (!QFile::exists(jsonPath)) {
+        return true;
+    }
+    const QString rulesPath = ConfigDefaults::rulesFilePath();
+    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+    if (!setOpt.has_value()) {
+        return true;
+    }
+
+    PhosphorRules::RuleSet ruleSet = *setOpt;
+    auto stored = ruleSet.ruleById(steamDefaultRuleId());
+    if (!stored.has_value()) {
+        // Deleted by the user, or a fresh install that seeded the corrected
+        // shape directly. Either way there is nothing of ours to repair.
+        return true;
+    }
+    if (!isRetiredSteamRuleShape(*stored)) {
+        // The user edited it, or it is already the corrected shape. Their
+        // copy is theirs — leave it exactly as found.
+        return true;
+    }
+
+    // Carry the user's enabled flag and priority across: only the match and
+    // the action were wrong, and a user who disabled the rule meant it.
+    PhosphorRules::Rule repaired = *stored;
+    applySteamDefaultRuleShape(repaired);
+    if (!ruleSet.updateRule(repaired)) {
+        qWarning("ConfigMigration::repairSeededSteamRule: could not update the Steam rule in %s",
+                 qPrintable(rulesPath));
+        return false;
+    }
+    if (!ruleSet.saveToFile(rulesPath)) {
+        qWarning("ConfigMigration::repairSeededSteamRule: failed to write %s after repairing the Steam rule",
+                 qPrintable(rulesPath));
+        return false;
+    }
+    qInfo(
+        "ConfigMigration::repairSeededSteamRule: narrowed the premade Steam rule in %s to Steam's notification "
+        "toasts (it excluded every Steam-launched game)",
+        qPrintable(rulesPath));
     return true;
 }
 
