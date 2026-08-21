@@ -15,6 +15,12 @@ import org.kde.kirigami as Kirigami
  * a kind selector plus a child list, each child recursively a
  * MatchExpressionEditor.
  *
+ * A leaf at the ROOT also gets Add condition / Add group buttons, which wrap
+ * it into an `all` group holding the original condition plus the new one. The
+ * guided starting points seed a single leaf as the whole match, so without
+ * that promotion those rules could never take a second condition — see
+ * `_promoteRootToGroup`.
+ *
  * Because it instantiates itself, this file MUST be listed in the qml module's
  * QML_FILES — a missing entry is a runtime "not a type" load failure.
  *
@@ -56,6 +62,12 @@ ColumnLayout {
         return "all";
     }
     readonly property var _children: matchEditor.node ? (matchEditor.node[matchEditor._compositeKind] || []) : []
+    /// No registered match fields ⇒ nothing for the user to ever pick, so
+    /// adding a condition would hand them an empty field picker. Held here
+    /// rather than inline on the buttons because both the composite block and
+    /// the leaf-root promote row gate on it, and a guard that only half the
+    /// add-paths honour is worse than no guard.
+    readonly property bool _canAddCondition: matchEditor.matchFieldOptions.length > 0
 
     // `nodeEdited`, not `nodeChanged`, because `property var node` already
     // auto-generates a `nodeChanged()` change-signal and QML rejects the
@@ -81,19 +93,24 @@ ColumnLayout {
         matchEditor._emitChildren(matchEditor._compositeKind, children);
     }
 
-    function _addLeafChild() {
-        // Start the condition fully unselected so the user must pick a field
-        // rather than being handed the first field by default. MatchLeafEditor
-        // renders the "Choose…" field picker and hides the operator / value
-        // editors until a field is chosen (at which point its onSelected seeds
-        // a valid operator and a typed value). `_matchHasFilledLeaves` gates
-        // save on a filled leaf, so an unfilled placeholder can't be saved.
-        var children = matchEditor._children.slice();
-        children.push({
+    /// A blank condition. Deliberately fully unselected so the user must pick a
+    /// field rather than being handed the first field by default:
+    /// MatchLeafEditor renders the "Choose…" field picker and hides the
+    /// operator / value editors until a field is chosen (at which point its
+    /// onSelected seeds a valid operator and a typed value).
+    /// `_matchHasFilledLeaves` gates save on a filled leaf, so an unfilled
+    /// placeholder can't be saved.
+    function _blankLeaf() {
+        return {
             "field": "",
             "op": "",
             "value": ""
-        });
+        };
+    }
+
+    function _addLeafChild() {
+        var children = matchEditor._children.slice();
+        children.push(matchEditor._blankLeaf());
         matchEditor._emitChildren(matchEditor._compositeKind, children);
     }
 
@@ -103,6 +120,27 @@ ColumnLayout {
             "all": []
         });
         matchEditor._emitChildren(matchEditor._compositeKind, children);
+    }
+
+    /// Wrap a LEAF ROOT into an `all` group holding the existing condition plus
+    /// @p sibling, and hand the new composite upward.
+    ///
+    /// Only the root can need this. Every seeded rule whose subject implies one
+    /// condition — the Monitor / Desktop / Application / Activity start-from-
+    /// scratch subjects and most quick-start templates — arrives as a bare leaf
+    /// (`RuleTemplates::newEmptyRule` / `newRuleFromTemplate`), and a leaf
+    /// renders no kind selector and no add-buttons. Without this the user could
+    /// never give such a rule a second condition, which made every guided
+    /// starting point a dead end the moment one condition wasn't enough.
+    ///
+    /// Doing it here rather than seeding `all:[leaf]` in the templates is what
+    /// repairs rules ALREADY STORED with a leaf root, and it keeps a
+    /// single-condition rule rendering as a plain row instead of a group
+    /// wrapper the user never asked for.
+    function _promoteRootToGroup(sibling) {
+        matchEditor.nodeEdited({
+            "all": [matchEditor.node, sibling]
+        });
     }
 
     function _changeKind(newKind) {
@@ -128,6 +166,51 @@ ColumnLayout {
                 matchEditor.nodeEdited(updated);
             }
             onRemoveRequested: matchEditor.removeRequested()
+        }
+    }
+
+    // ── Leaf ROOT: the promote-to-group affordance ──
+    // A leaf CHILD needs none of this: its enclosing group already offers Add
+    // condition / Add group, and a child that grew its own would be adding a
+    // sibling to the wrong level. Only the root (`removable === false`) has no
+    // group above it to ask.
+    Loader {
+        Layout.fillWidth: true
+        active: matchEditor._isLeaf && !matchEditor.removable
+        visible: active
+
+        sourceComponent: RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+
+            // Same leading gutter the composite header uses, so these buttons
+            // line up with the field picker of the condition directly above
+            // rather than hanging off the left edge.
+            Item {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            }
+
+            Button {
+                text: i18n("Add condition")
+                icon.name: "list-add"
+                flat: true
+                enabled: matchEditor._canAddCondition
+                Accessible.name: i18n("Add a second condition, grouping it with this one")
+                onClicked: matchEditor._promoteRootToGroup(matchEditor._blankLeaf())
+            }
+
+            Button {
+                text: i18n("Add group")
+                icon.name: "list-add"
+                flat: true
+                Accessible.name: i18n("Add a condition group, grouping it with this condition")
+                onClicked: matchEditor._promoteRootToGroup({
+                    "all": []
+                })
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
         }
     }
 
@@ -272,10 +355,7 @@ ColumnLayout {
                             text: i18n("Add condition")
                             icon.name: "list-add"
                             flat: true
-                            // No registered match fields ⇒ nothing for the user
-                            // to ever pick; disable the button rather than adding
-                            // a condition whose field picker would be empty.
-                            enabled: matchEditor.matchFieldOptions.length > 0
+                            enabled: matchEditor._canAddCondition
                             Accessible.name: i18n("Add a condition to this group")
                             onClicked: matchEditor._addLeafChild()
                         }
