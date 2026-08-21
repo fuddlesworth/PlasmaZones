@@ -114,6 +114,35 @@ jobs:
           echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION (prerelease=$IS_PRE, pkgrel=$PKGREL)"
 
+      # A rebuild-only republish reuses a tag that already shipped. If that
+      # tag's release is immutable the assets cannot be replaced, and — the
+      # part that actually bites — GitHub keeps the tag reserved even after
+      # the release is deleted, so nothing can be published under it ever
+      # again. Refuse here, before six package builds run and before the
+      # release job's create path gets anywhere near the existing release.
+      - name: Refuse a rebuild against an immutable release
+        if: steps.version.outputs.pkgrel != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! RELEASE_JSON="$(gh release view "v$VERSION" --json isImmutable 2>/dev/null)"; then
+              echo "No existing release for v$VERSION — nothing to conflict with." >&2
+              exit 0
+          fi
+          if [[ "$(jq -r '.isImmutable' <<<"$RELEASE_JSON")" == "true" ]]; then
+              {
+                  echo "Error: the release for v$VERSION is immutable, so its assets cannot be"
+                  echo "replaced and the tag cannot be reused for a new release."
+                  echo ""
+                  echo "A rebuild-only republish is not possible for this tag. Cut a new version"
+                  echo "tag instead; the source AUR package still rebuilds from the tag archive,"
+                  echo "but every prebuilt channel needs a new release to publish under."
+              } >&2
+              exit 1
+          fi
+
   # ═══════════════════════════════════════════════════════════════════════════
   # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
   # ═══════════════════════════════════════════════════════════════════════════
@@ -155,10 +184,29 @@ jobs:
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
-        # Third arg is the package revision — see the version job's `pkgrel`
-        # output. Stamps the newest changelog entry only, so a rebuild-only
-        # republish produces 3.3.8-2 and apt actually offers the upgrade.
-        run: bash packaging/generate-changelog.sh debian "" "${{ needs.version.outputs.pkgrel }}"
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
+        run: |
+          set -euo pipefail
+          # The third argument is the package revision, but do not rely on the
+          # generator honouring it. Checkouts are pinned to the release tag, so
+          # this runs THAT TAG'S copy of the script while the workflow itself
+          # comes from the dispatched branch. Rebuilding a tag published before
+          # the revision argument existed silently drops it and emits -1.
+          bash packaging/generate-changelog.sh debian "" "$PKGREL"
+          # So stamp the revision here, where the workflow is authoritative.
+          # Line 1 is the newest entry; its only `-<digits>)` is the revision.
+          sed -i "1s/-[0-9]\{1,\})/-$PKGREL)/" packaging/debian/changelog
+          # Never ship a package whose version is not the one asked for: the
+          # deb version comes wholly from this file, so a silent mismatch here
+          # is a package apt will not offer as an upgrade.
+          GOT="$(sed -n '1s/^plasmazones (\(.*\)).*/\1/p' packaging/debian/changelog)"
+          if [[ "$GOT" != "$VERSION-$PKGREL" ]]; then
+              echo "Error: debian/changelog version is '$GOT', expected '$VERSION-$PKGREL'" >&2
+              exit 1
+          fi
+          echo "Debian version: $GOT"
 
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
@@ -243,6 +291,15 @@ jobs:
           # changelog and Arch pkgrel use.
           sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
           bash packaging/generate-changelog.sh rpm "" "$PKGREL"
+          # Assert the stamp landed. Same reasoning as the Debian step: the
+          # checked-out generator comes from the release tag and may predate
+          # the revision argument, so the workflow's own sed above is what
+          # actually decides the NEVR.
+          GOT="$(sed -n 's/^Release:[[:space:]]*//p' packaging/rpm/plasmazones.spec)"
+          if [[ "$GOT" != "$PKGREL%{?dist}" ]]; then
+              echo "Error: spec Release is '$GOT', expected '$PKGREL%{?dist}'" >&2
+              exit 1
+          fi
 
       - name: Create source tarball
         run: |
@@ -375,6 +432,15 @@ jobs:
           # changelog and Arch pkgrel use.
           sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
           bash packaging/generate-changelog.sh rpm "" "$PKGREL"
+          # Assert the stamp landed. Same reasoning as the Debian step: the
+          # checked-out generator comes from the release tag and may predate
+          # the revision argument, so the workflow's own sed above is what
+          # actually decides the NEVR.
+          GOT="$(sed -n 's/^Release:[[:space:]]*//p' packaging/rpm/plasmazones.spec)"
+          if [[ "$GOT" != "$PKGREL%{?dist}" ]]; then
+              echo "Error: spec Release is '$GOT', expected '$PKGREL%{?dist}'" >&2
+              exit 1
+          fi
 
       - name: Create source tarball
         run: |
@@ -752,16 +818,6 @@ jobs:
             echo '```'
           } > release_notes.md
 
-      - name: Delete existing release if present
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="v${{ needs.version.outputs.version }}"
-          if gh release view "$VERSION" &>/dev/null; then
-            echo "Release $VERSION already exists — deleting so we can recreate with assets"
-            gh release delete "$VERSION" --yes
-          fi
-
       - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -791,11 +847,28 @@ jobs:
           else
               RELEASE_FLAGS+=(--latest)
           fi
-          gh release create "$VERSION" \
-            --title "PlasmaZones $VERSION" \
-            --notes-file release_notes.md \
-            "${RELEASE_FLAGS[@]}" \
-            "${ASSETS[@]}"
+          # Update in place when the release already exists, and NEVER delete
+          # it. Deleting is not a safe way to "recreate with assets": on a repo
+          # with immutable releases the delete succeeds, the recreate then fails
+          # with "tag_name was used by an immutable release", and the tag is
+          # burned permanently — the release is gone and nothing can replace it.
+          # Every prebuilt channel that resolves a release-download URL breaks
+          # at that point. Editing and clobbering assets fails harmlessly
+          # instead, leaving the published release intact.
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+              echo "Release $VERSION exists — updating in place"
+              gh release edit "$VERSION" \
+                --title "PlasmaZones $VERSION" \
+                --notes-file release_notes.md \
+                "${RELEASE_FLAGS[@]}"
+              gh release upload "$VERSION" --clobber "${ASSETS[@]}"
+          else
+              gh release create "$VERSION" \
+                --title "PlasmaZones $VERSION" \
+                --notes-file release_notes.md \
+                "${RELEASE_FLAGS[@]}" \
+                "${ASSETS[@]}"
+          fi
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Publish to AUR (Arch User Repository)
@@ -1102,6 +1175,15 @@ jobs:
           # changelog and Arch pkgrel use.
           sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
           bash packaging/generate-changelog.sh rpm "" "$PKGREL"
+          # Assert the stamp landed. Same reasoning as the Debian step: the
+          # checked-out generator comes from the release tag and may predate
+          # the revision argument, so the workflow's own sed above is what
+          # actually decides the NEVR.
+          GOT="$(sed -n 's/^Release:[[:space:]]*//p' packaging/rpm/plasmazones.spec)"
+          if [[ "$GOT" != "$PKGREL%{?dist}" ]]; then
+              echo "Error: spec Release is '$GOT', expected '$PKGREL%{?dist}'" >&2
+              exit 1
+          fi
 
       - name: Commit package to OBS
         env:
