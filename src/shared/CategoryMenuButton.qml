@@ -613,10 +613,14 @@ ComboBox {
                 root._opening = false;
                 return;
             }
-            updateChecks();
-            // Cleared here as well as in onAboutToShow, so the open latch does
-            // not depend on the popup actually being shown.
+            // Cleared BEFORE the two calls below, not after. Either could
+            // throw, and a latched `_opening` with no popup makes
+            // _requestOpenMenu refuse to open the picker for the rest of its
+            // life — the same permanent latch the build guard above exists to
+            // prevent. Clearing first means the worst case is one press that
+            // does nothing, which the next press recovers from.
             root._opening = false;
+            updateChecks();
             categoryMenu.popup(root, 0, root.height);
         }
 
