@@ -433,6 +433,13 @@ QUuid steamDefaultRuleId()
 /// caption exists and stay pinned that way for the window's life. The class is
 /// stamped at first resolve, so the class arm has no such window.
 ///
+/// Both halves are POSITIVE WindowClass/Title predicates, and WindowClass sits
+/// in the daemon's `unanswerableWindowFields()`, so this rule only ever bites
+/// on the EFFECT path, where window_query.cpp stamps both fields. That was
+/// equally true of the retired shape, whose class leaf was positive too, so it
+/// is not a change — but it is where to look when checking the rule against a
+/// live session.
+///
 /// The action is `ExcludePlacement`, not the blanket `Exclude`: a toast has no
 /// business being placed, but stripping its decorations and animations too was
 /// never the point. `Exclude` was the only exclusion action that existed when

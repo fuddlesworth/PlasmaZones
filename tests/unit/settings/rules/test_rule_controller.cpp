@@ -630,6 +630,12 @@ void TestRuleController::actionMetadata()
         // divider can describe honestly. This also pins the shape: bare
         // "Window" would be a direct item sitting above the submenus, the
         // mixed flat-list-plus-submenus layout this organisation replaced.
+        //
+        // The comparison is against the TRANSLATED label, which holds because
+        // a headless unit run loads no catalogue so tr() returns its source
+        // string. That is the same coupling the strip-axis label rows below
+        // rely on, and the file-level convention here. Loading translations in
+        // this target would break both at once, so they move together.
         const QString category = a.value(QStringLiteral("category")).toString();
         const bool windowDomain = a.value(QStringLiteral("domain")).toString() == QLatin1String("window");
         const QString whereFailed = wire + QLatin1String(" -> ") + category;
