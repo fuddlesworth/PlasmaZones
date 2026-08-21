@@ -281,8 +281,10 @@ private Q_SLOTS:
         // returns false and rebuild retries from the stash). Both paths
         // surface as a follow-up run after the user repairs the quarantine.
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        // The migration chain now runs v3 → v4 → v5, so config.json lands at
-        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        // The chain runs past the v3→v4 step to ConfigSchemaVersion, so
+        // config.json lands at the current version whatever that is (the
+        // v3→v4 step still stamps 4 mid-chain). Asserted against the constant
+        // rather than a literal, so a future bump needs no edit here.
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
     }
 
