@@ -338,7 +338,7 @@ public:
     /// Match fields suitable for the leaf-editor field dropdown. Each entry:
     /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
     ///    valueKind: "string"|"number"|"bool"|"windowType"|"virtualDesktop"|
-    ///    "screen"|"activity"|"mode"|"orientation"|"layout" }`. The screen /
+    ///    "screen"|"activity"|"mode"|"orientation"|"layout"|"colorScheme" }`. The screen /
     /// activity / virtualDesktop / layout kinds drive dedicated pickers; the
     /// closed-vocab kinds (windowType / mode / orientation) also carry an
     /// `options` list. QML keys off `wire` so it never has to reconstruct the

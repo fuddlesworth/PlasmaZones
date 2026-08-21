@@ -101,7 +101,6 @@ QString legacyAssignmentsFilePath()
     return QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
 }
 
-/// Pre-flight check for the legacy assignments.json sidecar: if the file
 /// A quarantine target that does not overwrite an existing one. A user who hit
 /// the corrupt path, restored a file by hand, and hit it again would otherwise
 /// lose the first quarantine to the second — the two failures are usually
@@ -122,6 +121,7 @@ QString uniqueQuarantinePath(const QString& preferred)
     return preferred;
 }
 
+/// Pre-flight check for the legacy assignments.json sidecar: if the file
 /// exists but fails to parse (truncation, power-loss, hand-edit error), abort
 /// the v3→v4 conversion BEFORE anything irreversible runs.
 ///

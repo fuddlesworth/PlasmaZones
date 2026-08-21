@@ -104,16 +104,18 @@ QVariantList ruleTemplates()
     };
 
     // Templates mirror the flows the per-settings pages used to author
-    // before the unified rule store: monitor → layout / algorithm
-    // (assignments), plus the classic per-app window rules (zone placement,
-    // screen routing, floating, exclusion). One-click starting points for the
+    // before the unified rule store: monitor → layout / algorithm /
+    // scrolling mode and virtual desktop → layout (assignments), plus the
+    // classic per-app window rules (zone placement, screen routing, floating,
+    // exclusion). One-click starting points for the
     // common cases, ordered context band first, then application band.
     //
     // The bar for a tile is that it saves the user something a from-scratch
-    // subject plus the action picker does not: either it seeds TWO
-    // coordinated actions (every context tile pairs SetEngineMode with the
-    // thing that engine needs), or it is one of the handful of per-app rules
-    // people open this dialog specifically to write. Single-action showcase
+    // subject plus the action picker does not: either it seeds the coordinated
+    // actions a context assignment needs (the mode plus, where the engine
+    // needs one, its layout or algorithm — see scrollingOnMonitor below for
+    // the case where it deliberately needs nothing else), or it is one of the
+    // handful of per-app rules people open this dialog specifically to write. Single-action showcase
     // tiles were removed rather than kept for discoverability — the action
     // picker's Window submenus now surface those actions directly, and a grid
     // long enough to scroll costs more than the showcase was worth. That
@@ -256,8 +258,10 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
         // ExcludePlacement, not the blanket Exclude: the template's title and
         // description promise a placement-only exclusion, and stripping
-        // decorations/animations too was the pre-split behavior of the only
-        // action available then. Rules already created from this template keep
+        // decorations too was the pre-split behavior of the only action
+        // available then. (Blanket Exclude covers placement and decorations;
+        // it does not suppress animations, it only cancels per-window
+        // animation overrides.) Rules already created from this template keep
         // their stored blanket action.
         RuleAction action;
         action.type = QString::fromLatin1(ActionType::ExcludePlacement);

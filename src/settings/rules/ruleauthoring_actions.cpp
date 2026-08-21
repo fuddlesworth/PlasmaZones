@@ -83,13 +83,13 @@ QString windowSubcategory(const QString& sub)
 /// per-window colours are window-domain while the rest of each family is
 /// context-domain). A bucket takes its divider side from a single item, so a
 /// bucket may never mix domains.
-PickerCategory actionCategory(const QString& type)
+///
+/// Takes the descriptor's @p cat rather than re-fetching it: `ActionRegistry::
+/// descriptor` returns by value and an ActionDescriptor carries three
+/// std::functions, a QStringList and a QList, so the copy allocates. The sole
+/// caller has already fetched the descriptor to test `userAuthorable`.
+PickerCategory actionCategory(const QString& type, const QString& cat)
 {
-    const auto desc = PhosphorRules::ActionRegistry::instance().descriptor(type);
-    if (!desc.has_value()) {
-        return {PhosphorI18n::tr("Other"), kOrderOther};
-    }
-    const QString& cat = desc->category;
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), kOrderGaps};
     }
@@ -193,11 +193,14 @@ PickerCategory actionCategory(const QString& type)
             return {windowSubcategory(PhosphorI18n::tr("Behavior")), kOrderWindowBehavior};
         }
         // Everything else in the category decides where a window opens, stays,
-        // or returns to: snap/float, the screen and desktop routing, the three
-        // restore policies, and the two exclusions that opt a window out of
-        // placement entirely.
+        // or returns to: snap/float, the screen and desktop routing, the four
+        // restore and unfloat policies, and the two exclusions that opt a
+        // window out of placement entirely.
         return {windowSubcategory(PhosphorI18n::tr("Placement")), kOrderWindowPlacement};
     }
+    // Reachable only for a descriptor category that does not exist yet — every
+    // one the registry currently ships has a branch above. Kept as the
+    // extension point so a new category surfaces somewhere rather than nowhere.
     return {PhosphorI18n::tr("Other"), kOrderOther};
 }
 
@@ -216,7 +219,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Set scrolling template");
     }
     if (type == ActionType::SetMaxWindows) {
-        return PhosphorI18n::tr("Set max tiled windows");
+        return PhosphorI18n::tr("Set maximum tiled windows");
     }
     if (type == ActionType::SetSplitRatio) {
         return PhosphorI18n::tr("Set split ratio");
@@ -276,7 +279,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Focus new windows");
     }
     if (type == ActionType::SetScrollSmartGaps) {
-        return PhosphorI18n::tr("Smart gaps");
+        return PhosphorI18n::tr("Drop the outer gaps for a lone column");
     }
     if (type == ActionType::SetScrollFocusFollowsMouse) {
         return PhosphorI18n::tr("Focus follows the mouse");
@@ -296,9 +299,11 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::OpenFullscreen) {
         return PhosphorI18n::tr("Open in fullscreen");
     }
-    // Tab indicator. The labels say "tab indicator" rather than just "tabs" so
-    // they cannot be mistaken for the tabbed-column actions above, which
-    // change how a column BEHAVES rather than how its indicator is drawn.
+    // Tab indicator. The labels that could be confused with the tabbed-column
+    // actions above say "tab indicator" in full; the ones with no ambiguous
+    // counterpart (gap between tabs, corner radius, the three tab colours) say
+    // just "tab". The tabbed-column actions change how a column BEHAVES rather
+    // than how its indicator is drawn.
     if (type == ActionType::SetTabIndicatorEnabled) {
         return PhosphorI18n::tr("Show the tab indicator");
     }
@@ -403,7 +408,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Lock layout");
     }
     if (type == ActionType::DefaultLayoutAssignment) {
-        return PhosphorI18n::tr("Default layout assignment");
+        return PhosphorI18n::tr("Assign default layout");
     }
     if (type == ActionType::Exclude) {
         // The exclusion family shares one shape ("Exclude from <scope>") built
@@ -421,10 +426,10 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Float window");
     }
     if (type == ActionType::SnapToZone) {
-        return PhosphorI18n::tr("Snap to zone(s)");
+        return PhosphorI18n::tr("Snap to zones");
     }
     if (type == ActionType::RestorePosition) {
-        return PhosphorI18n::tr("Restore position on login");
+        return PhosphorI18n::tr("Restore previous position");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
         // Named after the setting it overrides ("Restore windows to their
@@ -474,10 +479,10 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Set opacity");
     }
     if (type == ActionType::OverrideOverlayShader) {
-        return PhosphorI18n::tr("Set overlay shader");
+        return PhosphorI18n::tr("Override overlay shader");
     }
     if (type == ActionType::OverrideOverlayStyle) {
-        return PhosphorI18n::tr("Set overlay style");
+        return PhosphorI18n::tr("Override overlay style");
     }
     if (type == ActionType::SetOverlayHighlightColor) {
         return PhosphorI18n::tr("Set overlay highlight color");
@@ -580,9 +585,8 @@ QString actionTypeLabelImpl(const QString& type)
 
 QString boolActionStateLabel(const QString& type, bool on)
 {
-    namespace ActionType = PhosphorRules::ActionType;
     if (type == ActionType::RestorePosition) {
-        return on ? PhosphorI18n::tr("Restore position on login") : PhosphorI18n::tr("Don't restore position on login");
+        return on ? PhosphorI18n::tr("Restore previous position") : PhosphorI18n::tr("Don't restore previous position");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
         return on ? PhosphorI18n::tr("Restore to previous zone") : PhosphorI18n::tr("Don't restore to previous zone");
@@ -719,15 +723,22 @@ QVariantList actionTypes()
         QString type;
         QString categoryLabel;
         int categoryOrder;
+        QString domain;
     };
     QList<TypeEntry> entries;
     for (const QString& type : registry.registeredTypes()) {
         const auto desc = registry.descriptor(type);
+        // `userAuthorable` defaults true and no descriptor in the tree sets it
+        // false today; the filter is the declared opt-out, not dead weight.
         if (!desc.has_value() || !desc->userAuthorable) {
             continue;
         }
-        const PickerCategory acat = actionCategory(type);
-        entries.append({type, acat.label, acat.order});
+        // One descriptor fetch per type feeds the category, the label and the
+        // domain below. `descriptor()` returns by value and the copy allocates.
+        const PickerCategory acat = actionCategory(type, desc->category);
+        const QString domainStr =
+            desc->domain == PhosphorRules::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
+        entries.append({type, acat.label, acat.order, domainStr});
     }
     // Sorted only to make this list deterministic across registry iteration
     // orders. The sole consumer, CategoryMenuButton, re-sorts every item
@@ -752,15 +763,10 @@ QVariantList actionTypes()
         entry[QStringLiteral("params")] = paramsForActionType(e.type);
         entry[QStringLiteral("category")] = e.categoryLabel;
         entry[QStringLiteral("categoryOrder")] = e.categoryOrder;
-        RuleAction probe;
-        probe.type = e.type;
-        const auto domain = registry.domainFor(probe);
-        const QString domainStr =
-            domain == PhosphorRules::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
-        entry[QStringLiteral("domain")] = domainStr;
+        entry[QStringLiteral("domain")] = e.domain;
         // The picker draws a divider between top-level categories whose group
         // differs — context-domain categories above, window-domain below.
-        entry[QStringLiteral("categoryGroup")] = domainStr;
+        entry[QStringLiteral("categoryGroup")] = e.domain;
         out.append(entry);
     }
     return out;
