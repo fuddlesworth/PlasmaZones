@@ -917,6 +917,11 @@ add_executable(test_zone_selector_hit_geometry ui/zones/test_zone_selector_hit_g
 target_link_libraries(test_zone_selector_hit_geometry PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin plasmazones_core)
 add_test(NAME test_zone_selector_hit_geometry COMMAND test_zone_selector_hit_geometry)
 
+add_executable(test_shader_node_teardown ui/zones/test_shader_node_teardown.cpp)
+# GuiPrivate: ShaderNodeRhi.h includes <rhi/qrhi.h>, a private Qt Gui header.
+target_link_libraries(test_shader_node_teardown PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate PhosphorRendering)
+add_test(NAME test_shader_node_teardown COMMAND test_shader_node_teardown)
+
 add_executable(test_surface_shader_item ui/zones/test_surface_shader_item.cpp)
 target_link_libraries(test_surface_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick Qt6::GuiPrivate plasmazones_rendering)
 add_test(NAME test_surface_shader_item COMMAND test_surface_shader_item)

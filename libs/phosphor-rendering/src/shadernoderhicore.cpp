@@ -173,6 +173,10 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     , m_uboProfile(profile ? std::move(profile) : std::make_unique<PhosphorShaders::BaseUniformProfile>())
 {
     Q_ASSERT(item != nullptr);
+    // Arm the liveness block the tracking ShaderEffect reads. No lock needed
+    // here: nothing else can hold a reference to the block until
+    // registerRenderNode() publishes it, which happens after construction.
+    m_liveness->node = this;
     // The UBO profile's ctor seeds an identity qt_Matrix + qt_Opacity=1.0 (the
     // init that used to live here, moved into BaseUniformProfile so the
     // surface profile gets the same lead-in for free).
@@ -196,8 +200,24 @@ ShaderNodeRhi::ShaderNodeRhi(QQuickItem* item, std::unique_ptr<PhosphorShaders::
     setFlag(QSGNode::UsePreprocess, true);
 }
 
+void ShaderNodeRhi::retractLiveness() noexcept
+{
+    // A GUI-thread teardown that is already inside the block's mutex finishes
+    // its call before this lock is granted, so it can never touch a node whose
+    // destructor has begun; one that arrives afterwards reads null and knows
+    // the scene graph has taken the node. This is the half of the contract
+    // that lets ~ShaderEffect sever the item back-pointer unconditionally.
+    const std::lock_guard<std::mutex> livenessLock(m_liveness->mutex);
+    m_liveness->node = nullptr;
+}
+
 ShaderNodeRhi::~ShaderNodeRhi()
 {
+    // FIRST statement, before any member teardown. Usually a no-op repeat: a
+    // subclass destructor has already retracted (that is the contract this
+    // hierarchy holds — see retractLiveness), and this covers the plain
+    // ShaderNodeRhi case where there is no subclass to have done it.
+    retractLiveness();
     QObject::disconnect(m_sourceTextureChangedConn);
     releaseRhiResources();
 }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorRendering/ShaderNodeLiveness.h>
 #include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <PhosphorShaders/BaseUniforms.h>
@@ -145,6 +146,33 @@ public:
      * Thread-safe: uses an atomic flag checked by prepare()/render().
      */
     void invalidateItem();
+
+    /**
+     * @brief Whether this node still holds a usable back-pointer to its item.
+     *
+     * False once invalidateItem() has run. This is the node's central
+     * threading invariant — every m_item dereference is gated on it — so it is
+     * exposed for callers that need to assert the teardown contract held
+     * (chiefly: that the item severed the back-pointer before it was freed).
+     * Thread-safe, but only a snapshot: do not use it to gate a dereference
+     * the node does not own.
+     */
+    bool hasValidItem() const
+    {
+        return m_itemValid.load(std::memory_order_acquire);
+    }
+
+    /**
+     * @brief The liveness block to hand to ShaderEffect::registerRenderNode.
+     *
+     * Valid for the node's whole lifetime and beyond — the block itself
+     * outlives the node, which nulls its own pointer inside it on
+     * destruction. See ShaderNodeLiveness.
+     */
+    const std::shared_ptr<ShaderNodeLiveness>& liveness() const
+    {
+        return m_liveness;
+    }
 
     // QSGRenderNode
     QSGRenderNode::StateFlags changedStates() const override;
@@ -344,6 +372,23 @@ protected:
      */
     QRhi* safeRhi() const;
 
+    /**
+     * @brief Retract this node from its liveness block.
+     *
+     * MUST be the first statement of EVERY subclass destructor, not just this
+     * class's. The most-derived destructor body and its member teardown run
+     * before ~ShaderNodeRhi, so a retract that happened only in the base would
+     * leave ShaderEffect::withTrackedNode able to dispatch a virtual call into
+     * a node whose derived half is already destroyed.
+     *
+     * Idempotent (nulling an already-null pointer under the same mutex), so
+     * the base destructor's own call after a subclass has already retracted
+     * costs one uncontended lock and nothing else. Takes
+     * ShaderNodeLiveness::mutex, so it must not be called with m_itemMutex
+     * held. See ShaderNodeLiveness for the full ordering.
+     */
+    void retractLiveness() noexcept;
+
 private:
     bool ensurePipeline();
     bool ensureBufferPipeline();
@@ -426,6 +471,12 @@ private:
     // Lock-ordering invariant: MUST NOT block on the GUI thread while holding
     // m_itemMutex (avoids deadlock during ~ShaderEffect → invalidateItem path).
     mutable std::mutex m_itemMutex;
+
+    /// Published to the tracking ShaderEffect so it can tell a live node from
+    /// one the scene graph has already deleted. Seeded with `this` in the
+    /// constructor, nulled under its own mutex by retractLiveness() as the
+    /// first act of every destructor in the hierarchy. See ShaderNodeLiveness.
+    std::shared_ptr<ShaderNodeLiveness> m_liveness = std::make_shared<ShaderNodeLiveness>();
 
     // ── Uniform Extension ──────────────────────────────────────────────
     std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;

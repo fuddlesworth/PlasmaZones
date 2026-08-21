@@ -53,6 +53,7 @@ set(phosphorrendering_SRCS
 
 set(phosphorrendering_public_HDRS
     include/PhosphorRendering/ShaderCompiler.h
+    include/PhosphorRendering/ShaderNodeLiveness.h
     include/PhosphorRendering/ShaderNodeRhi.h
     include/PhosphorRendering/ShaderEffect.h
     include/PhosphorRendering/ZoneShaderCommon.h

@@ -317,19 +317,17 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // both ShaderEffect subclasses (this and tools/shader-render's
         // RenderEffect) follow the same factory pattern — and a future
         // refactor to delegate updatePaintNode to the parent picks up the
-        // right node type for free. REGISTER the node with the base (this
-        // override replaces the base updatePaintNode that normally does the
-        // tracking) so the base destructor / sceneGraphAboutToStop teardown
-        // severs the node's item back-pointer — the same participation
-        // SurfaceShaderItem has.
-        registerRenderNode(nullptr);
+        // right node type for free.
         node = static_cast<PhosphorRendering::ZoneShaderNodeRhi*>(createShaderNode());
         freshNode = true;
         qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     }
-    // Register on every frame, not just the fresh-node path: windowChanged
-    // clears the base's tracked node, and a reuse-path frame after that would
-    // leave the teardown guard permanently disarmed.
+    // REGISTER the node with the base, on every frame rather than only the
+    // fresh-node path: this override replaces the base updatePaintNode that
+    // normally does the tracking, so without it the base destructor /
+    // sceneGraphAboutToStop teardown silently no-ops for this item. The scene
+    // graph can also swap in a node the base is not tracking, and a reuse-path
+    // frame is the only chance to notice.
     registerRenderNode(node);
     // No per-frame log on the reuse path: updatePaintNode runs on every rendered
     // frame, so logging here floods the journal at the repaint rate.
