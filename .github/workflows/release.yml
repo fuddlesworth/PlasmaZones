@@ -15,7 +15,7 @@ on:
         description: 'Tag to release (e.g. v3.0.0). Must already exist.'
         required: true
       pkgrel:
-        description: 'Arch pkgrel. Bump for a rebuild-only republish of an already-released tag (e.g. a Qt private-ABI break). Leave at 1 for a normal release.'
+        description: 'Package revision (Arch pkgrel / RPM Release / deb revision). Bump for a rebuild-only republish of an already-released tag, e.g. after a KWin or Qt bump breaks the installed binaries. Leave at 1 for a normal release.'
         required: false
         default: '1'
 
@@ -87,12 +87,22 @@ jobs:
           if [[ "$VERSION" =~ -(alpha|beta|rc)(\.?[0-9]+)?$ ]]; then
               IS_PRE=true
           fi
-          # Arch pkgrel. A tag push always means a fresh version, so it
-          # starts at 1; only a manual dispatch can raise it, and that is
-          # the rebuild-only path — same source, same tag, new package,
-          # e.g. when a Qt patch release breaks the private-API ABI the
-          # layer-shell QPA plugin is compiled against. Digits only, for
-          # the same script-injection reason the tag is gated above.
+          # Package revision: Arch pkgrel, RPM Release, deb revision. A tag
+          # push always means a fresh version, so it starts at 1; only a
+          # manual dispatch can raise it, and that is the rebuild-only path
+          # — same source, same tag, new packages.
+          #
+          # What forces it is a dependency ABI moving under an installed
+          # build. KWin is the routine one: the effect plugin's IID embeds
+          # KWin's exact upstream version, and KWin refuses to load an
+          # effect whose IID does not match, so the overlay goes missing on
+          # every KWin bump until a rebuild. Qt is the sharp one: the
+          # layer-shell QPA plugin compiles against Qt private headers whose
+          # class layouts carry no ABI guarantee, so a qt6 patch bump can
+          # leave the daemon reading members at stale offsets and crashing.
+          #
+          # Digits only, for the same script-injection reason the tag is
+          # gated above.
           PKGREL="${INPUT_PKGREL:-1}"
           if [[ ! "$PKGREL" =~ ^[0-9]+$ ]]; then
               echo "Error: PKGREL '$PKGREL' is not a positive integer" >&2
@@ -145,7 +155,10 @@ jobs:
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
-        run: bash packaging/generate-changelog.sh debian
+        # Third arg is the package revision — see the version job's `pkgrel`
+        # output. Stamps the newest changelog entry only, so a rebuild-only
+        # republish produces 3.3.8-2 and apt actually offers the upgrade.
+        run: bash packaging/generate-changelog.sh debian "" "${{ needs.version.outputs.pkgrel }}"
 
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
@@ -223,8 +236,13 @@ jobs:
       - name: Generate RPM changelog and set version from CHANGELOG.md
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
+          # Release must move for a rebuild-only republish, otherwise dnf and
+          # zypper see the same NEVR and offer nothing. Same revision the deb
+          # changelog and Arch pkgrel use.
+          sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm "" "$PKGREL"
 
       - name: Create source tarball
         run: |
@@ -350,8 +368,13 @@ jobs:
       - name: Generate RPM changelog and set version from CHANGELOG.md
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
+          # Release must move for a rebuild-only republish, otherwise dnf and
+          # zypper see the same NEVR and offer nothing. Same revision the deb
+          # changelog and Arch pkgrel use.
+          sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm "" "$PKGREL"
 
       - name: Create source tarball
         run: |
@@ -1068,12 +1091,17 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # OBS builds from the committed spec, so it must carry the real
           # version (download_files resolves Source0's %{version}) and the
           # release changelog — not the 0.0.0 placeholder. Same templating
           # as the build-rpm-opensuse job above.
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
+          # Release must move for a rebuild-only republish, otherwise dnf and
+          # zypper see the same NEVR and offer nothing. Same revision the deb
+          # changelog and Arch pkgrel use.
+          sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm "" "$PKGREL"
 
       - name: Commit package to OBS
         env:
@@ -1081,6 +1109,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # Check out the existing OBS package working copy — the project
           # and package must already exist (see the setup notes above).
           osc checkout "$OBS_PROJECT" plasmazones
@@ -1099,7 +1128,11 @@ jobs:
           # empty result and silently mistaken for "no changes".
           STATUS="$(osc status)"
           if [[ -n "$STATUS" ]]; then
-              osc commit -m "Update to $VERSION"
+              if [[ "$PKGREL" == "1" ]]; then
+                  osc commit -m "Update to $VERSION"
+              else
+                  osc commit -m "Rebuild $VERSION (release $PKGREL)"
+              fi
               echo "✅ Committed plasmazones $VERSION to $OBS_PROJECT — OBS will rebuild"
           else
               echo "No changes to commit"

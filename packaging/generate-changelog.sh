@@ -89,8 +89,10 @@ print(d.strftime('%a %b ') + str(d.day).rjust(2) + d.strftime(' %Y'))
 # Generate Debian changelog
 generate_debian() {
     local filter_version="${1:-}"
+    local revision="${2:-1}"
     local outfile="$SCRIPT_DIR/debian/changelog"
     local current_version="" current_date="" first_entry=1
+    local current_version_seen=""
     local tmpfile
     tmpfile=$(mktemp)
 
@@ -113,7 +115,16 @@ generate_debian() {
 
             current_version="$version"
             current_date="$date"
-            echo "plasmazones ($version-1) unstable; urgency=medium"
+            # The newest entry is the one being released, so it carries the
+            # caller's revision. Older entries keep -1: their packages were
+            # published under that revision, and restamping them would invent
+            # uploads that never happened.
+            local entry_revision=1
+            if [[ -z "$current_version_seen" ]]; then
+                entry_revision="$revision"
+                current_version_seen=1
+            fi
+            echo "plasmazones ($version-$entry_revision) unstable; urgency=medium"
             echo ""
         fi
 
@@ -144,8 +155,9 @@ generate_debian() {
 # Generate RPM %changelog section and splice into spec
 generate_rpm() {
     local filter_version="${1:-}"
+    local revision="${2:-1}"
     local specfile="$SCRIPT_DIR/rpm/plasmazones.spec"
-    local current_version="" current_date=""
+    local current_version="" current_date="" current_version_seen=""
     local tmpfile
     tmpfile=$(mktemp)
 
@@ -162,7 +174,13 @@ generate_rpm() {
 
             current_version="$version"
             current_date="$date"
-            echo "* $(iso_to_rpm "$date") fuddlesworth - $version-1"
+            # See generate_debian: only the newest entry takes the revision.
+            local entry_revision=1
+            if [[ -z "$current_version_seen" ]]; then
+                entry_revision="$revision"
+                current_version_seen=1
+            fi
+            echo "* $(iso_to_rpm "$date") fuddlesworth - $version-$entry_revision"
         fi
 
         # Escape RPM macros: a bare % in changelog text is expanded by
@@ -221,22 +239,42 @@ generate_notes() {
     ' "$CHANGELOG" | sed -e :a -e '/^[[:space:]]*$/{ $d; N; ba; }'
 }
 
+# Package revision, applied to the newest changelog entry. 1 for a normal
+# release; raised for a rebuild-only republish of a version that is already
+# out, where the source is unchanged but the binaries must be rebuilt.
+#
+# The recurring cause is a dependency ABI moving underneath an installed
+# build. KWin is the common one: the effect plugin's IID embeds KWin's exact
+# upstream version and KWin refuses to load an effect whose IID does not
+# match, so every KWin bump strands the overlay until a rebuild. Qt is the
+# sharper one: the layer-shell QPA plugin compiles against Qt private headers
+# whose class layouts carry no ABI guarantee, so a qt6 patch bump can leave
+# the daemon reading members at stale offsets and crashing outright.
+#
+# Without a revision bump apt/dnf/zypper see the same NEVR and offer no
+# upgrade, so the rebuild never reaches anyone. Mirrors Arch's pkgrel.
+REVISION="${3:-1}"
+if [[ ! "$REVISION" =~ ^[0-9]+$ ]]; then
+    echo "Error: revision must be a positive integer, got: $REVISION" >&2
+    exit 1
+fi
+
 case "${1:-}" in
     debian)
-        generate_debian "${2:-}"
+        generate_debian "${2:-}" "$REVISION"
         ;;
     rpm)
-        generate_rpm "${2:-}"
+        generate_rpm "${2:-}" "$REVISION"
         ;;
     notes)
         generate_notes "${2:-}"
         ;;
     all)
-        generate_debian "${2:-}"
-        generate_rpm "${2:-}"
+        generate_debian "${2:-}" "$REVISION"
+        generate_rpm "${2:-}" "$REVISION"
         ;;
     *)
-        echo "Usage: $0 {debian|rpm|notes|all} [version]" >&2
+        echo "Usage: $0 {debian|rpm|notes|all} [version] [revision]" >&2
         exit 1
         ;;
 esac
