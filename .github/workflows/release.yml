@@ -14,6 +14,10 @@ on:
       tag:
         description: 'Tag to release (e.g. v3.0.0). Must already exist.'
         required: true
+      pkgrel:
+        description: 'Arch pkgrel. Bump for a rebuild-only republish of an already-released tag (e.g. a Qt private-ABI break). Leave at 1 for a normal release.'
+        required: false
+        default: '1'
 
 # Default scope is read-only. Only the `release` job and the AUR publish
 # need writes — they opt in via per-job permissions blocks.
@@ -35,8 +39,10 @@ jobs:
     name: Extract Version
     runs-on: ubuntu-latest
     outputs:
+      ref: ${{ steps.version.outputs.ref }}
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      pkgrel: ${{ steps.version.outputs.pkgrel }}
     steps:
       - name: Extract version from tag
         id: version
@@ -46,6 +52,7 @@ jobs:
         # GitHub Actions script-injection hardening pattern.
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_PKGREL: ${{ github.event.inputs.pkgrel }}
         run: |
           set -euo pipefail
           # On push the ref is refs/tags/v<x>; on manual dispatch we
@@ -80,9 +87,22 @@ jobs:
           if [[ "$VERSION" =~ -(alpha|beta|rc)(\.?[0-9]+)?$ ]]; then
               IS_PRE=true
           fi
+          # Arch pkgrel. A tag push always means a fresh version, so it
+          # starts at 1; only a manual dispatch can raise it, and that is
+          # the rebuild-only path — same source, same tag, new package,
+          # e.g. when a Qt patch release breaks the private-API ABI the
+          # layer-shell QPA plugin is compiled against. Digits only, for
+          # the same script-injection reason the tag is gated above.
+          PKGREL="${INPUT_PKGREL:-1}"
+          if [[ ! "$PKGREL" =~ ^[0-9]+$ ]]; then
+              echo "Error: PKGREL '$PKGREL' is not a positive integer" >&2
+              exit 1
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRE" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION (prerelease=$IS_PRE)"
+          echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION (prerelease=$IS_PRE, pkgrel=$PKGREL)"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
@@ -103,6 +123,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -176,6 +198,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -286,6 +310,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         # Reuse the install-with-retry shape from the prerequisites step.
@@ -376,6 +402,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -464,6 +492,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -490,7 +520,7 @@ jobs:
           # CI Build - uses local source
           pkgname=plasmazones
           pkgver=${{ needs.version.outputs.version }}
-          pkgrel=1
+          pkgrel=${{ needs.version.outputs.pkgrel }}
           pkgdesc="Window tiling and autotiling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
@@ -568,6 +598,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install Nix
         # SHA-pinned to match ci.yml; bump together when verifying a new release.
@@ -605,6 +637,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          ref: ${{ needs.version.outputs.ref }}
           fetch-depth: 0
 
       - name: Download all artifacts
@@ -756,6 +789,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Download generic tarball artifact
         uses: actions/download-artifact@v8
@@ -800,6 +835,7 @@ jobs:
       - name: Clone and update AUR repository (plasmazones-bin)
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
           SHA256: ${{ steps.hash.outputs.sha256 }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones-bin.git /tmp/aur-bin
@@ -814,7 +850,7 @@ jobs:
           # rewrite as the source PKGBUILD (below) so future additional
           # `source=` entries don't silently leave a stale second hash.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
           awk -v sum="$SHA256" '
             # Single-line form: sha256sums=(\047hash\047) — replace inline.
             /^sha256sums=\(.*\)$/ {
@@ -857,7 +893,11 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update to $VERSION"
+            if [[ "$PKGREL" == "1" ]]; then
+              git commit -m "Update to $VERSION"
+            else
+              git commit -m "Rebuild $VERSION (pkgrel $PKGREL)"
+            fi
             git push
             echo "✅ Published plasmazones-bin $VERSION to AUR"
           fi
@@ -865,6 +905,7 @@ jobs:
       - name: Clone and update AUR repository (plasmazones - source)
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones.git /tmp/aur-src
           cd /tmp/aur-src
@@ -876,7 +917,7 @@ jobs:
 
           # Update version
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
 
           # Calculate and update source tarball hash. Anchor inside the
           # sha256sums=(...) block via awk so future additional hashes
@@ -937,7 +978,11 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update to $VERSION"
+            if [[ "$PKGREL" == "1" ]]; then
+              git commit -m "Update to $VERSION"
+            else
+              git commit -m "Rebuild $VERSION (pkgrel $PKGREL)"
+            fi
             git push
             echo "✅ Published plasmazones $VERSION to AUR"
           fi
@@ -985,6 +1030,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install osc (OBS command-line client)
         run: |
