@@ -7,7 +7,7 @@ pkgname=plasmazones-bin
 # before publishing. See packaging/arch/update-aur.sh.
 pkgver=0.0.0
 pkgrel=1
-pkgdesc='Window tiling and autotiling for KDE Plasma (binary)'
+pkgdesc='Window snapping, tiling and scrolling for KDE Plasma (binary)'
 arch=('x86_64')
 url='https://github.com/fuddlesworth/PlasmaZones'
 # Dual-licensed: the main daemon + KCM + editor are GPL-3.0-or-later; the

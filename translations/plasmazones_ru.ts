@@ -2,6 +2,229 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ru">
 <context>
+    <name>AboutPageShell</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/AboutPageShell.qml" line="79"/>
+        <source>About %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/AboutPageShell.qml" line="79"/>
+        <source>About</source>
+        <translation type="unfinished">О программе</translation>
+    </message>
+</context>
+<context>
+    <name>DiscardChangesDialog</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="36"/>
+        <source>Discard unsaved changes?</source>
+        <translation type="unfinished">Отменить несохранённые изменения?</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
+        <source>You have unsaved settings. Apply them now, or close without saving?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
+        <source>You have unsaved settings. Closing now will discard them.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="52"/>
+        <source>Apply</source>
+        <translation type="unfinished">Применить</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="67"/>
+        <source>Discard</source>
+        <translation type="unfinished">Отменить</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="81"/>
+        <source>Cancel</source>
+        <translation type="unfinished">Отмена</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="81"/>
+        <source>Keep Editing</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>PageHost</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/PageHost.qml" line="281"/>
+        <source>Select a page from the sidebar</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>PageLoadingIndicator</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/PageLoadingIndicator.qml" line="28"/>
+        <location filename="../libs/phosphor-control/qml/PageLoadingIndicator.qml" line="70"/>
+        <source>Loading…</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>SettingsAppWindow</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="142"/>
+        <source>Settings</source>
+        <translation type="unfinished">Параметры</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="553"/>
+        <source>Back</source>
+        <translation type="unfinished">Назад</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="567"/>
+        <source>Forward</source>
+        <translation type="unfinished">Вперёд</translation>
+    </message>
+</context>
+<context>
+    <name>Sidebar</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/Sidebar.qml" line="563"/>
+        <source>Search...</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>SidebarBackButton</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
+        <source>Back to %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
+        <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="88"/>
+        <source>Back</source>
+        <translation type="unfinished">Назад</translation>
+    </message>
+</context>
+<context>
+    <name>SidebarRow</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
+        <source>%1 section, expanded</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
+        <source>%1 section, collapsed</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>UnsavedChangesFooter</name>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="173"/>
+        <source>Unsaved changes</source>
+        <translation type="unfinished">Несохранённые изменения</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
+        <source>Discarding…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="245"/>
+        <source>Discard</source>
+        <translation type="unfinished">Отменить</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="187"/>
+        <source>Discard changes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="196"/>
+        <source>Saving…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="196"/>
+        <source>Save</source>
+        <translation type="unfinished">Сохранить</translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="200"/>
+        <source>Save settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="240"/>
+        <source>Discard Changes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="241"/>
+        <source>Are you sure you want to discard all unsaved changes?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="254"/>
+        <source>Cancel</source>
+        <translation type="unfinished">Отмена</translation>
+    </message>
+</context>
+<context>
+    <name>main</name>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="42"/>
+        <source>PlasmaZones</source>
+        <translation type="unfinished">PlasmaZones</translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="48"/>
+        <source>Version %1</source>
+        <translation type="unfinished">Версия %1</translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="48"/>
+        <source>Version unknown</source>
+        <translation type="unfinished">Версия неизвестна</translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="58"/>
+        <source>Window snapping, tiling and scrolling for Wayland compositors</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="71"/>
+        <source>Open PlasmaZones Settings</source>
+        <translation type="unfinished">Открыть параметры PlasmaZones</translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="82"/>
+        <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="99"/>
+        <source>GitHub</source>
+        <translation type="unfinished">GitHub</translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="106"/>
+        <source>Report Bug</source>
+        <translation type="unfinished">Сообщить об ошибке</translation>
+    </message>
+    <message>
+        <location filename="../kcm/about/ui/main.qml" line="113"/>
+        <source>Documentation</source>
+        <translation type="unfinished">Документация</translation>
+    </message>
+</context>
+<context>
     <name>plasmazones</name>
     <message>
         <location filename="../src/editor/controller/settings.cpp" line="92"/>
@@ -1222,27 +1445,27 @@
         <translation>Переименовать зону</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="231"/>
-        <source>Window tiling and zone management</source>
-        <translation>Мозаичное размещение окон и управление зонами</translation>
+        <location filename="../src/daemon/main.cpp" line="249"/>
+        <source>Window snapping, tiling and scrolling</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="236"/>
+        <location filename="../src/daemon/main.cpp" line="254"/>
         <source>Replace existing daemon instance</source>
         <translation>Заменить существующий экземпляр службы</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="240"/>
+        <location filename="../src/daemon/main.cpp" line="258"/>
         <source>Enable debug logging for all PlasmaZones categories</source>
         <translation>Включить отладочное журналирование для всех категорий PlasmaZones</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="244"/>
+        <location filename="../src/daemon/main.cpp" line="262"/>
         <source>Write log output to &lt;file&gt; instead of stderr</source>
         <translation>Записывать вывод журнала в &lt;file&gt; вместо stderr</translation>
     </message>
     <message>
-        <location filename="../src/daemon/main.cpp" line="245"/>
+        <location filename="../src/daemon/main.cpp" line="263"/>
         <source>file</source>
         <translation>файл</translation>
     </message>
@@ -9476,12 +9699,12 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="302"/>
-        <source>A scrolling template you picked has been deleted, so that monitor kept its previous template. Pick one again on the Monitors page.</source>
+        <source>A scrolling template you picked has been deleted, so that monitor kept its previous template. Pick one again on the Overview page.</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
-        <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Monitors page.</source>
+        <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
@@ -10254,52 +10477,27 @@
         <translation>Не удалось сохранить выбор активного профиля.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="38"/>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="16"/>
         <source>PlasmaZones</source>
         <translation>PlasmaZones</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="42"/>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="18"/>
         <source>Version %1</source>
         <translation>Версия %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="42"/>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="18"/>
         <source>Version unknown</source>
         <translation>Версия неизвестна</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="54"/>
-        <source>Window tiling and zone management for Wayland compositors</source>
-        <translation>Мозаичное размещение окон и управление зонами для композиторов Wayland</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="63"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="55"/>
         <source>Open PlasmaZones Settings</source>
         <translation>Открыть параметры PlasmaZones</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="74"/>
-        <source>Configure zones, tiling, appearance, shortcuts, and more</source>
-        <translation>Настройка зон, мозаичного размещения, внешнего вида, комбинаций клавиш и других параметров</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="87"/>
-        <source>GitHub</source>
-        <translation>GitHub</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="94"/>
-        <source>Report Bug</source>
-        <translation>Сообщить об ошибке</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="101"/>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="50"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="52"/>
         <source>Documentation</source>
         <translation>Документация</translation>
     </message>
@@ -12801,72 +12999,74 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
-        <source>A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.</source>
-        <translation>Инструмент мозаичного размещения окон и управления зонами для композиторов Wayland. Организуйте рабочий стол с помощью настраиваемых зон, автоматических мозаичных раскладок и размещения окон с клавиатуры.</translation>
+        <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
+        <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="20"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
         <source>PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).</source>
         <translation>PlasmaZones — свободное программное обеспечение, распространяемое по лицензии GNU General Public License версии 3 или более поздней (GPL-3.0-or-later).</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="26"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="28"/>
         <source>Links</source>
         <translation>Ссылки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="32"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="34"/>
         <source>GitHub Repository</source>
         <translation>Репозиторий GitHub</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="38"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="40"/>
         <source>Report a Bug</source>
         <translation>Сообщить об ошибке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="44"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="46"/>
         <source>Discord Community</source>
         <translation>Сообщество в Discord</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="56"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="58"/>
         <source>Releases</source>
         <translation>Выпуски</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="65"/>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="87"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="67"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="90"/>
         <source>What&apos;s New</source>
         <translation>Что нового</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="104"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="111"/>
         <source>Credits</source>
         <translation>Авторы</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="113"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="128"/>
         <source>Created by fuddlesworth</source>
         <translation>Автор: fuddlesworth</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="121"/>
-        <source>Inspired by FancyZones, extended with automatic tiling.</source>
-        <translation>Создано под влиянием FancyZones, расширено автоматическим мозаичным размещением.</translation>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="138"/>
+        <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
+        <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="129"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="148"/>
         <source>Built with Qt, KDE Frameworks, and Kirigami.</source>
         <translation>Создано с использованием Qt, KDE Frameworks и Kirigami.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="168"/>
         <source>Opens %1 in web browser</source>
         <translation>Открывает %1 в веб-браузере</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="167"/>
+        <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="186"/>
         <source>Cannot open this link</source>
         <translation>Не удалось открыть эту ссылку</translation>
     </message>
@@ -13822,8 +14022,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
-        <source>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</source>
-        <translation>Остановка службы PlasmaZones отключает мозаичное размещение и прилипание окон, пока вы не запустите её снова.</translation>
+        <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
+        <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>

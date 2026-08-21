@@ -17,6 +17,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QFutureWatcher>
 #include <QJsonDocument>
@@ -270,6 +271,16 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     }));
 
     return {}; // Ignored — reply sent asynchronously
+}
+
+void ControlAdaptor::quit()
+{
+    qCInfo(lcDbus) << "Shutdown requested over D-Bus (org.plasmazones.Control.quit)";
+    // Return to main(), which owns the teardown order: Daemon::stop() then the
+    // explicit window destroy loop. Doing either from here would run it inside
+    // a D-Bus dispatch, with this adaptor's own parent among the objects torn
+    // down under it.
+    QCoreApplication::quit();
 }
 
 } // namespace PlasmaZones

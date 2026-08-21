@@ -78,7 +78,7 @@ private Q_SLOTS:
 
         // AutotileEngine with all-nullptr dependencies is explicitly
         // supported for headless tests — see the comment at the top of
-        // AutotileEngine::AutotileEngine (src/autotile/AutotileEngine.cpp).
+        // AutotileEngine::AutotileEngine (libs/phosphor-tile-engine/src/AutotileEngine.cpp).
         // The algorithm registry is non-null even in headless mode because
         // the engine resolves an initial algorithm in its constructor;
         // share the test-process registry.

@@ -300,9 +300,9 @@ void SettingsController::save()
                 Q_EMIT layoutOperationFailed(
                     refusedTemplates.size() == 1
                         ? PhosphorI18n::tr("A scrolling template you picked has been deleted, so that monitor kept "
-                                           "its previous template. Pick one again on the Monitors page.")
+                                           "its previous template. Pick one again on the Overview page.")
                         : PhosphorI18n::tr("%n scrolling templates you picked have been deleted, so those monitors "
-                                           "kept their previous templates. Pick them again on the Monitors page.",
+                                           "kept their previous templates. Pick them again on the Overview page.",
                                            nullptr, static_cast<int>(refusedTemplates.size())));
             }
             QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
