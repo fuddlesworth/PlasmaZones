@@ -305,17 +305,20 @@ std::shared_ptr<ShaderNodeLiveness> ShaderEffect::trackedNodeLink() const
 void ShaderEffect::withTrackedNode(const std::function<void(ShaderNodeRhi*)>& fn) const
 {
     // Copy the shared_ptr out under our own lock first, then release it before
-    // taking the block's. Holding both at once would put m_renderNodeMutex on
-    // the inside of a lock the render thread's ~ShaderNodeRhi also takes, for
-    // no benefit — the copied share already keeps the block alive even if the
-    // node dies and something deregisters it while fn runs.
+    // taking the block's, so the two mutexes are never held at the same time.
+    // Holding m_renderNodeMutex across the whole call would block every
+    // registerRenderNode (one per frame, on the render thread) for as long as
+    // fn runs — and fn can be releaseResources(), a full RHI teardown. Dropping
+    // it early costs nothing: the copied share keeps the block alive even if
+    // the node dies and something deregisters it while fn runs.
     const std::shared_ptr<ShaderNodeLiveness> link = trackedNodeLink();
     if (!link) {
         return;
     }
     // The block's mutex is what makes this safe rather than merely likely: a
-    // node destructor that has begun is already past its own retract-under-lock
-    // step or is blocked here, so link->node is live for the whole call.
+    // node destructor that has begun has already run retractLiveness() (every
+    // destructor in the hierarchy does, as its first statement) or is blocked
+    // here, so link->node is live for the whole call.
     const std::lock_guard<std::mutex> livenessLock(link->mutex);
     if (link->node) {
         fn(link->node);

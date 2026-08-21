@@ -1004,7 +1004,8 @@ private:
     std::shared_ptr<ShaderNodeLiveness> m_renderNodeLink;
     /// Serialises reads and writes of m_renderNodeLink. Held only long enough
     /// to copy the shared_ptr out; the node call itself happens under the
-    /// block's own mutex. Taken BEFORE ShaderNodeLiveness::mutex, never after.
+    /// block's own mutex, after this one has been released. The two are never
+    /// held simultaneously — see withTrackedNode() for why.
     mutable std::mutex m_renderNodeMutex;
     /// Take a share of the tracked liveness block. Null when nothing is
     /// registered. Never dereference the node without holding the block's

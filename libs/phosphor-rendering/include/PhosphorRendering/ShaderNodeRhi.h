@@ -372,6 +372,23 @@ protected:
      */
     QRhi* safeRhi() const;
 
+    /**
+     * @brief Retract this node from its liveness block.
+     *
+     * MUST be the first statement of EVERY subclass destructor, not just this
+     * class's. The most-derived destructor body and its member teardown run
+     * before ~ShaderNodeRhi, so a retract that happened only in the base would
+     * leave ShaderEffect::withTrackedNode able to dispatch a virtual call into
+     * a node whose derived half is already destroyed.
+     *
+     * Idempotent (nulling an already-null pointer under the same mutex), so
+     * the base destructor's own call after a subclass has already retracted
+     * costs one uncontended lock and nothing else. Takes
+     * ShaderNodeLiveness::mutex, so it must not be called with m_itemMutex
+     * held. See ShaderNodeLiveness for the full ordering.
+     */
+    void retractLiveness() noexcept;
+
 private:
     bool ensurePipeline();
     bool ensureBufferPipeline();
@@ -457,8 +474,8 @@ private:
 
     /// Published to the tracking ShaderEffect so it can tell a live node from
     /// one the scene graph has already deleted. Seeded with `this` in the
-    /// constructor, nulled under its own mutex as the first act of the
-    /// destructor. See ShaderNodeLiveness.
+    /// constructor, nulled under its own mutex by retractLiveness() as the
+    /// first act of every destructor in the hierarchy. See ShaderNodeLiveness.
     std::shared_ptr<ShaderNodeLiveness> m_liveness = std::make_shared<ShaderNodeLiveness>();
 
     // ── Uniform Extension ──────────────────────────────────────────────

@@ -3,10 +3,14 @@
 
 #include <QGuiApplication>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QTest>
 
 #include <PhosphorRendering/ShaderEffect.h>
+#include <PhosphorRendering/ShaderNodeLiveness.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
+
+#include <memory>
 
 using namespace PhosphorRendering;
 
@@ -76,15 +80,53 @@ private Q_SLOTS:
         auto effect = std::make_unique<TrackingEffect>();
 
         auto* node = new ShaderNodeRhi(effect.get());
+        // Take a share of the liveness block BEFORE the node dies. The block
+        // outlives the node by design, so this stays readable afterwards and
+        // gives the node's half of the contract a direct assertion rather than
+        // only an ASAN-visible one.
+        const std::shared_ptr<ShaderNodeLiveness> link = node->liveness();
+        QCOMPARE(link->node, node);
+
         effect->registerRenderNode(node);
         delete node;
 
-        // The item is now tracking a node the "scene graph" deleted. Its
-        // destructor must notice and skip the sever rather than walking the
-        // freed node. Reaching the end of this test without a crash (or an
-        // ASAN use-after-free) is the assertion.
+        // The node retracted itself as it went, so the item now reads "gone"
+        // instead of holding a raw pointer into freed memory.
+        QVERIFY(link->node == nullptr);
+
+        // And the item's own teardown must skip the sever rather than walking
+        // the freed node — an ASAN use-after-free here is the second failure
+        // mode this case covers.
         effect.reset();
-        QVERIFY(true);
+    }
+
+    /// The other half of the regression, and the only case here that gives the
+    /// item a window. `windowChanged` used to clear the tracked node on every
+    /// window transition, on the theory that the old window's scene graph had
+    /// already taken it for deletion. It had not, and the clear dropped the
+    /// only handle to a live node — permanently disarming the destructor's
+    /// sever. Detach-then-destroy is exactly the shape the core dump showed.
+    /// The windowless cases above all pass with that clear restored, so
+    /// without this one the second root cause has no guard at all.
+    void testTeardown_severesAfterItemLeavesItsWindow()
+    {
+        QQuickWindow window;
+        auto* effect = new TrackingEffect;
+        effect->setParentItem(window.contentItem());
+        QCOMPARE(effect->window(), &window);
+
+        auto node = std::make_unique<ShaderNodeRhi>(effect);
+        effect->registerRenderNode(node.get());
+        QVERIFY(node->hasValidItem());
+
+        // windowChanged(nullptr) fires here. The node is untouched by that —
+        // the scene graph, not the reparent, is what deletes nodes.
+        effect->setParentItem(nullptr);
+        QCOMPARE(effect->window(), nullptr);
+
+        delete effect;
+
+        QVERIFY(!node->hasValidItem());
     }
 
     /// Re-registering the same node every frame is the documented contract for
