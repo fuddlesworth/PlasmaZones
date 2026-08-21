@@ -23,8 +23,6 @@
 #include <QSet>
 #include <QUuid>
 
-#include <array>
-#include <atomic>
 #include <optional>
 #include <string_view>
 
@@ -157,15 +155,21 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
                                       + PhosphorRules::Detail::encodeSegment(eventPath)
                                       + PhosphorRules::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
     rule.enabled = true;
-    // Seed INSIDE the Animation band (100..199) rather than at 1..N. The
+    // Seed INSIDE the Animation band (101..199) rather than at 1..N. The
     // descending offset preserves the source order the legacy array carried,
     // but the bare 1..N these used to get sat below every band, so a user
     // upgrading with animation rules found them reading "Priority 3" under
     // rules that start at 100. Bands mirror RuleTemplates (duplicated as
-    // literals because that header lives in the settings tree). The clamp
-    // keeps a pathological source list from spilling into the Application
-    // band at 200; past 99 entries the tail ties at the base, the same
-    // saturation assignBandPrioritiesToZeroRules has.
+    // literals because that header lives in the settings tree).
+    //
+    // The clamp keeps a pathological source list from spilling into the
+    // Application band at 200. Past 99 entries the LEADING rules tie at 199,
+    // the top of the band — the offset is descending, so it is the head of the
+    // list that saturates, not the tail. (assignBandPrioritiesToZeroRules
+    // saturates the other way, at its band base; these are not the same
+    // mechanism.) Tied rules fall back to list order, which only matters if
+    // two animation rules target the same window and the same slot, and needs
+    // more than 99 legacy entries to reach at all.
     constexpr int kAnimationBandBase = 100;
     constexpr int kBandWidth = 100;
     rule.priority = kAnimationBandBase + qBound(0, count - i, kBandWidth - 1);
@@ -252,10 +256,9 @@ constexpr QLatin1StringView kLayoutAppRuleTargetScreen{"targetScreen"};
 
 /// Drain the v4 animation-rule stash into @p rules. Malformed entries are
 /// silently discarded — the legacy runtime loader did the same. The two-pass
-/// shape (filter, then build) matches the legacy bridge byte-for-byte: the
-/// the descending offset is computed against the POST-filter size, so dropped
-/// entries don't leave gaps in the descending-by-list-order priority
-/// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
+/// shape (filter, then build) is the legacy bridge's: the descending offset is
+/// computed against the POST-filter size, so dropped entries don't leave gaps
+/// in the descending-by-list-order priority sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).
 /// Give every migrated rule the append helpers left at priority 0 (the Exclude,
 /// animation-exclusion, and SnapToZone rules) a sensible band priority, matching what the Settings
@@ -441,8 +444,8 @@ QUuid steamDefaultRuleId()
 /// live session.
 ///
 /// The action is `ExcludePlacement`, not the blanket `Exclude`: a toast has no
-/// business being placed, but stripping its decorations and animations too was
-/// never the point. `Exclude` was the only exclusion action that existed when
+/// business being placed, but stripping its decorations too, and cancelling its
+/// animation overrides, was never the point. `Exclude` was the only exclusion action that existed when
 /// this rule was written; the scoped one landed later.
 ///
 /// Everything else Steam opens — the library window, Friends List, chat, Big

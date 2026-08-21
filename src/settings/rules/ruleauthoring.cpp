@@ -108,9 +108,9 @@ QString fieldDescription(Field f)
         return PhosphorI18n::tr("The application's ID (Wayland app_id / desktop entry), e.g. org.kde.konsole.");
     case Field::WindowClass:
         return PhosphorI18n::tr(
-            "The window's class as the compositor reports it: the WM_CLASS pair "
-            "\"resourceName resourceClass\", e.g. \"konsole konsole\". Use Contains "
-            "or Ends with rather than Equals.");
+            "The window's class as the compositor reports it, which is the WM_CLASS "
+            "pair \"resourceName resourceClass\" — e.g. \"konsole konsole\", not just "
+            "\"konsole\". Use contains or ends with rather than is.");
     case Field::DesktopFile:
         return PhosphorI18n::tr("The application's desktop entry file name.");
     case Field::WindowRole:

@@ -25,7 +25,6 @@
 #include <QLatin1String>
 #include <QLockFile>
 #include <QSet>
-#include <QStandardPaths>
 #include <QUuid>
 
 #include <array>
@@ -153,7 +152,10 @@ bool parseAssignmentGroup(const QString& groupName, const QString& prefix, QStri
             // `desktop` at 0, so "Screen:Desktop:0" and "Screen:Desktop:xyz"
             // both parsed to the same (screenId, 0) pair and produced two
             // rules that collide. A malformed group is not a valid v3 artifact.
-            qWarning("ConfigMigration: assignment group has an unparseable desktop segment — skipping");
+            qWarning(
+                "ConfigMigration: assignment group \"%s\" has an unparseable desktop segment — the whole "
+                "group is skipped",
+                qPrintable(groupName));
             return false;
         }
         desktop = d;
@@ -979,9 +981,8 @@ namespace {
 /// non-versioned repairs to rows this code seeded, so both need the same
 /// scaffold: gate on the conversion having happened, tolerate a missing or
 /// unloadable store as "nothing of ours to fix", and never write unless
-/// something actually changed. Writing it once also means the already-clean
-/// path — overwhelmingly the common one — parses rules.json once per startup
-/// instead of once per fix-up.
+/// something actually changed. Each fix-up still loads the store for itself —
+/// this is a DRY extraction, not a perf one.
 ///
 /// Not serialised against a RUNNING daemon that already holds the rule set in
 /// memory: `ensureJsonConfig` runs once at process startup, so launching the
@@ -1061,7 +1062,8 @@ bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
     // otherwise keep the broken rule forever. Idempotent — once repaired,
     // `isRetiredSteamRuleShape` stops recognising it and the re-run is a
     // no-op.
-    return withRuleSet(jsonPath, "repairSeededSteamRule", [](PhosphorRules::RuleSet& ruleSet) {
+    bool failed = false;
+    const bool ok = withRuleSet(jsonPath, "repairSeededSteamRule", [&failed](PhosphorRules::RuleSet& ruleSet) {
         auto stored = ruleSet.ruleById(steamDefaultRuleId());
         if (!stored.has_value()) {
             // Deleted by the user, or a fresh install that seeded the
@@ -1098,11 +1100,18 @@ bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
         PhosphorRules::Rule repaired = *stored;
         applySteamDefaultRuleShape(repaired);
         if (!ruleSet.updateRule(repaired)) {
+            // Distinct from the no-op returns above: the store REFUSED a rule
+            // we built, which is a real failure and must not be reported as a
+            // clean startup. Practically unreachable (updateRule fails only on
+            // an invalid rule or a missing id, and this one was just fetched
+            // by id), so it is a guard rather than a live path.
             qWarning("ConfigMigration::repairSeededSteamRule: the corrected Steam rule was rejected by the store");
+            failed = true;
             return false;
         }
         return true;
     });
+    return ok && !failed;
 }
 
 } // namespace PlasmaZones

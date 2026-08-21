@@ -105,8 +105,10 @@ QString legacyAssignmentsFilePath()
 /// the corrupt path, restored a file by hand, and hit it again would otherwise
 /// lose the first quarantine to the second — the two failures are usually
 /// different, and the first copy is the one closest to the last good state.
-/// Falls back to the bare path only after 99 suffixes, which means something
-/// is very wrong and one overwrite is the least of it.
+/// Falls back to the bare path after 99 suffixes. That does NOT overwrite:
+/// QFile::rename refuses an existing target, so the caller takes its
+/// failed-to-quarantine branch, leaves the file where it is and aborts — which
+/// is the right outcome for a directory in that state.
 QString uniqueQuarantinePath(const QString& preferred)
 {
     if (!QFile::exists(preferred)) {

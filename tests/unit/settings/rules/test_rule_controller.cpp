@@ -539,19 +539,6 @@ void TestRuleController::operatorMetadata()
 {
     RuleController controller;
 
-    const auto opWires = [&](const QString& fieldWire) {
-        QSet<QString> wires;
-        for (const QVariant& f : controller.matchFields()) {
-            if (f.toMap().value(QStringLiteral("wire")).toString() != fieldWire) {
-                continue;
-            }
-            for (const QVariant& o : controller.operatorsForField(f.toMap().value(QStringLiteral("value")).toInt())) {
-                wires.insert(o.toMap().value(QStringLiteral("wire")).toString());
-            }
-        }
-        return wires;
-    };
-
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
     QVERIFY(!appOps.isEmpty());

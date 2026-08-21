@@ -58,8 +58,15 @@ ColumnLayout {
     /// reaches 32 levels by clicking, but an ungated path into an unloadable
     /// rule is still a path into an unloadable rule.
     readonly property int _maxParseDepth: 32
-    /// Room for one more group below this node.
-    readonly property bool _canAddGroup: matchEditor.depth + 1 <= matchEditor._maxParseDepth
+    /// Room for one more CONDITION below this node. `fromJsonAtDepth` checks
+    /// the cap at the top of the function, before it splits leaf from
+    /// composite, so a leaf is rejected at depth 33 exactly like a group is.
+    readonly property bool _canAddLeafHere: matchEditor.depth + 1 <= matchEditor._maxParseDepth
+    /// Room for one more group below this node AND for a condition inside it.
+    /// Gating on the group alone would allow a group at the cap whose own Add
+    /// condition then pushes a leaf past it — the same unloadable rule, one
+    /// click later.
+    readonly property bool _canAddGroup: matchEditor.depth + 2 <= matchEditor._maxParseDepth
     readonly property bool _isLeaf: matchEditor.node && matchEditor.node.field !== undefined
     readonly property string _compositeKind: {
         if (!matchEditor.node)
@@ -209,7 +216,7 @@ ColumnLayout {
                 text: i18n("Add condition")
                 icon.name: "list-add"
                 flat: true
-                enabled: matchEditor._canAddCondition
+                enabled: matchEditor._canAddCondition && matchEditor._canAddLeafHere
                 Accessible.name: i18n("Add a second condition, grouping it with this one")
                 onClicked: matchEditor._promoteRootToGroup(matchEditor._blankLeaf())
             }
@@ -383,7 +390,7 @@ ColumnLayout {
                             text: i18n("Add condition")
                             icon.name: "list-add"
                             flat: true
-                            enabled: matchEditor._canAddCondition
+                            enabled: matchEditor._canAddCondition && matchEditor._canAddLeafHere
                             Accessible.name: i18n("Add a condition to this group")
                             onClicked: matchEditor._addLeafChild()
                         }

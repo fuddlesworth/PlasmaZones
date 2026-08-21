@@ -606,7 +606,31 @@ ComboBox {
         }
 
         function showMenu() {
-            if (!_built) {
+            if (!_built && !_buildTree()) {
+                // The build failed and cleaned up after itself. Do NOT popup an
+                // empty menu; the next items change or press retries from a
+                // clean slate.
+                root._opening = false;
+                return;
+            }
+            updateChecks();
+            // Cleared here as well as in onAboutToShow, so the open latch does
+            // not depend on the popup actually being shown.
+            root._opening = false;
+            categoryMenu.popup(root, 0, root.height);
+        }
+
+        /// Populate the menu tree. Returns false if anything threw, having
+        /// first torn down whatever was already built.
+        ///
+        /// The teardown is the point. `_built`, `_owned`, `_allItems` and
+        /// `_categorySubmenus` are only consistent with each other at the end
+        /// of a completed build, so a throw part-way through leaves a
+        /// half-populated menu that a retry would append to rather than
+        /// replace. markDirty() puts it back to empty and clears the latch,
+        /// which is what makes a retry safe.
+        function _buildTree() {
+            try {
                 if (root.includeNoneEntry) {
                     _addItem(categoryMenu, {
                         "text": root.noneText,
@@ -684,19 +708,18 @@ ComboBox {
                 for (var u = 0; u < uncategorized.length; u++)
                     _addItem(categoryMenu, _itemProps(uncategorized[u]));
 
-                // Set only now that the build has completed. Setting it up
-                // front meant a throw anywhere in the build left a
-                // half-populated menu flagged as built, and because popup()
-                // below was never reached, onAboutToShow never fired and
-                // `_opening` latched true — which makes the picker refuse to
-                // open again for the rest of its life.
+                // Set only now that the build has completed, so `_built` is
+                // never true over a half-populated tree.
                 _built = true;
+                return true;
+            } catch (e) {
+                console.warn("CategoryMenuButton: menu build failed —", e);
+                // Tear the partial tree down. This also clears `_built` and
+                // `_opening`, so the next press starts from empty instead of
+                // appending to what is already there.
+                markDirty();
+                return false;
             }
-            updateChecks();
-            // Cleared here as well as in onAboutToShow, so the open latch does
-            // not depend on the popup actually being shown.
-            root._opening = false;
-            categoryMenu.popup(root, 0, root.height);
         }
 
         onAboutToShow: root._opening = false

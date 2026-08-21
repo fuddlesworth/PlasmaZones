@@ -227,7 +227,7 @@ QString paramLabel(const QString& type, const QString& key)
     // overriding the per-engine restore-on-login setting, so the off meaning
     // is spelled out the same way the other bool actions do.
     if (type == ActionType::RestorePosition && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Restore position on login (off = don't restore)");
+        return PhosphorI18n::tr("Restore the window's previous position (off = don't restore)");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin && key == ActionParam::Value) {
         return PhosphorI18n::tr("Return the window to its previous zone when it reopens (off = don't restore)");

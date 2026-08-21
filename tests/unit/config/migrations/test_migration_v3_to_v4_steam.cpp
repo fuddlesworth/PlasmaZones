@@ -81,11 +81,7 @@ private Q_SLOTS:
     void testSteamDefaultRule_seeded()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         const QJsonArray rules = rulesFromRules();
         QJsonObject steam;

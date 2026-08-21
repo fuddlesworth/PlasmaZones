@@ -32,10 +32,12 @@
 #include <QString>
 #include <QStringList>
 #include <QTest>
+#include <QUuid>
 
 #include <algorithm>
 
 #include "config/configdefaults.h"
+#include "config/configkeys.h"
 #include "config/configmigration.h"
 #include "helpers/IsolatedConfigGuard.h"
 
@@ -100,6 +102,15 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(desktopRules, 1);
+
+        // Pin the TOTAL too. Without it, a regression that let a malformed
+        // desktop entry fall through to a screen-wide disable rule would be
+        // invisible: such a rule has a non-empty screenId and no
+        // virtualDesktop, so it is indistinguishable from the legitimate
+        // monitor-list rules and both assertions above still hold.
+        // Expected: snapping monitors DP-3 + DP-9, autotile monitors DP-3 +
+        // HDMI-2, snapping desktop DP-1/4, autotile activity DP-1/act-uuid-7.
+        QCOMPARE(disabled.size(), 6);
 
         // And nothing emitted a rule with an empty screen id, which would
         // match every window on every screen.

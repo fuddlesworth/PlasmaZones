@@ -115,7 +115,8 @@ QVariantList ruleTemplates()
     // actions a context assignment needs (the mode plus, where the engine
     // needs one, its layout or algorithm — see scrollingOnMonitor below for
     // the case where it deliberately needs nothing else), or it is one of the
-    // handful of per-app rules people open this dialog specifically to write. Single-action showcase
+    // handful of per-app rules people open this dialog specifically to write.
+    // Single-action showcase
     // tiles were removed rather than kept for discoverability — the action
     // picker's Window submenus now surface those actions directly, and a grid
     // long enough to scroll costs more than the showcase was worth. That
