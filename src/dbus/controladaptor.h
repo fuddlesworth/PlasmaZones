@@ -110,6 +110,23 @@ public Q_SLOTS:
      */
     QString generateSupportReport(int sinceMinutes, const QDBusMessage& message);
 
+    /**
+     * @brief Ask the daemon to shut down cleanly
+     *
+     * The exit path is the ordinary one: this quits the event loop, so main()
+     * resumes after exec() and runs Daemon::stop() plus the window teardown on
+     * the main thread. Nothing is torn down from inside the D-Bus dispatch.
+     *
+     * This is what `plasmazonesd --replace` calls on the incumbent instance
+     * before claiming the bus name. It is deliberately on the Control facade
+     * rather than the Daemon object itself: Control is the documented
+     * third-party entry point, and a shutdown verb needs no daemon internals.
+     *
+     * Safe to call when a shutdown is already in flight — QCoreApplication::quit()
+     * on an already-quitting loop is a no-op.
+     */
+    void quit();
+
 private:
     WindowTrackingAdaptor* m_wta;
     SnapAdaptor* m_snapAdaptor;
