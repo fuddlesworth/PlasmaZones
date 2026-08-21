@@ -525,13 +525,16 @@ void TestRuleController::authoringMetadata()
     // Every action carries a picker category; collect the order per wire so the
     // grouping can be spot-checked. Context-domain categories come first
     // (Gaps=0, Engine=1, Snapping=2, Tiling/Algorithm and Tiling/Behavior both
-    // =3, Scrolling=4, Overlay=5), then the window-domain categories
-    // (Animation=6, Appearance=7, Window=8, with Window/Scrolling sharing
-    // Window's 8 — the per-app scrolling Open* actions live in that submenu so
-    // the picker's context/window divider stays honest). An unregistered or
-    // uncategorized action falls to Other=99. The old flat "Layout & engine"
-    // category was split into Engine / Snapping / Tiling / Scrolling.
+    // =3, Scrolling=4, Overlay=5), then the ONE window-domain bucket, whose
+    // numbers order its submenus: Window/Placement=6, Window/Scrolling=7,
+    // Window/Appearance=8, Window/Animation=9, Window/Behavior=10,
+    // Window/Tab indicator=11, Window/Drop indicator=12. CategoryMenuButton
+    // takes a bucket's position from the SMALLEST order in it, so 6 is what
+    // puts Window last. An unregistered or uncategorized action falls to
+    // Other=99. The old flat "Layout & engine" category was split into
+    // Engine / Snapping / Tiling / Scrolling.
     QHash<QString, int> actionCategoryOrder;
+    QHash<QString, QString> actionCategoryLabel;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();
         if (a.value(QStringLiteral("value")).toString() == QLatin1String("float"))
@@ -554,7 +557,21 @@ void TestRuleController::authoringMetadata()
         // covering every registered type — an action added without a
         // description entry fails here by name).
         QVERIFY2(!a.value(QStringLiteral("description")).toString().isEmpty(), qPrintable(wire));
+        // The structural invariant behind the picker's context/window divider:
+        // a top-level bucket takes its side from ONE of its items, so a bucket
+        // may never hold both domains. Every window-domain action therefore
+        // lives in a `Window/<sub>` submenu and no context-domain action may,
+        // which collapses the whole window half into a single bucket the
+        // divider can describe honestly. This also pins the shape: bare
+        // "Window" would be a direct item sitting above the submenus, the
+        // mixed flat-list-plus-submenus layout this organisation replaced.
+        const QString category = a.value(QStringLiteral("category")).toString();
+        const bool windowDomain = a.value(QStringLiteral("domain")).toString() == QLatin1String("window");
+        const QString whereFailed = wire + QLatin1String(" -> ") + category;
+        QVERIFY2(category != QLatin1String("Window"), qPrintable(whereFailed));
+        QVERIFY2(windowDomain == category.startsWith(QLatin1String("Window/")), qPrintable(whereFailed));
         actionCategoryOrder.insert(wire, a.value(QStringLiteral("categoryOrder")).toInt());
+        actionCategoryLabel.insert(wire, category);
     }
     QVERIFY(sawFloat);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap"), -1), 0); // Gaps (context)
@@ -563,20 +580,41 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm"), -1), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam"), -1), 3); // Tiling (context)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn"), -1), 4); // Scrolling (context)
-    // Window/Scrolling shares Window's order 8: the picker buckets by
-    // top-level segment and orders by the minimum categoryOrder, so a
-    // sub-category never carries its own distinct number.
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 8); // Window/Scrolling (window)
+    // Each Window submenu carries its own number, which is what orders the
+    // submenus inside the bucket. Pin the label too: the order alone cannot
+    // tell Window/Scrolling apart from a stray top-level bucket that happens
+    // to sort at 7.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 7);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("openTabbed")), QStringLiteral("Window/Scrolling"));
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader"), -1), 5); // Overlay (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 6); // Animation (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 7); // Appearance (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude"), -1), 8); // Window (window)
-    // The scoped exclusion siblings: placement rides Window with the blanket
-    // Exclude; decorations rides Appearance with the border family. A
-    // descriptor category typo on either would land it in the wrong picker
-    // bucket (or Other=99) with no other test noticing.
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludePlacement"), -1), 8); // Window (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeDecorations"), -1), 7); // Appearance (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 9);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("excludeAnimations")), QStringLiteral("Window/Animation"));
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 8);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setOpacity")), QStringLiteral("Window/Appearance"));
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude"), -1), 6);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("exclude")), QStringLiteral("Window/Placement"));
+    // The scoped exclusion siblings: placement rides Window/Placement with the
+    // blanket Exclude; decorations rides Window/Appearance with the border
+    // family. A descriptor category typo on either would land it in the wrong
+    // picker bucket (or Other=99) with no other test noticing.
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("excludePlacement")), QStringLiteral("Window/Placement"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("excludeDecorations")), QStringLiteral("Window/Appearance"));
+    // The two behaviour overrides are the reason Window/Behavior exists: the
+    // stacking layer and the pointer scroll multiplier are neither placement
+    // nor looks, and the scroll multiplier in particular must NOT drift into
+    // Window/Scrolling, which is the scrolling engine's per-window arm.
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setWindowLayer")), QStringLiteral("Window/Behavior"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("scrollFactor")), QStringLiteral("Window/Behavior"));
+    // The per-window indicator colours: window-domain, so they sit in the
+    // Window bucket, one hop from the context-domain half of each family under
+    // Scrolling. Keeping a family whole would put window actions above the
+    // divider — see actionCategory()'s tabIndicator branch.
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("tabColorActive")), QStringLiteral("Window/Tab indicator"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setTabIndicatorActiveColor")),
+             QStringLiteral("Scrolling/Tab indicator"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("dropIndicatorColor")), QStringLiteral("Window/Drop indicator"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setDropIndicatorColor")),
+             QStringLiteral("Scrolling/Drop indicator"));
     // The per-context scrolling behaviour toggles and enums ride the Scrolling bucket
     // with the sizing knobs they sit beside. Every one of them shares the
     // `layoutEngine` descriptor category with the engine controls, so the
@@ -592,16 +630,16 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouse"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStickyWindowHandling"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStripAxis"), -1), 4);
-    // The per-window Open* actions are window-domain and share plain Window's
-    // order 8 through the Window/Scrolling submenu, the same way openTabbed
-    // above does. A miss here puts them above the picker's context/window
-    // divider.
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openMaximized"), -1), 8);
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFocused"), -1), 8);
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFullscreen"), -1), 8);
-    // The unfloat fallback is a windowManagement action, riding Window with
-    // the blanket Exclude.
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setUnfloatFallbackToZone"), -1), 8);
+    // The per-window Open* actions are window-domain and ride the
+    // Window/Scrolling submenu, the same way openTabbed above does. A miss
+    // here drops them into the context-domain Scrolling bucket, above the
+    // picker's divider.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openMaximized"), -1), 7);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFocused"), -1), 7);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFullscreen"), -1), 7);
+    // The unfloat fallback is a windowManagement action, riding
+    // Window/Placement with the blanket Exclude.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setUnfloatFallbackToZone"), -1), 6);
 
     // The strip-axis option labels — the exact summary strings the editor
     // combo and the rule row render, matching the Strip direction card's own

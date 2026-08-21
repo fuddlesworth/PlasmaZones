@@ -29,7 +29,15 @@ import org.kde.kirigami as Kirigami
  * The `category` field is split on `/` to build a two-level tree
  * (`"Audio/Reactive"` → `Audio` submenu containing a `Reactive` submenu).
  * Items without a category land in a flat tail below the category
- * submenus.
+ * submenus. Two levels is the limit: a second `/` is part of the
+ * sub-category name, not a third level.
+ *
+ * Both levels order by the smallest `categoryOrder` any item in them
+ * carries, then alphabetically on a tie. A host that wants a curated
+ * sub-category order therefore gives each sub-category its own number
+ * (the rule editor's action picker does this for the Window submenus);
+ * one that gives a whole bucket a single number keeps that bucket's
+ * sub-categories alphabetical.
  *
  * ## "None" entry
  *
@@ -51,7 +59,8 @@ import org.kde.kirigami as Kirigami
  *     categoryGroup?, dimmed?, dimReason? }` maps. A `dimmed` item renders
  *     greyed with a warning icon + `dimReason` tooltip (still selectable —
  *     the host surfaces the consequence). `categoryOrder` (int) sorts
- *     top-level categories; uncategorised items sort by name.
+ *     both top-level categories and sub-categories, each by the smallest
+ *     order any of its items carries; uncategorised items sort by name.
  *     `categoryGroup` (string) is used for group separators between
  *     top-level categories.
  *
@@ -195,9 +204,20 @@ ComboBox {
                 tree[top].direct.push(s);
             } else {
                 if (!tree[top].subcats[sub])
-                    tree[top].subcats[sub] = [];
+                    tree[top].subcats[sub] = {
+                        "items": [],
+                        "order": Infinity
+                    };
 
-                tree[top].subcats[sub].push(s);
+                // Sub-categories order by their own smallest categoryOrder,
+                // the same rule the top level uses. A host that gives every
+                // item in a bucket the same order (the shader choosers, and
+                // Tiling's Algorithm/Behavior pair) ties here and falls back
+                // to alphabetical, so this only reorders hosts that ask it to.
+                if (ord < tree[top].subcats[sub].order)
+                    tree[top].subcats[sub].order = ord;
+
+                tree[top].subcats[sub].items.push(s);
             }
         }
         var keys = Object.keys(tree);
@@ -214,13 +234,16 @@ ComboBox {
             var node = tree[keys[k]];
             var subKeys = Object.keys(node.subcats);
             subKeys.sort(function (a, b) {
+                var oa = node.subcats[a].order, ob = node.subcats[b].order;
+                if (oa !== ob)
+                    return oa - ob;
                 return a.localeCompare(b);
             });
             var subcategories = [];
             for (var si = 0; si < subKeys.length; si++) {
                 subcategories.push({
                     "name": subKeys[si],
-                    "items": node.subcats[subKeys[si]]
+                    "items": node.subcats[subKeys[si]].items
                 });
             }
             categories.push({
