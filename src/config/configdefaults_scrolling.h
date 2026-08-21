@@ -370,9 +370,23 @@ public:
     /// Gap between the indicator and the window, in logical pixels. NEGATIVE
     /// IS MEANINGFUL and matches niri: it pulls the indicator on top of the
     /// window instead of away from it, so the floor is negative rather than 0.
+    ///
+    /// Placed OUTSIDE the column (the shipped PlaceWithinColumn is off), the
+    /// indicator's far edge lands `gap + thickness` beyond the column edge, so
+    /// the two together have to fit the gutter between columns or the bar ends
+    /// up flush against — or over — the neighbouring window. niri's own 5 is
+    /// sized for niri's 16 px gaps; ours are Defaults::InnerGap, so the figure
+    /// is DERIVED rather than copied: half of whatever the gutter has left
+    /// after the bar's thickness, which centres the bar in it and leaves the
+    /// same air on both sides. Clamped at 0 so a gutter narrower than the bar
+    /// still yields a placement gap rather than pulling the bar onto its own
+    /// window. The chips style is far thicker than any gutter and is expected
+    /// to be paired with PlaceWithinColumn or a Top/Bottom position, so it is
+    /// not what this figure is sized for.
     static constexpr int scrollingTabIndicatorGap()
     {
-        return 5;
+        const int spare = Defaults::InnerGap - scrollingTabIndicatorWidthForBar();
+        return spare > 0 ? spare / 2 : 0;
     }
     static constexpr int scrollingTabIndicatorGapMin()
     {
