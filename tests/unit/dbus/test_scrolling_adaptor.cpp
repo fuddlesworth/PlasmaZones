@@ -57,8 +57,10 @@
  *     one carries none at all — the only thing on the wire distinguishing a
  *     stack of tabs from the single window the walk emits for it.
  * 17. stripChanged relays the engine's placement changes as a wake-up for
- *     anyone rendering the strip, gated on the screens the engine owns, and
- *     dies with clearEngine like the screen-set relay.
+ *     anyone rendering the strip, naming the screen that changed and gated on
+ *     the screens the engine owns. Nothing reaches the bus after clearEngine
+ *     either, though that one is the relay's own null guard rather than the
+ *     disconnect — see the note in testClearedEngine_stopsRelayingSignals.
  */
 
 #include <QTest>
@@ -755,10 +757,12 @@ private Q_SLOTS:
     void testClearedEngine_stopsRelayingSignals()
     {
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
-        // The strip wake-up rides the same sweep, and it is the more urgent of
-        // the two: its relay lambda dereferences the engine pointer clearEngine
-        // just nulled, so a surviving connection is a crash on the shutdown
-        // path rather than a stale emission.
+        // The strip wake-up rides the same sweep, but be clear about what this
+        // spy can and cannot show: its relay lambda tests `!m_engine` before
+        // touching the engine, so a surviving connection would be inert and
+        // this assertion holds with the disconnect deleted. The screen-set spy
+        // above is the discriminating one — that lambda has no such guard, and
+        // clearEngine also clears the last-broadcast set it compares against.
         QSignalSpy stripSpy(m_adaptor, &ScrollingAdaptor::stripChanged);
         m_adaptor->clearEngine();
 
@@ -775,12 +779,22 @@ private Q_SLOTS:
     // are the whole contract.
     void testStripChanged_wakesForOwnedScreensOnly()
     {
+        // TWO owned screens, so the id the relay forwards is load-bearing.
+        // With only one, an implementation that ignored its argument and
+        // named the sole owned screen would pass every assertion below.
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripChanged);
 
         // Opening a window is a placement change on an owned screen.
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         QVERIFY(spy.count() >= 1);
         QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-1"));
+
+        // The other owned screen names itself, not the first one.
+        spy.clear();
+        m_engine->windowOpened(QStringLiteral("app|d"), QStringLiteral("DP-2"), 0, 0);
+        QVERIFY(spy.count() >= 1);
+        QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
 
         // A tab switch is the case the poll could not see quickly: it moves
         // which tile the strip shows without moving a single rect.
@@ -800,19 +814,47 @@ private Q_SLOTS:
         // ScrollStrip::focusWindow, so this arm covers both; what neither
         // route emits is a wake-up for a focus that moves nothing, which is
         // the emit-on-change rule and not a gap.
+        // The premise, enforced rather than asserted in prose: this really is
+        // a change no rect-watching poll could have seen. Captured either side
+        // of the verb — if a future relayout DID move a rect here, the case
+        // would quietly stop covering what it was written for.
+        const QVector<QRect> rectsBefore = m_engine->visibleTileRects(QStringLiteral("DP-1"));
         m_engine->focusWindowTop(QStringLiteral("DP-1"));
         QCOMPARE(m_engine->visibleTiles(QStringLiteral("DP-1")).first().activeTabIndex, 0);
+        QCOMPARE(m_engine->visibleTileRects(QStringLiteral("DP-1")), rectsBefore);
         QVERIFY2(spy.count() >= 1, "a tab switch must wake the preview: no rect moves, so nothing else would");
+    }
 
-        // A screen the engine does not own wakes nobody — visibleStripJson
-        // answers "[]" for it, so the wake-up could only ever say "nothing".
-        spy.clear();
+    // The ownership gate on the relay, on its own. A released screen answers
+    // "[]" from visibleStripJson, so a wake-up naming it could only ever say
+    // "nothing". Whether any production path emits a placement change for a
+    // released screen is NOT established here — this drives the signal itself
+    // — so read this as "if one ever does, the gate is what stops it".
+    void testStripChanged_staysSilentForAReleasedScreen()
+    {
         m_engine->setActiveScreens({QStringLiteral("DP-2")});
-        spy.clear();
-        m_engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("DP-1"), 0, 0);
-        for (const QList<QVariant>& emission : spy) {
-            QVERIFY2(emission.at(0).toString() != QLatin1String("DP-1"), "woke for a screen the engine has released");
-        }
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripChanged);
+
+        // Driven at the engine's own signal rather than through a verb: every
+        // verb refuses a screen outside the scrolling set before it reaches an
+        // emit, so a verb-driven leg proves only that the ENGINE declined —
+        // it never reaches the adaptor's gate at all, and passes just as well
+        // with that gate deleted.
+        Q_EMIT m_engine->placementChanged(QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 0);
+
+        // Positive control: the same emit for an OWNED screen does surface,
+        // so the silence above is the gate and not a dead signal path.
+        Q_EMIT m_engine->placementChanged(QStringLiteral("DP-2"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
+
+        // An empty screen id surfaces nothing either. Documents the outcome
+        // rather than isolating the relay's `isEmpty()` conjunct: the active
+        // screen set never holds an empty string, so the ownership lookup
+        // already answers false and deleting that conjunct keeps this green.
+        Q_EMIT m_engine->placementChanged(QString());
+        QCOMPARE(spy.count(), 1);
     }
 
     // The scrollingScreens property's DocString promises that changes are
@@ -846,6 +888,11 @@ private Q_SLOTS:
         // A relayed PropertiesChanged would arrive over the bus, which is
         // asynchronous — give it a window rather than concluding from the
         // same turn that emitted the signal above.
+        //
+        // Known limitation of asserting an ABSENCE on a wall clock: a loaded
+        // machine that merely delayed the relay past this window passes too.
+        // There is no positive control available (the whole claim is that
+        // nothing is emitted on this path), so the window is the guarantee.
         QTest::qWait(200);
 
         QCOMPARE(m_propertiesChangedCount, 0);

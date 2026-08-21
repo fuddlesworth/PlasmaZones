@@ -22,6 +22,8 @@
 #include <QVariantMap>
 #include <QVector>
 
+#include <algorithm>
+
 namespace PlasmaZones::StripZones {
 
 using VisibleTile = PhosphorScrollEngine::ScrollEngine::VisibleTile;
@@ -136,7 +138,13 @@ inline QVariantList zoneMapsForTiles(const QString& screenId, const QVector<Visi
         // zero gate, so the two paths reach ZonePreview identically shaped.
         if (tile.tabCount > 0) {
             zoneMap[PhosphorProtocol::Service::StripPreviewKey::TabCount] = tile.tabCount;
-            zoneMap[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = tile.activeTabIndex;
+            // Clamped into the pill row like the wire twin's read. The engine
+            // types activeTabIndex as -1 for a column with no indicator, which
+            // a tabCount above zero already rules out — so this cannot bite
+            // today, and it is here so the two producers stay the same shape
+            // rather than one of them relying on a caller's invariant.
+            zoneMap[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] =
+                std::clamp(tile.activeTabIndex, 0, tile.tabCount - 1);
             zoneMap[PhosphorProtocol::Service::StripPreviewKey::TabPosition] =
                 static_cast<int>(tile.tabIndicatorPosition);
             zoneMap[PhosphorProtocol::Service::StripPreviewKey::TabLength] = tile.tabLengthProportion;

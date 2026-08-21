@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
@@ -82,6 +83,13 @@ ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, Q
     // Monitors thumbnail today). Relayed straight through: placementChanged
     // IS the engine's change gate, and the reasons this adaptor does not add
     // a second, payload-level one are on the signal's declaration.
+    //
+    // Undamped, unlike the sibling relay of this same signal onto
+    // Tiling.tilingChanged (init_engines.cpp), which skips the edge
+    // auto-scroll's ~60 Hz tick. Deliberate rather than an oversight: that
+    // one had no in-tree subscriber to damp it, while this signal's only
+    // reader coalesces every wake-up onto a settle timer and re-reads once.
+    // The cost here is a payload-free bus message per tick, not a relayout.
     connect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString& screenId) {
         // A placement change for a screen this engine no longer owns
         // describes a strip no reader can fetch: visibleStripJson
@@ -305,6 +313,11 @@ QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
         if (entry.tile.tabCount > 0) {
             obj[PhosphorProtocol::Service::StripPreviewKey::TabCount] = entry.tile.tabCount;
             obj[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = entry.tile.activeTabIndex;
+            // The numeric wire values are TabIndicatorPosition's explicit
+            // enumerators (ScrollTypes.h). Kept in sync BY HAND with the two
+            // places that spell them out for a reader: this interface's XML
+            // and the StripPreviewKey doc. Renumbering the enum silently
+            // rotates every preview's indicator to the wrong edge.
             obj[PhosphorProtocol::Service::StripPreviewKey::TabPosition] =
                 static_cast<int>(entry.tile.tabIndicatorPosition);
             obj[PhosphorProtocol::Service::StripPreviewKey::TabLength] = entry.tile.tabLengthProportion;
@@ -356,8 +369,11 @@ void ScrollingAdaptor::clearEngine()
         disconnect(m_engine, &PhosphorScrollEngine::ScrollEngine::scrollingScreensChanged, this, nullptr);
         // The strip wake-up relay dies with it, for the same reason: a
         // detached adaptor must not keep putting a dead engine's screen ids
-        // on the bus. Its lambda also dereferences m_engine, which the null
-        // below would make a crash rather than a stale emit.
+        // on the bus. Defence in depth rather than the load-bearing half —
+        // the relay's own `!m_engine` conjunct already makes a surviving
+        // connection inert rather than fatal, so no test can tell this
+        // disconnect from its absence. The sibling above is the one a spy
+        // discriminates, because its lambda has no such guard.
         disconnect(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, nullptr);
         m_engine = nullptr;
     }

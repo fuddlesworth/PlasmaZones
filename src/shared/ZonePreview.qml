@@ -20,7 +20,9 @@ Item {
     Kirigami.Theme.colorSet: Kirigami.Theme.View
     Kirigami.Theme.inherit: false
 
-    /// Array of zone objects with relativeGeometry: { x, y, width, height }
+    /// Array of zone objects with relativeGeometry: { x, y, width, height }.
+    /// Must be a JS array or a QVariantList, not an arbitrary model: the tab
+    /// band filters it, so a type without `filter` breaks that binding.
     required property var zones
     /// Whether this preview is in "active/selected" state (affects coloring)
     property bool isActive: false
@@ -81,14 +83,37 @@ Item {
     property bool showMasterDot: false
     /// Number of master zones to mark with indicator dots
     property int masterCount: 1
-    /// Whether a zone carrying scrolling tab data draws its column's tab
-    /// indicator. Inert for every host that renders a LAYOUT: layout zones
-    /// carry no tab keys, so the model below comes out empty for them. The
-    /// two hosts that do feed tab data are the strip previews — the Monitors
-    /// page thumbnail (over visibleStripJson) and the daemon's OSD strip card
-    /// (in-process, same keys) — and a tabbed column is indistinguishable from
-    /// a plain one without it, since the strip walk lists only the shown tab.
-    property bool showTabIndicators: true
+
+    /// Where a zone's tile lands, in one place. Three overlays need it — the
+    /// zone rect itself, the master dots and the scrolling tab bands — and
+    /// each one drifting off its own copy is how an overlay ends up labelling
+    /// a tile it no longer sits on.
+    ///
+    /// Zones may come from LayoutPreview (flat x/y/w/h) or the legacy
+    /// zonesToVariantList shape (nested relativeGeometry); flat wins, nested
+    /// is the fallback. Relative coordinates are clamped to [0, 1] because a
+    /// fixed-geometry layout whose reference screen differs from the current
+    /// one can exceed 1.0. Overlapping layouts skip the edge gaps and padding
+    /// so the algorithm's raw geometry renders as-is.
+    component TileGeometry: QtObject {
+        required property var zone
+
+        // Detect screen boundaries (tolerance 0.01)
+        readonly property real edgeTolerance: 0.01
+        readonly property var relGeo: zone.relativeGeometry || ({})
+        readonly property real relX: Math.max(0, Math.min((zone.x !== undefined ? zone.x : (relGeo.x || 0)), 1))
+        readonly property real relY: Math.max(0, Math.min((zone.y !== undefined ? zone.y : (relGeo.y || 0)), 1))
+        readonly property real relWidth: Math.max(0, Math.min((zone.width !== undefined ? zone.width : (relGeo.width || 0.25)), 1 - relX))
+        readonly property real relHeight: Math.max(0, Math.min((zone.height !== undefined ? zone.height : (relGeo.height || 1)), 1 - relY))
+        readonly property real leftGap: root.producesOverlappingZones ? 0 : (relX < edgeTolerance ? root.edgeGap : root.zonePadding / 2)
+        readonly property real topGap: root.producesOverlappingZones ? 0 : (relY < edgeTolerance ? root.edgeGap : root.zonePadding / 2)
+        readonly property real rightGap: root.producesOverlappingZones ? 0 : ((relX + relWidth) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2)
+        readonly property real bottomGap: root.producesOverlappingZones ? 0 : ((relY + relHeight) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2)
+        readonly property real tileX: relX * root.width + leftGap
+        readonly property real tileY: relY * root.height + topGap
+        readonly property real tileWidth: Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+        readonly property real tileHeight: Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+    }
 
     Repeater {
         model: root.zones || []
@@ -104,16 +129,12 @@ Item {
 
             required property var modelData
             required property int index
-            // Parse relative geometry — clamp to [0, 1] to handle fixed-geometry
-            // layouts whose reference screen differs from current (zones can exceed 1.0).
-            // Zones may come from LayoutPreview (flat x/y/w/h) or the legacy
-            // zonesToVariantList shape (nested relativeGeometry); prefer flat,
-            // fall back to nested.
-            property var relGeo: modelData.relativeGeometry || ({})
-            property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
-            property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
-            property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
-            property real relHeight: Math.max(0, Math.min((modelData.height !== undefined ? modelData.height : (relGeo.height || 1)), 1 - relY))
+
+            TileGeometry {
+                id: geometry
+
+                zone: zoneRect.modelData
+            }
             // Check if this zone is selected (by index or by zone ID)
             property bool isZoneSelected: {
                 // Option 1: Highlight by index (layout selector mode)
@@ -138,19 +159,10 @@ Item {
             /// states only apply when no specific zone is singled out — see
             /// `root.hasZoneSelection`.
             readonly property bool isZoneHighlighted: isZoneSelected || (!root.hasZoneSelection && (root.isActive || root.isHovered))
-            // Detect screen boundaries (tolerance 0.01)
-            readonly property real edgeTolerance: 0.01
-            readonly property real leftGap: relX < edgeTolerance ? root.edgeGap : root.zonePadding / 2
-            readonly property real topGap: relY < edgeTolerance ? root.edgeGap : root.zonePadding / 2
-            readonly property real rightGap: (relX + relWidth) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
-            readonly property real bottomGap: (relY + relHeight) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
-
-            // Position and size — overlapping layouts skip edge gaps/padding so the
-            // algorithm's raw geometry is rendered as-is.
-            x: root.producesOverlappingZones ? (relX * root.width) : (relX * root.width + leftGap)
-            y: root.producesOverlappingZones ? (relY * root.height) : (relY * root.height + topGap)
-            width: root.producesOverlappingZones ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
-            height: root.producesOverlappingZones ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+            x: geometry.tileX
+            y: geometry.tileY
+            width: geometry.tileWidth
+            height: geometry.tileHeight
             // Zone fill color - use highlight color when selected/hovered, inactive color otherwise.
             // The configured fill opacity is baked into the FILL colour's alpha
             // (discarding the colour's own carried alpha so the two don't
@@ -263,21 +275,23 @@ Item {
         model: root.showMasterDot ? (root.zones || []) : []
 
         Rectangle {
+            id: masterDot
+
             required property var modelData
             required property int index
-            // Mirror the zone rect's geometry handling above: [0,1]-clamped
-            // relative coordinates, and gap offsets skipped for overlapping
-            // layouts so the dot tracks the zone's actual rendered origin.
-            readonly property var relGeo: modelData.relativeGeometry || ({})
-            readonly property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
-            readonly property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
-            readonly property real leftOffset: root.producesOverlappingZones ? 0 : (relX < 0.01 ? root.edgeGap : root.zonePadding / 2)
-            readonly property real topOffset: root.producesOverlappingZones ? 0 : (relY < 0.01 ? root.edgeGap : root.zonePadding / 2)
+
+            TileGeometry {
+                id: dotGeometry
+
+                zone: masterDot.modelData
+            }
 
             visible: index < root.masterCount
             Accessible.ignored: true
-            x: relX * root.width + leftOffset + Kirigami.Units.smallSpacing
-            y: relY * root.height + topOffset + Kirigami.Units.smallSpacing
+            // Inset from the tile's own origin so the dot sits inside the zone
+            // it marks rather than on its corner.
+            x: dotGeometry.tileX + Kirigami.Units.smallSpacing
+            y: dotGeometry.tileY + Kirigami.Units.smallSpacing
             width: Kirigami.Units.smallSpacing * 2
             height: Kirigami.Units.smallSpacing * 2
             radius: Kirigami.Units.smallSpacing
@@ -301,9 +315,19 @@ Item {
     //     says. Outside the column it would land on the neighbouring tile at
     //     this scale and read as that tile's indicator.
     // Position and length ARE the resolved ones, so which edge it runs along
-    // and how far it reaches match the screen.
+    // and how far it reaches match the screen, with one caveat: the proportion
+    // is measured against the column's TRUE extent (engine_query.cpp), while
+    // the rect it ships beside is clipped to the work area. On a column clipped
+    // along the indicator's own long axis the band therefore reads shorter than
+    // the bar on screen. That is inherited from the compositor's own accepted
+    // limit (engine_apply.cpp, "KNOWN LIMIT"), which keeps the bar on the true
+    // extent and explicitly rejected re-deriving it from the clamped one.
+    //
+    // Carrying tab data is the whole gate: a layout zone has no tab keys, so
+    // the filter below leaves layout hosts with no band items at all rather
+    // than one inert item per zone.
     Repeater {
-        model: root.showTabIndicators ? (root.zones || []) : []
+        model: (root.zones || []).filter(zone => (zone.tabCount || 0) > 0)
 
         Item {
             id: tabBand
@@ -314,56 +338,83 @@ Item {
             objectName: "zonePreviewTabIndicator"
 
             required property var modelData
+            // PhosphorScrollEngine::TabIndicatorPosition, named rather than
+            // spelled as bare numbers so a renumbering on the C++ side is
+            // greppable here instead of silently rotating the band.
+            readonly property int positionLeft: 0
+            readonly property int positionRight: 1
+            readonly property int positionTop: 2
             // Absent key, 0, or a malformed value all mean "this column draws
             // no indicator" — the single gate, matching the null indicator
-            // rect that gates the compositor's own tab payload.
+            // rect that gates the compositor's own tab payload. The model
+            // above filters on it, so a band only exists where it is positive.
             readonly property int tabCount: modelData.tabCount || 0
-            readonly property int activeTab: modelData.activeTab || 0
-            // 0 Left, 1 Right, 2 Top, 3 Bottom (TabIndicatorPosition).
+            // Clamped, not defaulted: an index outside the pill row would
+            // leave the band with nothing lit, which reads as "no tab is
+            // current" on a column that always has one.
+            readonly property int activeTab: Math.max(0, Math.min(modelData.activeTab || 0, tabCount - 1))
             readonly property int tabPosition: modelData.tabPosition || 0
-            readonly property bool vertical: tabPosition === 0 || tabPosition === 1
+            readonly property bool vertical: tabPosition === positionLeft || tabPosition === positionRight
             readonly property real lengthProportion: Math.max(0, Math.min(modelData.tabLength !== undefined ? modelData.tabLength : 1, 1))
 
-            // Mirror of the zone delegate's geometry, the same way the master
-            // dots mirror it: the band has to track the tile as DRAWN, gaps
-            // and minimum size included, or it drifts off the tile it labels.
-            readonly property var relGeo: modelData.relativeGeometry || ({})
-            readonly property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
-            readonly property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
-            readonly property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
-            readonly property real relHeight: Math.max(0, Math.min((modelData.height !== undefined ? modelData.height : (relGeo.height || 1)), 1 - relY))
-            readonly property real leftGap: root.producesOverlappingZones ? 0 : (relX < 0.01 ? root.edgeGap : root.zonePadding / 2)
-            readonly property real topGap: root.producesOverlappingZones ? 0 : (relY < 0.01 ? root.edgeGap : root.zonePadding / 2)
-            readonly property real rightGap: root.producesOverlappingZones ? 0 : ((relX + relWidth) > 0.99 ? root.edgeGap : root.zonePadding / 2)
-            readonly property real bottomGap: root.producesOverlappingZones ? 0 : ((relY + relHeight) > 0.99 ? root.edgeGap : root.zonePadding / 2)
-            readonly property real tileX: relX * root.width + leftGap
-            readonly property real tileY: relY * root.height + topGap
-            readonly property real tileWidth: Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
-            readonly property real tileHeight: Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+            // The band has to track the tile as DRAWN, gaps and minimum size
+            // included, or it drifts off the tile it labels.
+            TileGeometry {
+                id: bandGeometry
 
-            // Thick enough to see, and never more than a quarter of the tile's
-            // short side — a clipped edge column of the strip can be a few
-            // pixels wide, and a fixed thickness would bury it.
-            readonly property real thickness: Math.max(2, Math.min(Kirigami.Units.smallSpacing / 2, Math.min(tileWidth, tileHeight) / 4))
-            readonly property real bandLength: Math.max(2, (vertical ? tileHeight : tileWidth) * lengthProportion)
+                zone: tabBand.modelData
+            }
+
+            // Named locally because the thickness, length and placement
+            // expressions below read them repeatedly; they are nothing but
+            // bandGeometry under a shorter name.
+            readonly property real tileX: bandGeometry.tileX
+            readonly property real tileY: bandGeometry.tileY
+            readonly property real tileWidth: bandGeometry.tileWidth
+            readonly property real tileHeight: bandGeometry.tileHeight
+
+            // Floored rather than scaled: below about two pixels the band
+            // stops reading as a band at thumbnail scale. Half of smallSpacing
+            // is the target above that floor, capped at a quarter of the
+            // tile's short side so a clipped edge column of the strip, which
+            // can be a handful of pixels wide, is not buried under its own
+            // indicator. At the shipping smallSpacing of 4 the floor and the
+            // target coincide and the cap cannot bind; it earns its keep on a
+            // theme with a larger spacing unit.
+            readonly property real minThickness: 2
+            readonly property real thickness: Math.max(minThickness, Math.min(Kirigami.Units.smallSpacing / 2, Math.min(tileWidth, tileHeight) / 4))
+            // Same floor, and the same reason: a band shorter than this reads
+            // as a speck rather than as an indicator.
+            readonly property real bandLength: Math.max(minThickness, (vertical ? tileHeight : tileWidth) * lengthProportion)
             // One pixel between pills, dropped once the pills themselves are
             // down to about that: below it the gaps eat the indicator and a
-            // five-tab column reads as an empty band.
-            readonly property real pillSpacing: (bandLength / Math.max(1, tabCount)) > 3 ? 1 : 0
+            // five-tab column reads as an empty band. Three pixels is the
+            // width at which a one-pixel gap still leaves a pill wider than
+            // the gap beside it.
+            readonly property real minPillLengthForSpacing: 3
+            readonly property real pillSpacing: (bandLength / Math.max(1, tabCount)) > minPillLengthForSpacing ? 1 : 0
             readonly property real pillLength: Math.max(1, (bandLength - pillSpacing * (tabCount - 1)) / Math.max(1, tabCount))
 
-            visible: tabCount > 0
+            // Both pill extents are floored, so a column with more tabs than
+            // the band has pixels lays out a row longer than the band. Clip
+            // rather than let it run past, since outside the band is the
+            // neighbouring tile at this scale.
+            clip: true
             Accessible.ignored: true
 
             // Centered on the long axis, matching indicatorRectFor, and flush
             // with the tile's edge on the short one.
-            x: vertical ? (tabPosition === 0 ? tileX : tileX + tileWidth - thickness) : tileX + (tileWidth - bandLength) / 2
-            y: vertical ? tileY + (tileHeight - bandLength) / 2 : (tabPosition === 2 ? tileY : tileY + tileHeight - thickness)
+            x: vertical ? (tabPosition === positionLeft ? tileX : tileX + tileWidth - thickness) : tileX + (tileWidth - bandLength) / 2
+            y: vertical ? tileY + (tileHeight - bandLength) / 2 : (tabPosition === positionTop ? tileY : tileY + tileHeight - thickness)
             width: vertical ? thickness : bandLength
             height: vertical ? bandLength : thickness
 
             Repeater {
-                model: tabBand.visible ? tabBand.tabCount : 0
+                // The band's own existence is the gate, so this does not read
+                // the band's visibility: Item.visible is the EFFECTIVE state,
+                // and an ancestor hiding the preview would tear every pill
+                // down and rebuild it on the way back.
+                model: tabBand.tabCount
 
                 Rectangle {
                     required property int index
@@ -373,12 +424,14 @@ Item {
                     width: tabBand.vertical ? tabBand.thickness : tabBand.pillLength
                     height: tabBand.vertical ? tabBand.pillLength : tabBand.thickness
                     radius: tabBand.thickness / 2
-                    // Theme roles, like every other colour here. The real
-                    // indicator's own colours are configurable and can follow
-                    // the theme themselves, so a preview that read them would
-                    // have to carry three more keys to end up in the same
-                    // place for the default configuration.
-                    color: index === tabBand.activeTab ? Qt.rgba(root.highlightColor.r, root.highlightColor.g, root.highlightColor.b, 1) : Qt.rgba(root.borderColor.r, root.borderColor.g, root.borderColor.b, 0.7)
+                    Accessible.ignored: true
+                    // The indicator's OWN fallbacks, not the zone palette:
+                    // ZoneColorDefaults owns these and the compositor's
+                    // resolveTabColor mirrors them, so a user who has recoloured
+                    // their zones still sees pills that match the bar on screen.
+                    // A configured tab colour is not reachable without new wire
+                    // keys, so the default configuration is what agrees here.
+                    color: index === tabBand.activeTab ? ZoneColorDefaults.tabActiveColor : ZoneColorDefaults.tabInactiveBarColor
                 }
             }
         }

@@ -613,20 +613,17 @@ SettingsFlickable {
 
             // Fetch the live strip for the current selection. The daemon's
             // strip is briefly empty while a mode flip's re-announce batch is
-            // being adopted (the OSD defers around the same window); a one-shot
-            // read landing there returned [] and left the fallback sketch up
-            // for good. When the daemon says the screen IS scrolling but the
-            // strip came back empty, re-read once after a settle beat.
-            // allowRetry MUST be false when called FROM the settle timer. The
-            // retry is a one-shot settle beat, and a re-arm from inside its own
-            // handler is an unbounded loop: a scrolling screen with no windows
-            // legitimately reports an empty strip forever, and the page object
-            // outlives its visibility (the page host keeps visited pages alive
-            // and merely hides them), so nothing would ever stop it. That is a
-            // blocking D-Bus round trip every _stripSettleIntervalMs on a page
-            // nobody is looking at. Every call site passes the flag
-            // explicitly; there is no default, so no site can drift into the
-            // retrying behaviour by omission.
+            // adopted (the OSD defers around the same window); a one-shot read
+            // landing there returned [] and left the fallback sketch up for
+            // good, so an empty strip on a scrolling screen re-reads once.
+            // allowRetry MUST be false when called FROM the settle timer. A
+            // re-arm from inside its own handler is an unbounded loop: a
+            // scrolling screen with no windows legitimately reports an empty
+            // strip forever, and the page outlives its visibility (the host
+            // keeps visited pages alive and merely hides them), so nothing
+            // would stop it — a blocking round trip every settle interval on a
+            // page nobody is looking at. Every call site passes the flag
+            // explicitly, so none can drift into retrying by omission.
             function refreshScrollingStrip(allowRetry) {
                 if (!screenState)
                     return;
@@ -635,42 +632,38 @@ SettingsFlickable {
                 // alive and merely hides them, and screenState changes on every
                 // hotplug / desktop / activity event, so without this a stack
                 // of cached Monitors pages would each block the GUI thread on
-                // events that change nothing they are showing. The live timer
-                // is the SINGLE caller: it carries triggeredOnStart, so its
-                // running transition (which includes both visibility and the
-                // mode) fires one read immediately rather than leaving the
-                // preview stale for a whole beat, and a selection change nudges
-                // it with restart() instead of reading here a second time.
+                // events that change nothing they show. The live timer is the
+                // SINGLE caller: triggeredOnStart makes its running transition
+                // (visibility and mode both) fire one read immediately rather
+                // than leaving the preview stale for a beat, and a selection
+                // change nudges it with restart() rather than reading again.
                 if (!stateView.visible)
                     return;
                 var fresh = settingsController.getScrollingStripPreview(screenState.screenId || "");
                 // Assign only on a real change. The reply is a fresh
-                // QVariantList every tick, so a plain assignment always signals
-                // — and the Repeater behind a JS-array model has no diffing, so
-                // every 2s beat tore down and rebuilt the whole delegate tree
-                // (four Behaviors per tile) for an identical strip.
+                // QVariantList every tick, so a plain assignment always
+                // signals, and a JS-array model has no diffing: every beat
+                // rebuilt the whole delegate tree for an identical strip.
                 if (!_stripMatches(fresh, scrollingStripZones))
                     scrollingStripZones = fresh;
                 // The settle beat covers the case where the mode just flipped
                 // and the re-announce batch briefly reports an empty strip: one
                 // _stripSettleIntervalMs shot beats waiting out the live beat.
                 // It cannot compound — the retry passes allowRetry=false, so a
-                // retry never arms another retry, and restart() on a one-shot
-                // Timer replaces any pending fire rather than stacking one.
-                // Gated on isScrolling as well, matching the live timer: with
-                // Snapping staged locally the thumbnail is hidden, and arming a
-                // blocking read for it is exactly the poll that gate exists to
-                // prevent.
+                // retry never arms another, and restart() on a one-shot Timer
+                // replaces any pending fire. Gated on isScrolling too, matching
+                // the live timer: with Snapping staged locally the thumbnail is
+                // hidden, and arming a blocking read for it is the poll that
+                // gate exists to prevent.
                 if (allowRetry && stateView.isScrolling && fresh.length === 0 && (screenState.mode || 0) === 2)
                     stripSettleRetry.restart();
                 // Template seed progress on the SAME beat, behind the same
                 // visibility gate. One more blocking round trip is the right
                 // trade: the daemon answers two ints off state it already
-                // holds, and a timer of its own would double the wakeups for
-                // a value that cannot change without the strip changing.
-                // An empty reply (screen not scrolling, no blueprint, daemon
-                // down) leaves both at zero, which is what suppresses the
-                // line below.
+                // holds, and a timer of its own would double the wakeups for a
+                // value that cannot change without the strip changing. An
+                // empty reply (not scrolling, no blueprint, daemon down)
+                // leaves both at zero, which suppresses the line below.
                 const progress = settingsController.getScrollingBlueprintProgress(screenState.screenId || "");
                 blueprintTotal = (progress && progress.total) || 0;
                 blueprintUsed = (progress && progress.used) || 0;
@@ -678,12 +671,16 @@ SettingsFlickable {
 
             // True when two strip replies would render identically. Compares
             // what the thumbnail actually draws: the tile count, each tile's
-            // number, its geometry rounded to three decimals (relative
-            // 0–1 values, so that survives D-Bus float round-trips), and the
-            // tab indicator its column draws. Same fingerprint-before-assign
-            // shape LayoutComboBox uses for its zone previews. The tab fields
-            // count because switching tabs moves no rect at all, so a
-            // geometry-only compare would hold the stale pills up forever.
+            // number, its geometry rounded to three decimals (relative 0–1
+            // values, so that survives D-Bus float round-trips), and the tab
+            // indicator its column draws. Same fingerprint-before-assign shape
+            // LayoutComboBox uses. The tab fields count because switching tabs
+            // moves no rect at all, so a geometry-only compare would hold the
+            // stale pills up forever — at the accepted cost of rebuilding every
+            // delegate for a switch that moved nothing, a JS-array model having
+            // no diffing. The four tab keys are spelled raw here (QML cannot
+            // reach PhosphorProtocol's constants), so a rename turns this
+            // compare into undefined-vs-undefined and stops the repaint.
             function _stripMatches(a, b) {
                 if (!a || !b || a.length !== b.length)
                     return false;
@@ -713,12 +710,13 @@ SettingsFlickable {
                 onTriggered: stateView.refreshScrollingStrip(false)
             }
 
-            // The daemon's strip wake-up, coalesced. Scrolling.stripChanged
-            // relays placement changes, so a drag fires it per step and each
-            // hit taken straight to the read would be a blocking D-Bus call on
-            // the GUI thread. One shot once the burst settles is all a
-            // thumbnail needs, on the settle retry's interval: both mean "wait
-            // for the strip to stop moving, then read once".
+            // The daemon's strip wake-up, coalesced. stripChanged relays
+            // placement changes, so a drag fires it per step and each hit taken
+            // straight to the read would be a blocking D-Bus call on the GUI
+            // thread. One shot once the burst settles is all a thumbnail needs.
+            // That is the best case, not the bound: a drip spaced just over the
+            // interval fires every time, so the worst case is one read (two
+            // blocking round trips) per interval, paid on the visible page.
             Timer {
                 id: stripEdgeCoalesce
                 interval: stateView._stripSettleIntervalMs
@@ -726,16 +724,17 @@ SettingsFlickable {
                 // Through the live timer, never a direct read: it owns EVERY
                 // strip read, and restart() gives one immediate shot via
                 // triggeredOnStart while pushing the periodic beat out.
-                //
                 // Guarded exactly like the context nudge in
                 // onScreenStateChanged. restart() on a STOPPED timer would
                 // START it, and the `running` binding below does not re-assert
-                // until a dependency changes, so a wake-up arriving on a hidden
-                // page would leave it beating against its own gate; a pending
-                // start shot already covers this context, so restarting on top
-                // of one just queues a second blocking read. Dropping the
-                // wake-up costs nothing — a stopped timer re-reads through
-                // triggeredOnStart when its gate lets it run again.
+                // until a dependency changes, so a wake-up on a hidden page
+                // would leave it beating against its own gate; a pending start
+                // shot already covers this context, so restarting on top of one
+                // just queues a second blocking read. Dropping the wake-up
+                // costs nothing — a stopped timer re-reads through
+                // triggeredOnStart once its gate lets it run again. This is
+                // also the only visibility test on the wake-up path, since the
+                // Connections below has none of its own.
                 onTriggered: {
                     if (stripLiveRefresh.running && !stripLiveRefresh._startShotPending)
                         stripLiveRefresh.restart();
@@ -748,6 +747,9 @@ SettingsFlickable {
                 // Only the screen on show: the daemon wakes every screen whose
                 // strip moves, and reading for a monitor nobody is looking at
                 // is the blocking call this page's gating exists to prevent.
+                // Plain equality, unlike the physical-id-tolerant matches
+                // elsewhere here, because both sides are the daemon's own
+                // screen id — the read sends this same one straight back.
                 function onScrollingStripChanged(screenId) {
                     if (!stateView.screenState || screenId !== (stateView.screenState.screenId || ""))
                         return;
@@ -759,40 +761,37 @@ SettingsFlickable {
             // column, or tab two together while this page is up. The wake-up
             // above turns that into a prompt re-read; this beat is the backstop
             // under it, for what the signal misses (an emission while the
-            // daemon was down, a daemon too old to send one) and it runs only
-            // while the page is on screen showing a scrolling monitor. The read
-            // is a single cheap D-Bus call that returns [] for any other screen.
+            // daemon was down, a daemon too old to send one, a relayout that
+            // left the view anchor put). It runs only while the page is on
+            // screen showing a scrolling monitor.
             Timer {
                 id: stripLiveRefresh
                 interval: stateView._stripLiveIntervalMs
                 repeat: true
                 // Gated on isScrolling, not just the daemon's mode: with the
-                // daemon scrolling and Snapping staged locally the preview
-                // thumbnail is hidden, and polling for something nobody is
-                // looking at is the one thing a blocking call must not do.
-                // daemonRunning is part of the gate: with the daemon gone every
-                // tick is a 500ms timeout on the GUI thread, forever, for a
-                // preview that cannot change.
+                // daemon scrolling and Snapping staged locally the thumbnail is
+                // hidden, and polling for something nobody is looking at is the
+                // one thing a blocking call must not do. daemonRunning is part
+                // of the gate too: with the daemon gone every tick is a 500ms
+                // timeout on the GUI thread, forever, for a preview that
+                // cannot change.
                 running: settingsController.daemonRunning && stateView.visible && stateView.isScrolling && stateView.screenState !== null && (stateView.screenState.mode || 0) === 2
                 // Fire on the running transition too, so coming back to a
                 // hidden-then-shown page (or picking Scrolling in the mode
                 // toggle) repaints from one fresh read. This timer owns EVERY
-                // strip read: a second path meant two blocking reads in the
-                // same frame on every such transition, so a selection change
-                // restarts it instead of reading on its own.
+                // strip read: a second path meant two blocking reads in one
+                // frame on every such transition.
                 triggeredOnStart: true
                 // True from the moment the timer starts until the shot
                 // triggeredOnStart queues for that start has run. It marks the
-                // one tick that follows an event (a mode flip, the page coming
+                // one tick following an event (a mode flip, the page coming
                 // back, a selection change) as opposed to the periodic beats,
                 // and only that tick may arm the settle retry: the settle beat
                 // exists for a re-announce batch briefly reporting an empty
-                // strip, while a legitimately empty strip would otherwise have
-                // every beat arm another blocking read.
-                //
-                // It also tells onScreenStateChanged that a start's own shot is
-                // already pending, so nudging the timer for the new context
-                // there would only queue a second read for the same frame.
+                // strip, while a legitimately empty one would otherwise have
+                // every beat arm another blocking read. It also tells
+                // onScreenStateChanged that a start's shot is already pending,
+                // so nudging there would queue a second read for one frame.
                 property bool _startShotPending: false
 
                 onRunningChanged: _startShotPending = running
@@ -875,30 +874,30 @@ SettingsFlickable {
                 }
 
                 // A context whose daemon mode is NOT scrolling can never be
-                // handed a fresh read (the timer's running binding needs
-                // mode 2), so the retained array from the PREVIOUS context
-                // must be dropped here or a later local "Scrolling" pick on
-                // this monitor renders the other monitor's tiles as its live
-                // strip. The blueprint counters ride the same read and go
-                // with it — left standing, monitor A's "2 of its 3 starting
-                // columns" note appended itself to monitor B's explainer
-                // (zero total is the documented nothing-to-say state). Not a
-                // read, so the single-read-path rule holds.
+                // handed a fresh read (the timer's running binding needs mode
+                // 2), so the retained array from the PREVIOUS context must be
+                // dropped here or a later local "Scrolling" pick on this
+                // monitor renders the other monitor's tiles as its live strip.
+                // The blueprint counters ride the same read and go with it:
+                // left standing, monitor A's "2 of its 3 starting columns"
+                // note appended itself to monitor B's explainer (zero total is
+                // the nothing-to-say state). Not a read, so the
+                // single-read-path rule holds.
                 if ((screenState.mode || 0) !== 2) {
                     scrollingStripZones = [];
                     blueprintTotal = 0;
                     blueprintUsed = 0;
-                } else
-                // Nudge the live strip preview into re-reading for the new
-                // context. Placed after the local state is initialized so the
-                // timer's own gates (isScrolling) see the mode this handler
-                // just settled, and routed through the timer rather than a
-                // direct read so there is exactly one read path. When the mode
-                // change itself started the timer, its start shot is already
-                // pending for this same context and a restart would only queue
-                // a second blocking read.
-                if (stripLiveRefresh.running && !stripLiveRefresh._startShotPending)
-                    stripLiveRefresh.restart();
+                } else {
+                    // Nudge the live preview into re-reading for the new
+                    // context. After the local state is initialized so the
+                    // timer's gates (isScrolling) see the mode this handler
+                    // just settled, and through the timer rather than a direct
+                    // read so there is one read path. When the mode change
+                    // itself started the timer, its start shot is already
+                    // pending and a restart would queue a second blocking read.
+                    if (stripLiveRefresh.running && !stripLiveRefresh._startShotPending)
+                        stripLiveRefresh.restart();
+                }
             }
 
             // The per-mode preview thumbnails (snapping layout, tiling

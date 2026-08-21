@@ -11,8 +11,8 @@
 // keeps naming ScrollVisibleTile for every existing consumer.
 //
 // ScrollTypes.h stays the STRIP MODEL's vocabulary (widths, heights, resolved
-// columns). These three describe the engine's API surface around that model,
-// which is why they live apart from it.
+// columns). The types here describe the engine's API surface around that
+// model, which is why they live apart from it.
 
 // The one crossing into the strip model's vocabulary: a visible tile reports
 // the tab indicator its column draws, and TabIndicatorPosition is that
@@ -95,13 +95,15 @@ struct ScrollVisibleTile
     /// Absolute pixel rect, clipped to the work area.
     QRect rect;
     /// How many tabs the owning column's indicator shows, and 0 when it draws
-    /// no indicator at all. The gate is the resolved indicator rect, exactly
-    /// as it is for the compositor's tab-strip payload (engine_apply.cpp):
-    /// that one rect already folds in the master switch, the single-tab skip
-    /// and "this column is not tabbed", so this field cannot disagree with
-    /// what the screen shows. Counts the column's tiles including the hidden
-    /// ones — those ARE the tabs; only minimized tiles are absent, and they
-    /// have no pill on screen either.
+    /// no indicator at all. The gate is the resolved indicator rect, where the
+    /// compositor's tab-strip payload starts too (engine_apply.cpp): that one
+    /// rect already folds in the master switch, the single-tab skip and "this
+    /// column is not tabbed". The emitter's gate is a SUPERSET of this one —
+    /// it also drops out-of-view and fully-parked columns — so a preview is
+    /// never missing an indicator the screen draws, but a parked column can
+    /// carry one the screen does not. Counts the column's tiles including the
+    /// hidden ones — those ARE the tabs; only minimized tiles are absent, and
+    /// they have no pill on screen either.
     int tabCount = 0;
     /// Which tab of @c tabCount this tile is, 0-based, and -1 when the column
     /// draws no indicator. A resolved tabbed column has exactly one non-hidden

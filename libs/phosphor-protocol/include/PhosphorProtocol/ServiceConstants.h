@@ -152,9 +152,17 @@ inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 /// visibleStripJson wire (scrollingadaptor.cpp), the daemon's own OSD strip
 /// card, which builds its zone maps in-process without crossing the bus
 /// (daemon/stripzones.h), and the settings app, which reshapes the wire into
-/// the same zone maps (settingscontroller_session.cpp). ZonePreview.qml reads
-/// the far end of all three, so one home for the spellings is what keeps a
-/// rename from silently dropping the indicator on one surface only.
+/// the same zone maps (settingscontroller_session.cpp). One home for the
+/// spellings is what keeps a rename from silently dropping the indicator on
+/// one surface only.
+///
+/// TWO QML readers spell the keys as raw strings and cannot use these
+/// constants: ZonePreview.qml, which draws the far end of all three, and
+/// MonitorStatePage.qml, whose per-tile diff decides whether a strip read is
+/// worth repainting. The second one fails QUIETLY under a rename — its diff
+/// would compare undefined to undefined, conclude nothing changed, and stop
+/// repainting on a tab switch — so it belongs in any rename's checklist even
+/// though nothing about it looks like a reader.
 ///
 /// Distinct from ScrollTabKey above: those are the effect's PAINT overrides
 /// for the tab pills it draws on screen. These describe a strip being drawn
@@ -168,7 +176,10 @@ namespace StripPreviewKey {
 /// indicator — the single "no indicator here" gate on this payload, as the
 /// null rect is on the compositor's.
 inline constexpr QLatin1String TabCount("tabCount");
-/// The tile's own 0-based tab within that count.
+/// The tile's own 0-based tab within that count. Note the strip-card payload
+/// (src/common/stripcardserialize.cpp) spells an unrelated BOOLEAN the same
+/// way for a different consumer; the two never meet, but a grep for the
+/// spelling finds both.
 inline constexpr QLatin1String ActiveTab("activeTab");
 /// Which edge the indicator runs along, as a PhosphorScrollEngine::
 /// TabIndicatorPosition underlying value (0 Left, 1 Right, 2 Top, 3 Bottom).

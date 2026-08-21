@@ -13,6 +13,8 @@
 //     mirror store (`m_localRuleStore`) so the in-process LayoutRegistry's
 //     assignment cascade sees daemon-driven rule edits without a process
 //     restart.
+//   * Scrolling strip wake-ups (Scrolling interface) — relayed straight back
+//     out as `scrollingStripChanged` for the Monitors page's live thumbnail.
 //
 // The D-Bus wire-up is a natural seam away from `settingscontroller.cpp`. The
 // helper lambda and subscriptions are cohesive, only call into D-Bus
@@ -117,6 +119,15 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     // state, and the page that draws the strip owns both the coalescing and
     // the decision to re-read (its timer owns EVERY strip read, so a read
     // started here would be a second one in the same frame).
+    //
+    // The relayed signal carries the daemon's contract with it: a wake-up,
+    // not a difference. It fires per step of a drag and can fire without a
+    // visible tile moving, so a receiver coalesces and compares rather than
+    // repainting on every hit. It is also one-directional — a settings or
+    // template push can reshape the strip without emitting it at all — so the
+    // page's periodic poll stays as the backstop for what it misses, along
+    // with an emission that arrived while the daemon was down and a placement
+    // change on a context that only later becomes current.
     const QString scrollingIface = QString(PhosphorProtocol::Service::Interface::Scrolling);
     subscribeDaemonSignal(scrollingIface, QStringLiteral("stripChanged"), SIGNAL(scrollingStripChanged(QString)));
 
