@@ -42,6 +42,14 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
 
 ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
 {
+    // FIRST statement: retract from the liveness block before anything of this
+    // subclass is torn down. ~ShaderNodeRhi retracts too, but it does not run
+    // until this body and every member below have already been destroyed, so
+    // leaving it to the base would let a concurrent
+    // ShaderEffect::withTrackedNode virtual-dispatch releaseResources() into a
+    // half-destroyed ZoneShaderNodeRhi. Idempotent; see retractLiveness().
+    retractLiveness();
+
     // The parent's m_extraBindings map stores raw pointers to our
     // m_labelsTexture / m_labelsSampler. Those unique_ptr members run their
     // destructors AFTER this body returns (normal member-destruction order),

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorRendering/ShaderNodeLiveness.h>
 #include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
@@ -21,6 +22,7 @@
 #include <QPointer>
 #include <array>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 
@@ -797,11 +799,13 @@ protected:
      * MUST register its node here (and register nullptr when it deletes the
      * node) or the base teardown silently no-ops and a render-thread access
      * between item destruction and node deletion walks a freed item.
+     *
+     * Registration takes a share of the node's liveness block, so the base no
+     * longer has to guess whether a tracked node is still alive — see
+     * ShaderNodeLiveness. Re-registering the same node every frame (the
+     * documented usage) is an early-out, not a refcount churn.
      */
-    void registerRenderNode(ShaderNodeRhi* node)
-    {
-        m_renderNode.store(node, std::memory_order_release);
-    }
+    void registerRenderNode(ShaderNodeRhi* node);
 
     void setError(const QString& error);
     void setStatus(Status newStatus);
@@ -986,14 +990,31 @@ private:
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────
-    /// Atomic because the sceneGraphAboutToStop handler is a DirectConnection
-    /// that reads and dereferences this ON THE RENDER THREAD, while the
-    /// windowChanged handler nulls it on the GUI thread. The disconnect that
-    /// precedes that null write is thread-safe, but Qt does not promise it
-    /// BLOCKS an in-flight direct-connection slot, so the ordering alone is not
-    /// enough to make the plain pointer safe. Every access is a simple
-    /// load/store, so the atomic costs nothing measurable.
-    std::atomic<ShaderNodeRhi*> m_renderNode{nullptr};
+    /// Share of the tracked node's liveness block (ShaderNodeLiveness), or
+    /// null when no node is registered. The node nulls itself inside the block
+    /// when the scene graph deletes it, so this is the one place that can
+    /// answer "is the tracked node still alive?" without guessing — and,
+    /// because every use holds the block's mutex, the answer cannot go stale
+    /// between the check and the call.
+    ///
+    /// Guarded by m_renderNodeMutex rather than made atomic: registration runs
+    /// on the render thread during the sync phase, while the destructor and
+    /// the idle-release job reach it from the GUI and render threads at
+    /// arbitrary times, and a shared_ptr swap is not a single atomic store.
+    std::shared_ptr<ShaderNodeLiveness> m_renderNodeLink;
+    /// Serialises reads and writes of m_renderNodeLink. Held only long enough
+    /// to copy the shared_ptr out; the node call itself happens under the
+    /// block's own mutex, after this one has been released. The two are never
+    /// held simultaneously — see withTrackedNode() for why.
+    mutable std::mutex m_renderNodeMutex;
+    /// Take a share of the tracked liveness block. Null when nothing is
+    /// registered. Never dereference the node without holding the block's
+    /// mutex — see withTrackedNode().
+    std::shared_ptr<ShaderNodeLiveness> trackedNodeLink() const;
+    /// Run @p fn on the tracked node while holding its liveness mutex, so the
+    /// scene graph cannot delete the node mid-call. No-op when no node is
+    /// tracked or the node has already been deleted.
+    void withTrackedNode(const std::function<void(ShaderNodeRhi*)>& fn) const;
     // QPointer defends against reparent/teardown storms where the window is
     // destroyed out from under us before windowChanged(nullptr) fires.
     QPointer<QQuickWindow> m_connectedWindow;
