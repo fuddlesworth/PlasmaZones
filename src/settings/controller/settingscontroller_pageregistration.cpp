@@ -331,7 +331,7 @@ void SettingsController::buildApplicationController()
                /*collapsible=*/false, /*divider=*/true);
     // The advanced tree mirrors Tiling's per-concern split: Columns
     // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
-    // thirteen-knob family), Window (window handling plus the Focus and view
+    // eighteen-knob family), Window (window handling plus the Focus and view
     // card, which carries viewport centering and the Meta+wheel gesture —
     // those follow focus, so they sit with it rather than on a View leaf of
     // their own), Strip Selector (the drag popup), then the shared

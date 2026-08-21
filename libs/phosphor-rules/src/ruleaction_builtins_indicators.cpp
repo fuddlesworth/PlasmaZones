@@ -42,11 +42,16 @@ void ActionRegistry::registerBuiltinsIndicators()
     // eighteen context knobs below plus the three per-window tab colours
     // further down) would swamp that group's list, and the indicator is one
     // coherent feature a user reaches for as a unit.
-    // Seeds OFF against a global that defaults ON: the meaningful fresh rule is
-    // "no indicator on this screen", the same polarity the behaviour toggles in
-    // ruleaction_builtins_appearance.cpp follow. Bool descriptors here seed the
-    // INVERSE of their global default; the numeric ones seed the shipped value
-    // itself.
+    //
+    // SEED POLARITY, file-wide: bool descriptors seed the INVERSE of their
+    // global default, so a freshly added rule row does the one thing a user
+    // adding it can mean rather than restating the global. The numeric ones
+    // seed the shipped value itself, so a fresh row is a no-op the user then
+    // edits. The same split is stated in ruleaction_builtins_appearance.cpp,
+    // which the behaviour toggles follow.
+
+    // Seeds OFF against a global that defaults ON: the meaningful fresh rule
+    // is "no indicator on this screen".
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetTabIndicatorEnabled),
         .slotFor = constantSlot(ActionSlot::TabIndicatorEnabled),

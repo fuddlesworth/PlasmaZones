@@ -176,6 +176,13 @@ struct IndicatorAxes
     /// correct look for a bar with no room between its segments, not a
     /// regression.
     int gaps = 0;
+    /// The chip pill's inset from the indicator's edge, derived from the
+    /// theme's small spacing. Lives here rather than in ChipMetrics because
+    /// the gap cap above has to know it: the chip run is budgeted against the
+    /// long extent MINUS both insets, so a cap computed against the full
+    /// extent would let the run overflow by exactly this much. The bar style
+    /// does not use it.
+    int inset = 1;
 };
 
 IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style)
@@ -187,16 +194,23 @@ IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicat
     axes.shortExtent = axes.vertical ? indicator.rect.width() : indicator.rect.height();
     axes.tabCount = int(indicator.tabs.size());
     axes.gaps = std::max(0, style.gapsBetweenTabs);
+    axes.inset = std::max(1, int(std::lround(style.smallSpacing / 2.0)));
     // Then capped against the space there actually is. Every per-tab share
     // floors at 1px, but tabOffset() still accumulates the FULL gap per tab,
     // so a gap the run cannot afford walks the tail off the end of the
     // indicator — where the clip discards it and layoutPills intersects it
     // away, leaving those tabs undrawn AND unclickable. The cap leaves room
-    // for one pixel per tab plus the gaps between them. It is applied here, in
+    // for one pixel per tab plus the gaps between them.
+    //
+    // It is capped against the extent the STYLE actually budgets in, not the
+    // raw long extent: the chip run starts one inset in and ends one inset
+    // short, so capping against the full extent would leave the run able to
+    // overrun by both insets and lose the tail chip anyway. Applied here, in
     // the one place both styles and the hit test read their axes from, so draw
     // rects and hit rects can never disagree about the gap.
     if (axes.tabCount > 1) {
-        axes.gaps = std::min(axes.gaps, std::max(0, (axes.longExtent - axes.tabCount) / (axes.tabCount - 1)));
+        const int usable = style.style == 1 ? axes.longExtent : axes.longExtent - axes.inset * 2;
+        axes.gaps = std::min(axes.gaps, std::max(0, (usable - axes.tabCount) / (axes.tabCount - 1)));
     }
     return axes;
 }
@@ -212,23 +226,26 @@ struct ChipMetrics
     int trailingBudget = 1;
 };
 
-ChipMetrics chipMetricsOf(const IndicatorAxes& axes, const ScrollTabIndicatorStyle& style)
+ChipMetrics chipMetricsOf(const IndicatorAxes& axes)
 {
     ChipMetrics metrics;
-    metrics.inset = std::max(1, int(std::lround(style.smallSpacing / 2.0)));
+    // The inset is derived in axesOf(), because the gap cap there has to budget
+    // against the same inner extent this arm does. Read from the axes so the
+    // two cannot disagree — which is also why this takes no style: every input
+    // it needs now travels on the axes.
+    metrics.inset = axes.inset;
     metrics.thickness = std::max(1, axes.shortExtent - metrics.inset * 2);
     const int neighbours = std::max(0, axes.tabCount - 1);
     const int inner = axes.longExtent - metrics.inset * 2;
     // Floored at 1, NOT at some legible minimum: a floor big enough to keep a
     // title readable would let the run overflow the pill once there were
     // enough tabs, and an overflowing run is clipped — those tabs would be
-    // undrawn AND unclickable, which is worse than thin. While the indicator
-    // has at least one pixel per tab, axesOf()'s gap cap keeps the run inside
-    // the pill; with fewer pixels than tabs the 1px floor cannot help and the
-    // tail is clipped regardless. The chip arm budgets against `inner`, so
-    // even inside the cap the last chip's edge can run up to one inset (1-2px
-    // at the default spacing) past the pill and lose that edge to the clip.
-    // One clipped edge, never a lost tab.
+    // undrawn AND unclickable, which is worse than thin. While the pill has at
+    // least one pixel per tab, axesOf()'s gap cap keeps the run inside it: the
+    // cap budgets against this same `inner` extent, so the run ends flush with
+    // the pill's inner edge rather than one inset past it. With fewer pixels
+    // than tabs the 1px floor cannot help and the tail is clipped regardless,
+    // which is the trade the floor exists to make.
     metrics.longBudget = std::max(1, (inner - axes.gaps * neighbours) / std::max(1, axes.tabCount));
     // The last chip absorbs the division remainder so the run ends flush with
     // the pill's inner edge instead of leaving up to tabCount-1 px that
@@ -344,7 +361,7 @@ QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes
         }
         return out;
     }
-    const ChipMetrics metrics = chipMetricsOf(axes, style);
+    const ChipMetrics metrics = chipMetricsOf(axes);
     for (int i = 0; i < axes.tabCount; ++i) {
         const int along = i == axes.tabCount - 1 ? metrics.trailingBudget : metrics.longBudget;
         const int offset = metrics.inset + tabOffset(i, metrics.longBudget, axes.gaps);
@@ -462,7 +479,7 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
         }
 
         // ── Title-chip pill ──────────────────────────────────────────────
-        const ChipMetrics chip = chipMetricsOf(axes, style);
+        const ChipMetrics chip = chipMetricsOf(axes);
         const qreal pillRadius = tabRadius(style, axes.shortExtent);
         // The 1px border is a deliberate hairline. Qt Quick draws a
         // Rectangle's border fully INSIDE its bounds, while QPainter centres

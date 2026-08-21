@@ -388,10 +388,11 @@ public:
     /// colour, while a chip has to hold a title, and a value that suits one
     /// is unusable for the other.
     ///
-    /// The bar figure is niri's. The chip figure is a comfortable line box
-    /// for a label at the tab font's default size; the label is fitted to
-    /// this thickness rather than the other way round, so a user who wants
-    /// bigger text raises the Width setting, not any font scale.
+    /// The bar figure is niri's. The chip figure is a comfortable line box at
+    /// the system's small font size, which is what the painter starts its fit
+    /// from. The label is fitted to this thickness rather than the other way
+    /// round, so a user who wants bigger text raises the Width setting; there
+    /// is no font scale to raise.
     static constexpr int scrollingTabIndicatorWidthForBar()
     {
         return 4;

@@ -144,7 +144,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Style")
                     searchAnchor: "tabIndicatorStyle"
-                    description: i18n("Titled chips name each window. A segment bar is thinner and shows only how many there are.")
+                    description: i18n("Titled chips label each window. A segment bar is thinner and shows only how many there are.")
                     enabled: root.indicatorOn
 
                     WideComboBox {
@@ -291,7 +291,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Thickness")
                     searchAnchor: "tabIndicatorWidth"
-                    description: i18n("How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their titles, which on a left or right edge means a lot.")
+                    description: i18n("How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their labels, which on a left or right edge means a lot.")
 
                     SettingsSpinBox {
                         id: tabWidthSpin

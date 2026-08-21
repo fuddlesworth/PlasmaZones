@@ -286,9 +286,11 @@ inline bool isVerticalTabIndicator(TabIndicatorPosition position)
 
 /// The tab indicator's GEOMETRY inputs — the subset of the
 /// Scrolling.TabIndicator family that changes resolved rects, so it has to
-/// live in the layout params rather than staying overlay-side. The paint-only
-/// keys (style, gaps between tabs, corner radius, colours) never reach this
-/// library; the daemon reads those straight onto the overlay.
+/// live in the layout params rather than staying with the paint half. The
+/// paint-only keys (style, gaps between tabs, corner radius, the three colours
+/// and the five label-font keys) never reach this library: they go to the KWin
+/// effect, which draws the indicator itself. See IScrollSettings.h for the
+/// same split stated from the settings side.
 struct TabIndicatorParams
 {
     /// Off, no indicator rect is resolved and @c placeWithinColumn reserves

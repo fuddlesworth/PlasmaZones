@@ -171,7 +171,7 @@ inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
 /// and shared by the same two consumers, so the descriptor validator and the
 /// context resolver check one number rather than two hand-mirrored ones.
 ///
-/// Inside this library it is one constant; outside it the SAME 100..900 band
+/// Inside this library it is one pair; outside it the SAME 100..900 band
 /// is mirrored at three more sites, so widening it means editing four places.
 /// The config layer owns the canonical pair
 /// (ConfigDefaults::scrollingTabIndicatorFontWeight{Min,Max}() in

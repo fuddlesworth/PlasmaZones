@@ -15,6 +15,7 @@
 
 #include <QColor>
 #include <QFont>
+#include <QFontDatabase>
 #include <QImage>
 #include <QPoint>
 #include <QRect>
@@ -327,6 +328,15 @@ void TestScrollTabLayout::chipLabelFitsInsideTheChip()
     // (themeBackground at 0.85, a light grey) and the label drawn in themeText
     // (near-black). That turns "is this pixel label ink?" into a plain darkness
     // test with no dependence on which glyphs a given system renders.
+    // This is the one test in the file that needs a real typeface: it reads
+    // glyph ink off the raster. An image with no fonts installed renders an
+    // empty glyph run, which would make the two "no ink at the edge"
+    // assertions pass while proving nothing. Skip loudly there rather than
+    // either failing a legitimate environment or passing a useless one.
+    if (QFontDatabase::families().isEmpty()) {
+        QSKIP("no font families installed, so there is no label ink to measure");
+    }
+
     const QRect rect(0, 0, 400, 40);
     const ScrollTabIndicator indicator = makeIndicator(rect, 2, 2);
     const ScrollTabIndicatorStyle style = makeStyle(0, 0);
