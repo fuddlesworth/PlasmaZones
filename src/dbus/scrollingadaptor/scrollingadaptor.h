@@ -27,9 +27,10 @@ namespace PlasmaZones {
  * (with the preset vocabulary beside it), the wheel-driven focusColumn
  * verb, the four absolute width/height setters for external scripting, the
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
- * when a client leaves fullscreen on its own), and the
- * reapplyWindowGeometry repair call (inbound too, for a fullscreen exit
- * whose strip rects never moved).
+ * when a client leaves fullscreen on its own), the reapplyWindowGeometry
+ * repair call (inbound too, for a fullscreen exit whose strip rects never
+ * moved), the blueprintProgressJson template-seed report, and the
+ * stripChanged wake-up that tells a preview its strip is worth re-reading.
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -222,12 +223,22 @@ public Q_SLOTS:
      * panel gap, and a consumer maps back to pixels by scaling against the
      * screen rectangle. Same basis as the daemon's own OSD strip card.
      *
+     * A tile whose column draws a tab indicator carries four more keys —
+     * tabCount, activeTab, tabPosition and tabLength (PhosphorProtocol
+     * StripPreviewKey) — describing the bar that column shows. A column
+     * drawing none carries no tab key at all, so an absent key and a daemon
+     * from before this payload read the same. Those keys are the only thing
+     * distinguishing a stack of tabs from the single window the walk emits
+     * for it, since the walk lists a tabbed column's SHOWN tab only.
+     *
      * Excluded and unnumbered: hidden tabs of a tabbed column, minimized
-     * tiles, parked columns, and tiles whose intersection with the work
-     * area is EMPTY (a stack whose minimum heights overflow the work area
-     * resolves its tail below the bottom edge). Partially visible columns
-     * are clipped rather than dropped, with no minimum-visibility
-     * threshold, so an arbitrarily thin sliver still carries its number.
+     * tiles, and tiles whose intersection with the work area is EMPTY (a
+     * stack whose minimum heights overflow the work area resolves its tail
+     * below the bottom edge). Partially visible columns are clipped rather
+     * than dropped, with no minimum-visibility threshold, so an arbitrarily
+     * thin sliver still carries its number — and a barely-visible column
+     * parked below its peek floor keeps its number too, which is what makes
+     * a digit press for it work (see ScrollEngine.h).
      *
      * The settings app renders it where the other modes show a layout
      * thumbnail. Empty array when the screen has no strip or is not
@@ -294,6 +305,33 @@ Q_SIGNALS:
     /// whole map (see @ref scrollEffectBehaviour), so a receiver never has to
     /// merge a delta against a copy it might have missed an update to.
     void scrollEffectBehaviourChanged(const QVariantMap& behaviour);
+
+    /// @p screenId's strip changed shape: a wake-up for anyone rendering it,
+    /// not a payload. A receiver re-reads @ref visibleStripJson if it cares.
+    ///
+    /// Carries no payload and is NOT gated against the strip payload, which
+    /// is the deliberate half. Payload-gating it would mean resolving the
+    /// strip on every placement change — a full relayout, paid on the daemon
+    /// whether or not anything is listening — to suppress wake-ups whose only
+    /// cost on the other side is one D-Bus read that the reader already
+    /// discards when it fingerprints identical. The gate that DOES apply is
+    /// the engine's own: this relays placementChanged, which the engine emits
+    /// on a placement or focus change rather than on every relayout.
+    ///
+    /// That gate runs ONE WAY only, and a renderer must not read it as "every
+    /// strip change wakes me". A settings, rule or template push re-resolves
+    /// the rects through applyLayout, which announces the batch separately and
+    /// emits placementChanged only if the view anchor moved — so a relayout
+    /// that changes column widths while the anchor stays put changes the strip
+    /// without waking anything here. A periodic re-read is still the backstop;
+    /// this signal only makes the common cases prompt.
+    ///
+    /// So a receiver must treat this as "re-read soon", never as "the strip
+    /// differs": a placement change that moves a floating window, or one on a
+    /// context this screen is not currently showing, fires it without
+    /// changing a single visible tile. Receivers should also coalesce — a
+    /// drag or a burst of opens emits per step.
+    void stripChanged(const QString& screenId);
 
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
