@@ -17,6 +17,7 @@
  * are exercised against locally-staged rules.
  */
 
+#include <QSet>
 #include <QTest>
 
 #include "settings/rules/rulecontroller.h"
@@ -154,6 +155,7 @@ void TestRuleControllerVocabulary::templateCatalogueCarriesUiFields()
     // field would render a tile with a blank label or no icon.
     const QVariantList templates = controller.ruleTemplates();
     QVERIFY(!templates.isEmpty());
+    QSet<QString> seenIcons;
     for (const QVariant& v : templates) {
         const QVariantMap t = v.toMap();
         // QVERIFY2 with the id so a failing entry names ITSELF — a bare
@@ -163,7 +165,18 @@ void TestRuleControllerVocabulary::templateCatalogueCarriesUiFields()
         QVERIFY2(!t.value(QStringLiteral("id")).toString().isEmpty(), "template with empty id");
         QVERIFY2(!t.value(QStringLiteral("label")).toString().isEmpty(), id.constData());
         QVERIFY2(!t.value(QStringLiteral("description")).toString().isEmpty(), id.constData());
-        QVERIFY2(!t.value(QStringLiteral("icon")).toString().isEmpty(), id.constData());
+        const QString icon = t.value(QStringLiteral("icon")).toString();
+        QVERIFY2(!icon.isEmpty(), id.constData());
+        // No two tiles may share an icon. Three of them once shared the
+        // generic edit-delete-remove red X, which made that whole block of the
+        // grid read as one card repeated — the reason the catalogue was culled.
+        QVERIFY2(!seenIcons.contains(icon), qPrintable(QString::fromUtf8(id) + QLatin1String(" reuses icon ") + icon));
+        seenIcons.insert(icon);
+        // Every catalogued id must actually materialise. `newRuleFromTemplate`
+        // returns an empty map for an unknown id, so a tile added to the
+        // catalogue without its matching branch below would render, be
+        // clickable, and hand the sheet nothing.
+        QVERIFY2(!controller.newRuleFromTemplate(t.value(QStringLiteral("id")).toString()).isEmpty(), id.constData());
     }
 }
 
@@ -198,20 +211,6 @@ void TestRuleControllerVocabulary::templatesProduceSeededRules_context()
     QCOMPARE(algoActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("autotile"));
     QCOMPARE(algoActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setTilingAlgorithm"));
 
-    // `lockLayoutOnMonitor` is the lock template: ScreenId leaf + a single
-    // LockContext action seeded to lock (value == true). The seeded value is
-    // the contract — a regression that drops/inverts it would author a rule
-    // that silently doesn't lock, or doesn't surface in the picker's
-    // value-on default.
-    const QVariantMap lockRule = controller.newRuleFromTemplate(QStringLiteral("lockLayoutOnMonitor"));
-    QVERIFY(!lockRule.value(QStringLiteral("id")).toString().isEmpty());
-    QCOMPARE(lockRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("screenId"));
-    const QVariantList lockActions = lockRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(lockActions.size(), 1);
-    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("lockContext"));
-    QCOMPARE(lockActions.at(0).toMap().value(QStringLiteral("value")).toBool(), true);
-
     // `layoutOnDesktop` is the desktop twin of layoutOnMonitor: a
     // `VirtualDesktop == 1` leaf (0 is the all-desktops sentinel, so the seed
     // must be a real desktop number) + the same SetEngineMode("snapping") +
@@ -226,21 +225,18 @@ void TestRuleControllerVocabulary::templatesProduceSeededRules_context()
     QCOMPARE(desktopActions.at(1).toMap().value(QStringLiteral("type")).toString(),
              QStringLiteral("setSnappingLayout"));
 
-    // `portraitLayout` showcases the ScreenOrientation context field: a
-    // `screenOrientation == "portrait"` leaf + the snapping assignment pair.
-    const QVariantMap portraitRule = controller.newRuleFromTemplate(QStringLiteral("portraitLayout"));
-    const QVariantMap portraitMatch = portraitRule.value(QStringLiteral("match")).toMap();
-    QCOMPARE(portraitMatch.value(QStringLiteral("field")).toString(), QStringLiteral("screenOrientation"));
-    QCOMPARE(portraitMatch.value(QStringLiteral("value")).toString(), QStringLiteral("portrait"));
-    const QVariantList portraitActions = portraitRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(portraitActions.size(), 2);
-    QCOMPARE(portraitActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
-    QCOMPARE(portraitActions.at(1).toMap().value(QStringLiteral("type")).toString(),
-             QStringLiteral("setSnappingLayout"));
+    // `scrollingOnMonitor` is mode-only on purpose: ScreenId leaf +
+    // SetEngineMode("scrolling") and nothing else, so the quick-start is
+    // immediately savable without forcing a scrolling template choice.
+    const QVariantMap scrollRule = controller.newRuleFromTemplate(QStringLiteral("scrollingOnMonitor"));
+    QCOMPARE(scrollRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("screenId"));
+    const QVariantList scrollActions = scrollRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(scrollActions.size(), 1);
+    QCOMPARE(scrollActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("scrolling"));
 }
 
-// The window-domain templates (per-app exclusions, decoration, restore,
-// animation and float).
+// The window-domain templates (per-app exclusion and float).
 void TestRuleControllerVocabulary::templatesProduceSeededRules_window()
 {
     RuleController controller;
@@ -255,47 +251,6 @@ void TestRuleControllerVocabulary::templatesProduceSeededRules_window()
     const QVariantList excludeActions = excludeRule.value(QStringLiteral("actions")).toList();
     QCOMPARE(excludeActions.size(), 1);
     QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludePlacement"));
-
-    // `undecorateApp` is the decoration mirror of excludeApp: Application
-    // subject + a single ExcludeDecorations action (borders and packs off;
-    // placement and animations stay). Same seeded-shape contract.
-    const QVariantMap undecorateRule = controller.newRuleFromTemplate(QStringLiteral("undecorateApp"));
-    QCOMPARE(undecorateRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("appId"));
-    const QVariantList undecorateActions = undecorateRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(undecorateActions.size(), 1);
-    QCOMPARE(undecorateActions.at(0).toMap().value(QStringLiteral("type")).toString(),
-             QStringLiteral("excludeDecorations"));
-
-    // `noZoneRestoreApp` is the per-app veto of the zone-restore setting
-    // (discussion #889): Application subject + a single SetRestoreToZoneOnLogin
-    // action seeded FALSE. The seeded value is the contract — the template
-    // exists to opt an app OUT, so a dropped or inverted seed would author a
-    // rule that silently changes nothing.
-    const QVariantMap noRestoreRule = controller.newRuleFromTemplate(QStringLiteral("noZoneRestoreApp"));
-    QCOMPARE(noRestoreRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
-             QStringLiteral("appId"));
-    const QVariantList noRestoreActions = noRestoreRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(noRestoreActions.size(), 1);
-    QCOMPARE(noRestoreActions.at(0).toMap().value(QStringLiteral("type")).toString(),
-             QStringLiteral("setRestoreToZoneOnLogin"));
-    // The key must be PRESENT with an explicit false — QVariant().toBool()
-    // also reads false, so pin presence first.
-    QVERIFY(noRestoreActions.at(0).toMap().contains(QStringLiteral("value")));
-    QCOMPARE(noRestoreActions.at(0).toMap().value(QStringLiteral("value")).toBool(), false);
-
-    // `excludeSmallFromAnimations` showcases the new Width numeric match field:
-    // a `Width LessThan 300` leaf + a single terminal ExcludeAnimations action.
-    // Regression here means the quick-start that demonstrates the new fields is
-    // broken or silently authoring the wrong predicate.
-    const QVariantMap smallRule = controller.newRuleFromTemplate(QStringLiteral("excludeSmallFromAnimations"));
-    const QVariantMap smallMatch = smallRule.value(QStringLiteral("match")).toMap();
-    QCOMPARE(smallMatch.value(QStringLiteral("field")).toString(), QStringLiteral("width"));
-    QCOMPARE(smallMatch.value(QStringLiteral("op")).toString(), QStringLiteral("lessThan"));
-    QCOMPARE(smallMatch.value(QStringLiteral("value")).toInt(), 300);
-    const QVariantList smallActions = smallRule.value(QStringLiteral("actions")).toList();
-    QCOMPARE(smallActions.size(), 1);
-    QCOMPARE(smallActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("excludeAnimations"));
 
     // `floatApp`: AppId leaf + a single param-less Float action.
     const QVariantMap floatRule = controller.newRuleFromTemplate(QStringLiteral("floatApp"));
