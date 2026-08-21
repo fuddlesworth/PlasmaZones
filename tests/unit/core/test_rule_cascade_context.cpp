@@ -609,6 +609,103 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
+    // ─── Context scrolling params: the tab LABEL FONT slots ────────────────
+    // The five font slots are the only part of the tab-indicator family whose
+    // resolved value can legitimately be EMPTY, and the empty case is the one
+    // carrying the meaning: it is a rule walking one screen back to the system
+    // font after a global family was picked. So what is pinned here is not
+    // "the value arrives" but "the value arrives ENGAGED while holding an
+    // empty string". An isEmpty() tidy in the resolver's readString would
+    // leave the optional disengaged and the screen would silently keep the
+    // global family.
+    void testContextScrollingParams_tabIndicatorFontSlots()
+    {
+        // Re-declared rather than shared with the sibling above: both helpers
+        // are function-local there. That is this file's own precedent
+        // (intGapAction and valueAction each appear twice already).
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto scrollRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // A font-ONLY rule. Nothing else about the indicator is touched, which
+        // is what makes the hasTabIndicatorOverrides() assertion mean
+        // something: the font slots have to count towards it on their own.
+        const PWR::Rule fr =
+            scrollRule(QStringLiteral("font"), 500, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetTabIndicatorFontFamily, QStringLiteral("Noto Sans")),
+                        valueAction(PWR::ActionType::SetTabIndicatorFontWeight, 400),
+                        valueAction(PWR::ActionType::SetTabIndicatorFontItalic, true),
+                        // FALSE, not absent. A bool slot has to survive as a
+                        // VALUE, or "turn underline off for this screen" is
+                        // indistinguishable from "say nothing about underline".
+                        valueAction(PWR::ActionType::SetTabIndicatorFontUnderline, false),
+                        valueAction(PWR::ActionType::SetTabIndicatorFontStrikeout, true)});
+        QVERIFY(f.store->setAllRules({fr}));
+
+        const PhosphorZones::ContextScrollingParams p =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(!p.isEmpty());
+        QVERIFY(p.hasTabIndicatorOverrides());
+        QVERIFY(p.tabIndicatorFontFamily.has_value());
+        QCOMPARE(*p.tabIndicatorFontFamily, QStringLiteral("Noto Sans"));
+        QVERIFY(p.tabIndicatorFontWeight.has_value());
+        QCOMPARE(*p.tabIndicatorFontWeight, 400);
+        QVERIFY(p.tabIndicatorFontItalic.has_value());
+        QCOMPARE(*p.tabIndicatorFontItalic, true);
+        QVERIFY(p.tabIndicatorFontUnderline.has_value());
+        QCOMPARE(*p.tabIndicatorFontUnderline, false);
+        QVERIFY(p.tabIndicatorFontStrikeout.has_value());
+        QCOMPARE(*p.tabIndicatorFontStrikeout, true);
+
+        // ── the empty family ──
+        // QString(), never QVariant(): QJsonValue::fromVariant turns a bare
+        // QVariant into Null, the descriptor REJECTS Null, and the whole rule
+        // would then be dropped at the store — this pin would quietly become a
+        // no-op row that still passed.
+        const PWR::Rule er = scrollRule(QStringLiteral("empty"), 400, QStringLiteral("DP-2"),
+                                        {valueAction(PWR::ActionType::SetTabIndicatorFontFamily, QString())});
+        QVERIFY(f.store->setAllRules({fr, er}));
+        const PhosphorZones::ContextScrollingParams e =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(e.hasTabIndicatorOverrides());
+        QVERIFY(e.tabIndicatorFontFamily.has_value()); // ENGAGED…
+        QVERIFY(e.tabIndicatorFontFamily->isEmpty()); // …and holding the empty string.
+
+        // A screen no rule pins resolves to all-unset, so the daemon leaves
+        // that screen's font on the global setting.
+        const PhosphorZones::ContextScrollingParams none =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-3"), 0, QString());
+        QVERIFY(none.isEmpty());
+        QVERIFY(!none.hasTabIndicatorOverrides());
+
+        // An out-of-range weight never reaches a screen. NOTE THE MECHANISM,
+        // because it is not the one it looks like: Rule::isValid() runs every
+        // action of a rule through the registry, so setAllRules drops this rule
+        // whole at the STORE boundary and the resolver's own 100..900 bound is
+        // never consulted. Both guards agree on the outcome the user sees —
+        // the screen keeps the global weight — which is what this pins.
+        const PWR::Rule br = scrollRule(QStringLiteral("bad"), 300, QStringLiteral("DP-4"),
+                                        {valueAction(PWR::ActionType::SetTabIndicatorFontWeight, 9999)});
+        QVERIFY(f.store->setAllRules({fr, er, br}));
+        QVERIFY(!f.registry->resolveContextScrollingParams(QStringLiteral("DP-4"), 0, QString())
+                     .tabIndicatorFontWeight.has_value());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the

@@ -1563,12 +1563,15 @@ public:
         Q_EMIT scrollingRestoreFloatedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
-    // The scrolling tab-indicator family: all seven pairs are DEFAULTED
+    // The scrolling tab-indicator family: all twelve pairs are DEFAULTED
     // virtuals on ISettings that answer frozen constants, which makes any
-    // consumer predicate (overlayservice scrolltabs reads enabled/style)
-    // untestable through an unoverridden stub — the same hazard the
-    // scrollingRestoreFloatedWindowsOnLogin comment above records. Override
-    // all seven, member-backed and ConfigDefaults-seeded.
+    // consumer predicate untestable through an unoverridden stub — the same
+    // hazard the scrollingRestoreFloatedWindowsOnLogin comment above records.
+    // The real consumer is the D-Bus settings registry
+    // (settingsadaptor_registry_scrolling.cpp), which reads these through
+    // ISettings and pushes them to the KWin effect's tab loader. There is no
+    // overlayservice tab surface at all. Override all twelve, member-backed
+    // and ConfigDefaults-seeded.
     bool scrollingTabIndicatorEnabled() const override
     {
         return m_scrollingTabIndicatorEnabled;

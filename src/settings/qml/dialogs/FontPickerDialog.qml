@@ -17,13 +17,19 @@ Kirigami.Dialog {
     property bool selectedItalic: false
     property bool selectedUnderline: false
     property bool selectedStrikeout: false
-    // Internal working copies
+    // Internal working copies. `working*` is the RESOLVED face — what the
+    // preview draws, what the style list highlights, and what onAccepted
+    // commits. `requested*` is what the user actually asked for and is never
+    // written by the resolver, so browsing a family that has no matching face
+    // cannot downgrade the request for every family visited afterwards.
     property string workingFamily: ""
     property string workingStyle: ""
     property int workingWeight: Font.Bold
     property bool workingItalic: false
     property bool workingUnderline: false
     property bool workingStrikeout: false
+    property int requestedWeight: Font.Bold
+    property bool requestedItalic: false
     property var allFontFamilies: []
     property string searchText: ""
     property var availableStyles: []
@@ -37,6 +43,11 @@ Kirigami.Dialog {
         workingItalic = selectedItalic;
         workingUnderline = selectedUnderline;
         workingStrikeout = selectedStrikeout;
+        // Re-seeded on every open, not just initialised once: without this a
+        // request abandoned with Cancel would still be steering the matching
+        // the next time the dialog is opened.
+        requestedWeight = selectedWeight;
+        requestedItalic = selectedItalic;
         if (allFontFamilies.length === 0)
             allFontFamilies = Qt.fontFamilies();
 
@@ -56,18 +67,60 @@ Kirigami.Dialog {
             workingStyle = "";
             return;
         }
-        availableStyles = appSettings.fontStylesForFamily(workingFamily);
+        availableStyles = dedupStyles(workingFamily, appSettings.fontStylesForFamily(workingFamily));
         // Find the style matching current weight/italic
         workingStyle = findMatchingStyle();
     }
 
+    /// Whether a style name reads as a slanted face. Used only to break ties
+    /// between two names that resolve to the SAME (weight, italic) pair, so a
+    /// family whose oblique faces report italic()==false keeps the upright
+    /// name.
+    function styleNameLooksSlanted(name) {
+        var lower = name.toLowerCase();
+        return lower.indexOf("italic") !== -1 || lower.indexOf("oblique") !== -1;
+    }
+
+    /// One entry per distinct (weight, italic) pair. The dialog stores a weight
+    /// and an italic flag and never a style name, so two names resolving to the
+    /// same pair are the same pick with two spellings, and the second one looks
+    /// like a choice that does nothing. Where they collide, keep the name whose
+    /// spelling agrees with the italic flag: DejaVu Sans lists "Bold Oblique"
+    /// before "Bold" and both come back (700, false), so a plain first-seen
+    /// dedup would keep the wrong one and offer no way to ask for Bold.
+    function dedupStyles(family, styles) {
+        var byKey = {};
+        var order = [];
+        for (var i = 0; i < styles.length; i++) {
+            var name = styles[i];
+            var italic = appSettings.fontStyleItalic(family, name);
+            var key = appSettings.fontStyleWeight(family, name) + ":" + italic;
+            if (byKey[key] === undefined) {
+                byKey[key] = name;
+                order.push(key);
+            } else if (styleNameLooksSlanted(name) === italic && styleNameLooksSlanted(byKey[key]) !== italic) {
+                byKey[key] = name;
+            }
+        }
+        var result = [];
+        for (var j = 0; j < order.length; j++)
+            result.push(byKey[order[j]]);
+        return result;
+    }
+
     function findMatchingStyle() {
-        // Try to find a style that matches current weight + italic
+        // Both loops match against the REQUEST. Matching against the resolved
+        // value instead made every family without an exact face narrow the
+        // request permanently, so a walk through a few families ended on a
+        // weight the user never picked.
         for (var i = 0; i < availableStyles.length; i++) {
             var sw = appSettings.fontStyleWeight(workingFamily, availableStyles[i]);
             var si = appSettings.fontStyleItalic(workingFamily, availableStyles[i]);
-            if (sw === workingWeight && si === workingItalic)
+            if (sw === requestedWeight && si === requestedItalic) {
+                workingWeight = sw;
+                workingItalic = si;
                 return availableStyles[i];
+            }
         }
         // Fall back to closest weight match
         var bestIdx = 0;
@@ -75,7 +128,7 @@ Kirigami.Dialog {
         for (var j = 0; j < availableStyles.length; j++) {
             var w = appSettings.fontStyleWeight(workingFamily, availableStyles[j]);
             var it = appSettings.fontStyleItalic(workingFamily, availableStyles[j]);
-            var dist = Math.abs(w - workingWeight) + (it !== workingItalic ? 500 : 0);
+            var dist = Math.abs(w - requestedWeight) + (it !== requestedItalic ? 500 : 0);
             if (dist < bestDist) {
                 bestDist = dist;
                 bestIdx = j;
@@ -184,7 +237,13 @@ Kirigami.Dialog {
                         highlighted: modelData === dialog.workingFamily
                         onClicked: {
                             dialog.workingFamily = modelData;
-                            dialog.wasDefault = false;
+                            // Clicking the system family back re-selects
+                            // follow-the-system rather than pinning that
+                            // family by name. Unconditionally clearing this
+                            // made the choice one-way: nothing inside the
+                            // dialog could get back to it once any family had
+                            // been clicked.
+                            dialog.wasDefault = (modelData === dialog.systemFontFamily);
                             dialog.updateStyles();
                         }
                     }
@@ -228,6 +287,11 @@ Kirigami.Dialog {
                             dialog.workingStyle = modelData;
                             dialog.workingWeight = appSettings.fontStyleWeight(dialog.workingFamily, modelData);
                             dialog.workingItalic = appSettings.fontStyleItalic(dialog.workingFamily, modelData);
+                            // An explicit style click is the only thing that
+                            // restates the request, so a later family that
+                            // does carry this face gets it back.
+                            dialog.requestedWeight = dialog.workingWeight;
+                            dialog.requestedItalic = dialog.workingItalic;
                         }
                     }
                 }

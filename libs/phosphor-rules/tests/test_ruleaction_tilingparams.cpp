@@ -166,12 +166,12 @@ private Q_SLOTS:
     /// vocabularies that are the only load-time defence for a hand-edited
     /// rules.json.
     ///
-    /// The slot pins are the point. Sixteen near-identical registrations were
-    /// added in one commit, each a copy-paste of the last, and a
+    /// The slot pins are the point. Twenty-one near-identical registrations
+    /// have accumulated here, each a copy-paste of the last, and a
     /// `constantSlot` left pointing at the previous action's slot passes every
     /// bounds assertion while silently writing the wrong slot forever. That is
     /// the hazard testScrollingParamActions_range already calls out for its
-    /// own pair; this covers the sixteen that came after it.
+    /// own pair; this covers the twenty-one that came after it.
     void testTabIndicatorActions_slotsBoundsAndVocabularies()
     {
         const auto rejectsMissingValue = [](QLatin1StringView type) {
@@ -285,6 +285,51 @@ private Q_SLOTS:
             rejects(pair.first, QStringLiteral("3DAEE9")); // missing the #
             acceptsWithSlot(pair.first, QStringLiteral("#FF3DAEE9"), pair.second);
             acceptsWithSlot(pair.first, QStringLiteral("#3DAEE9"), pair.second);
+        }
+
+        // ── the five label-font actions ──
+        // The family is the ONE string action in this file that admits the
+        // EMPTY string, and that is the whole point of it: empty is the user
+        // asking for the system font, and it is the only way a rule walks one
+        // screen back to the default after a global family was picked. The
+        // empty row below is load-bearing. Swap the descriptor's
+        // hasStringAllowingEmpty for the ordinary hasNonEmptyString and every
+        // other line in this block still passes while the feature is dead.
+        rejectsMissingValue(ActionType::SetTabIndicatorFontFamily);
+        rejects(ActionType::SetTabIndicatorFontFamily, 700); // a number, not a string
+        acceptsWithSlot(ActionType::SetTabIndicatorFontFamily, QString(), ActionSlot::TabIndicatorFontFamily);
+        acceptsWithSlot(ActionType::SetTabIndicatorFontFamily, QStringLiteral("Noto Sans"),
+                        ActionSlot::TabIndicatorFontFamily);
+
+        // ── weight ──
+        // The bounds are DOUBLES here, unlike every int-typed sibling above,
+        // because the descriptor validates through the shared signed-range
+        // helper. Spelled as doubles for that reason: an int comparison
+        // against them is a type mismatch, not a tighter test.
+        rejectsMissingValue(ActionType::SetTabIndicatorFontWeight);
+        rejects(ActionType::SetTabIndicatorFontWeight, QStringLiteral("bold")); // a token, not a number
+        rejects(ActionType::SetTabIndicatorFontWeight, MinTabIndicatorFontWeight - 1.0);
+        rejects(ActionType::SetTabIndicatorFontWeight, MaxTabIndicatorFontWeight + 1.0);
+        // Zero is what the explicit 100 floor exists for: a zero-floored helper
+        // would admit it, and QFont::setWeight(0) is not a weight.
+        rejects(ActionType::SetTabIndicatorFontWeight, 0);
+        acceptsWithSlot(ActionType::SetTabIndicatorFontWeight, MinTabIndicatorFontWeight,
+                        ActionSlot::TabIndicatorFontWeight);
+        acceptsWithSlot(ActionType::SetTabIndicatorFontWeight, MaxTabIndicatorFontWeight,
+                        ActionSlot::TabIndicatorFontWeight);
+        // Regular, an interior value that is neither bound nor the shipped
+        // global default, so a validator narrowed to a closed set would fail.
+        acceptsWithSlot(ActionType::SetTabIndicatorFontWeight, 400.0, ActionSlot::TabIndicatorFontWeight);
+
+        // ── the three style flags ──
+        for (const auto& pair : QList<QPair<QLatin1StringView, QLatin1StringView>>{
+                 {ActionType::SetTabIndicatorFontItalic, ActionSlot::TabIndicatorFontItalic},
+                 {ActionType::SetTabIndicatorFontUnderline, ActionSlot::TabIndicatorFontUnderline},
+                 {ActionType::SetTabIndicatorFontStrikeout, ActionSlot::TabIndicatorFontStrikeout}}) {
+            rejectsMissingValue(pair.first);
+            rejects(pair.first, QStringLiteral("yes")); // non-bool
+            acceptsWithSlot(pair.first, true, pair.second);
+            acceptsWithSlot(pair.first, false, pair.second); // both polarities matter
         }
     }
 

@@ -309,10 +309,12 @@ SettingsFlickable {
                             spacing: Kirigami.Units.smallSpacing
 
                             Button {
-                                text: appSettings.labelFontFamily || i18n("System default")
+                                text: appSettings.labelFontFamily || i18n("System font")
                                 font.family: appSettings.labelFontFamily
                                 font.weight: appSettings.labelFontWeight
                                 font.italic: appSettings.labelFontItalic
+                                font.underline: appSettings.labelFontUnderline
+                                font.strikeout: appSettings.labelFontStrikeout
                                 icon.name: "font-select-symbolic"
                                 onClicked: {
                                     fontPickerDialog.selectedFamily = appSettings.labelFontFamily;

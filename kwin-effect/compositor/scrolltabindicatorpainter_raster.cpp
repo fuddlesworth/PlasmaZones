@@ -266,6 +266,13 @@ struct FittedLabel
 /// floor is 1px. A font that cannot honour pixelSize at all (a bitmap face)
 /// walks to that floor and is then clipped by the indicator clip rect, which
 /// is the same outcome the un-fitted code had.
+///
+/// The fit is a property of the FONT, not of the STRING. A title Qt renders
+/// through its fallback chain — a script this family does not cover — can
+/// report a taller line box than the fitted face does, and the excess is
+/// clipped by the indicator clip rect. Keying the memo on the title as well
+/// would cost a fit per tab instead of one per indicator, so what the fitted
+/// size promises is that THIS font fits, not that every title will.
 FittedLabel fitLabelFont(const QFont& base, int thickness, const QPaintDevice* device)
 {
     const qreal budget = std::max(1.0, qreal(thickness) - kLabelChipMargin);
@@ -519,7 +526,19 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
                 painter.rotate(angle);
             }
             painter.setPen(QPen(pill.active || pill.urgent ? style.themeHighlightedText : style.themeText));
-            painter.drawText(QRectF(-width / 2.0, -height / 2.0, width, height), Qt::AlignCenter, text);
+            // Widened symmetrically for the CLIP only. drawText clips to this
+            // rect, and a slanted or swashed final glyph can carry ink past
+            // its own advance, which `width` is measured in — newly visible
+            // now that italic is a user setting. AlignCenter means the text
+            // still draws in exactly the same place, in both orientations;
+            // only the boundary moves, and only bearing ink can appear in the
+            // margin. Qt::TextDontClip is deliberately NOT used: that would
+            // also let a mis-measured elide spill across the neighbouring
+            // chip. Widened on the text axis only — the vertical extent is the
+            // fitted line box, and growing it would defeat the fit.
+            const qreal clipSlack = height;
+            painter.drawText(QRectF(-width / 2.0 - clipSlack, -height / 2.0, width + clipSlack * 2.0, height),
+                             Qt::AlignCenter, text);
             painter.restore();
         }
         painter.restore();

@@ -779,15 +779,24 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // because the prefixes have to stay distinct from the ten entries
         // above. The three style flags come out of boolActionStateLabel.
         if (action.type == ActionType::SetTabIndicatorFontFamily) {
-            // Empty is a real value here (it means the system font), so it gets
-            // named rather than treated as unset. A non-string payload is the
-            // reject case, the same posture the numeric branches take.
-            if (!raw.isString() && !raw.isUndefined() && !raw.isNull()) {
+            // Three states, kept apart the way SetSplitRatio keeps them.
+            // Absent or null is present-but-unset and gets the bare label, so
+            // a staged payload never reads as a font choice. An EXPLICIT empty
+            // string is a real value meaning the system font, and it is named
+            // through the same descriptor vocabulary the rule editor's value
+            // pill uses so the two summaries cannot drift. Anything else is
+            // the reject case, matching the numeric branches above.
+            if (raw.isUndefined() || raw.isNull()) {
+                return PhosphorI18n::tr("Tab label font");
+            }
+            if (!raw.isString()) {
                 return PhosphorI18n::tr("Tab label font (invalid)");
             }
             const QString family = raw.toString();
-            return family.isEmpty() ? PhosphorI18n::tr("Tab label font: system font")
-                                    : PhosphorI18n::tr("Tab label font: %1").arg(family);
+            return PhosphorI18n::tr("Tab label font: %1")
+                .arg(family.isEmpty()
+                         ? RuleAuthoring::paramEmptyValueLabel(action.type, QString(PhosphorRules::ActionParam::Value))
+                         : family);
         }
         if (action.type == ActionType::SetTabIndicatorFontWeight) {
             const auto weight = intValueParam(action.type, raw);

@@ -693,7 +693,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                 PhosphorI18n::tr("bottom")});
     addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorFont"), PhosphorI18n::tr("Font"),
                {PhosphorI18n::tr("tab"), PhosphorI18n::tr("font"), PhosphorI18n::tr("typeface"),
-                PhosphorI18n::tr("title"), PhosphorI18n::tr("bold"), PhosphorI18n::tr("italic")});
+                PhosphorI18n::tr("title"), PhosphorI18n::tr("label"), PhosphorI18n::tr("bold"),
+                PhosphorI18n::tr("italic"), PhosphorI18n::tr("weight"), PhosphorI18n::tr("underline"),
+                PhosphorI18n::tr("strikeout")});
 
     addSection(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorSizing"),
                PhosphorI18n::tr("Size and spacing"));

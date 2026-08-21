@@ -382,11 +382,12 @@ public:
     // Each NUMERIC default below is pinned against its ConfigDefaults twin by a
     // static_assert in settings/scrolling.cpp, the way the toggle above is
     // (that covers the drop-indicator opacity/border-width literals further
-    // down too). The five colour defaults cannot be, for two different reasons.
-    // The tab trio returns a non-constexpr QString from ConfigDefaults, and
-    // test_scrolling_settings.cpp pins their SCHEMA defaults at runtime. The
-    // drop-indicator pair below returns a QColor, which is not a literal type
-    // either; its agreement with ConfigDefaults is pinned at runtime by
+    // down too). Six defaults below cannot be: the five colours and the tab
+    // label's font family. The tab colour trio and the family return a
+    // non-constexpr QString from ConfigDefaults, and their SCHEMA defaults are
+    // pinned at runtime by test_scrolling_settings.cpp. The drop-indicator
+    // pair below returns a QColor, which is not a literal type either; its
+    // agreement with ConfigDefaults is pinned at runtime by
     // dropIndicatorFallbackMatchesInterfaceDefault in test_settings_core.cpp.
 
     /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
@@ -442,9 +443,10 @@ public:
     /// lives on this interface for the same two readers. Empty family means
     /// the system font; there is no size key because Width drives the pill's
     /// thickness and the painter fits the label to it (see ConfigDefaults).
-    /// The family default is a QString, so it is pinned the way the colour
-    /// trio is rather than by a static_assert; the weight and the three flags
-    /// are pinned in settings/scrolling.cpp.
+    /// The family default is a QString, so it cannot be static_asserted; its
+    /// SCHEMA default is pinned at runtime by test_scrolling_settings.cpp the
+    /// way the colour trio's is. The weight and the three flags are pinned in
+    /// settings/scrolling.cpp.
     virtual QString scrollingTabIndicatorFontFamily() const
     {
         return QString();

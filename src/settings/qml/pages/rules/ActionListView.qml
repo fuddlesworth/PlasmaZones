@@ -148,6 +148,15 @@ ColumnLayout {
 
         var kind = param.kind;
         var rawStr = String(raw);
+        // A few params treat an explicit empty value as a real choice — the tab
+        // label font's empty family selects the system font. The descriptor
+        // publishes the word for that state, so the pill names it rather than
+        // rendering blank. Gated on the descriptor and NOT on the kind: every
+        // other string param's empty value means unset, and a `kind ===
+        // "string"` branch here would put this label on all of them, now and in
+        // future.
+        if (rawStr === "" && param.emptyLabel)
+            return param.emptyLabel;
         if (kind === "enum") {
             var opts = param.options || [];
             for (var i = 0; i < opts.length; ++i) {

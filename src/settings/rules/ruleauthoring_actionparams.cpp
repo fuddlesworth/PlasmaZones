@@ -416,6 +416,15 @@ bool actionAcceptsAccent(const QString& typeWire)
 
 } // namespace
 
+QString paramEmptyValueLabel(const QString& typeWire, const QString& key)
+{
+    if (typeWire == QString(PhosphorRules::ActionType::SetTabIndicatorFontFamily)
+        && key == QString(PhosphorRules::ActionParam::Value)) {
+        return PhosphorI18n::tr("System font");
+    }
+    return {};
+}
+
 QVariantList paramsForActionType(const QString& type)
 {
     QVariantList params;
@@ -438,6 +447,9 @@ QVariantList paramsForActionType(const QString& type)
         p[QStringLiteral("label")] = paramLabel(type, schema.key);
         if (const QString hint = paramHint(type, schema.key); !hint.isEmpty()) {
             p[QStringLiteral("hint")] = hint;
+        }
+        if (const QString emptyLabel = paramEmptyValueLabel(type, schema.key); !emptyLabel.isEmpty()) {
+            p[QStringLiteral("emptyLabel")] = emptyLabel;
         }
         // Bool params carry a polarity-aware on/off caption (e.g. "Show border" /
         // "Hide border") so the editor toggle reads out its current effect rather
