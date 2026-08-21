@@ -251,6 +251,18 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
             << "AlgorithmRegistry: refusing algorithm id with reserved 'autotile:' prefix" << id;
         return;
     }
+    // The other reserved word: "none" is the explicit no-algorithm sentinel
+    // (PhosphorZones::NoTilingAlgorithm — spelled as a literal here because
+    // this library does not link PhosphorZones, and must not start). Nothing
+    // stopped a user-authored Luau script declaring it, and a script that did
+    // would be misread as the opt-out by every site that translates the word:
+    // its own algorithm would become unselectable, and in the other direction
+    // the D-Bus setAlgorithm would pass its registry-existence check and hand
+    // the ENGINE the one word the engine must never see.
+    if (id == QLatin1String("none")) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry: refusing the reserved no-algorithm id" << id;
+        return;
+    }
     // IDs flow into LayoutPreview::id, JSON keys, D-Bus args, QML model roles.
     // Reject characters that would break a downstream parser. Allowed:
     // [A-Za-z0-9._:-] (':' enables "script:foo" namespacing).

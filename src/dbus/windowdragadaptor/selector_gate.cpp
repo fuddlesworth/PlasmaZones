@@ -144,9 +144,19 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     if (screen && (selectorSuppressed || (m_contextResolver && m_layoutManager))) {
         bool refuse = selectorSuppressed;
         if (!refuse && m_contextResolver && m_layoutManager) {
-            PhosphorContext::ContextHandle modeCtx = selectorCtx;
-            modeCtx.mode = m_layoutManager->modeForScreen(selectorScreenId, modeCtx.virtualDesktop, modeCtx.activity);
-            refuse = m_contextResolver->isDisabled(modeCtx);
+            // The mode handleFor already stamped is the LIVE one (the router),
+            // and it is the mode this gate must ask about — the same rule
+            // every sibling drag site follows ("live mode, NOT
+            // handleForMode(Snapping)"). This used to overwrite it with the
+            // raw CASCADE mode, which disagrees with the router exactly when
+            // an engine does not own the screen its assignment names: a
+            // downgraded tiling or scrolling assignment then had its disable
+            // checked against the engine axis while the overlay drawn beside
+            // it was the snapping one. The selector refused a drop the overlay
+            // had just promised, or offered one on a context the user disabled
+            // for snapping — the drag-vs-overlay disagreement of #724, from
+            // both directions.
+            refuse = m_contextResolver->isDisabled(selectorCtx);
         }
         if (refuse) {
             if (m_zoneSelectorShown) {

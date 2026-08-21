@@ -334,6 +334,20 @@ void Daemon::showLockedOsd(const QString& screenId)
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
+void Daemon::showUnlockedOsd(const QString& screenId)
+{
+    if (shouldSuppressOsd(screenId)) {
+        return;
+    }
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+    if (style == OsdStyle::None) {
+        return;
+    }
+
+    showKdeTextOsd(QStringLiteral("object-unlocked"), PhosphorI18n::tr("Layout Unlocked"));
+    qCInfo(lcDaemon) << "Showing unlocked text OSD for screen=" << screenId;
+}
+
 void Daemon::showLockedPreviewOsd(const QString& screenId)
 {
     if (shouldSuppressOsd(screenId)) {
@@ -705,9 +719,10 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                // const overload: a non-creating lookup. The non-const overload
-                // would lazily allocate an empty TilingState for a known screen
-                // during this read-only OSD preview build.
+                // const overload for const-correctness on a read-only build.
+                // BOTH stateForScreen overloads are non-creating today (the
+                // lazy-allocation the non-const one once performed is gone),
+                // so callers elsewhere gate on the non-const form safely.
                 const auto* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
@@ -815,19 +830,27 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
 
     if (m_layoutManager && m_screenManager) {
         const QString activity = currentActivity();
-        // Only the AUTOTILE arm depends on the master autotile switch. The
-        // templates arm must be resolved regardless: with autotile off and
-        // scrolling on, gating the whole resolution on autotileEnabled left
-        // scrollingActive false and handed a scrolling screen the manual list.
-        const bool autotileEnabled = m_settings->autotileEnabled();
+        // Both engine arms resolve through the ROUTER, never through a master
+        // switch directly. The router already folds the switch in — with
+        // tiling disabled updateEngineScreens does not claim the screen and
+        // the router downgrades it to Snapping — so asking the router is both
+        // switch-aware AND transition-aware, and it cannot drift from what the
+        // overlay resolves. Reading the switch here instead was how this
+        // filter came to disagree with the picker: the picker and
+        // visibleLayoutCount both resolve the autotile family through
+        // resolvePerScreenLayoutInclude, so the two answered differently and
+        // every visible card became a silent dead press. The quick-slot
+        // sibling (shortcuts_wiring.cpp) derives its filter from
+        // currentModeFor for exactly this reason.
 
         // Templates needs BOTH conjuncts, the same pair
-        // resolvePerScreenLayoutInclude in overlayservice.cpp requires. Not
-        // literally the same test: that one reads an injected resolver and
-        // treats an unwired one as Templates, while this one asks the router
-        // directly and has no such escape.
-        // a scrolling assignment id AND a live engine still reporting
-        // Templates. The live capability alone is not enough (an engine can
+        // resolvePerScreenLayoutInclude in overlayservice.cpp requires: a
+        // scrolling assignment id AND a live engine still reporting
+        // Templates. Not literally the same test — that one reads an injected
+        // resolver and treats an unwired one as Templates, while this one asks
+        // the router directly and has no such escape.
+        //
+        // The live capability alone is not enough (an engine can
         // report Templates for a screen whose assignment is not scrolling),
         // and the assignment id alone is not enough (a scrolling assignment
         // the router downgraded — master switch off, Scrolling axis
@@ -838,7 +861,8 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         const auto classify = [&](const QString& screenId) {
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(screenId, currentDesktopForScreen(screenId), activity);
-            if (autotileEnabled && PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+                && currentModeFor(screenId) == PhosphorZones::AssignmentEntry::Autotile) {
                 autotileActive = true;
             } else if (PhosphorLayout::LayoutId::isScrolling(assignmentId)
                        && layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
@@ -1134,7 +1158,7 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                 continue;
             }
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
-                const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+                QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
                 // Bare autotile (mode set, no concrete algorithm) draws its
                 // algorithm from the suppressed global default, so it won't tile
                 // (see updateEngineScreens) — show "not assigned" rather than
@@ -1144,6 +1168,40 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
                     && m_layoutManager->isDefaultAssignmentSuppressedForContext(screenId, desktop, activity)) {
                     showNotAssignedOsd(screenId);
                     continue;
+                }
+                // Explicit per-context opt-out ("autotile:none"): nothing
+                // tiles here by the user's own choice, so no card — the
+                // None-pick silent posture. Not the "not assigned" card:
+                // that one prompts for an assignment this context refuses,
+                // and the registry lookup below would print the raw
+                // reserved word as the display name.
+                if (algoId == PhosphorZones::NoTilingAlgorithm) {
+                    continue;
+                }
+                // A bare context that is NOT suppressed genuinely tiles, with
+                // the global default. Announce THAT rather than handing an
+                // empty id to the lookup below, which resolved no algorithm
+                // and bailed with a misleading "algorithm not found" warning —
+                // a real tiling screen silently announcing nothing on every
+                // desktop switch. A globally cleared default takes the same
+                // silent posture as the per-context opt-out above: nothing
+                // tiles there either, by the same choice.
+                if (algoId.isEmpty()) {
+                    if (m_settings && m_settings->defaultAutotileAlgorithm() == PhosphorZones::NoTilingAlgorithm) {
+                        continue;
+                    }
+                    // The engine's LIVE global id, not the setting. A bare
+                    // context enters the engine set with no per-screen
+                    // Algorithm override, so it tiles with whatever the engine
+                    // currently holds — and that can differ from the setting,
+                    // because the layout picker and the D-Bus setAlgorithm both
+                    // move the engine without writing it back. Naming the
+                    // setting here would announce an algorithm the screen is
+                    // not using.
+                    algoId = m_autotileEngine ? m_autotileEngine->algorithmId() : QString();
+                    if (algoId.isEmpty()) {
+                        continue;
+                    }
                 }
                 auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
                 const QString displayName = algo ? algo->name() : algoId;

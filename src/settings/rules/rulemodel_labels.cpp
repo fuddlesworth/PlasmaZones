@@ -245,8 +245,16 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     }
     if (action.type == ActionType::SetSnappingLayout) {
         const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
-        return layoutId.isEmpty() ? PhosphorI18n::tr("Snapping layout")
-                                  : PhosphorI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
+        if (layoutId.isEmpty()) {
+            return PhosphorI18n::tr("Snapping layout");
+        }
+        // The reserved "explicitly none" word — same treatment as the
+        // template arm below, for the same reason: the lookup cannot resolve
+        // it and the fallback would print a layout apparently named "none".
+        if (layoutId == PhosphorZones::NoSnappingLayout) {
+            return PhosphorI18n::tr("Snapping: None");
+        }
+        return PhosphorI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetScrollingTemplate) {
         // Same raw-UUID value shape as SetSnappingLayout, and the shared
@@ -277,6 +285,11 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // bare label rather than a dangling "Tiling: ", as SetSnappingLayout does.
         if (algo.isEmpty()) {
             return PhosphorI18n::tr("Tiling algorithm");
+        }
+        // The reserved word again — an unresolvable token would render
+        // verbatim as an algorithm named "none".
+        if (algo == PhosphorZones::NoTilingAlgorithm) {
+            return PhosphorI18n::tr("Tiling: None");
         }
         return PhosphorI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }

@@ -11,7 +11,8 @@ import org.kde.kirigami as Kirigami
  * One LayoutThumbnail per placement mode (snapping layout, tiling algorithm,
  * scrolling strip), exactly one visible at a time, split out of
  * MonitorStatePage when that page crossed the file-size ceiling. Pure view:
- * every input is read off the page's stateView / root handles so the
+ * inputs are read off the page's stateView / root handles (plus the
+ * appSettings context property for the shared font settings) so the
  * bindings stay live, and nothing here writes state.
  */
 ColumnLayout {
@@ -46,13 +47,40 @@ ColumnLayout {
             // screen must keep showing as unassigned rather than have
             // the preview reinstate the default the daemon withheld.
             if (previews.view.localLayoutCleared) {
+                // The global default can itself be the explicit opt-out (the
+                // library card's Clear Default). _findLayout misses it, and
+                // the tail literal would then caption the card "Default" —
+                // for a state where "Default" IS no layout. Name it honestly.
+                if (previews.page._layoutBridge.defaultLayoutId === previews.page._noLayoutToken) {
+                    return {
+                        "displayName": i18n("None"),
+                        "zones": []
+                    };
+                }
                 var fallback = previews.page._findLayout(previews.page._layoutBridge.defaultLayoutId);
                 if (fallback)
                     return fallback;
             }
+            // The explicit opt-out: no layout at all, on purpose. Its own
+            // branch because the daemon reports an empty layoutName for
+            // it, and the literal below would then caption the card
+            // "Default", which is the state the user just opted out of.
+            if (previews.view.localLayoutId === previews.page._noLayoutToken) {
+                return {
+                    "displayName": i18n("None"),
+                    "zones": []
+                };
+            }
             // The local list does not carry this layout, so there are
             // no zones to draw. The daemon still reports the resolved
             // name, so show that rather than nothing.
+            //
+            // No raw-id rung here, unlike the tiling preview below, and the
+            // asymmetry is deliberate: an algorithm id is a readable word
+            // ("bsp"), while a snapping layout id is a braced UUID, so
+            // falling back to it would caption the card "{8f3c…}". The
+            // InlineMessage on the page already names the unresolved id for
+            // this case.
             return {
                 "displayName": (previews.view.screenState && previews.view.screenState.layoutName) || i18n("Default"),
                 "zones": []
@@ -94,9 +122,33 @@ ColumnLayout {
             // algorithmId for a context whose algorithm is suppressed,
             // and that screen must keep showing as unassigned.
             if (previews.view.localAlgorithmCleared) {
+                // Same opt-out-as-default arm as the snapping preview above:
+                // without it the tail literal captions the card "Default"
+                // (algorithmName is empty for the reserved word and the
+                // cleared local id is empty too) — the exact miscaption the
+                // comment on that literal warns about, reached via the
+                // resolved default instead of the local pick.
+                if (previews.page._layoutBridge.defaultAutotileAlgorithm === previews.page._noLayoutToken) {
+                    return {
+                        "displayName": i18n("None"),
+                        "category": 1,
+                        "zones": []
+                    };
+                }
                 var fallback = previews.page._findLayout(previews.page._autotilePrefix + previews.page._layoutBridge.defaultAutotileAlgorithm);
                 if (fallback)
                     return fallback;
+            }
+            // The explicit opt-out: autotile mode with nothing tiling, on
+            // purpose. Its own branch because the daemon reports an empty
+            // algorithmName for the reserved word, and the literal below
+            // would fall through to the raw id and caption the card "none".
+            if (previews.view.localAlgorithmId === previews.page._noLayoutToken) {
+                return {
+                    "displayName": i18n("None"),
+                    "category": 1,
+                    "zones": []
+                };
             }
             // getScreenStates reports the algorithm's display name, so
             // prefer it over the raw id ("bsp") the local list missed.

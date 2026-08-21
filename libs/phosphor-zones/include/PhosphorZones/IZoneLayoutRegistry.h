@@ -82,8 +82,17 @@ public:
     ///               via @c deleteLater (matching how the registry
     ///               adopted it in @ref addLayout). Callers must drop
     ///               any other references before this call returns.
-    virtual void removeLayout(Layout* layout) = 0;
-    virtual void removeLayoutById(const QUuid& id) = 0;
+    /// @return       @c true when the layout was removed. @c false when the
+    ///               removal was REFUSED and the layout is still registered:
+    ///               the implementation keeps the layout, its file and its
+    ///               settings sidecar mutually consistent rather than deleting
+    ///               a half of them, so a caller that announces the deletion
+    ///               (a `layoutRemoved`-style signal, an eviction of per-layout
+    ///               state) must gate that announcement on this result.
+    virtual bool removeLayout(Layout* layout) = 0;
+    /// @copydoc removeLayout
+    /// Also returns @c false when no layout carries @p id.
+    virtual bool removeLayoutById(const QUuid& id) = 0;
     /// @param source Borrowed - caller retains ownership.
     /// @return       Newly allocated copy; ownership transferred to the
     ///               registry (mirrors @c addLayout semantics). Returns
@@ -349,7 +358,8 @@ public:
 
 Q_SIGNALS:
     // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;
-    // @c removeLayout / @c removeLayoutById fire `layoutRemoved`.
+    // @c removeLayout / @c removeLayoutById fire `layoutRemoved` on success;
+    // a refused removal (see their @return) fires nothing.
     void layoutAdded(Layout* layout);
     void layoutRemoved(Layout* layout);
 

@@ -31,6 +31,12 @@ QtObject {
     /// against it exactly as they did inline, with no rewrites.
     required property var row
 
+    /// The reserved explicit-opt-out word (PhosphorZones::NoSnappingLayout /
+    /// NoTilingAlgorithm — one spelling, see the AssignmentEntry.h checklist).
+    /// Named once here so the two editors that offer the None row share it,
+    /// matching MonitorStatePage's `_noLayoutToken` convention.
+    readonly property string noLayoutToken: "none"
+
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -442,8 +448,12 @@ QtObject {
     // streams: 0 = manual / snapping layouts, 1 = autotile algorithms.
     // `showNoneOption: false` because the action either targets a layout or
     // has no value (no implicit "Default" fallback inside a rule). The
-    // scrolling-template editor below uses a plain combo instead, for the
-    // reason its own comment gives.
+    // explicit-none row is a different thing and both editors carry it: the
+    // reserved word is a real value the action can carry (opt the context
+    // out of layouts entirely), so without the row a stored token had no
+    // entry to match and could not be re-picked. The scrolling-template
+    // editor below uses a plain combo instead, for the reason its own
+    // comment gives.
     property Component _snappingLayoutEditor: Component {
         LayoutComboBox {
             readonly property var _param: parent.modelData
@@ -453,7 +463,19 @@ QtObject {
             currentLayoutId: row.action[_param.key] || ""
             layoutFilter: 0
             showNoneOption: false
+            // The reserved "explicitly no layout" word
+            // (PhosphorZones::NoSnappingLayout, whose spelling checklist
+            // names this site).
+            showExplicitNoneOption: true
+            explicitNoneValue: editors.noLayoutToken
             showPreview: true
+            // Surface an unresolvable stored id verbatim, matching every
+            // sibling wire-value editor in this file: a rule pinned to a
+            // layout that has since been deleted matches no row, so the combo
+            // sits at currentIndex -1 and would otherwise render blank —
+            // hiding what the rule actually points at, with no "not in your
+            // list" message here to compensate.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
@@ -624,14 +646,35 @@ QtObject {
                 // (which wrote the combo's "autotile:bsp" verbatim) must round-
                 // trip too — and double-prefixing it would leave the combo
                 // blank. Matches the list resolver's already-prefixed handling.
+                // The reserved word stays bare: the explicit-none row is keyed
+                // "none", and prefixing it would leave the combo blank for a
+                // stored opt-out. A hand-edited "autotile:none" gets the same
+                // tolerance the corrupted prefixed real ids get — mapped to
+                // the bare word so it seats the None row instead of leaving
+                // the combo blank.
                 const stored = row.action[_param.key] || "";
-                if (stored === "" || stored.startsWith("autotile:"))
+                if (stored === "autotile:" + editors.noLayoutToken)
+                    return editors.noLayoutToken;
+                if (stored === "" || stored === editors.noLayoutToken || stored.startsWith("autotile:"))
                     return stored;
                 return "autotile:" + stored;
             }
             layoutFilter: 1
             showNoneOption: false
+            // The reserved "explicitly no algorithm" word
+            // (PhosphorZones::NoTilingAlgorithm, whose spelling checklist
+            // names this site). Bare on the wire like the algorithm ids.
+            // NOT offered for setAlgorithmParam, which shares this editor by
+            // kind: parameters tuned for "no algorithm" is a meaningless
+            // payload, and the SetAlgorithmParam summary would render the raw
+            // word as an algorithm apparently named "none".
+            showExplicitNoneOption: row.action.type !== "setAlgorithmParam"
+            explicitNoneValue: editors.noLayoutToken
             showPreview: true
+            // Same verbatim fallback as the snapping editor above: an
+            // algorithm that is no longer installed matches no row, and a
+            // blank combo hides what the rule pins.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             onActivated: function (index) {
                 const bareId = currentValue.startsWith("autotile:") ? currentValue.substring(9) : currentValue;
                 row.actionEdited(row._withParam(_param.key, bareId));

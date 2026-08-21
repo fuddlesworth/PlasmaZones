@@ -131,7 +131,11 @@ ExpandableRowDelegate {
             visible: text.length > 0
             text: {
                 const base = row.isRoot ? i18n("Based on defaults") : i18n("Inherits from “%1”", row.parentName);
-                return row.profileDescription.length > 0 ? (base + " · " + row.profileDescription) : base;
+                // Composed through i18nc rather than concatenated, so the
+                // separator and the order are the translator's to choose —
+                // the same treatment the other two-part subtitles in this
+                // settings tree already get.
+                return row.profileDescription.length > 0 ? i18nc("inheritance note, then the profile description", "%1 · %2", base, row.profileDescription) : base;
             }
             elide: Text.ElideRight
             color: Kirigami.Theme.disabledTextColor
@@ -288,6 +292,13 @@ ExpandableRowDelegate {
                     const idKinds = ["layoutId", "tilingAlgorithm", "screenId", "shaderPack", "decorationPack", "overlayShader"];
                     if (value.length === 0 && idKinds.indexOf(kind) >= 0)
                         return i18nc("a setting with no value", "Unset");
+                    // The reserved opt-out word for the two default keys
+                    // (PhosphorZones::NoSnappingLayout / NoTilingAlgorithm).
+                    // No catalogue carries it, so without this arm the pill
+                    // printed a layout apparently named "none" — the same
+                    // translation the rule list already does for the word.
+                    if (value === "none" && (kind === "layoutId" || kind === "tilingAlgorithm"))
+                        return i18nc("the explicit no-layout choice", "None");
                     const layouts = settingsController.layouts ? settingsController.layouts : [];
                     if (kind === "layoutId")
                         return diffColumn.resolveById(layouts, value, "id", "displayName");

@@ -19,10 +19,12 @@ ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
     , m_scrollEngine(scrollEngine)
 {
     // qFatal aborts unambiguously in both debug and release builds.
-    // modeFor() / partitionByMode() unconditionally deref each pointer,
-    // so a null dependency is a wiring bug that crashes on the first
-    // call — escalate at construction so the failure is loud and
-    // attributable to the construction site, not the first user.
+    // Every dependency here is required by the router's own contract:
+    // modeFor() / partitionByMode() deref the layout manager and the two
+    // engines they classify against, and engineFor() hands out the snap
+    // engine. A null one is a wiring bug that surfaces on the first call —
+    // escalate at construction so the failure is loud and attributable to
+    // the construction site, not the first user.
     if (!layoutManager || !snapEngine || !autotileEngine || !scrollEngine) {
         qFatal(
             "ScreenModeRouter: null dependency at construction "
@@ -55,7 +57,14 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     }
     const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
     const QString activity = m_layoutManager->currentActivity();
-    const auto mode = m_layoutManager->modeForScreen(screenId, desktop, activity);
+    // One cascade resolve for BOTH the mode and the algorithm the sentinel
+    // arm below tests. modeForScreen and tilingAlgorithmForScreen each run the
+    // full cascade (rule evaluation, connector fallback, default synthesis)
+    // and return fields of the very same entry, so asking them separately paid
+    // for that resolution twice on every routing query — and modeFor runs per
+    // screen in partitionByMode and again on every isXMode call.
+    const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
+    const auto mode = entry.mode;
     // Engine already confirmed "not autotile" at the top of this function,
     // so if the layout cascade still reports Autotile we're looking at
     // stale assignment state during a mode transition — trust the engine
@@ -82,6 +91,20 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     // checked above, so a cascade that still reports one of them is stale
     // assignment state mid-transition — trust the engines and fall back
     // to Snapping.
+    // One cascade-Autotile shape is NOT stale transition state: the explicit
+    // algorithm opt-out ("autotile:none"). updateEngineScreens deliberately
+    // leaves that screen out of the engine set FOREVER, so "engine inactive +
+    // cascade Autotile" is its permanent steady state, and downgrading it to
+    // Snapping makes every mode-keyed surface (mode toggle, OSD gating,
+    // cheatsheet, snap partitioning) treat an opted-out tiling screen as a
+    // live snapping screen. The declared mode is the user's standing choice —
+    // honor it. Scoped strictly to the sentinel: a bare-Autotile context with
+    // an empty or concrete algorithm and an inactive engine keeps the
+    // downgrade (that shape ships as the suppressed-default behavior and
+    // genuinely is transitional or suppression-driven).
+    if (mode == PhosphorZones::AssignmentEntry::Autotile && entry.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
+        return PhosphorZones::AssignmentEntry::Autotile;
+    }
     if (mode == PhosphorZones::AssignmentEntry::Autotile || mode == PhosphorZones::AssignmentEntry::Scrolling) {
         return PhosphorZones::AssignmentEntry::Snapping;
     }

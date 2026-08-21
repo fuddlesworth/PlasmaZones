@@ -52,8 +52,9 @@ namespace {
 /// every variant misses. @p tryOne must return a @c std::optional; an engaged
 /// optional holding a "settled" value (e.g. a non-null-but-empty Layout*) stops
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
-/// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
-/// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule /
+/// by layoutForScreen / resolveStoredAssignmentId (which both
+/// storedAssignmentIdForScreen and assignmentIdForScreen delegate to) /
+/// assignmentEntryForScreen / hasMatchingAssignmentRule /
 /// scrollingTemplateForContext / scrollingTemplateExplicitlyNone so the six
 /// callers cannot drift.
 template<typename TryFn>
@@ -209,10 +210,12 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
     //     SetSnappingLayout (mode-toggle losslessness), so blanket-deleting it
     //     would drop its SetEngineMode + SetTilingAlgorithm autotile intent.
     //     Rebuild via ContextRuleBridge::makeAssignmentActions with the
-    //     snapping layout cleared but mode + tilingAlgorithm preserved; only
-    //     drop the whole rule when, after the clear, nothing but a default
-    //     (Snapping) engine-mode remains — a pure Snapping mode-only context
-    //     rule encodes no intent beyond the default.
+    //     snapping layout cleared but mode + tilingAlgorithm preserved. The
+    //     rule is never dropped: reaching this shape at all means an exact
+    //     context rule that DECLARES an engine mode, which is a first-class
+    //     pin (hasExplicitSnappingModePin reads exactly it), so a rule left
+    //     with a bare Snapping mode still carries the user's intent rather
+    //     than encoding nothing.
     //
     //  2. A window-property rule that legitimately carries a SetSnappingLayout
     //     action (the phased rollout introduces exactly such rules). Rebuilding
@@ -260,7 +263,15 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             // deleted layout survives.
             AssignmentEntry entry = entryFromRuleMatchActions(rule);
             if (entry.snappingLayout == layoutId) {
-                entry.snappingLayout.clear();
+                // Same verdict as the template arm below, for the same
+                // reason: a Snapping context whose layout was just deleted
+                // must not silently adopt the registry-wide default layout
+                // (which is what an empty slot resolves to), so it takes the
+                // explicit no-layout word. A non-Snapping context keeps the
+                // plain clear — the slot is dormant data there, and writing an
+                // opt-out into a mode the context is not in would claim a
+                // choice the user never made.
+                entry.snappingLayout = entry.mode == AssignmentEntry::Snapping ? QString(NoSnappingLayout) : QString();
             }
             if (entry.scrollingTemplateLayout == layoutId) {
                 // The reserved word rather than empty, but ONLY where the
@@ -275,9 +286,7 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
                 //
                 // A non-Scrolling context keeps the plain clear: the slot is
                 // only a remembered value for a mode this context is not in,
-                // the user never asked for an opt-out, and the sentinel would
-                // also defeat the drop-if-nothing-remains test below and
-                // leave the rule behind as clutter.
+                // and the user never asked for an opt-out there.
                 entry.scrollingTemplateLayout =
                     entry.mode == AssignmentEntry::Scrolling ? QString(NoScrollingTemplate) : QString();
             }
@@ -287,18 +296,26 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
             // context needs to refresh, whether the rule was dropped or just
             // rebuilt.
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
-            if (entry.mode == AssignmentEntry::Snapping && entry.snappingLayout.isEmpty()
-                && entry.tilingAlgorithm.isEmpty() && entry.scrollingTemplateLayout.isEmpty()) {
-                // Nothing meaningful remains — a bare Snapping engine-mode is
-                // the default. Drop the whole rule. The snappingLayout guard
-                // is load-bearing: the clear above only empties the field
-                // that MATCHED the deleted id, so a rule whose template was
-                // deleted can still carry a live snapping assignment, and
-                // dropping it would destroy that assignment.
-                qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: dropped context rule" << rule.id.toString()
-                                    << "— only a default Snapping mode remained after clearing the deleted layout";
-                continue;
-            }
+            // No drop-if-nothing-remains test here, deliberately. It used to
+            // delete a rule left with mode Snapping and three empty payloads,
+            // on the reasoning that a bare Snapping engine-mode is just the
+            // default. That reasoning predates the explicit no-layout state:
+            // a bare Snapping mode on an EXACT context rule is now a
+            // first-class pin (hasExplicitSnappingModePin reads exactly this
+            // shape, and resolveStoredAssignmentId answers engaged-empty for
+            // it rather than falling through to default synthesis), and the
+            // Monitors page stages it whenever a context leaves Scrolling
+            // under a suppressed default.
+            //
+            // Every rule reaching this point is that pin: Shape 1 is gated on
+            // isContextAssignmentRule, which already requires both an exact
+            // context match and a SetEngineMode action. So the only way to
+            // arrive with all payloads empty is a pin whose one dormant
+            // template slot the purge just cleared — dropping it silently
+            // changed the context's mode resolution once suppression lifted
+            // or the level-1 default resolved to something other than
+            // Snapping. A rule whose SNAPPING layout was deleted never
+            // arrives empty: it takes the reserved word above.
             PWR::Rule rebuilt = rule;
             rebuilt.actions =
                 PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), entry.snappingLayout,
@@ -326,7 +343,26 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // window-negating rules), so there is no engine state to re-derive —
         // the store write's rulesChanged still reaches every projection
         // consumer.
-        const bool contextRule = isContextAssignmentRule(rule);
+        // Context-shaped for this purpose means "pins one exact context AND
+        // fills at least one assignment slot" — deliberately WIDER than
+        // isContextAssignmentRule, which additionally demands a SetEngineMode.
+        // A LAYOUT-ONLY exact-context rule (a SetSnappingLayout or
+        // SetScrollingTemplate with no mode action) is a first-class supported
+        // shape: findExactContextRule claims it through the same
+        // hasAnyAssignmentSlotAction test, and the batch rebuild spares it.
+        // Gating on the narrower predicate meant such a rule got neither the
+        // sentinel rewrite nor an `affected` entry, so deleting its layout
+        // erased the action outright, dropped the rule, and handed the context
+        // to the registry-wide default — the exact silent reshape the reserved
+        // word exists to prevent, and a contract this method publishes.
+        // Only the SHAPE needs testing here. hasAnyAssignmentSlotAction would
+        // be redundant twice over: it counts SetEngineMode among the slot
+        // actions, and every rule reaching Shape 2 carries a SetSnappingLayout
+        // or SetScrollingTemplate by construction — the referencesDeleted test
+        // at the top of the loop is what let it in.
+        const bool contextRule = rule.match.isContextOnly()
+            && (matchIsExactContextBase(rule.match) || matchIsExactContextDesktop(rule.match)
+                || matchIsExactContextActivity(rule.match));
         if (contextRule) {
             const ContextDims dims = decodeDims(rule.match);
             affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
@@ -345,11 +381,40 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // the context is not in or not a context slot at all, the user asked
         // for no opt-out, and the sentinel would keep a rule alive that the
         // empty-actions drop below should have taken.
-        if (contextRule && entryFromRuleMatchActions(rule).mode == AssignmentEntry::Scrolling) {
-            for (PWR::RuleAction& action : trimmed.actions) {
-                if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)
-                    && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
-                    action.params.insert(PWR::ActionParam::LayoutId, QString(NoScrollingTemplate));
+        if (contextRule) {
+            const AssignmentEntry::Mode ruleMode = entryFromRuleMatchActions(rule).mode;
+            // A rule that declares NO engine mode puts none of its slots out
+            // of force — the slot it carries IS its assignment, which is why
+            // the exact-context lookup admits the shape at all. Keying the
+            // rewrite on the mode would be wrong there:
+            // entryFromRuleMatchActions defaults a mode-less rule to Snapping,
+            // so a template-only rule would take the snapping arm, miss the
+            // template rewrite, and have its action erased instead. Key on
+            // whether the rule declares a mode, and fall back to rewriting
+            // whichever slot actually names the deleted id.
+            const bool declaresMode = hasEngineModeAction(rule);
+            const bool scrollingSlotInForce = declaresMode ? ruleMode == AssignmentEntry::Scrolling : true;
+            const bool snappingSlotInForce = declaresMode ? ruleMode == AssignmentEntry::Snapping : true;
+            if (scrollingSlotInForce) {
+                for (PWR::RuleAction& action : trimmed.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)
+                        && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
+                        action.params.insert(PWR::ActionParam::LayoutId, QString(NoScrollingTemplate));
+                    }
+                }
+            }
+            // The snapping twin, gated the same way: only a context that is
+            // IN Snapping mode takes the opt-out word when its layout is
+            // deleted — erasing the action would hand the screen to the
+            // registry-wide default layout the user never picked. A dormant
+            // SetSnappingLayout on a non-Snapping context keeps the plain
+            // erase.
+            if (snappingSlotInForce) {
+                for (PWR::RuleAction& action : trimmed.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+                        && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId) {
+                        action.params.insert(PWR::ActionParam::LayoutId, QString(NoSnappingLayout));
+                    }
                 }
             }
         }
@@ -378,11 +443,22 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
         // not the no-op a per-context bare mode would be.
         kept.append(trimmed);
         qCDebug(lcZonesLib) << "purgeLayoutIdFromAssignments: trimmed rule" << rule.id.toString()
-                            << "— cleared the deleted id (a Scrolling context's template slot is rewritten to the "
-                               "no-template word rather than removed), kept all other actions";
+                            << "— cleared the deleted id (a Scrolling context's template slot and a Snapping "
+                               "context's layout slot are rewritten to the reserved none word rather than removed), "
+                               "kept all other actions";
     }
     if (changed) {
-        m_ruleStore->setAllRules(kept);
+        if (!m_ruleStore->setAllRules(kept)) {
+            // The in-memory rule set is mutated and rulesChanged(false) has
+            // fired even on a save failure, so the running session stays
+            // consistent — but rules.json still holds the deleted id and the
+            // scrub (including the sentinel rewrites) is undone on the next
+            // daemon start. Nothing here can retry a failed save; leave the
+            // trace the silent discard used to swallow.
+            qCWarning(lcZonesLib) << "purgeLayoutIdFromAssignments: rule-store save failed — the scrub of" << layoutId
+                                  << "is not persisted; the stale store reloads on next start and the dangling id"
+                                  << "degrades at resolve time until something rewrites the rules";
+        }
         // Notify per-screen observers (overlays, autotile state, settings
         // tile caption, etc.) so they refresh against the new cascade —
         // without it, a layout delete left those consumers showing stale
@@ -484,7 +560,32 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
     // A hand-rolled isAutotile-only branch here once made a D-Bus
     // assign("scrolling:") fall into the null-Layout arm of assignLayout,
     // which CLEARS the assignment.
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)) {
+    //
+    // The reserved no-layout word routes through the same entry-upsert path,
+    // for the same reason: it names no Layout*, so the else-arm below would
+    // parse it to a null id and CLEAR the assignment — turning "explicitly
+    // none" into "inherit the default", the exact state the caller opted out
+    // of. fromLayoutId's non-UUID arm stores the word verbatim under Snapping
+    // mode (its autotile arm handles "autotile:none" with no help). This is
+    // the snapping/autotile write choke point the token's doc names.
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)
+        || layoutId == NoSnappingLayout) {
+        // Seeded from the EXACT context rule only. Known limitation, stated
+        // because the losslessness contract above is easy to over-read: when
+        // no exact rule exists yet, an activity-scoped write starts from an
+        // empty entry, so the siblings a BROADER (empty-activity) entry
+        // remembers are not carried onto it — and since the cascade returns
+        // the most specific entry whole rather than merging fields, the new
+        // entry shadows them.
+        //
+        // This is a property of every caller of this write path, not of any
+        // one mode: the picker's manual, autotile and no-layout branches all
+        // reach it. The daemon's mode-toggle arms compensate by widening the
+        // sibling slots themselves before writing through
+        // setAssignmentEntryDirect. Widening HERE would fix all callers at
+        // once, but it also makes every activity-scoped write copy the
+        // broader entry's values rather than leave them where they are, which
+        // is a different memory model and wants its own decision.
         AssignmentEntry existing;
         if (const PWR::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity)) {
             existing = entryFromRuleMatchActions(*rule);
@@ -496,6 +597,17 @@ void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDeskto
         upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
         Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
     } else {
+        // Deliberate asymmetry with assignScrollingTemplate's unresolvable-id
+        // arm (which stores the no-template word): an unknown or stale layout
+        // UUID here resolves to nullptr and assignLayout's null arm CLEARS
+        // the assignment, so the context inherits the default. The D-Bus
+        // assign verbs pre-validate layout existence, so this arm fires only
+        // for internal callers or an id deleted between validation and apply
+        // — states where the caller never expressed an opt-out, and where
+        // inheriting the default matches what every pre-opt-out caller
+        // expects of a failed assign. Rewriting to the opt-out word here
+        // would turn an internal error into a user-visible "this screen now
+        // has no layout".
         assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
     }
 }
@@ -663,10 +775,34 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
     //                  layout id) — the cascade is settled, fall through to
     //                  defaultLayout().
     //   - {layout}  -> resolved snap layout.
-    auto tryResolve = [this, virtualDesktop, &activity](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
+    //
+    // The explicit no-layout state cannot be expressed in that triple —
+    // "settled with no Layout*" already means "fall through to
+    // defaultLayout()" — so it rides a side flag: a Snapping entry carrying
+    // the reserved NoSnappingLayout word settles the chain AND suppresses the
+    // default fallback below. Mode-gated like the template resolver's None
+    // arm: a "none" preserved on a non-Snapping entry (the lossless
+    // mode-toggle contract) is dormant data, not an opt-out in force.
+    bool explicitlyNone = false;
+    auto tryResolve = [this, virtualDesktop, &activity,
+                       &explicitlyNone](const QString& sid) -> std::optional<PhosphorZones::Layout*> {
         const auto entry = resolveAssignmentEntry(sid, virtualDesktop, activity);
         if (!entry) {
             return std::nullopt; // genuine miss — the caller may retry
+        }
+        // The autotile opt-out is an opt-out here too, and the test must run
+        // BEFORE the non-Snapping settle below (which would swallow it into
+        // the plain {nullptr} that still falls through to defaultLayout()).
+        // Without this arm an autotile:none screen resolves the registry-wide
+        // default, and the ungated consumers (zone detection, window drag,
+        // resnap) snap windows into zones no overlay ever draws — the exact
+        // defeat of the opt-out this flag exists to prevent on the snapping
+        // side. A REAL algorithm id must not take this arm: those screens
+        // legitimately fall through (autotile-mode resolution is the engine's
+        // job; the default layout here is transition scaffolding).
+        if (entry->mode == AssignmentEntry::Autotile && entry->tilingAlgorithm == NoTilingAlgorithm) {
+            explicitlyNone = true;
+            return std::optional<PhosphorZones::Layout*>(nullptr);
         }
         // An entry exists; the cascade is settled — never retry. Any
         // NON-Snapping mode has no snap Layout*: an Autotile or Scrolling
@@ -678,15 +814,31 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
         if (entry->mode != AssignmentEntry::Snapping || entry->snappingLayout.isEmpty()) {
             return std::optional<PhosphorZones::Layout*>(nullptr);
         }
+        // "Explicitly none" short-circuits BEFORE the default fallback, and
+        // that ordering is the whole feature (the exact shape
+        // scrollingTemplateForContext gives templates): this context opted
+        // out of layouts, so the registry-wide default must not creep back
+        // in. Every hop that sets the flag also settles the chain, so the
+        // flag cannot go stale across fallback retries.
+        if (entry->snappingLayout == NoSnappingLayout) {
+            explicitlyNone = true;
+            return std::optional<PhosphorZones::Layout*>(nullptr);
+        }
         return std::optional<PhosphorZones::Layout*>(layoutById(QUuid::fromString(entry->snappingLayout)));
     };
 
     // Connector-name then virtual-screen fallback (the physical screen's
     // assignment is inherited). A settled {nullptr} stops the chain; a genuine
-    // miss (nullopt) and a {nullptr} both defer to the registry-wide default.
+    // miss (nullopt) and a {nullptr} both defer to the registry-wide default —
+    // unless the settle was the explicit opt-out above, which answers no
+    // layout at all. Every snap-engine consumer already tolerates a null here
+    // (SnapResult::noSnap and friends), so "no zones" is a safe engine state.
     // layoutForScreen returns a snap Layout* and has no autotile counterpart;
     // autotile-mode resolution is the autotile engine's job.
     const auto result = resolveWithScreenFallback(screenId, tryResolve);
+    if (explicitlyNone) {
+        return nullptr;
+    }
     return (result && *result) ? *result : defaultLayout();
 }
 

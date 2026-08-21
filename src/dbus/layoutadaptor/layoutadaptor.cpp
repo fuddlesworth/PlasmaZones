@@ -254,6 +254,12 @@ std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, cons
     return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
 }
 
+bool LayoutAdaptor::requiresManualLayoutValidation(const QString& layoutId)
+{
+    return !PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
+        && layoutId != PhosphorZones::NoSnappingLayout;
+}
+
 PhosphorZones::Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
 {
     auto uuidOpt = parseAndValidateUuid(id, operation);
@@ -654,7 +660,16 @@ void LayoutAdaptor::deleteLayout(const QString& id)
 
     QUuid uuid = layout->id();
     const QString deletedId = uuid.toString();
-    m_layoutManager->removeLayoutById(uuid);
+    // The registry REFUSES the removal when it cannot keep the layout, its
+    // file and its settings sidecar mutually consistent (an unwritable
+    // sidecar, an undeletable layout file). The layout is then still
+    // registered and still in the list, so announcing the deletion would make
+    // subscribers evict per-layout state for a layout that still exists —
+    // and no layoutsChanged follows to put it back.
+    if (!m_layoutManager->removeLayoutById(uuid)) {
+        qCWarning(lcDbusLayout) << "Layout removal refused by the registry — keeping layout" << id;
+        return;
+    }
 
     m_cachedLayoutJson.remove(uuid);
     if (m_cachedActiveLayoutId == uuid) {
@@ -664,8 +679,8 @@ void LayoutAdaptor::deleteLayout(const QString& id)
     qCInfo(lcDbusLayout) << "Deleted layout" << id;
     // removeLayoutById's purge also sweeps quick slots bound to the deleted
     // layout; subscribers holding slot state (the settings quick-shortcut
-    // cards) refresh only on this signal, so bump their revision. The
-    // registry API returns void here, so the hint fires unconditionally — a
+    // cards) refresh only on this signal, so bump their revision. It fires for
+    // any successful removal, whether or not a slot actually held this id — a
     // spare refresh is harmless.
     Q_EMIT quickLayoutSlotsChanged();
     // Deletion-specific companion to layoutListChanged — lets subscribers

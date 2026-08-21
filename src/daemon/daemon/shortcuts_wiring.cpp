@@ -147,6 +147,20 @@ void Daemon::connectShortcutSignals()
         const bool scrolling = (mode == PhosphorZones::AssignmentEntry::Scrolling);
         m_unifiedLayoutController->setLayoutFilter(!autotile && !scrolling, autotile, scrolling);
         if (!m_unifiedLayoutController->applyLayoutById(slotId)) {
+            // The slot IS bound, so this is not the deliberate unset no-op
+            // above — the bound id simply is not in the filtered list the
+            // press resolves against. That happens whenever the picker would
+            // not offer it either: a layout hidden from the selector, one
+            // excluded by an allow-list or the aspect filter, or an algorithm
+            // that is no longer installed. Nothing re-validates a slot when
+            // those axes change, so the binding silently stopped working;
+            // say so rather than leaving the key looking broken.
+            qCWarning(lcDaemon) << "QuickLayout shortcut: slot" << number << "is bound to" << slotId
+                                << "which is not available on screen" << screenId;
+            if (navigationOsdAllowed(screenId)) {
+                m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("slot_unavailable"),
+                                                    QString(), QString(), screenId);
+            }
             return;
         }
         resnapIfManualMode();
@@ -318,7 +332,13 @@ void Daemon::connectShortcutSignals()
         const int visibleCount = m_overlayService->visibleLayoutCount(screenId);
         const bool templateStoreEmpty = m_overlayService->screenResolvesToTemplates(screenId)
             && (!m_scrollingTemplateStore || m_scrollingTemplateStore->count() == 0);
-        if (templateStoreEmpty || visibleCount == 0) {
+        // <= 1, not == 0: the synthetic None row keeps every family's count
+        // at >= 1, so an empty manual/autotile vocabulary counts exactly 1
+        // (the lone None card) — a picker offering only the opt-out on a
+        // screen with nothing to opt out OF is the empty-list case, and the
+        // cycle gate in start.cpp uses the same threshold; the two must
+        // agree.
+        if (templateStoreEmpty || visibleCount <= 1) {
             // An empty template store (fresh install, or every template
             // deleted) is something the user can act on. The generic "engine
             // provides no layouts" card would misdescribe it, so this goes out
@@ -548,14 +568,25 @@ void Daemon::connectShortcutSignals()
         // needs no split — showLockedPreviewOsd is itself template-aware and
         // falls back to the text card when the context has no template.
         if (wasLocked) {
+            // Each arm falls back to the plain text card when it has nothing
+            // to preview — an explicit no-layout opt-out resolves no layout,
+            // and a scrolling context can hold no template. Without the
+            // fallback this was the one lock/unlock pairing that answered a
+            // deliberate keypress with nothing at all, while the lock
+            // direction still drew a card (showLockedPreviewOsd carries the
+            // same fallback internally).
             if (mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
                 const PhosphorZones::ScrollingTemplate templ = m_layoutManager->scrollingTemplateForContext(
                     screenId, currentDesktopForScreen(screenId), currentActivity());
                 if (templ.isValid()) {
                     showScrollingTemplateOsd(templ, screenId);
+                } else {
+                    showUnlockedOsd(screenId);
                 }
             } else if (PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId)) {
                 showLayoutOsd(layout, screenId);
+            } else {
+                showUnlockedOsd(screenId);
             }
         } else {
             showLockedPreviewOsd(screenId);

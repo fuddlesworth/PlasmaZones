@@ -44,6 +44,12 @@ SettingsFlickable {
     // authoritative declaration is PhosphorZones::NoScrollingTemplate in
     // AssignmentEntry.h.
     readonly property string _noTemplateToken: "none"
+    // The reserved word for the snapping/autotile opt-out, meaning
+    // "explicitly no layout" or "explicitly no algorithm" for this context.
+    // The same spelling as the template token but named separately because
+    // it hardcodes different C++ declarations: PhosphorZones::NoSnappingLayout
+    // and NoTilingAlgorithm in AssignmentEntry.h.
+    readonly property string _noLayoutToken: "none"
     // Aspect ratio of the currently selected screen (for layout preview).
     // With no selection yet, fall back to the SHOWN state's own screen — the
     // same object _currentState returns and _stageCurrentState writes against.
@@ -200,8 +206,15 @@ SettingsFlickable {
         var activity = state.activity || "";
         var snapping = "";
         var tiling = "";
+        // The RESOLVED layoutId cannot carry the explicit-none state (the
+        // reserved word resolves to no layout, so the daemon reports an
+        // empty layoutId beside a raw snappingLayoutId of "none"). Carrying
+        // the resolved value there would silently flatten the opt-out back
+        // to "inherit the default" on the next mode toggle, so the raw slot
+        // wins exactly when it holds the token.
+        var resolvedSnapping = (state.snappingLayoutId === root._noLayoutToken) ? root._noLayoutToken : state.layoutId;
         // See _carrySibling for the rule both slots follow.
-        var siblingSnapping = root._carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, state.layoutId);
+        var siblingSnapping = root._carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, resolvedSnapping);
         var siblingAlgo = root._carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
         var siblingTiling = siblingAlgo ? root._autotilePrefix + siblingAlgo : "";
         if (stateView.isScrolling) {
@@ -223,7 +236,7 @@ SettingsFlickable {
             // below: an untouched algorithm carries the resolved value only
             // when the daemon marked it explicit, so a pure mode toggle cannot
             // freeze the global default algorithm onto this screen.
-            var algoId = root._carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
+            var algoId = siblingAlgo;
             if (!algoId) {
                 // Nothing to pin — either the user picked "Default", or
                 // nothing resolved (fresh config, or the context suppresses
@@ -249,7 +262,7 @@ SettingsFlickable {
             // assignment — toggle Snapping to Scrolling and back, hit Apply,
             // and the screen now pins today's global default and stops
             // following it. The entered mode is not exempt from that rule.
-            var layoutId = root._carrySibling(stateView.localLayoutCleared, stateView.localLayoutTouched, stateView.localLayoutId, state.layoutIdExplicit, state.layoutId);
+            var layoutId = siblingSnapping;
             if (!layoutId) {
                 // Nothing to pin — either the user picked "Default", or
                 // nothing resolved (the context suppresses the default
@@ -797,9 +810,17 @@ SettingsFlickable {
                     localTemplateTouched = staged.scrollingTemplateId !== undefined;
                     localTemplateId = localTemplateTouched ? staged.scrollingTemplateId : (screenState.scrollingTemplateId || "");
                 } else {
-                    // No staged changes — use daemon state
+                    // No staged changes — use daemon state. The layout slot
+                    // seeds from the RAW field exactly when it holds the
+                    // explicit-none word: the resolved layoutId is empty for
+                    // that state, and seeding empty would seat the selector
+                    // on "Default" while the daemon holds the opt-out. The
+                    // algorithm slot needs no such split — algorithmId is the
+                    // RESOLVED value, and the resolver passes the reserved
+                    // word through verbatim rather than flattening it the way
+                    // the snapping resolver does.
                     localMode = screenState.mode || 0;
-                    localLayoutId = screenState.layoutId || "";
+                    localLayoutId = screenState.snappingLayoutId === root._noLayoutToken ? root._noLayoutToken : (screenState.layoutId || "");
                     localAlgorithmId = screenState.algorithmId || "";
                     localTemplateId = screenState.scrollingTemplateId || "";
                     localTemplateTouched = false;
@@ -850,8 +871,11 @@ SettingsFlickable {
                 // assignment is durable state, and hiding the Tiling button
                 // while a screen is already assigned Tiling would make that
                 // state unrepresentable here. With the feature disabled the
-                // router downgrades the screen to Snapping until it is
-                // re-enabled; the assignment itself is preserved.
+                // router downgrades a screen carrying a tiling algorithm to
+                // Snapping until it is re-enabled, and the algorithm is kept
+                // either way. The one shape that keeps its declared mode is
+                // the explicit no-algorithm state, which the router honors as
+                // the user's standing choice rather than a transition.
                 model: [i18nc("tiling mode name", "Snapping"), i18nc("tiling mode name", "Tiling"), i18nc("tiling mode name", "Scrolling")]
                 currentIndex: stateView.localMode
                 onIndexChanged: function (idx) {
@@ -886,7 +910,11 @@ SettingsFlickable {
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localLayoutId
                 layoutFilter: 0
-                noneText: i18n("Default")
+                // The explicit opt-out row, same third state the template
+                // selector below carries: Default inherits the configured
+                // default layout, None uses no layout at all.
+                showExplicitNoneOption: true
+                explicitNoneValue: root._noLayoutToken
                 showPreview: true
                 onActivated: function (idx) {
                     var entry = model[idx];
@@ -910,10 +938,12 @@ SettingsFlickable {
                 Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 text: i18n("This monitor uses %1, which is not in your layout list.", (stateView.screenState && stateView.screenState.layoutName) || stateView.localLayoutId)
-                // count > 1: while a layout fetch is in flight the model is
-                // just the Default row and every id resolves to -1, which is
-                // not a missing layout and must not raise this alarm.
-                visible: stateView.isSnapping && snappingSelector.currentIndex === -1 && snappingSelector.count > 1
+                // count > 2: while a layout fetch is in flight the model is
+                // just the two leading rows (Default and the explicit None),
+                // both present regardless of the fetched list, and every id
+                // resolves to -1 — which is not a missing layout and must not
+                // raise this alarm.
+                visible: stateView.isSnapping && snappingSelector.currentIndex === -1 && snappingSelector.count > 2
             }
 
             // Algorithm selector (tiling)
@@ -924,9 +954,17 @@ SettingsFlickable {
                 visible: stateView.isTiling
                 Accessible.name: i18n("Tiling algorithm")
                 appSettings: root._layoutBridge
-                currentLayoutId: stateView.localAlgorithmId ? root._autotilePrefix + stateView.localAlgorithmId : ""
+                // The opt-out word is stored bare, like the algorithm ids,
+                // but the explicit-none row is keyed by the bare word too —
+                // prefixing it would build "autotile:none", which matches no
+                // row and left the selector blank.
+                currentLayoutId: stateView.localAlgorithmId === root._noLayoutToken ? root._noLayoutToken : (stateView.localAlgorithmId ? root._autotilePrefix + stateView.localAlgorithmId : "")
                 layoutFilter: 1
-                noneText: i18n("Default")
+                // Same third state as the snapping selector above: Default
+                // inherits the configured default algorithm, None keeps the
+                // screen in autotile mode with nothing tiling it.
+                showExplicitNoneOption: true
+                explicitNoneValue: root._noLayoutToken
                 showPreview: true
                 onActivated: function (idx) {
                     var entry = model[idx];
@@ -950,8 +988,9 @@ SettingsFlickable {
                 Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 text: i18n("This monitor uses %1, which is not in your algorithm list.", (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId)
-                // Same in-flight-fetch guard as the snapping hint above.
-                visible: stateView.isTiling && tilingSelector.currentIndex === -1 && tilingSelector.count > 1
+                // Same in-flight-fetch guard as the snapping hint above
+                // (count > 2: two always-present leading rows).
+                visible: stateView.isTiling && tilingSelector.currentIndex === -1 && tilingSelector.count > 2
             }
 
             // Template selector (scrolling). Third in the same selector band as
@@ -966,7 +1005,6 @@ SettingsFlickable {
                 appSettings: root._layoutBridge
                 currentLayoutId: stateView.localTemplateId
                 layoutFilter: 2
-                noneText: i18n("Default")
                 // The third state this family needs and the other two do not.
                 showExplicitNoneOption: true
                 explicitNoneValue: root._noTemplateToken

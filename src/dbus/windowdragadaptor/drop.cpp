@@ -267,9 +267,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         bool selectorScreenLocked = false;
         PhosphorContext::ContextHandle selectorCtx;
         if (screen && m_contextResolver && m_layoutManager) {
+            // handleFor stamps the LIVE mode (the router), which is what the
+            // comment above already claims this handle carries and what every
+            // sibling drag site gates on. Overwriting it with the raw cascade
+            // mode made the two disagree precisely when an engine does not own
+            // the screen its assignment names, so a downgraded tiling or
+            // scrolling screen had its lock and disable checked against the
+            // engine axis while the overlay it was dropping onto was the
+            // snapping one — #724 in both directions.
             selectorCtx = m_contextResolver->handleFor(selectorScreenId);
-            selectorCtx.mode =
-                m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
             selectorScreenLocked = m_contextResolver->isLocked(selectorCtx);
         }
         // Reuse the `selectorCtx` handle built above for the lock check —

@@ -733,6 +733,9 @@ void Daemon::stop()
         // Same contract: the layouts-provided resolver captures `this` and
         // reads the router, which is reset before the engines below.
         m_overlayService->setLayoutSupportResolver({});
+        // Same contract and the same reason: it captures `this` and reads the
+        // router, which is reset before the engines below.
+        m_overlayService->setAutotileActiveResolver({});
         m_overlayService->setDragInsertSelectorResolver({});
         m_overlayService->setStripCardsProvider({});
         m_overlayService->setStripAxisProvider({});

@@ -138,8 +138,8 @@ Item {
             root.deleteRequested(root.modelData);
     }
     // Keyboard route to the context menu (Menu key / Shift+F10): the menu is
-    // the sole home of several card actions (Duplicate, Export, a template's
-    // Clear Default), so it cannot stay mouse-only.
+    // the sole home of several card actions (Duplicate, Export, the current
+    // default's Clear Default), so it cannot stay mouse-only.
     Keys.onMenuPressed: {
         if (root.contextMenuEnabled) {
             root.selected();

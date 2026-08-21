@@ -27,6 +27,7 @@
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -522,6 +523,45 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * setDefaultLayoutId accepts the reserved no-layout word ("no default at
+     * all" — the library card's Clear Default) even though it is not a UUID,
+     * while any other malformed id keeps the no-op protection. Regression
+     * guard: the UUID normalizer used to degrade the word to empty and hit
+     * the malformed-input guard, making the sentinel silently unwritable.
+     */
+    void testSetDefaultLayoutId_acceptsSentinel_rejectsOtherNonUuids()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        const QString realId = QUuid::createUuid().toString();
+        settings.setDefaultLayoutId(realId);
+        QCOMPARE(settings.defaultLayoutId(), realId);
+
+        // A malformed non-UUID stays a no-op (typo protection).
+        settings.setDefaultLayoutId(QStringLiteral("not-a-uuid"));
+        QCOMPARE(settings.defaultLayoutId(), realId);
+
+        // The reserved word is stored verbatim and emits. Spelled as a literal
+        // on purpose: the setter compares against PhosphorZones::NoSnappingLayout,
+        // so this doubles as an exact-spelling pin that fails loudly if the
+        // constant is ever respelled without the config surface following.
+        QSignalSpy spy(&settings, &Settings::defaultLayoutIdChanged);
+        settings.setDefaultLayoutId(QStringLiteral("none"));
+        QCOMPARE(settings.defaultLayoutId(), QStringLiteral("none"));
+        QCOMPARE(spy.count(), 1);
+
+        // And it survives a save / reload round trip. This is the value the
+        // daemon's default-layout provider reads at the NEXT start, so an
+        // in-memory-only pin would miss a persistence path that dropped it —
+        // sparse persistence deletes default-equal keys, and the sentinel is
+        // not the default, so it must be written.
+        settings.save();
+        Settings reloaded;
+        QCOMPARE(reloaded.defaultLayoutId(), QStringLiteral("none"));
     }
 
     /**

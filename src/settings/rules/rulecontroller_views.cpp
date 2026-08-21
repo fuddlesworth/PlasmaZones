@@ -223,6 +223,17 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         const bool isMonitorDisableRule =
             disableMode.has_value() && PhosphorRules::ContextRuleBridge::matchIsExactContextBase(rule.match);
 
+        // Screen-independent, so scanned once per rule; the LockContext scan
+        // stays in the per-screen loop because its first-wins slot is
+        // per-screen state.
+        bool ruleHasEngineMode = false;
+        for (const RuleAction& a : rule.actions) {
+            if (a.type == ActionType::SetEngineMode) {
+                ruleHasEngineMode = true;
+                break;
+            }
+        }
+
         for (const QString& screenId : screenIds) {
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
@@ -236,11 +247,8 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             if (isMonitorDisableRule) {
                 s.disabledEngineModes.insert(*disableMode);
             }
-            bool ruleHasEngineMode = false;
             for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::SetEngineMode)
-                    ruleHasEngineMode = true;
-                else if (a.type == ActionType::LockContext && !s.lockResolved) {
+                if (a.type == ActionType::LockContext && !s.lockResolved) {
                     // First-wins on the single Locked slot (priority-DESC): the
                     // highest-priority LockContext rule decides, value and all.
                     s.lockResolved = true;
@@ -312,11 +320,24 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             const auto mode = PhosphorZones::modeFromWireString(summary.engineMode)
                                   .value_or(PhosphorZones::AssignmentEntry::Snapping);
             if (mode == PhosphorZones::AssignmentEntry::Snapping) {
-                layoutLabel = summary.snappingLayout;
-                labelLookup = &m_snappingLayoutLookup;
+                // The reserved "explicitly none" word gets the same
+                // substitution the scrolling arm below documents, for the
+                // same reason: no lookup resolves it and the fallback showed
+                // a layout apparently named "none". Bare-name wording for the
+                // tile's "%1 · %2" composition, like its scrolling twin.
+                if (summary.snappingLayout == PhosphorZones::NoSnappingLayout) {
+                    layoutLabel = PhosphorI18n::tr("Snapping (no layout)");
+                } else {
+                    layoutLabel = summary.snappingLayout;
+                    labelLookup = &m_snappingLayoutLookup;
+                }
             } else if (mode == PhosphorZones::AssignmentEntry::Autotile) {
-                layoutLabel = summary.tilingAlgorithm;
-                labelLookup = &m_tilingAlgorithmLookup;
+                if (summary.tilingAlgorithm == PhosphorZones::NoTilingAlgorithm) {
+                    layoutLabel = PhosphorI18n::tr("Tiling (no algorithm)");
+                } else {
+                    layoutLabel = summary.tilingAlgorithm;
+                    labelLookup = &m_tilingAlgorithmLookup;
+                }
             } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
                 // The reserved "explicitly none" word is not an id any lookup
                 // can resolve, and the resolve below renders an unresolvable
@@ -358,15 +379,28 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         // mode. The accumulator collected every DisableEngine token any
         // matching rule targets; the tile reads "engine off" only when
         // a disable rule targets the engine the screen actually runs.
-        // For an unset engineMode (no SetEngineMode rule) the screen
-        // defaults to Snapping per the cascade — match against that
-        // sentinel. The QML reads this as `tilingEnabled` (kept for
-        // backwards-compatibility with the existing tile component);
-        // the field's semantics are now "the engine running on this
-        // screen is NOT disabled".
-        const QString effectiveModeWire = summary.engineMode.isEmpty()
-            ? PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping)
-            : summary.engineMode;
+        // Normalized through the same modeFromWireString().value_or(Snapping)
+        // the layout arm above and the daemon's entryFromRuleMatchActions
+        // use, so an unset engineMode and an unrecognized token both resolve
+        // to Snapping — comparing the raw token missed a snapping-disable
+        // rule on a screen the daemon effectively runs as Snapping. The QML
+        // reads this as `tilingEnabled` (kept for backwards-compatibility
+        // with the existing tile component); the field's semantics are now
+        // "the engine running on this screen is NOT disabled".
+        //
+        // KNOWN LIMITATION, and the reason this is not simply "the effective
+        // mode": the parity above holds for a screen whose mode comes from an
+        // assignment RULE, which is what this accumulator can see. A screen
+        // with only a DisableEngine rule and no assignment rule takes its mode
+        // from the daemon's default-tier synthesis instead, and that tier can
+        // answer Autotile (no default layout id, but a default algorithm set).
+        // Such a screen reads as Snapping here, so a tiling-disable on it
+        // shows as enabled. Closing the gap needs the resolved per-screen mode
+        // passed in — this controller has no settings or daemon handle to
+        // derive it — and the cost was judged out of proportion to a tile
+        // badge. Pass it through `screens` if this ever needs to be exact.
+        const QString effectiveModeWire = PhosphorZones::modeToWireString(
+            PhosphorZones::modeFromWireString(summary.engineMode).value_or(PhosphorZones::AssignmentEntry::Snapping));
         const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;

@@ -762,6 +762,22 @@ bool OverlayService::isSnappingContextInactive(const QString& screenId) const
     // suppressed side.
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
     if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        // The AUTOTILE half consults its own live resolver for exactly the
+        // reason the scrolling half consults the capability one: a downgraded
+        // tiling assignment (master switch off, Autotile axis
+        // context-disabled) leaves a screen the snap engine really owns, where
+        // the drag pipeline runs the full snap path and windows do snap into
+        // zones. Suppressing the overlay there is the same drag-vs-overlay
+        // disagreement as #724. With no resolver wired (the shutdown window)
+        // the raw read stands, erring on the suppressed side.
+        return !m_autotileActiveResolver || m_autotileActiveResolver(screenId);
+    }
+    // The explicit snapping opt-out: no layout is in force, every snap and
+    // detection consumer answers null for this screen (layoutForScreen's
+    // opt-out arm), so drawing the drag overlay here would render the
+    // DEFAULT layout's zones — zones nothing will ever snap into, the
+    // drag-vs-overlay disagreement class of #724 in the other direction.
+    if (assignmentId == PhosphorZones::NoSnappingLayout) {
         return true;
     }
     if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
@@ -798,7 +814,29 @@ QString OverlayService::activeLayoutIdForScreen(const QString& screenId) const
         const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, virtualDesktop, m_currentActivity);
-        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+            && (!m_autotileActiveResolver || m_autotileActiveResolver(screenId))) {
+            // Live-gated like the Templates arm below, and for the same
+            // reason: on a downgraded tiling assignment the picker offers
+            // MANUAL cards, so highlighting the algorithm id would mark a card
+            // that is not in the list. Such a screen falls through to the
+            // manual resolution instead, which is what its live snapping path
+            // uses. An unwired resolver trusts the assignment id.
+            //
+            // The explicit opt-out stamp: the picker's None card is keyed by
+            // the bare reserved word, so "autotile:none" has to translate or
+            // the highlight lands on no card. Same string mapping as
+            // UnifiedLayoutController::displayIdForAssignment.
+            if (PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId) == PhosphorZones::NoTilingAlgorithm) {
+                return QString(PhosphorZones::NoSnappingLayout);
+            }
+            return assignmentId;
+        }
+        // The snapping opt-out IS the bare reserved word, which already
+        // matches the None card — and it must not fall through to the manual
+        // resolution below, whose defaultLayout() fallback would highlight
+        // the default layout the context just opted out of.
+        if (assignmentId == PhosphorZones::NoSnappingLayout) {
             return assignmentId;
         }
         if (PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
@@ -1012,7 +1050,16 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     }
     const QString assignmentId = m_layoutManager->assignmentIdForScreen(
         resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)
+        && (!m_autotileActiveResolver || m_autotileActiveResolver(resolvedId))) {
+        // Gated on the LIVE resolver for the same reason the Templates arm
+        // below is: the router downgrades an autotile assignment to snapping
+        // when the tiling engine does not own the screen (master switch off,
+        // Autotile axis context-disabled), and such a screen falls through to
+        // the manual arm — the list its live snapping path actually uses.
+        // Without the gate the picker drew ALGORITHM cards on a screen whose
+        // controller list held manual layouts, so every visible card was a
+        // dead press. An unwired resolver trusts the assignment id.
         flags.manual = false;
         flags.autotile = true;
         flags.templates = false;
@@ -1070,10 +1117,17 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile, inc.templates),
         m_autotileLayoutSource, autotilePreviewCanvas, inc.templates,
         m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
-        // The None row: this list is a PICKER of the context's template, so it
-        // carries the opt-out alongside the templates themselves. Mirrored in
-        // visibleLayoutCount below, which must agree with this row for row.
-        inc.templates,
+        // The None row: this list is a PICKER of the context's layout (or
+        // template), so it carries the opt-out alongside the real choices —
+        // template-flavoured on a Templates screen, the generic no-layout row
+        // everywhere else. Derived from the include resolution, NOT passed
+        // unconditionally: a LayoutSupport::None screen zeroes all three
+        // family flags precisely so the picker's show bails on the empty
+        // list, and an unconditional row would hand that screen a lone None
+        // card whose press writes an opt-out where no layout concept exists.
+        // Mirrored in visibleLayoutCount below, which must agree with this
+        // row for row.
+        inc.manual || inc.autotile || inc.templates,
         // Template cards depict the columns this screen's strip will hold, so
         // they follow the screen's strip axis. Count-neutral, which is why
         // visibleLayoutCount does not pay for the same resolve.
@@ -1155,11 +1209,13 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, inc.templates,
         m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
-        // Same None row as buildLayoutsList, on the same condition. This is
+        // Same None row as buildLayoutsList, on the same condition (derived
+        // from the include resolution, so a LayoutSupport::None screen counts
+        // zero rows and the picker/trigger-edge gates keep refusing). This is
         // the row-for-row agreement the header of that function calls out: a
         // count short by one here would size the popup for fewer cards than
         // it draws.
-        inc.templates
+        inc.manual || inc.autotile || inc.templates
         // No strip axis: this function is asked per cursor tick by the
         // trigger-edge probe, and the axis only transposes each card's bands.
         // It cannot add or drop a row, so taking the default here leaves the

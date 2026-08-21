@@ -903,6 +903,14 @@ bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDes
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;
 }
+
+bool LayoutRegistry::exactContextDeclaresEngineMode(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const
+{
+    const PhosphorRules::Rule* rule = findExactContextRule(screenId, virtualDesktop, activity);
+    return rule && hasEngineModeAction(*rule);
+}
+
 const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& screenId, int virtualDesktop,
                                                                 const QString& activity) const
 {
