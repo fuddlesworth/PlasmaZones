@@ -315,12 +315,20 @@ void ActionRegistry::registerBuiltinsIndicators()
         .slotFor = constantSlot(ActionSlot::TabIndicatorFontFamily),
         .validate =
             [](const QJsonObject& p) {
-                return hasStringAllowingEmpty(p, ActionParam::Value);
+                if (!hasStringAllowingEmpty(p, ActionParam::Value)) {
+                    return false;
+                }
+                // Length is checked on the TRIMMED value, so a family padded
+                // with spaces cannot buy itself room. Empty stays legal — it
+                // is the "use the system font" request, not a length failure.
+                return p.value(ActionParam::Value).toString().trimmed().size() <= kMaxFontFamilyLength;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("string")}},
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("string"),
+                     .max = static_cast<double>(kMaxFontFamilyLength)}},
         .category = QStringLiteral("tabIndicator"),
         .displayOrder = 17,
         .tags = {QString(Tag::LayoutEngine)},

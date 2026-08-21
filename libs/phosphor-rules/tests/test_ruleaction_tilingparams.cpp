@@ -300,6 +300,16 @@ private Q_SLOTS:
         acceptsWithSlot(ActionType::SetTabIndicatorFontFamily, QString(), ActionSlot::TabIndicatorFontFamily);
         acceptsWithSlot(ActionType::SetTabIndicatorFontFamily, QStringLiteral("Noto Sans"),
                         ActionSlot::TabIndicatorFontFamily);
+        // The length cap is a grossly-malformed-payload guard, not a real
+        // limit, so the boundary is accepted and only past it is rejected. It
+        // is measured on the TRIMMED value, which is why the padded case below
+        // is rejected even though its raw size is the same as the accepted one
+        // two lines up.
+        acceptsWithSlot(ActionType::SetTabIndicatorFontFamily, QString(MaxFontFamilyLength, QLatin1Char('x')),
+                        ActionSlot::TabIndicatorFontFamily);
+        rejects(ActionType::SetTabIndicatorFontFamily, QString(MaxFontFamilyLength + 1, QLatin1Char('x')));
+        const QString paddedToCap = QString(2, QLatin1Char(' ')) + QString(MaxFontFamilyLength, QLatin1Char('x'));
+        acceptsWithSlot(ActionType::SetTabIndicatorFontFamily, paddedToCap, ActionSlot::TabIndicatorFontFamily);
 
         // ── weight ──
         // The bounds are DOUBLES here, unlike every int-typed sibling above,

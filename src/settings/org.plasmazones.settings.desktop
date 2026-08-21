@@ -5,11 +5,11 @@
 Type=Application
 Name=PlasmaZones Settings
 GenericName=Window Tiling Settings
-Comment=Configure window zone snapping and autotiling for PlasmaZones
+Comment=Configure window snapping, tiling and scrolling for PlasmaZones
 Icon=plasmazones-settings
 Exec=plasmazones-settings
 Terminal=false
 Categories=Qt;KDE;Settings;
-Keywords=window;tiling;zones;layout;snap;settings;
+Keywords=window;tiling;zones;layout;snap;scrolling;column;template;settings;
 StartupWMClass=plasmazones-settings
 SingleMainWindow=true

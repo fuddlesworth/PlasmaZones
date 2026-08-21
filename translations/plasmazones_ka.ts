@@ -3999,7 +3999,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="363"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="344"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="353"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="446"/>
         <source>On</source>
@@ -4012,7 +4012,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="363"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="344"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="353"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="446"/>
         <source>Off</source>
@@ -4165,7 +4165,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="580"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="611"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="355"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="402"/>
         <source>Accent</source>
         <translation>აქცენტი</translation>
     </message>
@@ -13868,17 +13868,17 @@
         <translation>ამ წესზე შეტანილი ცვლილებები დაიკარგება. გავაუქმო ისინი?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="213"/>
         <source>Choose Label Font</source>
         <translation>აირჩიეთ ჭდის შრიფტი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="197"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="240"/>
         <source>Search fonts...</source>
         <translation>შრიფტების ძიება...</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="216"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="259"/>
         <source>Family</source>
         <translation>ოჯახი</translation>
     </message>
@@ -13886,35 +13886,40 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="151"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="81"/>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="265"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="314"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="260"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="145"/>
         <source>Style</source>
         <translation>სტილი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="311"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="363"/>
         <source>Effects:</source>
         <translation>ეფექტები:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="368"/>
+        <source>Italic</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="388"/>
         <source>Underline</source>
         <translation>ხაზგასმა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="394"/>
         <source>Strikeout</source>
         <translation>ხაზგადასმული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="410"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="375"/>
         <source>Size:</source>
         <translation>ზომა:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="360"/>
+        <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="432"/>
         <source>AaBbCc 123</source>
         <translation>AaBbCc 123</translation>
     </message>
@@ -16789,64 +16794,64 @@
         <translation>ამ წესს ქმედების დამატება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="232"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="241"/>
         <source>e.g. 1, 2 or 1-2</source>
         <comment>@info:placeholder zone numbers for a snap-to-zone rule</comment>
         <translation>მაგ. 1, 2 ან 1-2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="172"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="181"/>
         <source>e.g. Editor, Terminal</source>
         <comment>@info:placeholder zone names for a snap-to-zone rule</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="183"/>
         <source>Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone names field of a snap-to-zone rule</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="196"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="205"/>
         <source>Add a name…</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="197"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="206"/>
         <source>Add a zone name from your layouts</source>
         <comment>@info:accessibility</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="234"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="243"/>
         <source>One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone numbers field of a snap-to-zone rule</comment>
         <translation type="unfinished">ერთი ან მეტი ზონის ნომერი (დათვლა 1-დან), რომელთანაც მიმაგრდება შესატყვისი ფანჯრები. რამდენიმე ზონა მათ გაერთიანებულ არეს მოიცავს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="399"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="408"/>
         <source>Reset to the system accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="409"/>
         <source>Follow the system accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="520"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="529"/>
         <source>None</source>
         <comment>@item:inlistbox scrolling template rule action, use no template at all</comment>
         <translation type="unfinished">არცერთი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="537"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="546"/>
         <source>Choose a template…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="560"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="569"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="519"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
@@ -16854,7 +16859,7 @@
         <translation>ძირითადი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="560"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="569"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="519"/>
         <source>%1 · %2</source>
@@ -16862,36 +16867,36 @@
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="576"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="585"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="539"/>
         <source>Choose a monitor…</source>
         <translation>აირჩიეთ მონიტორი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="620"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="629"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="492"/>
         <source>Choose a desktop…</source>
         <translation>აირჩიეთ სამუშაო მაგიდა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="731"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="740"/>
         <source>Choose an event…</source>
         <translation>აირჩიეთ მოვლენა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="843"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="852"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation>პაკეტის დამატება…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="961"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="970"/>
         <source>Choose a shader…</source>
         <translation>აირჩიეთ შეიდერი…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="988"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="997"/>
         <source>Choose an overlay shader…</source>
         <translation>აირჩიეთ გადადების შეიდერი…</translation>
     </message>
@@ -21471,7 +21476,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="604"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="613"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="474"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>

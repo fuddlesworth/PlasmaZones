@@ -23,6 +23,7 @@
 
 #include "configdefaults.h"
 #include "configmigration.h"
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include "core/types/enums.h"
 
@@ -73,6 +74,7 @@ PhosphorConfig::Schema buildSettingsSchema()
 // the same function-object type as KeyDef::validator. The ones the scrolling
 // TU shares live in settingsschema_p.h; the rest are local to this file.
 
+using SchemaValidators::canonicalFontFamily;
 using SchemaValidators::clampDouble;
 using SchemaValidators::clampInt;
 using SchemaValidators::validIntOr;
@@ -299,7 +301,11 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
         {CD::fontColorKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
-        {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString},
+        {CD::fontFamilyKey(),
+         CD::labelFontFamily(),
+         QMetaType::QString,
+         {},
+         canonicalFontFamily(PhosphorRules::MaxFontFamilyLength)},
         {CD::fontSizeScaleKey(),
          CD::labelFontSizeScale(),
          QMetaType::Double,

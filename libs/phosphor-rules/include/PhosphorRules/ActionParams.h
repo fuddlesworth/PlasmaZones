@@ -113,6 +113,21 @@ inline constexpr int MaxZoneOrdinal = 64;
 /// ParamSchema `max` so the editor can read it from the schema).
 inline constexpr int MaxZoneNameLength = 128;
 
+/// Upper bound on a tab label font FAMILY (`SetTabIndicatorFontFamily`), in
+/// characters, measured on the TRIMMED value. Same posture and same number as
+/// MaxZoneNameLength: a grossly-malformed-payload guard, not a real limit —
+/// installed family names run well under it, and the value normally arrives
+/// from a QFontDatabase enumeration rather than being typed. It exists because
+/// this is the one free-form string in the tab-indicator family, so without it
+/// a hand-edited rules file could carry an unbounded one through the resolver
+/// and onto the wire. EMPTY stays legal and is NOT a length failure: it is the
+/// documented "use the system font" value. Consumers: the descriptor validator
+/// (ruleaction_builtins_indicators.cpp), the settings-layer config validator
+/// for both family keys (settingsschema_scrolling.cpp and settingsschema.cpp),
+/// and the `value` ParamSchema `max`, which the rule editor's text field reads
+/// so it cannot author a value the validator would then drop.
+inline constexpr int MaxFontFamilyLength = 128;
+
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
 /// load-time descriptor validators (ruleaction_builtins_appearance.cpp for

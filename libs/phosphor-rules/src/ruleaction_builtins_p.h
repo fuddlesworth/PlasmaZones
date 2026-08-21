@@ -199,6 +199,10 @@ inline constexpr double kMaxTabIndicatorLengthPercent = kMaxTabIndicatorLengthRa
 // helper too: a zero would not be a lighter font, only an off-scale number.
 inline constexpr double kMinTabIndicatorFontWeight = MinTabIndicatorFontWeight;
 inline constexpr double kMaxTabIndicatorFontWeight = MaxTabIndicatorFontWeight;
+// The label font's FAMILY length cap, aliased the same way. An int rather than
+// a double, because it is a character count the descriptor compares against
+// QString::size() rather than a numeric param bound.
+inline constexpr int kMaxFontFamilyLength = MaxFontFamilyLength;
 
 // Drop indicator. Every floor here really is zero — a zero border width is a
 // fill with no edge and a zero radius is a square corner, neither a sentinel —

@@ -4,12 +4,12 @@
 [Desktop Entry]
 Type=Application
 Name=PlasmaZones Layout Editor
-GenericName=Zone Layout Editor
-Comment=Create and edit window zone layouts for PlasmaZones
+GenericName=Layout Editor
+Comment=Create and edit zone layouts and scrolling templates for PlasmaZones
 Icon=plasmazones-editor
 Exec=plasmazones-editor
 Terminal=false
 Categories=Qt;KDE;Settings;Utility;
-Keywords=window;tiling;zones;layout;snap;
+Keywords=window;tiling;zones;layout;snap;scrolling;template;
 StartupWMClass=plasmazones-editor
 SingleMainWindow=true

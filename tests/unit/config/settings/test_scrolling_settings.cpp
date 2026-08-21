@@ -62,6 +62,7 @@
 #include <PhosphorConfig/Schema.h>
 // For the drop indicator's radius default, which is deliberately the zone
 // overlay's constant rather than a literal.
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorZones/ZoneDefaults.h>
 
 #include "config/configdefaults.h"
@@ -374,23 +375,37 @@ private Q_SLOTS:
         QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
 
         // ── the label font ──
-        // Four of these five keys have nothing to validate: the family is
-        // free-form (EMPTY means the system font, which no closed set can
-        // express alongside an arbitrary installed family) and the three style
-        // flags are plain bools. The weight is the one ranged key, and it
-        // CLAMPS rather than snapping back — a hand-edited 9999 is a user
-        // asking for the boldest face, not junk.
+        // The three style flags are plain bools with nothing to validate. The
+        // weight is a ranged key and it CLAMPS rather than snapping back — a
+        // hand-edited 9999 is a user asking for the boldest face, not junk.
+        // The family is free-form (EMPTY means the system font, which no
+        // closed set can express alongside an arbitrary installed family), but
+        // it is canonicalised: trimmed, and snapped back to empty when it is
+        // implausibly long.
         const auto* fontFamily = findKey(schema, tabGroup, ConfigDefaults::fontFamilyKey());
-        QVERIFY(fontFamily);
+        QVERIFY(fontFamily && fontFamily->validator);
         QCOMPARE(fontFamily->defaultValue.toString(), ConfigDefaults::scrollingTabIndicatorFontFamily());
         // The shipped default IS the empty sentinel, which is what makes the
         // page's explicit-empty reset write meaningful rather than decorative.
         QVERIFY(fontFamily->defaultValue.toString().isEmpty());
-        // NO validator, deliberately, and symmetric with the zone label's own
-        // family key. This line ENCODES that decision rather than describing
-        // today's code: if a length cap or a family-must-exist check is ever
-        // wanted, INVERT this assertion, do not delete it.
-        QVERIFY(!fontFamily->validator);
+        // A real family survives untouched.
+        QCOMPARE(fontFamily->validator(QStringLiteral("Noto Sans")).toString(), QStringLiteral("Noto Sans"));
+        // Trimmed, which is the load-bearing half: a padded value is NOT the
+        // empty sentinel, so without this it would pass an isEmpty() check and
+        // reach QFont::setFamily, which substitutes an arbitrary face rather
+        // than the system font the user asked for.
+        QCOMPARE(fontFamily->validator(QStringLiteral("  Noto Sans  ")).toString(), QStringLiteral("Noto Sans"));
+        QCOMPARE(fontFamily->validator(QStringLiteral("   ")).toString(), QString());
+        // Empty stays empty rather than being treated as a length failure.
+        QCOMPARE(fontFamily->validator(QString()).toString(), QString());
+        // Implausibly long SNAPS to the system font rather than truncating,
+        // because a truncated family names a face that does not exist and Qt
+        // would substitute something arbitrary for it.
+        const QString overlong(PhosphorRules::MaxFontFamilyLength + 1, QLatin1Char('x'));
+        QCOMPARE(fontFamily->validator(overlong).toString(), QString());
+        // …and the boundary itself is accepted, so the cap is off-by-one safe.
+        const QString atCap(PhosphorRules::MaxFontFamilyLength, QLatin1Char('x'));
+        QCOMPARE(fontFamily->validator(atCap).toString(), atCap);
 
         const auto* fontWeight = findKey(schema, tabGroup, ConfigDefaults::fontWeightKey());
         QVERIFY(fontWeight && fontWeight->validator);

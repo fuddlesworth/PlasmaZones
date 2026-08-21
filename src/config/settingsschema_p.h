@@ -64,6 +64,31 @@ inline auto validIntOr(std::initializer_list<int> valid, int fallback)
     };
 }
 
+/// Canonicalize a font FAMILY: trim it, and snap an implausibly long one back
+/// to the empty string, which every reader of these keys resolves to the
+/// system font.
+///
+/// Trimming is the load-bearing half. A family padded with spaces is not the
+/// empty sentinel, so `" "` would pass an isEmpty() check and reach
+/// QFont::setFamily, which silently resolves it to some fallback face — an
+/// accepted-but-wrong value rather than the system font the user asked for.
+/// The length cap is only a grossly-malformed-payload guard, the same posture
+/// and the same number as PhosphorRules::MaxFontFamilyLength, which the rule
+/// path applies to its own copy of this value; kept in step by the shared
+/// constant rather than by two hand-written numbers.
+///
+/// Snapping rather than truncating, because a truncated family names a face
+/// that almost certainly does not exist, and Qt would then substitute
+/// something arbitrary. Falling back to the system font is the outcome the
+/// user can actually see and reason about.
+inline auto canonicalFontFamily(int maxLength)
+{
+    return [maxLength](const QVariant& v) -> QVariant {
+        const QString trimmed = v.toString().trimmed();
+        return trimmed.size() > maxLength ? QString() : trimmed;
+    };
+}
+
 /// How many entries a canonicalized preset list may keep. Same size-cap
 /// rationale as canonicalTriggerList: a hand-edited file must not smuggle an
 /// unbounded list past the setter path, since every entry is walked on each

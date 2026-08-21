@@ -11,6 +11,7 @@
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "configdefaults.h"
@@ -22,6 +23,7 @@ using namespace Qt::StringLiterals;
 
 namespace PlasmaZones {
 
+using SchemaValidators::canonicalFontFamily;
 using SchemaValidators::canonicalProportionList;
 using SchemaValidators::clampDouble;
 using SchemaValidators::clampInt;
@@ -351,7 +353,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         // means the system font, and no closed set can express that alongside
         // an arbitrary installed family. There is no size key — Width gives
         // the pill its thickness and the painter fits the label to it.
-        {CD::fontFamilyKey(), CD::scrollingTabIndicatorFontFamily(), QMetaType::QString},
+        {CD::fontFamilyKey(),
+         CD::scrollingTabIndicatorFontFamily(),
+         QMetaType::QString,
+         {},
+         canonicalFontFamily(PhosphorRules::MaxFontFamilyLength)},
         {CD::fontWeightKey(),
          CD::scrollingTabIndicatorFontWeight(),
          QMetaType::Int,
