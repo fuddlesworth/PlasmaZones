@@ -183,19 +183,18 @@ QSGNode* SurfaceShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     if (!node) {
         // Scene graph deleted the previous node, or first call. Route node
         // creation through createShaderNode() so the surface UBO profile is
-        // installed, and REGISTER the node with the base: this override
-        // replaces the base updatePaintNode that normally does the tracking,
-        // and without it the base destructor / sceneGraphAboutToStop teardown
-        // (invalidateItem + resource release) silently no-ops for this item —
-        // a render-thread prepare() between item destruction and node deletion
-        // would then dereference the freed item.
-        registerRenderNode(nullptr);
+        // installed.
         node = createShaderNode();
         freshNode = true;
     }
-    // Register on every frame, not just the fresh-node path: windowChanged
-    // clears the base's tracked node, and a reuse-path frame after that would
-    // leave the teardown guard permanently disarmed.
+    // REGISTER the node with the base, on every frame rather than only the
+    // fresh-node path: this override replaces the base updatePaintNode that
+    // normally does the tracking, and without it the base destructor /
+    // sceneGraphAboutToStop teardown (invalidateItem + resource release)
+    // silently no-ops for this item — a render-thread prepare() between item
+    // destruction and node deletion would then dereference the freed item. The
+    // scene graph can also swap in a node the base is not tracking, and a
+    // reuse-path frame is the only chance to notice.
     registerRenderNode(node);
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth) ──
