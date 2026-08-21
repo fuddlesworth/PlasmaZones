@@ -11,8 +11,14 @@
 // keeps naming ScrollVisibleTile for every existing consumer.
 //
 // ScrollTypes.h stays the STRIP MODEL's vocabulary (widths, heights, resolved
-// columns). These three describe the engine's API surface around that model,
-// which is why they live apart from it.
+// columns). The types here describe the engine's API surface around that
+// model, which is why they live apart from it.
+
+// The one crossing into the strip model's vocabulary: a visible tile reports
+// the tab indicator its column draws, and TabIndicatorPosition is that
+// model's enum. Not re-declared here — a second spelling of the four edges
+// is exactly the kind of parallel vocabulary the split above exists to avoid.
+#include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include <QRect>
 #include <QRectF>
@@ -88,6 +94,37 @@ struct ScrollVisibleTile
     int zoneNumber = 0;
     /// Absolute pixel rect, clipped to the work area.
     QRect rect;
+    /// How many tabs the owning column's indicator shows, and 0 when it draws
+    /// no indicator at all. The gate is the resolved indicator rect, where the
+    /// compositor's tab-strip payload starts too (engine_apply.cpp): that one
+    /// rect already folds in the master switch, the single-tab skip and "this
+    /// column is not tabbed". The emitter's gate is a SUPERSET of this one —
+    /// it also drops out-of-view and fully-parked columns — so a preview is
+    /// never missing an indicator the screen draws, but a parked column can
+    /// carry one the screen does not. Counts the column's tiles including the
+    /// hidden ones — those ARE the tabs; only minimized tiles are absent, and
+    /// they have no pill on screen either.
+    int tabCount = 0;
+    /// Which tab of @c tabCount this tile is, 0-based, and -1 when the column
+    /// draws no indicator. A resolved tabbed column has exactly one non-hidden
+    /// tile, so exactly one visible tile carries the column's tab data.
+    int activeTabIndex = -1;
+    /// Which edge of the column the indicator runs along. Meaningful only
+    /// while @c tabCount is above zero; the default matches
+    /// ResolvedColumn::tabIndicatorPosition's.
+    TabIndicatorPosition tabIndicatorPosition = TabIndicatorPosition::Left;
+    /// How much of that edge the indicator covers, 0 to 1, centered on it
+    /// (TabIndicatorParams::indicatorRectFor centers on the long axis). The
+    /// RESOLVED proportion, measured off the two rects rather than copied from
+    /// the setting, so the rounding and the 1px floor the resolve applied are
+    /// already in it.
+    ///
+    /// The indicator's THICKNESS deliberately does not ride along. It is a
+    /// handful of pixels, which is under half a pixel once a preview scales a
+    /// screen into a thumbnail, so every renderer of this has to floor it to
+    /// something legible and a true value would only invite one of them to
+    /// draw an invisible indicator faithfully.
+    qreal tabLengthProportion = 0.0;
 };
 
 /// A tile paired with its screen-normalized rect, from ONE strip walk (see

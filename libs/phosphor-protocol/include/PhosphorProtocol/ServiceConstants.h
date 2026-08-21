@@ -144,6 +144,53 @@ inline constexpr QLatin1String FontUnderline("fontUnderline");
 inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 }
 
+/// Tab keys on the STRIP PREVIEW payload — the per-tile description of the
+/// tab indicator its column draws, so a preview of the strip shows a tabbed
+/// column as tabbed instead of as a plain window.
+///
+/// Three surfaces spell these and they must agree: the daemon's
+/// visibleStripJson wire (scrollingadaptor.cpp), the daemon's own OSD strip
+/// card, which builds its zone maps in-process without crossing the bus
+/// (daemon/stripzones.h), and the settings app, which reshapes the wire into
+/// the same zone maps (settingscontroller_session.cpp). One home for the
+/// spellings is what keeps a rename from silently dropping the indicator on
+/// one surface only.
+///
+/// TWO QML readers spell the keys as raw strings and cannot use these
+/// constants: ZonePreview.qml, which draws the far end of all three, and
+/// MonitorStatePage.qml, whose per-tile diff decides whether a strip read is
+/// worth repainting. The second one fails QUIETLY under a rename — its diff
+/// would compare undefined to undefined, conclude nothing changed, and stop
+/// repainting on a tab switch — so it belongs in any rename's checklist even
+/// though nothing about it looks like a reader.
+///
+/// Distinct from ScrollTabKey above: those are the effect's PAINT overrides
+/// for the tab pills it draws on screen. These describe a strip being drawn
+/// as a thumbnail, and no consumer of one reads the other.
+///
+/// Deliberately not ZoneJsonKeys: that namespace owns the zone/layout FILE
+/// format, and a strip preview's synthetic zones are not layout zones (see
+/// that header's note on payloads that merely share a spelling).
+namespace StripPreviewKey {
+/// How many tabs the tile's column shows, and absent or 0 when it draws no
+/// indicator — the single "no indicator here" gate on this payload, as the
+/// null rect is on the compositor's.
+inline constexpr QLatin1String TabCount("tabCount");
+/// The tile's own 0-based tab within that count. Note the strip-card payload
+/// (src/common/stripcardserialize.cpp) spells an unrelated BOOLEAN the same
+/// way for a different consumer; the two never meet, but a grep for the
+/// spelling finds both.
+inline constexpr QLatin1String ActiveTab("activeTab");
+/// Which edge the indicator runs along, as a PhosphorScrollEngine::
+/// TabIndicatorPosition underlying value (0 Left, 1 Right, 2 Top, 3 Bottom).
+inline constexpr QLatin1String TabPosition("tabPosition");
+/// How much of that edge the indicator covers, 0.0 to 1.0, centered on it.
+/// No thickness counterpart by design: a few pixels of indicator is
+/// sub-pixel once a screen is scaled into a thumbnail, so a preview floors
+/// the thickness at whatever it can actually draw.
+inline constexpr QLatin1String TabLength("tabLength");
+}
+
 /// Single-instance app identities. Each Phosphor sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.

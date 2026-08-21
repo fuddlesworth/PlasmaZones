@@ -88,6 +88,10 @@ private Q_SLOTS:
     void digitNamingTheOperatedWindowIsANoOp();
     void tabbedStackMateDigitRefocusesWithoutReordering();
     void hiddenTabLosesItsNumberAndGetsItBack();
+    void visibleTileCarriesItsColumnsTabIndicator();
+    void visibleTileTabLengthIsMeasuredOffTheResolvedRects();
+    void visibleTileReportsTheResolvedIndicatorPosition();
+    void columnDrawingNoIndicatorCarriesNoTabFields();
     void clippedEdgeTilesKeepTheirNumbers();
     void crossOutputMoveKeepsHeightAndAnnouncesOnDestination();
     void crossOutputSwapTradesSlotsWithStackedSource();
@@ -524,6 +528,148 @@ void TestScrollEngineZoneNumbers::hiddenTabLosesItsNumberAndGetsItBack()
     QCOMPARE(engine->visibleTiles(QStringLiteral("S1")).size(), 2);
     QCOMPARE(numberOf(engine, "a"), 1);
     QCOMPARE(numberOf(engine, "x"), 2);
+}
+
+void TestScrollEngineZoneNumbers::visibleTileCarriesItsColumnsTabIndicator()
+{
+    // The walk drops a column's hidden tabs, so the tile it DOES emit is the
+    // only place a consumer can learn that the tile stands for a stack. These
+    // are the fields the strip previews draw their tab pills from.
+    QObject owner;
+    ScrollEngine* engine = oneScreenEngine(&owner);
+    engine->windowOpened(wid("a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(wid("x"), QStringLiteral("S1"), 0, 0);
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1")); // x joins a's column
+    engine->windowFocused(wid("a"), QStringLiteral("S1"));
+
+    // A normal column carries no indicator, whatever it holds: two stacked
+    // tiles are two tiles, not two tabs. Size-checked first, or a walk that
+    // returned nothing at all would satisfy the loop by never entering it.
+    const QVector<ScrollEngine::VisibleTile> plain = engine->visibleTiles(QStringLiteral("S1"));
+    QCOMPARE(plain.size(), 2);
+    for (const ScrollEngine::VisibleTile& tile : plain) {
+        QCOMPARE(tile.tabCount, 0);
+        QCOMPARE(tile.activeTabIndex, -1);
+        QCOMPARE(tile.tabLengthProportion, 0.0);
+    }
+
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+
+    const QVector<ScrollEngine::VisibleTile> tabbed = engine->visibleTiles(QStringLiteral("S1"));
+    QCOMPARE(tabbed.size(), 1);
+    // Both tabs are counted, hidden one included — those are the pills the
+    // indicator shows — and the shown tab names its own slot among them.
+    QCOMPARE(tabbed.first().windowId, wid("a"));
+    QCOMPARE(tabbed.first().tabCount, 2);
+    QCOMPARE(tabbed.first().activeTabIndex, 0);
+    // The proportion is pinned numerically in its own case below; here it is
+    // only asserted to exist, since a bare 0 would silently give every preview
+    // an empty band. (The <= 1.0 companion this once carried was structurally
+    // guaranteed by the qBound in the walk and could never fail.)
+    QVERIFY(tabbed.first().tabLengthProportion > 0.0);
+
+    // Switching tabs moves the index with the shown tile. Nothing about the
+    // strip's GEOMETRY changes here, which is exactly why a preview cannot
+    // decide it is up to date from the rects alone.
+    engine->windowFocused(wid("x"), QStringLiteral("S1"));
+    const QVector<ScrollEngine::VisibleTile> switched = engine->visibleTiles(QStringLiteral("S1"));
+    QCOMPARE(switched.size(), 1);
+    QCOMPARE(switched.first().windowId, wid("x"));
+    QCOMPARE(switched.first().tabCount, 2);
+    QCOMPARE(switched.first().activeTabIndex, 1);
+}
+
+namespace {
+
+/// A screen carrying one tabbed column of two windows, with @p overrides
+/// applied before the tabbing so they are in force when the strip resolves.
+ScrollEngine* tabbedColumnEngine(QObject* owner, const QVariantMap& overrides = {})
+{
+    ScrollEngine* engine = ScrollTestUtils::makeProviderEngine(owner, {QStringLiteral("S1")});
+    if (!overrides.isEmpty()) {
+        engine->applyPerScreenConfig(QStringLiteral("S1"), overrides);
+    }
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|x"), QStringLiteral("S1"), 0, 0);
+    engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+    return engine;
+}
+
+} // namespace
+
+void TestScrollEngineZoneNumbers::visibleTileTabLengthIsMeasuredOffTheResolvedRects()
+{
+    // The proportion is the whole reason the payload carries a length at all:
+    // the resolve rounds the configured fraction and floors it at one pixel,
+    // so a preview that re-applied the raw setting would draw a length the
+    // screen does not have. Pinned NUMERICALLY against the rect the walk
+    // reports beside it — asserting only "> 0" left the entire computation
+    // replaceable by a constant.
+    QObject owner;
+    ScrollEngine* engine = tabbedColumnEngine(&owner);
+
+    const QVector<ScrollEngine::VisibleTile> tiles = engine->visibleTiles(QStringLiteral("S1"));
+    const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"));
+    QCOMPARE(tiles.size(), 1);
+    QCOMPARE(rects.size(), 1);
+
+    // Default position is Left, so the indicator runs along the column's
+    // HEIGHT. Measuring the other axis would divide the indicator's thickness
+    // by the column's width and land nowhere near this.
+    const int axisExtent = rects.first().height();
+    QVERIFY(axisExtent > 0);
+    const qreal configured = engine->tabIndicatorParamsForScreen(QStringLiteral("S1")).lengthProportion;
+    const qreal expected = static_cast<qreal>(qBound(1, qRound(axisExtent * configured), axisExtent)) / axisExtent;
+    QVERIFY(qAbs(tiles.first().tabLengthProportion - expected) < 0.0001);
+}
+
+void TestScrollEngineZoneNumbers::visibleTileReportsTheResolvedIndicatorPosition()
+{
+    // Position is stamped from the resolved column, and Left is BOTH the
+    // struct default and the configured default — so only a non-default value
+    // can tell a real stamp from a field nobody wrote. Bottom also transposes
+    // the length basis onto the column's width, which pins the axis choice.
+    QObject owner;
+    QVariantMap overrides;
+    overrides.insert(ScrollPerScreenKeys::tabIndicatorPosition(), static_cast<int>(TabIndicatorPosition::Bottom));
+    ScrollEngine* engine = tabbedColumnEngine(&owner, overrides);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(QStringLiteral("S1")).position, TabIndicatorPosition::Bottom);
+
+    const QVector<ScrollEngine::VisibleTile> tiles = engine->visibleTiles(QStringLiteral("S1"));
+    const QVector<QRect> rects = engine->visibleTileRects(QStringLiteral("S1"));
+    QCOMPARE(tiles.size(), 1);
+    QCOMPARE(rects.size(), 1);
+    QCOMPARE(tiles.first().tabIndicatorPosition, TabIndicatorPosition::Bottom);
+
+    const int axisExtent = rects.first().width();
+    QVERIFY(axisExtent > 0);
+    const qreal configured = engine->tabIndicatorParamsForScreen(QStringLiteral("S1")).lengthProportion;
+    const qreal expected = static_cast<qreal>(qBound(1, qRound(axisExtent * configured), axisExtent)) / axisExtent;
+    QVERIFY(qAbs(tiles.first().tabLengthProportion - expected) < 0.0001);
+}
+
+void TestScrollEngineZoneNumbers::columnDrawingNoIndicatorCarriesNoTabFields()
+{
+    // The gate is the RESOLVED indicator rect, not the column's tabbed flag,
+    // and the master switch is one of the things that rect folds in. Without
+    // this leg every negative case in the suite was an untabbed column, so
+    // dropping the rect half of the gate changed nothing anywhere: a tabbed
+    // column with the indicator switched off would have reported a tab count
+    // and sprouted a pill in every preview.
+    QObject owner;
+    QVariantMap overrides;
+    overrides.insert(ScrollPerScreenKeys::tabIndicatorEnabled(), false);
+    ScrollEngine* engine = tabbedColumnEngine(&owner, overrides);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(QStringLiteral("S1")).enabled, false);
+
+    const QVector<ScrollEngine::VisibleTile> tiles = engine->visibleTiles(QStringLiteral("S1"));
+    // The column is still tabbed — one visible tile standing for two windows.
+    QCOMPARE(tiles.size(), 1);
+    QCOMPARE(tiles.first().tabCount, 0);
+    QCOMPARE(tiles.first().activeTabIndex, -1);
+    QCOMPARE(tiles.first().tabLengthProportion, 0.0);
 }
 
 void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()

@@ -905,8 +905,9 @@ SettingsController::SettingsController(QObject* parent)
     // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions along with every
     // other daemon broadcast this class listens to. Of those, settingsChanged
     // reaches this timer as well, by way of onExternalSettingsChanged() ->
-    // load(). quickLayoutSlotsChanged relays straight back out as a signal for
-    // QML. The rest run their own slots and never touch it.
+    // load(). quickLayoutSlotsChanged and the Scrolling interface's
+    // stripChanged relay straight back out as signals for QML. The rest run
+    // their own slots and never touch it.
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
