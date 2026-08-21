@@ -184,6 +184,10 @@ jobs:
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
+        # Force bash for the same reason the build step below does: the KDE
+        # Neon container's default shell resolves to dash, which has neither
+        # `set -o pipefail` nor `[[ ]]`.
+        shell: bash
         env:
           VERSION: ${{ needs.version.outputs.version }}
           PKGREL: ${{ needs.version.outputs.pkgrel }}
@@ -282,6 +286,9 @@ jobs:
       # Template the version FIRST so the source tarball baked into the
       # SRPM carries the matching spec rather than the 0.0.0 placeholder.
       - name: Generate RPM changelog and set version from CHANGELOG.md
+        # See the Debian step: the version assertion below uses `[[ ]]`, which
+        # dash does not have, and a container's default shell may resolve to it.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           PKGREL="${{ needs.version.outputs.pkgrel }}"
@@ -423,6 +430,9 @@ jobs:
         run: rpmdev-setuptree
 
       - name: Generate RPM changelog and set version from CHANGELOG.md
+        # See the Debian step: the version assertion below uses `[[ ]]`, which
+        # dash does not have, and a container's default shell may resolve to it.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           PKGREL="${{ needs.version.outputs.pkgrel }}"
