@@ -526,9 +526,22 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // the window (the close-animation overshoot). Live geometry accessors on a
     // ref-held Deleted window are already exercised every close frame by
     // paintWindow's anchor-uniform block, so reading them here is the same
-    // safety class. Bail only for a deleted window with NO live transition
-    // (nothing of ours paints it).
-    if (!window || (window->isDeleted() && !m_shaderManager.findTransition(window))) {
+    // safety class. Bail only for a deleted window NOTHING of ours paints:
+    // neither a live transition nor a decoration riding a foreign close
+    // animation (see slotWindowClosed). The padded-decoration rewrite below is
+    // the reason the second term is here — a decorated corpse presents through
+    // a canvas larger than its redirect texture exactly like a live one, and
+    // the natural quad would clip the margin band off its close animation.
+    //
+    // The kept decoration is looked up through the FROZEN id cache rather than
+    // getWindowId: that resolver re-derives and re-inserts for a cache miss,
+    // and re-populating the id maps from a dying window is exactly what the
+    // close path's scrub (and buildWindowMap's skip) exist to prevent. A window
+    // whose decoration was kept still has its mapping — slotWindowClosed keeps
+    // the two together — so a miss here is a corpse we are not painting.
+    if (!window
+        || (window->isDeleted() && !m_shaderManager.findTransition(window)
+            && !m_windowDecorations.contains(m_idCaches.windowIdCache.value(window)))) {
         return;
     }
     // Only surface-extent transitions deform the quad list. Anchor-extent
