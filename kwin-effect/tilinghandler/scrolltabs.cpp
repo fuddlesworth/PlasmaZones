@@ -156,6 +156,22 @@ bool overrideBool(const QVariantMap& map, QLatin1String key, bool& out)
     return true;
 }
 
+/// Reads an override string with the same presence-and-type guard as the two
+/// above. It differs in one way that matters: an EMPTY string is a VALUE here,
+/// not an absence. The wire contract for the font family is that a
+/// present-but-empty family means "the system font", so this only reports
+/// whether the key was there and was a string, and the caller decides what an
+/// empty one means.
+bool overrideString(const QVariantMap& map, QLatin1String key, QString& out)
+{
+    const auto it = map.constFind(key);
+    if (it == map.constEnd() || it->typeId() != QMetaType::QString) {
+        return false;
+    }
+    out = it->toString();
+    return true;
+}
+
 /// Layers a per-screen context rule's five font keys onto @p font.
 ///
 /// ORDER MATTERS, and this is the only order that works: the style carries a
@@ -170,9 +186,18 @@ bool overrideBool(const QVariantMap& map, QLatin1String key, bool& out)
 /// chip thickness, which the geometry half of the rule already governs.
 void applyFontOverrides(const QVariantMap& map, QFont& font)
 {
-    const QString family = map.value(ScrollTabKey::FontFamily).toString();
-    if (!family.isEmpty()) {
-        font.setFamily(family);
+    QString family;
+    if (overrideString(map, ScrollTabKey::FontFamily, family)) {
+        // A present-but-EMPTY family is an override that says "the system
+        // font", which is what every producer of this key documents and what
+        // the global loader does with it. Dropping it here would leave the
+        // global family standing and make the rule a silent no-op. It is
+        // re-derived rather than cleared with setFamily(QString()), because an
+        // empty family list falls back to QFont's application default instead
+        // of the small system face fillScrollTabTheme started from, so the two
+        // "no family named" paths would render differently.
+        font.setFamily(family.isEmpty() ? QFontDatabase::systemFont(QFontDatabase::SmallestReadableFont).family()
+                                        : family);
     }
     int weight = int(font.weight());
     if (overrideInt(map, ScrollTabKey::FontWeight, kFontWeightMin, kFontWeightMax, weight)) {

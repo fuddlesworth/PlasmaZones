@@ -165,9 +165,16 @@ struct IndicatorAxes
     int longExtent = 0;
     int shortExtent = 0;
     int tabCount = 0;
-    /// Inter-tab gap, floored at 0: a negative value can only arrive through
-    /// a garbled per-screen override (the setting's own floor is 0), and
-    /// below zero the segment offsets would walk backwards over each other.
+    /// Inter-tab gap, floored at 0 and then capped by axesOf() against the
+    /// space the indicator has: a negative value can only arrive through a
+    /// garbled per-screen override (the setting's own floor is 0), and below
+    /// zero the segment offsets would walk backwards over each other, while a
+    /// gap the run cannot afford would push the tail tabs outside the
+    /// indicator to be clipped away. The cap can drive a nonzero setting to 0,
+    /// which the segment bar then draws as one continuous run with square
+    /// interior joints (the `axes.gaps == 0` test further down). That is the
+    /// correct look for a bar with no room between its segments, not a
+    /// regression.
     int gaps = 0;
 };
 
@@ -180,6 +187,17 @@ IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicat
     axes.shortExtent = axes.vertical ? indicator.rect.width() : indicator.rect.height();
     axes.tabCount = int(indicator.tabs.size());
     axes.gaps = std::max(0, style.gapsBetweenTabs);
+    // Then capped against the space there actually is. Every per-tab share
+    // floors at 1px, but tabOffset() still accumulates the FULL gap per tab,
+    // so a gap the run cannot afford walks the tail off the end of the
+    // indicator — where the clip discards it and layoutPills intersects it
+    // away, leaving those tabs undrawn AND unclickable. The cap leaves room
+    // for one pixel per tab plus the gaps between them. It is applied here, in
+    // the one place both styles and the hit test read their axes from, so draw
+    // rects and hit rects can never disagree about the gap.
+    if (axes.tabCount > 1) {
+        axes.gaps = std::min(axes.gaps, std::max(0, (axes.longExtent - axes.tabCount) / (axes.tabCount - 1)));
+    }
     return axes;
 }
 
@@ -204,7 +222,13 @@ ChipMetrics chipMetricsOf(const IndicatorAxes& axes, const ScrollTabIndicatorSty
     // Floored at 1, NOT at some legible minimum: a floor big enough to keep a
     // title readable would let the run overflow the pill once there were
     // enough tabs, and an overflowing run is clipped — those tabs would be
-    // undrawn AND unclickable, which is worse than thin.
+    // undrawn AND unclickable, which is worse than thin. While the indicator
+    // has at least one pixel per tab, axesOf()'s gap cap keeps the run inside
+    // the pill; with fewer pixels than tabs the 1px floor cannot help and the
+    // tail is clipped regardless. The chip arm budgets against `inner`, so
+    // even inside the cap the last chip's edge can run up to one inset (1-2px
+    // at the default spacing) past the pill and lose that edge to the clip.
+    // One clipped edge, never a lost tab.
     metrics.longBudget = std::max(1, (inner - axes.gaps * neighbours) / std::max(1, axes.tabCount));
     // The last chip absorbs the division remainder so the run ends flush with
     // the pill's inner edge instead of leaving up to tabCount-1 px that
@@ -300,7 +324,11 @@ QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes
         // Segment bar: each segment takes an equal share of the long axis
         // after the inter-tab gaps are removed, floored at 1 so a bar too
         // short for its tab count still carries every segment rather than
-        // silently dropping the tail to zero.
+        // silently dropping the tail to zero. While the bar has at least one
+        // pixel per tab, axesOf()'s gap cap is what keeps the run inside it —
+        // the floor alone does not, because the offsets still accumulate the
+        // gap. Below one pixel per tab the tail segments are clipped and
+        // nothing here can prevent it.
         const int baseLength = std::max(1, (axes.longExtent - axes.gaps * (axes.tabCount - 1)) / axes.tabCount);
         for (int i = 0; i < axes.tabCount; ++i) {
             const int offset = tabOffset(i, baseLength, axes.gaps);

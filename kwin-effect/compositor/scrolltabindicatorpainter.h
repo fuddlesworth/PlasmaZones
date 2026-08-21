@@ -95,7 +95,10 @@ struct ScrollTabIndicatorStyle
     int style = 1;
     /// Gap between individual tabs, in logical pixels. Negative values are
     /// treated as 0 by the layout (the setting's floor is 0; a negative one
-    /// can only arrive through a garbled override).
+    /// can only arrive through a garbled override), and the layout also caps
+    /// the gap against the space the indicator has, so a large gap on a short
+    /// indicator draws smaller than it was set rather than pushing the tail
+    /// tabs out of the indicator.
     int gapsBetweenTabs = 0;
     /// Per-tab corner radius. NEGATIVE means fully rounded (half the tab's
     /// short extent), which is how the chips pill has always looked.

@@ -395,8 +395,10 @@ inline constexpr QLatin1StringView SetScrollStripAxis{"setScrollStripAxis"};
 // context rules cascade per-property (a layout rule can set the position while
 // a theme rule sets the colours, and neither clobbers the other). The GEOMETRY
 // half reaches the scrolling engine through its per-screen override map; the
-// PAINT half is consumed daemon-side and applied to the overlay, matching the
-// split IScrollSettings documents.
+// PAINT half never reaches that engine at all — the daemon pushes it to the
+// KWin effect through TilingAdaptor::setScrollTabPaintOverrides, and the
+// effect draws the indicator from it. That is the split IScrollSettings
+// documents.
 /// Whether tabbed columns show an indicator at all. Boolean `ActionParam::Value`.
 inline constexpr QLatin1StringView SetTabIndicatorEnabled{"setTabIndicatorEnabled"};
 /// Title chips or a segment bar. Closed enum token (`ActionParam::Value`,

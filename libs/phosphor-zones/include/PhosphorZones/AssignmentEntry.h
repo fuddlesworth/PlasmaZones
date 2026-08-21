@@ -468,7 +468,7 @@ struct ContextTilingParams
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
  * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
- * behaviour toggles, the thirteen SetTabIndicator* slots and the six
+ * behaviour toggles, the eighteen SetTabIndicator* slots and the six
  * SetDropIndicator* slots, each documented in its own block below); an unset
  * field means "use the config value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
@@ -526,9 +526,11 @@ struct ContextScrollingParams
     /// The tab indicator's overrides, niri's `tab-indicator` layout block.
     /// Split the way IScrollSettings splits the family: the GEOMETRY fields
     /// are layered onto the scrolling engine's per-screen override map, while
-    /// the PAINT fields never reach that library and are applied to the
-    /// overlay daemon-side. Each is independently optional so a context rule
-    /// that sets one property leaves the other seventeen alone.
+    /// the PAINT fields never reach that library. The daemon pushes those to
+    /// the KWin effect through TilingAdaptor::setScrollTabPaintOverrides and
+    /// the effect draws the indicator from them. Each is independently
+    /// optional so a context rule that sets one property leaves the other
+    /// seventeen alone.
     std::optional<bool> tabIndicatorEnabled;
     std::optional<bool> tabIndicatorHideWhenSingleTab;
     std::optional<bool> tabIndicatorPlaceWithinColumn;

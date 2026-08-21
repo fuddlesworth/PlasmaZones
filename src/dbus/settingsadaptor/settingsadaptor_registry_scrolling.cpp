@@ -270,7 +270,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
 
     // The PAINT keys of both indicator families register through the
     // interface too — isettings.h declares getter+no-op-setter virtual pairs
-    // for exactly these eleven so a non-Settings backend keeps them (its
+    // for exactly these sixteen so a non-Settings backend keeps them (its
     // stated rationale); only the tab indicator's GEOMETRY keys are
     // deliberately concrete-only (isettings.h documents that exclusion).
     // The Style enum keeps its validated hand registration, via the

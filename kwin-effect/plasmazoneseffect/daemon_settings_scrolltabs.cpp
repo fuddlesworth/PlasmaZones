@@ -27,10 +27,14 @@ void PlasmaZonesEffect::loadScrollTabIndicatorSettings()
     // ── Scrolling tab indicator PAINT settings ──
     //
     // The effect draws the tab pills itself, so it needs the paint half of
-    // Scrolling.TabIndicator that the daemon otherwise pushes onto the QML
-    // overlay. The geometry half never comes here: it reaches the engine
-    // through IScrollSettings and is already baked into the committed column
-    // rects the effect paints against.
+    // Scrolling.TabIndicator. These are the GLOBAL keys, pulled over the
+    // settings channel below; per-screen rule overrides for the same keys
+    // arrive separately, pushed by the daemon through
+    // TilingAdaptor::setScrollTabPaintOverrides (src/daemon/daemon/scrolling.cpp).
+    // Neither reaches the QML overlay, which has no tab surface at all. The
+    // geometry half never comes here either: it reaches the engine through
+    // IScrollSettings and is already baked into the committed column rects the
+    // effect paints against.
     //
     // Defaults live on the members (see the header block) and are the
     // ConfigDefaults::scrollingTabIndicator*() accessors in
@@ -44,12 +48,18 @@ void PlasmaZonesEffect::loadScrollTabIndicatorSettings()
     // loadCachedSettings re-runs in full on EVERY settingsChanged and an
     // ungated assignment would cost a full rebuild per unrelated setting edit.
     //
-    // The numeric bounds below DUPLICATE, by hand, the ConfigDefaults
-    // {Min,Max} accessors named beside each (the effect cannot include the
-    // daemon's config headers, and no shared phosphor-* header carries these
-    // four pairs); a bound change there is a change here too. The same four
-    // pairs are repeated once more in kwin-effect/tilinghandler/scrolltabs.cpp
-    // for the per-screen context overrides, which ride a different channel.
+    // Four numeric ranges are guarded below, but only THREE of them are
+    // ConfigDefaults {Min,Max} pairs duplicated by hand beside each guard
+    // (gaps 0..64, corner radius -1..64, font weight 100..900) — the effect
+    // cannot include the daemon's config headers, and no shared phosphor-*
+    // header carries them, so a bound change there is a change here too. The
+    // fourth, the style, is a closed set mirrored from
+    // ConfigDefaults::isValidScrollingTabIndicatorStyle rather than a pair.
+    // The same four ranges are guarded once more in
+    // kwin-effect/tilinghandler/scrolltabs.cpp for the per-screen context
+    // overrides, which ride a different channel; that file spells the style as
+    // a kStyleMin/kStyleMax pair, so it declares four pairs where this one has
+    // three.
     loadSettingAsync(QStringLiteral("scrollingTabIndicatorEnabled"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
@@ -229,21 +239,31 @@ void PlasmaZonesEffect::onScrollTabIndicatorStyleChanged()
 QFont PlasmaZonesEffect::scrollTabIndicatorFont() const
 {
     // Only the TYPEFACE half of the label font is decided here: family,
-    // weight, italic, underline, strikeout. The SIZE the returned font
-    // carries is a fallback and nothing more — the raster re-sizes the label
-    // to fit each chip's thickness before it draws
-    // (scrolltabindicatorpainter_raster.cpp), because the pill's Width
-    // setting is what the user sizes these labels with. The segment-bar style
-    // draws no text at all, so for it the size is never read either.
+    // weight, italic, underline, strikeout. The SIZE the returned font carries
+    // is never the size a label is DRAWN at — the raster re-sizes the label to
+    // fit each chip's thickness before it draws
+    // (scrolltabindicatorpainter_raster.cpp), because the pill's Width setting
+    // is what the user sizes these labels with. The segment-bar style draws no
+    // text at all, so for it the size is not read even that far.
     //
     // The starting point is QFontDatabase's SmallestReadableFont, the same
     // system font Kirigami's desktop platform plugin hands out as
     // Kirigami.Theme.smallFont (the "Small" font on Plasma's Fonts page). It
-    // supplies the family when the user has not named one, and its own size
-    // stands as the fallback, so a chip whose fit somehow never ran still
-    // draws at a readable system size rather than at whatever QFont defaults
-    // to.
+    // supplies the family when the user has not named one, and its size SEEDS
+    // the raster's fit: fitLabelFont measures this font's height ratio at its
+    // own pixel size to land a first guess, then only ever walks down from
+    // there. A readable system size therefore keeps that first guess close,
+    // and a wildly different one would only cost extra steps of the walk.
     QFont font = QFontDatabase::systemFont(QFontDatabase::SmallestReadableFont);
+    // Drop the inherited style NAME before the five settings are applied. A
+    // system font can arrive carrying one ("Book", "Regular", "Display"), and
+    // Qt matches a named style in preference to weight and italic, which would
+    // make the setWeight/setItalic below resolve to whatever face that name
+    // picks instead. Clearing it puts this font back on the weight-and-flags
+    // path the settings expect. On a system whose font names no style this is
+    // a no-op; where it does name one, the shipped 700 finally applies and the
+    // labels render bold.
+    font.setStyleName(QString());
     if (!m_cachedTabIndicatorFontFamily.isEmpty()) {
         font.setFamily(m_cachedTabIndicatorFontFamily);
     }

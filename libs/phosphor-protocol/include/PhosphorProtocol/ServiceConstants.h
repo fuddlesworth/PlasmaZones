@@ -132,10 +132,11 @@ inline constexpr QLatin1String CornerRadius("cornerRadius");
 inline constexpr QLatin1String ActiveColor("activeColor");
 inline constexpr QLatin1String InactiveColor("inactiveColor");
 inline constexpr QLatin1String UrgentColor("urgentColor");
-// The tab label's font. Paint keys like the three above them, carried on the
-// per-screen override map only — a window rule cannot restyle one tab's text,
-// only recolour it, so these have no counterpart on the colour map. There is
-// no size key: the effect's painter fits the label to the pill thickness.
+// The tab label's font. Paint keys like TabStyle, GapsBetweenTabs and
+// CornerRadius, carried on the per-screen override map only — a window rule
+// cannot restyle one tab's text, only recolour it, so unlike the three colours
+// above these have no counterpart on the colour map. There is no size key:
+// the effect's painter fits the label to the pill thickness.
 inline constexpr QLatin1String FontFamily("fontFamily");
 inline constexpr QLatin1String FontWeight("fontWeight");
 inline constexpr QLatin1String FontItalic("fontItalic");

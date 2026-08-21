@@ -410,7 +410,22 @@ bool ScrollTabIndicatorPainter::paint(KWin::LogicalOutput* output, const KWin::R
     // TransitionPass::drawOutputQuad, which feeds scaledRenderRect to the
     // same matrix.
     const QRectF destLogical = QRectF(entry->bounds).translated(viewOffset);
-    const QPointF destDevice(destLogical.x() * scale, destLogical.y() * scale);
+    QPointF destDevice(destLogical.x() * scale, destLogical.y() * scale);
+    // At rest, snap that origin to whole device pixels. `bounds` is integral in
+    // LOGICAL space, so on a fractional-scale output the scaled origin lands
+    // between device pixels and GL_LINEAR resamples the entire label texture —
+    // and the chip raster fits its label to within a couple of pixels, so half
+    // a pixel of resampling is a large share of the stroke. Conditional on
+    // purpose: snapping every frame would quantise the view spring to whole
+    // device pixels and make a smooth scroll step. isNull() is the right
+    // at-rest test because offsetFor() returns a default-constructed QPointF on
+    // every path that is not animating, and the last frame of an animation
+    // lands with a null offset, so the strip ends up snapped. std::round rather
+    // than std::floor: floor would bias the whole strip up and to the left by
+    // up to a device pixel, where rounding moves it by at most half of one.
+    if (viewOffset.isNull()) {
+        destDevice = QPointF(std::round(destDevice.x()), std::round(destDevice.y()));
+    }
     // Draw the quad at the texture's own device size rather than the
     // unrounded scaled bounds: the raster ceils its size, and a quad a
     // fraction narrower would resample the whole strip by up to a pixel.

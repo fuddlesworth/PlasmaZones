@@ -9,7 +9,7 @@
 // ruleaction_builtins_p.h.
 //
 // The seam is a concern, not an arbitrary cut: these two families are the
-// niri-parity INDICATOR surface — twenty-four registrations that are all paint
+// niri-parity INDICATOR surface — twenty-nine registrations that are all paint
 // or geometry for a widget the engine draws beside a column, none of which the
 // appearance half's per-window border / gap / engine-parameter descriptors
 // interact with.
@@ -34,12 +34,19 @@ void ActionRegistry::registerBuiltinsIndicators()
     // colours compose instead of clobbering each other. The GEOMETRY half is
     // layered onto the scrolling engine's per-screen override map (the
     // ScrollPerScreenKeys::tabIndicator* keys); the PAINT half never reaches
-    // that library and is applied to the overlay daemon-side.
+    // that library — the daemon pushes it to the KWin effect through
+    // TilingAdaptor::setScrollTabPaintOverrides, and the effect draws the
+    // indicator from it.
     //
-    // Their own category, not layoutEngine: sixteen more rows (the thirteen
-    // context knobs below plus the three per-window tab colours further down)
-    // would swamp that group's list, and the indicator is one coherent feature
-    // a user reaches for as a unit.
+    // Their own category, not layoutEngine: twenty-one more rows (the
+    // eighteen context knobs below plus the three per-window tab colours
+    // further down) would swamp that group's list, and the indicator is one
+    // coherent feature a user reaches for as a unit.
+    // Seeds OFF against a global that defaults ON: the meaningful fresh rule is
+    // "no indicator on this screen", the same polarity the behaviour toggles in
+    // ruleaction_builtins_appearance.cpp follow. Bool descriptors here seed the
+    // INVERSE of their global default; the numeric ones seed the shipped value
+    // itself.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetTabIndicatorEnabled),
         .slotFor = constantSlot(ActionSlot::TabIndicatorEnabled),
@@ -50,7 +57,7 @@ void ActionRegistry::registerBuiltinsIndicators()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("tabIndicator"),
         .displayOrder = 1,
         .tags = {QString(Tag::LayoutEngine)},
@@ -232,7 +239,7 @@ void ActionRegistry::registerBuiltinsIndicators()
     // HEX ONLY, no accent sentinel — the same contract the overlay colour
     // actions carry and for the same reason: no consumer on either the context
     // or the per-window path resolves the token. Both readColor helpers
-    // (layoutregistry_contextresolve.cpp, windowtrackingadaptor/rules.cpp) pass
+    // (layoutregistry_contextparams.cpp, windowtrackingadaptor/rules.cpp) pass
     // the string through verbatim to a QML colour property, so an accepted
     // "accent" would reach the overlay as an unparseable colour. Only the
     // border/tint family has a resolver for it.
@@ -328,9 +335,13 @@ void ActionRegistry::registerBuiltinsIndicators()
                      .kind = QStringLiteral("number"),
                      .min = kMinTabIndicatorFontWeight,
                      .max = kMaxTabIndicatorFontWeight,
-                     // Regular, the weight a fresh rule should not silently
-                     // embolden the labels away from.
-                     .defaultDisplay = 400.0}},
+                     // Bold, matching
+                     // ConfigDefaults::scrollingTabIndicatorFontWeight().
+                     // Every numeric descriptor in this file seeds the shipped
+                     // config value, so a fresh rule starts as a no-op the
+                     // user then edits rather than silently un-bolding the
+                     // labels the moment it is added.
+                     .defaultDisplay = 700.0}},
         .category = QStringLiteral("tabIndicator"),
         .displayOrder = 18,
         .tags = {QString(Tag::LayoutEngine)},
@@ -441,7 +452,8 @@ void ActionRegistry::registerBuiltinsIndicators()
     // tabbed column. Every action here is PAINT — there is no geometry half,
     // because the rect comes from the engine's layout math and cannot be
     // positioned independently of where the drop lands.
-    // Master switch, the peer of SetTabIndicatorEnabled.
+    // Master switch, the peer of SetTabIndicatorEnabled, and seeded the same
+    // way: its global defaults ON, so a fresh rule seeds OFF.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetDropIndicatorEnabled),
         .slotFor = constantSlot(ActionSlot::DropIndicatorEnabled),
@@ -452,7 +464,7 @@ void ActionRegistry::registerBuiltinsIndicators()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
         .category = QStringLiteral("dropIndicator"),
         .displayOrder = 1,
         .tags = {QString(Tag::LayoutEngine)},

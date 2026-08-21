@@ -25,11 +25,12 @@ namespace PhosphorRules {
 //
 // Param-key vocabulary shared across every wire-shape reader (the registry
 // validators in ruleaction_builtins_engine.cpp /
-// ruleaction_builtins_appearance.cpp, the config-layer v3→v4 migration that ports
-// legacy AnimationAppRule entries, the rule-editor UI, and the KWin-effect-
-// side resolvers in `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
+// ruleaction_builtins_appearance.cpp / ruleaction_builtins_indicators.cpp, the
+// config-layer v3→v4 migration that ports legacy AnimationAppRule entries, the
+// rule-editor UI, and the KWin-effect-side resolvers in
+// `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
 // A future rename (e.g. `effectId` → `effect_id`) updates one entry here and
-// flows everywhere instead of being hard-coded at four call sites.
+// flows everywhere instead of being hard-coded once per reader.
 namespace ActionParam {
 // OverrideAnimation{Shader,Timing,Curve} family. `Params` is the exception:
 // it is the shared nested-payload key for every action carrying a free-form
@@ -133,7 +134,7 @@ inline constexpr double MaxBorderRadius = 20.0;
 /// the same lockstep reason as the border bounds above: the load-time
 /// descriptor validators (via the private percent pair in
 /// ruleaction_builtins_p.h), the zones-layer context resolver
-/// (layoutregistry_contextresolve.cpp), and the per-window open-params consumer
+/// (layoutregistry_contextparams.cpp), and the per-window open-params consumer
 /// (windowtrackingadaptor/rules.cpp) all validate against these — a private
 /// copy in any of them would drift by hand-mirroring. A column or window may
 /// legitimately take the whole work area, so the upper bound is 1.0.
@@ -142,8 +143,8 @@ inline constexpr double MaxColumnWidthRatio = 1.0;
 
 /// Bounds for the tab-indicator numeric slots. Installed here, next to the
 /// column-width pair and for the same reason: the descriptor validators
-/// (ruleaction_builtins_appearance.cpp) and the per-context consumer
-/// (layoutregistry_contextresolve.cpp) both check against these, so a private
+/// (ruleaction_builtins_indicators.cpp) and the per-context consumer
+/// (layoutregistry_contextparams.cpp) both check against these, so a private
 /// copy in either would drift by hand-mirroring.
 ///
 /// Two floors are NEGATIVE and neither is a mistake. A negative GAP draws the
@@ -169,6 +170,16 @@ inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
 /// 400 is regular and 700 is bold. Kept beside the other tab-indicator bounds
 /// and shared by the same two consumers, so the descriptor validator and the
 /// context resolver check one number rather than two hand-mirrored ones.
+///
+/// Inside this library it is one constant; outside it the SAME 100..900 band
+/// is mirrored at three more sites, so widening it means editing four places.
+/// The config layer owns the canonical pair
+/// (ConfigDefaults::scrollingTabIndicatorFontWeight{Min,Max}() in
+/// src/config/configdefaults_scrolling.h). The KWin effect mirrors it twice:
+/// kFontWeightMin / kFontWeightMax in kwin-effect/tilinghandler/scrolltabs.cpp
+/// name it, and the global loader in
+/// kwin-effect/plasmazoneseffect/daemon_settings_scrolltabs.cpp spells it as
+/// bare literals.
 ///
 /// The floor is 100, not 0 — a zero weight is not a lighter font, it is an
 /// out-of-scale value the font stack rounds to whatever it likes. So this pair

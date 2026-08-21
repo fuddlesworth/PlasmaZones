@@ -388,8 +388,10 @@ public:
     /// colour, while a chip has to hold a title, and a value that suits one
     /// is unusable for the other.
     ///
-    /// The bar figure is niri's. The chip figure is a comfortable line box at
-    /// the default overlay font; a user who scales that font up will want more.
+    /// The bar figure is niri's. The chip figure is a comfortable line box
+    /// for a label at the tab font's default size; the label is fitted to
+    /// this thickness rather than the other way round, so a user who wants
+    /// bigger text raises the Width setting, not any font scale.
     static constexpr int scrollingTabIndicatorWidthForBar()
     {
         return 4;
@@ -508,19 +510,30 @@ public:
     /// here, so a user who never touches this follows their desktop font.
     ///
     /// This family exists so the pills stop borrowing the snapping zone-label
-    /// font, which is a different surface with different sizing pressure.
+    /// font, which is a different surface with different sizing pressure. That
+    /// decoupling is not free for everyone: an install that CUSTOMISED the
+    /// zone-label font loses that choice here in every dimension, because the
+    /// pills no longer read it at all. Only an install that left it alone sees
+    /// the same typeface and weight as before.
     ///
     /// THERE IS NO SIZE KEY, on purpose. The pill's thickness comes from the
     /// Width setting, and the painter fits the label to the band it was given.
     /// A size of its own would let the text draw outside that band, which is
-    /// the same reasoning that makes Width exact for every style.
+    /// the same reasoning that makes Width exact for every style. This is the
+    /// one dimension that changes for EVERY install: the labels no longer
+    /// follow the zone labels' FontSizeScale, which now moves those labels
+    /// alone.
     static QString scrollingTabIndicatorFontFamily()
     {
         return QString();
     }
-    /// Bold, matching what the pills already looked like: before they had a
-    /// font of their own they inherited the zone label's weight, which is 700.
-    /// Keeping that number here means existing installs see no visual change.
+    /// Bold, which is the weight the pills used to inherit from the snapping
+    /// zone label, so an install that left that font alone keeps the weight it
+    /// had. See the family accessor above for what does NOT carry over.
+    ///
+    /// Whether it renders as bold also depends on the platform font itself:
+    /// the painter clears the inherited style name before applying this, so a
+    /// system font that shipped one now takes a weight it previously ignored.
     static constexpr int scrollingTabIndicatorFontWeight()
     {
         return 700;
@@ -1067,6 +1080,11 @@ static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadius()
 static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMin()
                   == ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusPill(),
               "The corner-radius floor must be the pill sentinel — see the accessor comment");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorFontWeight()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorFontWeightMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorFontWeight()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorFontWeightMax(),
+              "ConfigDefaults::scrollingTabIndicatorFontWeight() outside the declared [min, max] range");
 // The drop indicator's three ranged defaults, same guard as the tab
 // indicator's above. The colour pair is unranged (empty means follow the
 // scheme) and Enabled is a bool, so neither has anything to check.

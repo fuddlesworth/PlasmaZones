@@ -3,12 +3,12 @@
 //
 // Private (non-installed) header — shared helpers for the built-in action
 // descriptor tables. registerBuiltins() is split across
-// ruleaction_builtins_engine.cpp and ruleaction_builtins_appearance.cpp for
-// file-size; the param validators, validation bounds, and the two
-// slot/enum-vocabulary helpers below are used by both halves, so they live
-// here once rather than being duplicated per TU. Defined `inline` (not in an
-// anonymous namespace) so an unused helper in either half raises no
-// -Wunused-function.
+// ruleaction_builtins_engine.cpp, ruleaction_builtins_appearance.cpp and
+// ruleaction_builtins_indicators.cpp for file-size; the param validators,
+// validation bounds, and the two slot/enum-vocabulary helpers below are used
+// by all three, so they live here once rather than being duplicated per TU.
+// Defined `inline` (not in an anonymous namespace) so a helper unused by one
+// of them raises no -Wunused-function.
 
 #pragma once
 

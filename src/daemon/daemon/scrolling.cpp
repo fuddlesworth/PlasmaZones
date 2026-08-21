@@ -372,14 +372,14 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         m_scrollEngine->applyPerScreenConfig(screenId, overrides);
         // The tab indicator's PAINT params (style, gaps, corner radius, the
         // three colours and the five label-font fields) go to the KWin effect,
-        // which draws the pills: it
-        // layers them over its global Scrolling.TabIndicator settings for this
-        // screen alone. Keyed by the same WindowPaintKeys / WindowColorKeys
-        // spellings the effect reads, so producer and consumer share one home
-        // for the names. Handed straight to the Tiling adaptor: the engine has
-        // no use for presentation state. Pushed even when EMPTY, like the
-        // engine map above — empty is how a screen whose rules stopped
-        // overriding falls back to the global look.
+        // which draws the pills: it layers them over its global
+        // Scrolling.TabIndicator settings for this screen alone. Keyed by the
+        // same WindowPaintKeys / WindowColorKeys spellings the effect reads,
+        // so producer and consumer share one home for the names. Handed
+        // straight to the Tiling adaptor: the engine has no use for
+        // presentation state. Pushed even when EMPTY, like the engine map
+        // above — empty is how a screen whose rules stopped overriding falls
+        // back to the global look.
         if (m_tilingAdaptor) {
             QVariantMap paint;
             if (params.tabIndicatorStyle) {
