@@ -37,6 +37,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -325,7 +326,13 @@ int main(int argc, char* argv[])
             QDBusInterface existing(serviceName, QString(PhosphorProtocol::Service::ObjectPath),
                                     QString(PhosphorProtocol::Service::Interface::Control), bus);
             if (existing.isValid()) {
-                existing.call(QStringLiteral("quit"));
+                // asyncCall, NOT call(): the incumbent this flag exists to
+                // displace is often a wedged one, and a wedged event loop never
+                // dispatches the method, so a blocking call would sit on the
+                // default 25s reply timeout before the wait loop below even
+                // starts. Nothing reads the reply — the retry loop is what
+                // actually detects that the name came free.
+                existing.asyncCall(QStringLiteral("quit"));
             } else {
                 qCWarning(PlasmaZones::lcDaemon)
                     << "--replace: the running instance did not answer on" << PhosphorProtocol::Service::ObjectPath
@@ -359,7 +366,12 @@ int main(int argc, char* argv[])
     // instead of being lost. The old handler called quit() directly, which is a
     // no-op on a loop that has not started, and then let startup continue into
     // exec() with stop() already applied.
-    if (::pipe(g_signalPipe) == 0) {
+    // O_CLOEXEC so the fds do not leak into the processes the daemon spawns
+    // (the settings app via QProcess::startDetached, the editor via
+    // LayoutAdaptor). O_NONBLOCK so a hypothetically full pipe makes the
+    // handler's write() fail rather than block inside signal context, which is
+    // the one thing this whole mechanism exists to avoid.
+    if (::pipe2(g_signalPipe, O_CLOEXEC | O_NONBLOCK) == 0) {
         auto* signalNotifier = new QSocketNotifier(g_signalPipe[0], QSocketNotifier::Read, &app);
         QObject::connect(signalNotifier, &QSocketNotifier::activated, &app, [](QSocketDescriptor socket) {
             unsigned char signum = 0;
@@ -367,7 +379,20 @@ int main(int argc, char* argv[])
             if (got != 1) {
                 return;
             }
-            qCInfo(PlasmaZones::lcDaemon) << "Received signal" << signum << "- shutting down";
+            // Warning, not info: plasmazones.* info is off without --debug, and
+            // the reason the daemon exited should be in the ordinary journal.
+            qCWarning(PlasmaZones::lcDaemon) << "Received signal" << signum << "- shutting down";
+            // Hand the signals back to the kernel before quitting. Everything
+            // after exec() returns — Daemon::stop() with its blocking D-Bus
+            // round trips and 500ms thread-pool join, then the window teardown —
+            // runs with no event loop reading this pipe, so a second SIGTERM in
+            // that window would be written and never acted on, leaving SIGKILL
+            // as the only way out. Restoring the default disposition makes the
+            // first signal graceful and a second one terminate immediately,
+            // which is what an operator pressing Ctrl-C twice expects.
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTERM, SIG_DFL);
+            signal(SIGHUP, SIG_DFL);
             QCoreApplication::quit();
         });
         signal(SIGINT, signalHandler);

@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # packaging/nix/hm-module.nix — Home Manager module (programs.plasmazones).
@@ -47,7 +48,7 @@ in
 
         Defaults to true here, unlike the NixOS module, which defaults to
         false. A Home Manager configuration already describes exactly one
-        user, so enabling the unit affects only that user; the NixOS module
+        user, so enabling the unit affects only that user. The NixOS module
         would otherwise autostart the daemon for everyone on the machine.
       '';
     };

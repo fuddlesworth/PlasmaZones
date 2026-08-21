@@ -196,7 +196,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="58"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation type="unfinished">Vensters tegelen en zones beheren voor Wayland-compositors</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="71"/>
@@ -206,7 +206,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="82"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation type="unfinished">Zones, tegelen, uiterlijk, sneltoetsen en meer configureren</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="99"/>
@@ -12959,7 +12959,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
         <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
-        <translation type="unfinished">Een hulpmiddel voor venstertegeling en zonebeheer voor Wayland-compositors. Organiseer uw bureaublad met aanpasbare zones, automatische tegelindelingen en toetsenbordgestuurde vensterplaatsing.</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
@@ -13011,7 +13011,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="138"/>
         <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
         <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
-        <translation type="unfinished">Geïnspireerd door FancyZones, uitgebreid met automatisch tegelen.</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="148"/>
@@ -13981,7 +13981,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation type="unfinished">Het stoppen van de PlasmaZones-daemon schakelt venstertegelen en vastklikken uit totdat je hem opnieuw start.</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>

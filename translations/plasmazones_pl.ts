@@ -196,7 +196,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="58"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation type="unfinished">Kafelkowanie okien i zarządzanie strefami dla kompozytorów Wayland</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="71"/>
@@ -206,7 +206,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="82"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation type="unfinished">Skonfiguruj strefy, kafelkowanie, wygląd, skróty i więcej</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="99"/>
@@ -12973,7 +12973,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
         <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
-        <translation type="unfinished">Narzędzie do kafelkowania okien i zarządzania strefami dla kompozytorów Wayland. Organizuj swój pulpit za pomocą konfigurowalnych stref, automatycznych układów kafelkowania i rozmieszczania okien za pomocą klawiatury.</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
@@ -13025,7 +13025,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="138"/>
         <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
         <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
-        <translation type="unfinished">Zainspirowane FancyZones, rozszerzone o automatyczne kafelkowanie.</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="148"/>
@@ -13996,7 +13996,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation type="unfinished">Zatrzymanie usługi PlasmaZones wyłącza kafelkowanie i przyciąganie okien, dopóki nie uruchomisz jej ponownie.</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>

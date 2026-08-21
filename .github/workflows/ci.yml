@@ -14,6 +14,14 @@ on:
     # -DBUILD_TESTING=OFF and release.yml has no test job, so without this a
     # tag pushed at a commit that never landed on one of the branches above
     # shipped to GitHub Releases, the AUR and OBS with no test evidence at all.
+    #
+    # This is evidence, NOT a gate. release.yml does not depend on this
+    # workflow, so the two run concurrently on a tag push and a red CI run does
+    # not stop the release from publishing; it just means the failure is on the
+    # record next to the tag. The workflow_dispatch release path is not covered
+    # at all, since dispatching against an existing tag pushes nothing. Making
+    # it a real gate means adding a test job inside release.yml that the
+    # `release` job needs.
     tags: ["v*"]
   pull_request:
     branches: [main, v3, v3.1, v3.2, v3.3, v3.4]

@@ -116,10 +116,11 @@ PhosphorUi.AboutPageShell {
                 // All three wrap. SettingsCard puts its contentItem inside a
                 // `clip: true` item and binds the content width to the card, so
                 // a Label that does not wrap is truncated mid-word rather than
-                // merely overflowing. Layout.preferredWidth: 0 goes with
-                // wrapMode for the reason AboutPageShell documents: a WordWrap
-                // Label reports its full unwrapped length as implicitWidth,
-                // which would otherwise inflate the column.
+                // merely overflowing. Layout.preferredWidth: 0 is paired with
+                // wrapMode the way AboutPageShell documents; here the card
+                // overrides the content width outright, so it is belt-and-braces
+                // rather than load-bearing, and it keeps this content correct if
+                // it is ever hosted somewhere without that override.
                 Label {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 0

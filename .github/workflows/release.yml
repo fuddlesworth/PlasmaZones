@@ -21,14 +21,21 @@ on:
 permissions:
   contents: read
 
-# Two tag pushes (or a re-run of the same tag dispatch) must not race
-# the delete-and-recreate dance in the `release` job. Keyed on the tag
-# being released rather than github.ref: on workflow_dispatch github.ref
-# is the branch the run was dispatched FROM, so a dispatch naming v3.4.0
-# and a push of v3.4.0 would land in different groups and race each other,
-# which is exactly what this is meant to prevent.
+# Two tag pushes (or a re-run of the same tag dispatch) must not race the
+# delete-and-recreate dance in the `release` job. Keyed on the tag being
+# released rather than github.ref, because on workflow_dispatch github.ref is
+# the branch the run was dispatched FROM, so a dispatch and a push of the same
+# tag would otherwise never serialise against each other.
+#
+# github.ref_name, not github.ref: ref_name is the BARE tag ("v3.4.0") on a tag
+# push, which is the spelling the dispatch input asks for, so the two sides
+# produce the same group string. github.ref would yield "refs/tags/v3.4.0" and
+# silently fail to match a bare input. Residual edge, accepted: an operator who
+# types the input as "refs/tags/v3.4.0" (which the version job below tolerates)
+# lands in a different group again. Expressions here have no string-strip
+# function to normalise that, and the bare form is what the input documents.
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:

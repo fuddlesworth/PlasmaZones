@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "kcmabout.h"
+
+#include <KPluginFactory>
+
 #include <QCoreApplication>
 #include <QLocale>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTranslator>
-#include <KPluginFactory>
 
 K_PLUGIN_FACTORY_WITH_JSON(KCMAboutFactory, "kcm_plasmazones_about.json", registerPlugin<PlasmaZones::KCMAbout>();)
 

@@ -51,8 +51,12 @@ file(GLOB_RECURSE PLASMAZONES_I18N_SOURCES CONFIGURE_DEPENDS
 )
 file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.qml"
-    # phosphor-control supplies the settings app's whole window chrome, and one
-    # of its files (Sidebar.qml) calls i18n(), so it needs the stub pass too.
+    # phosphor-control extracts nothing HERE today — its chrome calls qsTr(),
+    # which lupdate reads natively via the qsTr glob below, and the one `i18n`
+    # string in that tree is inside a code comment (Sidebar.qml). Listed anyway
+    # so that the day someone adds a real i18n() call to the settings chrome it
+    # is picked up instead of silently going missing, which is the failure this
+    # whole file exists to prevent.
     "${CMAKE_SOURCE_DIR}/libs/phosphor-control/qml/*.qml"
 )
 

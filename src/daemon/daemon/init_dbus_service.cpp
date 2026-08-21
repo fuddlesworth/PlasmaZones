@@ -5,9 +5,9 @@
 // Daemon — D-Bus service and object registration
 //
 // Split out of init_engines.cpp, which holds the engine wiring proper. Bus
-// registration is its own concern: it runs before the event loop, owns the
-// bounded synchronous retry, and wires the zone-detection adaptor's
-// highlight feedback into the overlay.
+// registration is its own concern: it runs before the event loop, confirms the
+// well-known name main() already claimed, registers the daemon object, and
+// wires the zone-detection adaptor's highlight feedback into the overlay.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -26,7 +26,7 @@ namespace PlasmaZones {
 
 bool Daemon::registerDBusService()
 {
-    // Register D-Bus service and object with error handling and retry logic
+    // Register D-Bus service and object with error handling
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
         qCCritical(lcDaemon) << "Session D-Bus: cannot connect, daemon cannot function";

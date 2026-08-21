@@ -13,9 +13,10 @@ KCMUtils.SimpleKCM {
     ColumnLayout {
         // Guarded because `parent` is null for one event loop while
         // SimpleKCM (a Kirigami.ScrollablePage) instantiates its content item.
-        // Unguarded, the binding computes NaN for that frame and the NaN
-        // propagates into every Layout.fillWidth child. AboutPageShell carries
-        // the same guard for the same reason.
+        // Unguarded, dereferencing it raises a TypeError and the binding
+        // evaluates to undefined for that frame, which then propagates into
+        // every Layout.fillWidth child. AboutPageShell carries the same guard
+        // for the same reason.
         width: parent ? parent.width : 0
         spacing: Kirigami.Units.largeSpacing
 
