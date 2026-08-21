@@ -58,6 +58,16 @@ void SettingsAdaptor::initializeRegistryScrolling()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
+#define REGISTER_STRING_SETTING(name, getter, setter)                                                                  \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        m_settings->setter(v.toString());                                                                              \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+
 #define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -297,6 +307,23 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                           setScrollingTabIndicatorInactiveColor)
     REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
                                           setScrollingTabIndicatorUrgentColor)
+    // The label font, paint keys like the colours above and registered through
+    // the interface for the same reason: this generic wire is how the settings
+    // app writes them AND how the KWin effect's loadCachedSettings reads them
+    // back, so a missing entry here ships the whole font feature dead. The
+    // family is a plain string with no closed set — empty means the system
+    // font and any installed family is legal. There is no size key: Width
+    // gives the pill its thickness and the painter fits the label to it.
+    REGISTER_STRING_SETTING("scrollingTabIndicatorFontFamily", scrollingTabIndicatorFontFamily,
+                            setScrollingTabIndicatorFontFamily)
+    REGISTER_INT_SETTING("scrollingTabIndicatorFontWeight", scrollingTabIndicatorFontWeight,
+                         setScrollingTabIndicatorFontWeight)
+    REGISTER_BOOL_SETTING("scrollingTabIndicatorFontItalic", scrollingTabIndicatorFontItalic,
+                          setScrollingTabIndicatorFontItalic)
+    REGISTER_BOOL_SETTING("scrollingTabIndicatorFontUnderline", scrollingTabIndicatorFontUnderline,
+                          setScrollingTabIndicatorFontUnderline)
+    REGISTER_BOOL_SETTING("scrollingTabIndicatorFontStrikeout", scrollingTabIndicatorFontStrikeout,
+                          setScrollingTabIndicatorFontStrikeout)
     // The drop indicator's two colours resolve in the config layer instead
     // (Settings::resolvedSystemColor), so they take the zone quartet's shape:
     // the plain key carries the RESOLVED colour and the "Raw" companion carries
@@ -700,6 +727,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
 // Clean up macros (local scope; unity-batch hygiene)
 #undef REGISTER_BOOL_SETTING
 #undef REGISTER_INT_SETTING
+#undef REGISTER_STRING_SETTING
 #undef REGISTER_DOUBLE_SETTING
 #undef REGISTER_THEME_FALLBACK_COLOR_SETTING
 #undef REGISTER_COLOR_SETTING

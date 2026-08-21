@@ -438,6 +438,48 @@ public:
     virtual void setScrollingTabIndicatorUrgentColor(const QString& /*color*/)
     {
     }
+    /// The tab labels' own font. Paint-only like the colours above, so it
+    /// lives on this interface for the same two readers. Empty family means
+    /// the system font; there is no size key because Width drives the pill's
+    /// thickness and the painter fits the label to it (see ConfigDefaults).
+    /// The family default is a QString, so it is pinned the way the colour
+    /// trio is rather than by a static_assert; the weight and the three flags
+    /// are pinned in settings/scrolling.cpp.
+    virtual QString scrollingTabIndicatorFontFamily() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorFontFamily(const QString& /*family*/)
+    {
+    }
+    virtual int scrollingTabIndicatorFontWeight() const
+    {
+        return 700;
+    }
+    virtual void setScrollingTabIndicatorFontWeight(int /*weight*/)
+    {
+    }
+    virtual bool scrollingTabIndicatorFontItalic() const
+    {
+        return false;
+    }
+    virtual void setScrollingTabIndicatorFontItalic(bool /*italic*/)
+    {
+    }
+    virtual bool scrollingTabIndicatorFontUnderline() const
+    {
+        return false;
+    }
+    virtual void setScrollingTabIndicatorFontUnderline(bool /*underline*/)
+    {
+    }
+    virtual bool scrollingTabIndicatorFontStrikeout() const
+    {
+        return false;
+    }
+    virtual void setScrollingTabIndicatorFontStrikeout(bool /*strikeout*/)
+    {
+    }
 
     /// Drop-target indicator during a scrolling drag re-insert. Virtual with
     /// an always-on default so the overlay service can gate through the
@@ -962,6 +1004,11 @@ Q_SIGNALS:
     void scrollingTabIndicatorActiveColorChanged();
     void scrollingTabIndicatorInactiveColorChanged();
     void scrollingTabIndicatorUrgentColorChanged();
+    void scrollingTabIndicatorFontFamilyChanged();
+    void scrollingTabIndicatorFontWeightChanged();
+    void scrollingTabIndicatorFontItalicChanged();
+    void scrollingTabIndicatorFontUnderlineChanged();
+    void scrollingTabIndicatorFontStrikeoutChanged();
 
     // Scrolling drop indicator (Scrolling.DropIndicator)
     void scrollingDropIndicatorEnabledChanged();

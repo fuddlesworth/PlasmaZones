@@ -121,6 +121,14 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetTabIndicatorActiveColor,
     ActionType::SetTabIndicatorInactiveColor,
     ActionType::SetTabIndicatorUrgentColor,
+    // Tab label font — context-domain like the rest of the paint half. The
+    // labels belong to the indicator, not to any one window in the column, so
+    // there is no per-window twin of these the way the tab colours have one.
+    ActionType::SetTabIndicatorFontFamily,
+    ActionType::SetTabIndicatorFontWeight,
+    ActionType::SetTabIndicatorFontItalic,
+    ActionType::SetTabIndicatorFontUnderline,
+    ActionType::SetTabIndicatorFontStrikeout,
     // Drop indicator — context-domain for the whole family, because the
     // indicator describes an empty SLOT on a screen and a window-matching rule
     // has no referent for it. The two per-window COLOURS below are the

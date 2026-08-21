@@ -281,6 +281,107 @@ void ActionRegistry::registerBuiltinsIndicators()
         .displayOrder = 13,
         .tags = {QString(Tag::LayoutEngine)},
     });
+    // ── the tab label's font (domain Context, PAINT) ──
+    // Five more per-property actions, split for the same cascade reason as the
+    // rest of the family: a theme rule can pick the family while a separate
+    // rule italicises, and neither clobbers the other. All PAINT — the label
+    // is drawn by the effect, and its metrics never move a resolved rect,
+    // because the painter fits the text to the pill rather than the pill to
+    // the text. That auto-fit is also why there is no font-SIZE action here:
+    // a size would be overwritten by the fit on the very next paint.
+    //
+    // FAMILY takes the empty-admitting string validator, unlike every other
+    // string-valued action in this file. An empty family is a real request —
+    // "use the system font" — and it is the only way a rule can walk one
+    // screen back to the default after a global family was chosen. The
+    // resolver's readString mirrors this and stores the empty string rather
+    // than treating it as unset.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTabIndicatorFontFamily),
+        .slotFor = constantSlot(ActionSlot::TabIndicatorFontFamily),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasStringAllowingEmpty(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("string")}},
+        .category = QStringLiteral("tabIndicator"),
+        .displayOrder = 17,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Explicit-floor helper despite both ends being positive: see the bounds'
+    // own note in ActionParams.h for why 100 rather than 0 is the floor.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTabIndicatorFontWeight),
+        .slotFor = constantSlot(ActionSlot::TabIndicatorFontWeight),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinTabIndicatorFontWeight,
+                                              kMaxTabIndicatorFontWeight);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = kMinTabIndicatorFontWeight,
+                     .max = kMaxTabIndicatorFontWeight,
+                     // Regular, the weight a fresh rule should not silently
+                     // embolden the labels away from.
+                     .defaultDisplay = 400.0}},
+        .category = QStringLiteral("tabIndicator"),
+        .displayOrder = 18,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // The three style flags seed ON: a user adding "set italic" at all means
+    // to turn it on, and the off direction is reachable by clearing the box.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTabIndicatorFontItalic),
+        .slotFor = constantSlot(ActionSlot::TabIndicatorFontItalic),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("tabIndicator"),
+        .displayOrder = 19,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTabIndicatorFontUnderline),
+        .slotFor = constantSlot(ActionSlot::TabIndicatorFontUnderline),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("tabIndicator"),
+        .displayOrder = 20,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTabIndicatorFontStrikeout),
+        .slotFor = constantSlot(ActionSlot::TabIndicatorFontStrikeout),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("tabIndicator"),
+        .displayOrder = 21,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
 
     // ── per-window tab colours (domain Window) ──
     // niri's `tab-indicator` WINDOW rule: recolours only the matched window's

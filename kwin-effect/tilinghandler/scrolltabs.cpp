@@ -54,6 +54,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QEvent>
+#include <QFont>
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QGuiApplication>
@@ -109,6 +110,13 @@ constexpr int kGapsMin = 0;
 constexpr int kGapsMax = 64;
 constexpr int kCornerRadiusMin = -1; // the "fully rounded" pill sentinel
 constexpr int kCornerRadiusMax = 64;
+// Duplicates ConfigDefaults::scrollingTabIndicatorFontWeight{Min,Max}(), the
+// same CSS-style band the global loader in daemon_settings_scrolltabs.cpp
+// enforces. There is no font SIZE override for the same reason there is no
+// size setting: the pill's Width drives its thickness and the raster fits the
+// label to it.
+constexpr int kFontWeightMin = 100;
+constexpr int kFontWeightMax = 900;
 
 QColor colorFromMap(const QVariantMap& map, QLatin1String key)
 {
@@ -134,6 +142,54 @@ bool overrideInt(const QVariantMap& map, QLatin1String key, int min, int max, in
     return true;
 }
 
+/// Reads an override bool with the same type guard: present and ACTUALLY a
+/// bool. A wrong-typed entry (an older daemon's empty QVariant, say) leaves
+/// the global value standing rather than turning the flag off through
+/// toBool()'s silent false.
+bool overrideBool(const QVariantMap& map, QLatin1String key, bool& out)
+{
+    const auto it = map.constFind(key);
+    if (it == map.constEnd() || it->typeId() != QMetaType::Bool) {
+        return false;
+    }
+    out = it->toBool();
+    return true;
+}
+
+/// Layers a per-screen context rule's five font keys onto @p font.
+///
+/// ORDER MATTERS, and this is the only order that works: the style carries a
+/// resolved QFont rather than the five separate fields, so the override
+/// cannot be layered before the font exists. fillScrollTabTheme() must build
+/// it from the global settings first, and this then mutates it. What it
+/// mutates is the STYLE's font, which fillScrollTabTheme copied out of the
+/// cached theme, so one screen's override cannot leak into the cache and
+/// through it onto the next screen's rebuild.
+///
+/// The label's SIZE is deliberately not in here: the raster fits it to the
+/// chip thickness, which the geometry half of the rule already governs.
+void applyFontOverrides(const QVariantMap& map, QFont& font)
+{
+    const QString family = map.value(ScrollTabKey::FontFamily).toString();
+    if (!family.isEmpty()) {
+        font.setFamily(family);
+    }
+    int weight = int(font.weight());
+    if (overrideInt(map, ScrollTabKey::FontWeight, kFontWeightMin, kFontWeightMax, weight)) {
+        font.setWeight(static_cast<QFont::Weight>(weight));
+    }
+    bool flag = false;
+    if (overrideBool(map, ScrollTabKey::FontItalic, flag)) {
+        font.setItalic(flag);
+    }
+    if (overrideBool(map, ScrollTabKey::FontUnderline, flag)) {
+        font.setUnderline(flag);
+    }
+    if (overrideBool(map, ScrollTabKey::FontStrikeout, flag)) {
+        font.setStrikeOut(flag);
+    }
+}
+
 } // namespace
 
 // ── Theme and font cache ─────────────────────────────────────────────────────
@@ -156,7 +212,11 @@ void TilingHandler::fillScrollTabTheme(ScrollTabIndicatorStyle& style)
     // measurable on the caption-tick path. The cache is dropped by the
     // palette / font event filter below and by every tab paint-setting edge
     // (the label font is built from cached settings), which are the only
-    // things that can move these values.
+    // things that can move these values. Per-screen context overrides are
+    // NOT cached here and need no invalidation: the caller layers them onto
+    // its own copy of `style` after this fill, on every rebuild, and an
+    // override change drives a rebuild of exactly that screen
+    // (slotScrollTabPaintOverridesChanged).
     if (!m_scrollTabThemeCached) {
         const KColorScheme view(QPalette::Active, KColorScheme::View);
         const KColorScheme selection(QPalette::Active, KColorScheme::Selection);
@@ -523,6 +583,10 @@ void TilingHandler::rebuildScrollTabIndicators(const QString& screenId)
         if (const QColor c = colorFromMap(ov, ScrollTabKey::UrgentColor); c.isValid()) {
             style.urgentColor = c;
         }
+        // AFTER fillScrollTabTheme, which is what put a font in `style` at
+        // all. See applyFontOverrides for why that order is forced and why
+        // mutating here cannot poison the cached theme.
+        applyFontOverrides(ov, style.font);
     }
 
     QVector<ScrollTabIndicator> indicators;
