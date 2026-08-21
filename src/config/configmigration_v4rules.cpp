@@ -3,39 +3,24 @@
 
 #include "configmigration.h"
 
-#include "configbackends.h"
-#include "configdefaults.h"
 #include "configkeys.h"
-#include "perscreenresolver.h"
-#include "settings.h"
 #include "configmigration_v4detail.h"
 
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/Profile.h>
-#include <PhosphorConfig/MigrationRunner.h>
-#include <PhosphorConfig/QSettingsBackend.h>
-#include <PhosphorConfig/Schema.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/IdentityKey.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
-#include <PhosphorZones/LayoutRegistry.h>
 
-#include <QColor>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1String>
-#include <QLockFile>
 #include <QSet>
-#include <QStandardPaths>
 #include <QUuid>
 
 #include <array>
@@ -99,10 +84,12 @@ bool isValidAnimationAppRuleSource(const QJsonObject& source)
 /// responsible for validating before calling; this function is total on
 /// valid input.
 ///
-/// @param i      zero-based index into the FILTERED (valid-only) source
-///               list — used to derive `priority = count - i`.
-/// @param count  total VALID source entries (priority floors at 1, reserving
-///               0 for the unassigned-marker band that assignBandPrioritiesToZeroRules stamps).
+/// @param i      zero-based index into the FILTERED (valid-only) source list.
+/// @param count  total VALID source entries. Together they give a descending
+///               offset that preserves the legacy array's order, applied on
+///               top of the Animation band base so the rules sit in a band
+///               rather than below every one of them. Never 0, so
+///               assignBandPrioritiesToZeroRules leaves them alone.
 PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int count)
 {
     namespace ActionParam = PhosphorRules::ActionParam;
@@ -170,7 +157,18 @@ PhosphorRules::Rule buildAnimationAppRule(const QJsonObject& source, int i, int 
                                       + PhosphorRules::Detail::encodeSegment(eventPath)
                                       + PhosphorRules::Detail::encodeSegment(isShader ? kKindShader : kKindTiming));
     rule.enabled = true;
-    rule.priority = count - i;
+    // Seed INSIDE the Animation band (100..199) rather than at 1..N. The
+    // descending offset preserves the source order the legacy array carried,
+    // but the bare 1..N these used to get sat below every band, so a user
+    // upgrading with animation rules found them reading "Priority 3" under
+    // rules that start at 100. Bands mirror RuleTemplates (duplicated as
+    // literals because that header lives in the settings tree). The clamp
+    // keeps a pathological source list from spilling into the Application
+    // band at 200; past 99 entries the tail ties at the base, the same
+    // saturation assignBandPrioritiesToZeroRules has.
+    constexpr int kAnimationBandBase = 100;
+    constexpr int kBandWidth = 100;
+    rule.priority = kAnimationBandBase + qBound(0, count - i, kBandWidth - 1);
     rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
                                                           PhosphorRules::Operator::Contains, classPattern);
     rule.actions.append(action);
@@ -245,17 +243,17 @@ inline const QUuid& snapToZoneMigrationNamespace()
 // zone app-assignment format this fold is the last reader of. Local literals
 // (NOT the live `ZoneJsonKeys::` accessors) so a future rename of those live
 // keys can never retarget this migration away from what v3 wrote to disk.
-constexpr QLatin1String kLayoutAppRulesKey{"appRules"};
-constexpr QLatin1String kLayoutAppRulePattern{"pattern"};
-constexpr QLatin1String kLayoutAppRuleZoneNumber{"zoneNumber"};
-constexpr QLatin1String kLayoutAppRuleTargetScreen{"targetScreen"};
+constexpr QLatin1StringView kLayoutAppRulesKey{"appRules"};
+constexpr QLatin1StringView kLayoutAppRulePattern{"pattern"};
+constexpr QLatin1StringView kLayoutAppRuleZoneNumber{"zoneNumber"};
+constexpr QLatin1StringView kLayoutAppRuleTargetScreen{"targetScreen"};
 
 } // namespace
 
 /// Drain the v4 animation-rule stash into @p rules. Malformed entries are
 /// silently discarded — the legacy runtime loader did the same. The two-pass
 /// shape (filter, then build) matches the legacy bridge byte-for-byte: the
-/// priority `count - i` is computed against the POST-filter size, so dropped
+/// the descending offset is computed against the POST-filter size, so dropped
 /// entries don't leave gaps in the descending-by-list-order priority
 /// sequence (`AnimationAppRuleList::fromJson` filtered first; `toRuleSet`
 /// then used the filtered `entries.size()` as count).

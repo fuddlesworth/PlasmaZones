@@ -61,6 +61,12 @@ constexpr int kOrderOther = 99;
 /// through here: the Window bucket holds submenus only, never a flat list with
 /// a few submenus hanging off the end, so the picker's second level means the
 /// same thing everywhere in it.
+///
+/// The path joins TRANSLATED text with a literal `/`, and CategoryMenuButton
+/// splits on the first one to build its tree. A translation containing a slash
+/// would therefore restructure the picker rather than just rename a bucket, so
+/// `/` is effectively reserved in every category string this file produces. No
+/// in-tree locale uses one today.
 QString windowSubcategory(const QString& sub)
 {
     return PhosphorI18n::tr("Window") + QStringLiteral("/") + sub;

@@ -254,9 +254,9 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
 
-        // Same pattern in two layout files mapping to DIFFERENT zones. A global
-        // ordinal SnapToZone rule fires regardless of the active layout, so only
-        // the first (name-order) wins; the second is dropped.
+        // Same pattern in three layout files mapping to DIFFERENT zones. A
+        // global ordinal SnapToZone rule fires regardless of the active
+        // layout, so only the first in NAME order wins; the rest are dropped.
         const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
         writeJson(layoutsDir + QStringLiteral("/a-layout.json"),
@@ -267,6 +267,13 @@ private Q_SLOTS:
                   QJsonObject{{QStringLiteral("appRules"),
                                QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("mpv")},
                                                       {QStringLiteral("zoneNumber"), 4}}}}});
+        // A THIRD file whose name sorts before both. With only two files the
+        // winner is the same under name order, directory-enumeration order and
+        // first-encountered, so the claim below would not be falsifiable.
+        writeJson(layoutsDir + QStringLiteral("/0-layout.json"),
+                  QJsonObject{{QStringLiteral("appRules"),
+                               QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("mpv")},
+                                                      {QStringLiteral("zoneNumber"), 7}}}}});
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -289,7 +296,7 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(mpvRuleCount, 1);
-        QCOMPARE(winningZones, (QList<int>{1})); // a-layout.json wins on name order
+        QCOMPARE(winningZones, (QList<int>{7})); // 0-layout.json wins on name order
     }
 
     void testLayoutAppRules_idempotentRuleIds()

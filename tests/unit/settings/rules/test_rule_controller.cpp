@@ -19,7 +19,6 @@
  *   - the field / operator / action authoring metadata is well-formed.
  */
 
-#include <QJSEngine>
 #include <QJsonObject>
 #include <QSet>
 #include <QSignalSpy>
@@ -54,6 +53,7 @@ private Q_SLOTS:
     void asyncCommitAndRevertAreInvokable();
     void stageUserRulesEnforcesTheAddRuleBoundary();
     void stageUserRulesRaisesTheCommitGate();
+    void promotedLeafRootRoundTrips();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -75,9 +75,31 @@ void TestRuleController::newEmptyRuleShapesBySubject()
     const QVariantMap activityMatch = activity.value(QStringLiteral("match")).toMap();
     QCOMPARE(activityMatch.value(QStringLiteral("field")).toString(), QStringLiteral("activity"));
 
-    // Custom starts from the catch-all All{} composite.
+    // The desktop subject starts with a VirtualDesktop leaf, seeded at 1
+    // because 0 is the "unpinned" sentinel and would match nothing.
+    const QVariantMap desktop = controller.newEmptyRule(QStringLiteral("desktop"));
+    const QVariantMap desktopMatch = desktop.value(QStringLiteral("match")).toMap();
+    QCOMPARE(desktopMatch.value(QStringLiteral("field")).toString(), QStringLiteral("virtualDesktop"));
+    QCOMPARE(desktopMatch.value(QStringLiteral("value")).toInt(), 1);
+
+    // Animation and Custom both start from the catch-all All{} composite —
+    // they are the two subjects that do NOT seed a bare leaf. Because their
+    // match shapes are identical, the PRIORITY is the only thing separating
+    // the two branches, so a dispatch that routed one into the other would be
+    // invisible without asserting it.
     const QVariantMap custom = controller.newEmptyRule(QStringLiteral("custom"));
     QVERIFY(custom.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
+    const QVariantMap animation = controller.newEmptyRule(QStringLiteral("animation"));
+    QVERIFY(animation.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
+    QVERIFY2(custom.value(QStringLiteral("priority")).toInt() != animation.value(QStringLiteral("priority")).toInt(),
+             "custom and animation must not collapse onto one band");
+
+    // Every subject the New Rule dialog offers is covered above. An id it does
+    // not know falls through to the custom shape rather than producing an
+    // empty map, so a typo in the QML catalogue degrades rather than breaks.
+    const QVariantMap unknown = controller.newEmptyRule(QStringLiteral("no-such-subject"));
+    QVERIFY(!unknown.value(QStringLiteral("id")).toString().isEmpty());
+    QVERIFY(unknown.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
 
     // Each fresh rule carries a distinct UUID.
     QVERIFY(monitor.value(QStringLiteral("id")).toString() != app.value(QStringLiteral("id")).toString());
@@ -109,6 +131,20 @@ void TestRuleController::addUpdateRemoveByUuid()
     QVERIFY(controller.removeRule(id));
     QCOMPARE(controller.model()->rowCount(), 0);
     QVERIFY(!controller.removeRule(id));
+
+    // The negative half of the by-UUID surface. Every one of these takes an id
+    // from QML, where a stale binding or a deleted-then-clicked row hands over
+    // an id the model no longer has. They must refuse, not assert or write.
+    const QString ghost = QUuid::createUuid().toString();
+    QVERIFY2(controller.ruleJson(ghost).isEmpty(), "ruleJson must return an empty map for an unknown id");
+    QVERIFY2(!controller.setRuleEnabled(ghost, true), "setRuleEnabled must refuse an unknown id");
+    QVERIFY2(!controller.removeRule(ghost), "removeRule must refuse an unknown id");
+
+    QVariantMap orphan = controller.newEmptyRule(QStringLiteral("application"));
+    orphan[QStringLiteral("id")] = ghost;
+    orphan[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    QVERIFY2(!controller.updateRuleFromJson(orphan), "updateRuleFromJson must refuse an id the model does not hold");
+    QCOMPARE(controller.model()->rowCount(), 0);
 }
 
 void TestRuleController::dirtyTrackingAndRevert()
@@ -123,9 +159,12 @@ void TestRuleController::dirtyTrackingAndRevert()
     const QString id = controller.addRuleFromJson(rule);
     QVERIFY(!id.isEmpty());
 
-    // Adding a rule flips the dirty bit.
+    // Adding a rule flips the dirty bit, exactly once. A floor (>= 1) would
+    // pass for an add that emitted dirtyChanged three times, which is the
+    // regression this signal is most likely to grow — CLAUDE.md's "only emit
+    // when the value actually changes" applies here.
     QVERIFY(controller.isDirty());
-    QVERIFY(dirtySpy.count() >= 1);
+    QCOMPARE(dirtySpy.count(), 1);
 
     // revert() re-fetches the daemon's authoritative set asynchronously and
     // only clears the dirty bit if the re-fetch succeeded. The contract this
@@ -683,6 +722,65 @@ void TestRuleController::authoringMetadata()
                  qPrintable(QStringLiteral("bool action %1 renders both polarities identically").arg(type)));
     }
     QVERIFY2(boolActions > 10, "the bool-action sweep must actually cover the family, not an empty set");
+}
+
+void TestRuleController::promotedLeafRootRoundTrips()
+{
+    // The C++ half of the editor's leaf-root promotion. Every guided starting
+    // point seeds a BARE LEAF as the whole match, and MatchExpressionEditor
+    // wraps it into `all:[existingLeaf, blankLeaf]` when the user adds a
+    // second condition. That shape reaches the store, so the contract it has
+    // to satisfy is pinned here — the QML side has no test harness in this
+    // tree, and the shape is the part that persists.
+    RuleController controller;
+
+    const QVariantMap seeded = controller.newEmptyRule(QStringLiteral("application"));
+    QVariantMap leaf = seeded.value(QStringLiteral("match")).toMap();
+    // The seeded subject really is a bare leaf — the premise the promotion
+    // exists for. If this ever becomes a composite, the promote row stops
+    // rendering and this test is measuring nothing.
+    QVERIFY2(leaf.contains(QStringLiteral("field")), "the application subject must seed a bare leaf");
+    leaf[QStringLiteral("value")] = QStringLiteral("org.kde.dolphin");
+
+    const QVariantMap blank{{QStringLiteral("field"), QString()},
+                            {QStringLiteral("op"), QString()},
+                            {QStringLiteral("value"), QString()}};
+    QVariantMap promoted = seeded;
+    promoted[QStringLiteral("match")] = QVariantMap{{QStringLiteral("all"), QVariantList{leaf, blank}}};
+    promoted[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+
+    // A half-filled group must not become a stored rule. The blank leaf makes
+    // MatchExpression::fromJson reject the WHOLE expression, so accepting it
+    // would either drop the user's filled condition or leave a match-everything
+    // catch-all behind. The editor gates Save on its own filled-leaves check;
+    // this pins that the store refuses it too, for every path that does not go
+    // through the editor (D-Bus, import, a hand-edited rules.json).
+    QVERIFY2(controller.addRuleFromJson(promoted).isEmpty(),
+             "a promoted group with a blank second condition must not be storable");
+    QCOMPARE(controller.model()->rowCount(), 0);
+
+    // Fill the second condition and the rule commits, with the FIRST leaf
+    // preserved intact — the promotion embeds the original by reference, so a
+    // regression that rebuilt it instead would surface as a lost field/value.
+    QVariantMap filled = blank;
+    filled[QStringLiteral("field")] = QStringLiteral("windowClass");
+    filled[QStringLiteral("op")] = QStringLiteral("contains");
+    filled[QStringLiteral("value")] = QStringLiteral("dolphin");
+    promoted[QStringLiteral("match")] = QVariantMap{{QStringLiteral("all"), QVariantList{leaf, filled}}};
+
+    const QString id = controller.addRuleFromJson(promoted);
+    QVERIFY2(!id.isEmpty(), "a fully filled promoted group must be storable");
+
+    const QVariantMap stored = controller.ruleJson(id);
+    const QVariantList children = stored.value(QStringLiteral("match")).toMap().value(QStringLiteral("all")).toList();
+    QCOMPARE(children.size(), 2);
+    QCOMPARE(children.at(0).toMap().value(QStringLiteral("field")).toString(), QStringLiteral("appId"));
+    QCOMPARE(children.at(0).toMap().value(QStringLiteral("value")).toString(), QStringLiteral("org.kde.dolphin"));
+    QCOMPARE(children.at(1).toMap().value(QStringLiteral("field")).toString(), QStringLiteral("windowClass"));
+
+    // Still a window-property match, so the picker keeps offering
+    // window-domain actions rather than flipping to the context half.
+    QVERIFY(!controller.matchIsContextOnly(stored.value(QStringLiteral("match")).toMap()));
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()

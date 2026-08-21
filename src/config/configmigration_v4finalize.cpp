@@ -6,26 +6,16 @@
 #include "configbackends.h"
 #include "configdefaults.h"
 #include "configkeys.h"
-#include "perscreenresolver.h"
 #include "settings.h"
 #include "configmigration_v4detail.h"
 
-#include <PhosphorAnimation/CurveRegistry.h>
-#include <PhosphorAnimation/Profile.h>
 #include <PhosphorConfig/MigrationRunner.h>
-#include <PhosphorConfig/QSettingsBackend.h>
-#include <PhosphorConfig/Schema.h>
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorRules/ContextRuleBridge.h>
-#include <PhosphorRules/IdentityKey.h>
-#include <PhosphorRules/MatchExpression.h>
-#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 
-#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -40,6 +30,7 @@
 
 #include <array>
 #include <atomic>
+#include <functional>
 #include <optional>
 #include <string_view>
 
@@ -156,9 +147,16 @@ bool parseAssignmentGroup(const QString& groupName, const QString& prefix, QStri
     if (deskIdx >= 0) {
         bool ok = false;
         const int d = remainder.mid(deskIdx + kDesktopTag.size()).toInt(&ok);
-        if (ok && d > 0) {
-            desktop = d;
+        if (!ok || d <= 0) {
+            // Reject the whole group rather than dropping the bad segment.
+            // Truncating it stripped the text from the screen id and left
+            // `desktop` at 0, so "Screen:Desktop:0" and "Screen:Desktop:xyz"
+            // both parsed to the same (screenId, 0) pair and produced two
+            // rules that collide. A malformed group is not a valid v3 artifact.
+            qWarning("ConfigMigration: assignment group has an unparseable desktop segment — skipping");
+            return false;
         }
+        desktop = d;
         remainder = remainder.left(deskIdx);
     }
     screenId = remainder;
@@ -329,24 +327,38 @@ bool relocateLayoutSettingsImpl(const QString& layoutsDir, const QString& sideca
             continue; // already slimmed, or no settings / unidentifiable — leave as-is
         }
 
-        sidecar.insert(layoutId, settings);
-        sidecarDirty = true;
+        // Import a layout's embedded settings ONCE. If the sidecar already
+        // carries an entry for it, pass 2 failed on a previous run (the file
+        // is still fat) and the sidecar copy is the live one the runtime store
+        // has been reading and writing since. Re-importing would push that
+        // file's stale embedded block over a newer edit and silently lose it.
+        // Still queue the strip, so the fat file is cleaned up either way.
+        if (!sidecar.contains(layoutId)) {
+            sidecar.insert(layoutId, settings);
+            sidecarDirty = true;
+        }
         pending.append({path, stripLayoutSettings(full)});
     }
 
-    if (!sidecarDirty) {
+    if (pending.isEmpty()) {
         return true; // every layout already slim — no writes, fully idempotent
     }
 
     // Commit the authoritative sidecar FIRST. If it can't be persisted, leave the
     // layout files untouched (their embedded settings are still read by the
     // runtime store) and report failure — the next run retries.
-    sidecar.insert(QString(kSettingsVersionKey), kLayoutSettingsSchemaVersion);
-    QDir().mkpath(QFileInfo(sidecarPath).absolutePath());
-    if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, sidecar)) {
-        qWarning("ConfigMigration: layout-settings relocation failed to write %s — leaving layout files intact",
-                 qPrintable(sidecarPath));
-        return false;
+    //
+    // Skipped when nothing new was imported: every pending file's settings are
+    // already in the sidecar from an earlier run, so there is nothing to
+    // commit and pass 2 can proceed straight to slimming them.
+    if (sidecarDirty) {
+        sidecar.insert(QString(kSettingsVersionKey), kLayoutSettingsSchemaVersion);
+        QDir().mkpath(QFileInfo(sidecarPath).absolutePath());
+        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sidecarPath, sidecar)) {
+            qWarning("ConfigMigration: layout-settings relocation failed to write %s — leaving layout files intact",
+                     qPrintable(sidecarPath));
+            return false;
+        }
     }
 
     // Pass 2: slim the source files now that their settings are durably stored.
@@ -384,6 +396,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // rename this function uses to retire assignments.json; idempotent (only
     // fires when the new file is absent and the legacy one present).
     {
+        // Frozen legacy filename, not a config key, so it is spelled here
+        // rather than behind a ConfigDefaults accessor — nothing else in the
+        // tree refers to it and nothing ever will.
         const QString legacyRulesPath = QFileInfo(rulesPath).absolutePath() + QStringLiteral("/windowrules.json");
         if (!QFile::exists(rulesPath) && QFile::exists(legacyRulesPath)) {
             if (QFile::rename(legacyRulesPath, rulesPath)) {
@@ -411,8 +426,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // crash-safe and idempotent, so running it on a stalled-chain retry is a
     // no-op-or-progress, never a regression.
     {
-        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        const QString layoutsDir = ConfigDefaults::layoutsDirPath();
         if (!relocateLayoutSettings(layoutsDir, ConfigDefaults::layoutSettingsFilePath())) {
             qWarning(
                 "ConfigMigration: per-layout settings relocation reported a write failure — "
@@ -805,8 +819,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // runs only on the first conversion (the `rulesAlreadyConverted` gate
     // above), which every real v3→v4 upgrade hits exactly once.
     {
-        const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-            + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
+        const QString layoutsDir = ConfigDefaults::layoutsDirPath();
         appendLayoutAppRulesAsSnapToZone(rules, layoutsDir);
     }
 
@@ -957,6 +970,49 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     return true;
 }
 
+namespace {
+
+/// Load rules.json, hand the mutable set to @p mutate, and save only when it
+/// reports a change.
+///
+/// Shared by the two sidecar fix-ups that ride the cleanup branch. They are
+/// non-versioned repairs to rows this code seeded, so both need the same
+/// scaffold: gate on the conversion having happened, tolerate a missing or
+/// unloadable store as "nothing of ours to fix", and never write unless
+/// something actually changed. Writing it once also means the already-clean
+/// path — overwhelmingly the common one — parses rules.json once per startup
+/// instead of once per fix-up.
+///
+/// @param jsonPath config.json; only gates on the conversion having happened.
+/// @param what     fix-up name, for the failure warning.
+/// @return true on success or a clean no-op; false only on a write failure.
+bool withRuleSet(const QString& jsonPath, const char* what, const std::function<bool(PhosphorRules::RuleSet&)>& mutate)
+{
+    if (!QFile::exists(jsonPath)) {
+        return true;
+    }
+    const QString rulesPath = ConfigDefaults::rulesFilePath();
+    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
+    if (!setOpt.has_value()) {
+        // No rules.json yet (conversion not established), or a store this
+        // build cannot load. Either way there is nothing of ours to repair,
+        // and prevalidateRulesFile owns the unloadable-store case.
+        return true;
+    }
+    PhosphorRules::RuleSet ruleSet = *setOpt;
+    if (!mutate(ruleSet)) {
+        return true; // nothing to change — no write
+    }
+    if (!ruleSet.saveToFile(rulesPath)) {
+        qWarning("ConfigMigration::%s: failed to write %s", what, qPrintable(rulesPath));
+        return false;
+    }
+    qInfo("ConfigMigration::%s: rewrote %s", what, qPrintable(rulesPath));
+    return true;
+}
+
+} // namespace
+
 bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)
 {
     // The provider-default catch-all assignment rule is retired: the gated
@@ -966,17 +1022,6 @@ bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)
     // the rule is gone finds nothing). No schema bump: this runs from
     // finalizeV4Conversion's cleanup path. config.json is untouched; jsonPath
     // only gates on the conversion having happened.
-    if (!QFile::exists(jsonPath)) {
-        return true;
-    }
-    const QString rulesPath = ConfigDefaults::rulesFilePath();
-    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-    if (!setOpt.has_value()) {
-        // No rules.json yet (conversion not established) — nothing to strip. A
-        // fresh install never wrote a provider-default rule in the first place.
-        return true;
-    }
-
     // The provider-default's identity was fixed: the UUID derivation
     // ContextRuleBridge keyed off the "provider-default" family with an empty
     // (screen, desktop, activity) tuple. Reconstruct it directly — the rule
@@ -986,22 +1031,11 @@ bool ConfigMigration::pruneRetiredProviderDefaultRule(const QString& jsonPath)
         CRB::detail::namespaceUuid(),
         CRB::detail::contextIdentityKey(QLatin1StringView("provider-default"), QString(), 0, QString()));
 
-    PhosphorRules::RuleSet ruleSet = *setOpt;
-    if (!ruleSet.removeRule(providerDefaultId)) {
-        // No provider-default rule present — already stripped, or a fresh
-        // install that never had one. Clean no-op.
-        return true;
-    }
-    if (!ruleSet.saveToFile(rulesPath)) {
-        qWarning(
-            "ConfigMigration::pruneRetiredProviderDefaultRule: failed to write %s after removing the "
-            "provider-default rule",
-            qPrintable(rulesPath));
-        return false;
-    }
-    qInfo("ConfigMigration::pruneRetiredProviderDefaultRule: removed the provider-default rule from %s",
-          qPrintable(rulesPath));
-    return true;
+    return withRuleSet(jsonPath, "pruneRetiredProviderDefaultRule", [&](PhosphorRules::RuleSet& ruleSet) {
+        // removeRule reports whether anything was there: false means already
+        // stripped, or a fresh install that never had one. Clean no-op.
+        return ruleSet.removeRule(providerDefaultId);
+    });
 }
 
 bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
@@ -1019,47 +1053,32 @@ bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
     // otherwise keep the broken rule forever. Idempotent — once repaired,
     // `isRetiredSteamRuleShape` stops recognising it and the re-run is a
     // no-op.
-    if (!QFile::exists(jsonPath)) {
-        return true;
-    }
-    const QString rulesPath = ConfigDefaults::rulesFilePath();
-    auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-    if (!setOpt.has_value()) {
-        return true;
-    }
+    return withRuleSet(jsonPath, "repairSeededSteamRule", [](PhosphorRules::RuleSet& ruleSet) {
+        auto stored = ruleSet.ruleById(steamDefaultRuleId());
+        if (!stored.has_value()) {
+            // Deleted by the user, or a fresh install that seeded the
+            // corrected shape directly. Nothing of ours to repair.
+            return false;
+        }
+        if (!isRetiredSteamRuleShape(*stored)) {
+            // The user edited it, or it is already the corrected shape. Their
+            // copy is theirs — leave it exactly as found.
+            return false;
+        }
 
-    PhosphorRules::RuleSet ruleSet = *setOpt;
-    auto stored = ruleSet.ruleById(steamDefaultRuleId());
-    if (!stored.has_value()) {
-        // Deleted by the user, or a fresh install that seeded the corrected
-        // shape directly. Either way there is nothing of ours to repair.
+        // Carry the user's enabled flag and priority across: only the match
+        // and the action were wrong, and a user who disabled the rule meant
+        // it. The NAME is re-stamped along with them, so the row says what it
+        // now guards rather than keeping a title for a rule that no longer
+        // matches what it says.
+        PhosphorRules::Rule repaired = *stored;
+        applySteamDefaultRuleShape(repaired);
+        if (!ruleSet.updateRule(repaired)) {
+            qWarning("ConfigMigration::repairSeededSteamRule: the corrected Steam rule was rejected by the store");
+            return false;
+        }
         return true;
-    }
-    if (!isRetiredSteamRuleShape(*stored)) {
-        // The user edited it, or it is already the corrected shape. Their
-        // copy is theirs — leave it exactly as found.
-        return true;
-    }
-
-    // Carry the user's enabled flag and priority across: only the match and
-    // the action were wrong, and a user who disabled the rule meant it.
-    PhosphorRules::Rule repaired = *stored;
-    applySteamDefaultRuleShape(repaired);
-    if (!ruleSet.updateRule(repaired)) {
-        qWarning("ConfigMigration::repairSeededSteamRule: could not update the Steam rule in %s",
-                 qPrintable(rulesPath));
-        return false;
-    }
-    if (!ruleSet.saveToFile(rulesPath)) {
-        qWarning("ConfigMigration::repairSeededSteamRule: failed to write %s after repairing the Steam rule",
-                 qPrintable(rulesPath));
-        return false;
-    }
-    qInfo(
-        "ConfigMigration::repairSeededSteamRule: narrowed the premade Steam rule in %s to Steam's notification "
-        "toasts (it excluded every Steam-launched game)",
-        qPrintable(rulesPath));
-    return true;
+    });
 }
 
 } // namespace PlasmaZones

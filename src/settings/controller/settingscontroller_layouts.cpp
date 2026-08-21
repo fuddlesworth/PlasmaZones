@@ -631,8 +631,7 @@ void SettingsController::editScrollingTemplate(const QString& templateId)
 
 void SettingsController::openLayoutsFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
-        + ConfigDefaults::layoutsSubdir();
+    const QString path = ConfigDefaults::layoutsDirPath();
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));

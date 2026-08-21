@@ -446,6 +446,12 @@ public:
     // next to rules.json rather than inside each layout file.
     PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
 
+    // Returns the absolute path to the per-user layouts DIRECTORY. Composed
+    // here rather than at each call site: three sites were joining
+    // GenericDataLocation to ConfigKeys::layoutsSubdir() by hand, so a change
+    // to either half had to be found in all of them.
+    PLASMAZONES_EXPORT static QString layoutsDirPath();
+
     // Curated default picker visibility, seeded into layout-settings.json on a
     // fresh install only (LayoutRegistry::seedDefaultLayoutSettingsIfFresh).
     // Returns an object keyed exactly as layout-settings.json — manual layouts

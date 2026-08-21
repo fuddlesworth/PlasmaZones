@@ -52,7 +52,8 @@ void TestRuleControllerVocabulary::engineModePickerExposesAllVocabularyTokens()
     RuleController controller;
     const QVariantList types = controller.actionTypes();
     // Each entry in `actionTypes()` carries its own `params` list (see the
-    // descriptor docstring in rulecontroller.h:330-344). For each
+    // `actionTypes()` docstring in rulecontroller.h — cited by name rather
+    // than by line, which drifts). For each
     // param of kind="enum", the `options` list contains `{value, label}`
     // pairs. We walk to the `mode` param of each action and extract its
     // options to verify the closed engine-mode vocabulary.
@@ -177,6 +178,28 @@ void TestRuleControllerVocabulary::templateCatalogueCarriesUiFields()
         // catalogue without its matching branch below would render, be
         // clickable, and hand the sheet nothing.
         QVERIFY2(!controller.newRuleFromTemplate(t.value(QStringLiteral("id")).toString()).isEmpty(), id.constData());
+        // A tile with no name renders as a blank row in the Rules page once
+        // the rule is saved.
+        QVERIFY2(!controller.newRuleFromTemplate(t.value(QStringLiteral("id")).toString())
+                      .value(QStringLiteral("name"))
+                      .toString()
+                      .isEmpty(),
+                 id.constData());
+    }
+
+    // The reverse direction: a `newRuleFromTemplate` branch left behind by the
+    // cull, with no tile to reach it, is dead code nothing else would catch.
+    // Checked by pinning the count — the loop above proves catalogue → branch,
+    // so an equal count proves the two sets match.
+    QCOMPARE(templates.size(), 8);
+
+    // The five templates the cull removed must not materialise. Without this a
+    // resurrected branch would be reachable by anything that still remembers
+    // the old id (a stored rule draft, a stale QML binding).
+    for (const QString& retired :
+         {QStringLiteral("lockLayoutOnMonitor"), QStringLiteral("portraitLayout"), QStringLiteral("noZoneRestoreApp"),
+          QStringLiteral("undecorateApp"), QStringLiteral("excludeSmallFromAnimations")}) {
+        QVERIFY2(controller.newRuleFromTemplate(retired).isEmpty(), qPrintable(retired));
     }
 }
 
@@ -489,6 +512,16 @@ void TestRuleControllerVocabulary::zoneNameListParsesAndFormatsRoundTrip()
              (QStringList{QStringLiteral("Left, Right"), QStringLiteral("Main")}));
     QCOMPARE(controller.parseZoneNameList(QStringLiteral("\"Say \"\"hi\"\"\"")),
              QStringList{QStringLiteral("Say \"hi\"")});
+    // Unterminated quote — the likeliest real input, because the user is
+    // mid-typing in a free-text field. The parser leaves `inQuotes` true to
+    // end of string, so the separators are swallowed and the remainder is one
+    // token. Pinned so that behaviour cannot drift silently.
+    QCOMPARE(controller.parseZoneNameList(QStringLiteral("\"Left, Right")), QStringList{QStringLiteral("Left, Right")});
+    // A lone quote opens an empty token, which is blank and therefore dropped.
+    QCOMPARE(controller.parseZoneNameList(QStringLiteral("\"")), QStringList{});
+    // Quoted whitespace is still blank after trimming, so it is dropped too.
+    QCOMPARE(controller.parseZoneNameList(QStringLiteral("\" \"")), QStringList{});
+
     // Over the per-name bound: dropped, the rest survive.
     const QString tooLong(PhosphorRules::MaxZoneNameLength + 1, QLatin1Char('a'));
     const QString atBound(PhosphorRules::MaxZoneNameLength, QLatin1Char('b'));

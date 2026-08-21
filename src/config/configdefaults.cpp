@@ -3,6 +3,8 @@
 
 #include "configdefaults.h"
 
+#include "configkeys.h"
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorLayoutApi/LayoutId.h>
@@ -54,6 +56,12 @@ QString ConfigDefaults::quickLayoutsFilePath()
 QString ConfigDefaults::layoutSettingsFilePath()
 {
     return configDir() + QStringLiteral("/plasmazones/layout-settings.json");
+}
+
+QString ConfigDefaults::layoutsDirPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ConfigKeys::layoutsSubdir();
 }
 
 QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
