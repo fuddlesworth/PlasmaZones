@@ -179,7 +179,7 @@ Item {
         id: daemonStopConfirm
 
         title: i18n("Stop daemon?")
-        subtitle: i18n("Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.")
+        subtitle: i18n("Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.")
         standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
             Kirigami.Action {

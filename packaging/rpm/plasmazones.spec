@@ -1,5 +1,5 @@
 # PlasmaZones RPM Spec File
-# Window tiling and autotiling for KDE Plasma
+# Window snapping, tiling and scrolling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+).
@@ -18,7 +18,7 @@
 Name:           plasmazones
 Version:        0.0.0
 Release:        1%{?dist}
-Summary:        Window tiling and autotiling for KDE Plasma
+Summary:        Window snapping, tiling and scrolling for KDE Plasma
 
 # The effective licence of the built binaries. GPL-3.0-or-later covers the app
 # and daemon, LGPL-2.1-or-later the Phosphor component libraries. MIT and
@@ -199,16 +199,20 @@ Requires(post): /usr/bin/update-mime-database
 %endif
 
 %description
-PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.
+PlasmaZones is a window placement tool for KDE Plasma 6. It gives every
+monitor one of three placement modes. Snapping drops windows into zones
+you drew, tiling places them automatically with a scripted algorithm,
+and scrolling arranges them as columns on an endless strip.
 
 Features:
-- Drag windows to predefined zones
-- Automatic tiling with multiple layout algorithms
-- Custom zone layouts with visual editor
-- Modifier key activation (Shift, Ctrl, etc.)
-- Multi-monitor support
-- Keyboard navigation between zones
-- Activity and virtual desktop-based layout switching
+- Drag windows into named zones, with a visual layout editor
+- Automatic tiling with a library of bundled Luau algorithms
+- Scrolling columns with width presets, tabs, and strip templates
+- A mode per monitor, virtual desktop, and activity
+- Multi-monitor support and virtual screen subdivision
+- Keyboard navigation with rebindable shortcuts throughout
+- Per-application window rules
+- GLSL shader overlays, window decoration packs, and window animations
 - Wayland-native using Layer Shell
 
 %prep

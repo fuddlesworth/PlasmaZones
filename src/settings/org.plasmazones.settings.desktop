@@ -4,7 +4,7 @@
 [Desktop Entry]
 Type=Application
 Name=PlasmaZones Settings
-GenericName=Window Tiling Settings
+GenericName=Window Placement Settings
 Comment=Configure window snapping, tiling and scrolling for PlasmaZones
 Icon=plasmazones-settings
 Exec=plasmazones-settings

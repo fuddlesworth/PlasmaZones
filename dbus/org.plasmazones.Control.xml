@@ -41,5 +41,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Markdown-formatted support report with config, screens, and logs."/>
             </arg>
         </method>
+        <method name="quit">
+            <annotation name="org.gtk.GDBus.DocString" value="Ask the daemon to shut down cleanly. Quits the event loop, so the daemon runs its ordinary teardown on the main thread rather than tearing down inside the call. This is what `plasmazonesd --replace` calls on the running instance before claiming the bus name. Calling it while a shutdown is already in flight is a no-op."/>
+        </method>
     </interface>
 </node>

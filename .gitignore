@@ -1,5 +1,5 @@
 # =============================================================================
-# PlasmaZones - Window tiling and autotiling for KDE Plasma
+# PlasmaZones - Window snapping, tiling and scrolling for KDE Plasma
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -16,8 +16,13 @@ compile_commands.json
 CTestTestfile.cmake
 _deps/
 *.cmake
-!CMakeLists.txt
-!cmake/*.cmake
+# Rescue hand-written CMake modules in any cmake/ directory, at any depth
+# below it. `!cmake/*.cmake` alone covered only the top-level cmake/, so a
+# future cmake/modules/Foo.cmake or libs/phosphor-foo/cmake/Bar.cmake would be
+# silently untracked with no error. Build-tree .cmake files stay ignored
+# regardless: build*/ excludes the directory itself, and no negation can reach
+# inside an excluded directory.
+!**/cmake/**/*.cmake
 .cmake/
 
 # -----------------------------------------------------------------------------

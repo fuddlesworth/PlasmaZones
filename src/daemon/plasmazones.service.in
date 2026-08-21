@@ -1,5 +1,8 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 [Unit]
-Description=PlasmaZones Window Snapping Daemon
+Description=PlasmaZones Window Placement Daemon
 Documentation=https://github.com/fuddlesworth/PlasmaZones
 PartOf=graphical-session.target
 After=plasma-workspace.target plasma-kglobalaccel.service
