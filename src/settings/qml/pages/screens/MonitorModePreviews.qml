@@ -182,6 +182,8 @@ ColumnLayout {
     // scrolling right now, else a representative endless-strip
     // sketch (clipped columns at both edges suggest continuation).
     LayoutThumbnail {
+        id: scrollingPreview
+
         Layout.alignment: Qt.AlignHCenter
         visible: previews.view.isScrolling
         // No onVisibleChanged re-read here: the live timer's
@@ -241,6 +243,15 @@ ColumnLayout {
         fontItalic: appSettings.labelFontItalic
         fontUnderline: appSettings.labelFontUnderline
         fontStrikeout: appSettings.labelFontStrikeout
-        Accessible.name: previews.view.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", previews.view.scrollingStripZones.length) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
+        // Counts WINDOWS, not tiles. A tabbed column emits one tile standing
+        // for its whole stack, so counting tiles told a screen-reader user
+        // "one window" about the five-tab column the pills draw five pills for.
+        readonly property int scrollingWindowCount: {
+            let total = 0;
+            for (const zone of previews.view.scrollingStripZones)
+                total += Math.max(1, zone.tabCount || 0);
+            return total;
+        }
+        Accessible.name: previews.view.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", scrollingPreview.scrollingWindowCount) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
     }
 }

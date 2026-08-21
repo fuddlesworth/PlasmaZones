@@ -35,7 +35,10 @@ import org.kde.kirigami as Kirigami
  *   composited differently per host and read as a different theme.
  *   The two FILL colors are therefore alpha-stripped at this boundary;
  *   the BORDER deliberately carries the pipeline's alpha to match the
- *   live overlay.
+ *   live overlay. The `tab*` fallbacks below are exempt from the
+ *   alpha-stripping too: they are what the compositor's own
+ *   resolveTabColor resolves to, and a preview of a tab bar that
+ *   dropped their alpha would stop matching the bar it depicts.
  *
  * All consumers keep their own `property color` hooks; this singleton
  * only supplies the default expressions.

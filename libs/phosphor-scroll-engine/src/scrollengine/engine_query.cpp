@@ -238,6 +238,62 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
     // break in one consumer and not the others.
     int zoneNumber = 0;
     for (const ResolvedColumn& column : resolved.columns) {
+        // The column's tab indicator, for the previews that draw one (the
+        // settings app's strip thumbnail and the daemon's OSD strip card).
+        // Gated on the resolved rect, which is where the compositor's own
+        // tab-strip payload starts too (engine_apply.cpp): that one rect folds
+        // in the master switch, the single-tab skip and "not tabbed".
+        //
+        // The emitter's gate is a SUPERSET, not a match. It additionally drops
+        // a column that is out of view and one whose tiles are all parked.
+        // This walk runs its own relayout and never consults park state at
+        // all, so a fully-parked tabbed column is emitted here with its tab
+        // fields while the screen draws no bar for it. Deliberate: the
+        // preview draws that tile, so drawing the tile's indicator is the
+        // self-consistent answer, and importing park state into a read-only
+        // query would couple it to the apply pipeline's ordering.
+        //
+        // Derived per COLUMN, not per tile: a tabbed column resolves exactly
+        // one non-hidden tile, so the walk below stamps the data onto that one
+        // tile and re-deriving it inside the tile loop would just repeat this
+        // scan for every tile of every normal column.
+        const bool drawsIndicator = column.tabbed && !column.tabIndicatorRect.isNull();
+        int activeTabIndex = -1;
+        qreal tabLengthProportion = 0.0;
+        if (drawsIndicator) {
+            for (int i = 0; i < column.tiles.size(); ++i) {
+                if (!column.tiles.at(i).hidden) {
+                    activeTabIndex = i;
+                    break;
+                }
+            }
+            // Measured off the resolved rects rather than read back off the
+            // params: the resolve rounds the proportion and floors it at one
+            // pixel, and a preview that re-applied the raw setting would draw
+            // a length the screen does not have. The column extent is the
+            // basis indicatorRectFor used, so the two divide out exactly.
+            //
+            // Basis caveat: it is the column's TRUE extent, while the rect
+            // emitted below is clipped to the work area. A renderer applying
+            // this to the clipped extent therefore draws short on a column
+            // clipped along the indicator's own long axis. That mirrors the
+            // compositor's accepted KNOWN LIMIT (engine_apply.cpp), which
+            // keeps the bar on the true extent and records that re-deriving it
+            // from the clamped one was tried and rejected.
+            const bool vertical = isVerticalTabIndicator(column.tabIndicatorPosition);
+            const int axisExtent = vertical ? column.rect.height() : column.rect.width();
+            const int indicatorExtent = vertical ? column.tabIndicatorRect.height() : column.tabIndicatorRect.width();
+            // A belt, not a live branch: indicatorRectFor returns a null rect
+            // for a zero-extent column, which drawsIndicator has already
+            // rejected above, so a non-null rect implies a positive extent on
+            // this same axis. Kept because the two facts live in different
+            // files and only the divide here would pay for them diverging.
+            if (axisExtent > 0) {
+                tabLengthProportion =
+                    qBound(0.0, static_cast<qreal>(indicatorExtent) / static_cast<qreal>(axisExtent), 1.0);
+            }
+        }
+        const int tabCount = drawsIndicator ? column.tiles.size() : 0;
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.hidden) {
                 continue;
@@ -246,7 +302,17 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
             // edge is what tells the viewer the strip continues off-screen.
             const QRect clipped = tile.rect.intersected(params.workArea);
             if (!clipped.isEmpty()) {
-                out.append(VisibleTile{tile.windowId, column.columnIndex, ++zoneNumber, clipped});
+                // Designated, not positional: three of these eight are ints in
+                // a row, so a member inserted mid-struct would compile clean
+                // and silently reassign the rest.
+                out.append(VisibleTile{.windowId = tile.windowId,
+                                       .columnIndex = column.columnIndex,
+                                       .zoneNumber = ++zoneNumber,
+                                       .rect = clipped,
+                                       .tabCount = tabCount,
+                                       .activeTabIndex = activeTabIndex,
+                                       .tabIndicatorPosition = column.tabIndicatorPosition,
+                                       .tabLengthProportion = tabLengthProportion});
             }
         }
     }

@@ -417,8 +417,8 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="165"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="176"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="62"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="219"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="879"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="221"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="926"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>Rullning</translation>
@@ -1983,7 +1983,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="45"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="249"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="909"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="956"/>
         <source>Snapping layout</source>
         <translation>Fästningslayout</translation>
     </message>
@@ -1991,7 +1991,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="48"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="287"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="47"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="955"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1002"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="156"/>
         <source>Tiling algorithm</source>
         <translation>Panelindelningsalgoritm</translation>
@@ -4201,7 +4201,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="265"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1004"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1051"/>
         <source>Scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6759,7 +6759,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="209"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="208"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="240"/>
         <source>applet</source>
         <translation type="unfinished"></translation>
@@ -9658,7 +9658,7 @@
         <translation>Ytor</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="431"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="430"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="60"/>
         <source>Shell</source>
@@ -17083,7 +17083,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="673"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="869"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="916"/>
         <source>Placement mode</source>
         <translation>Placeringsläge</translation>
     </message>
@@ -17764,7 +17764,7 @@
         <translation>Förhandsgranskning av panelindelningsalgoritm</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="244"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="255"/>
         <source>Scrolling strip preview with %n window</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -17772,75 +17772,75 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="244"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="255"/>
         <source>Scrolling strip preview, example strip</source>
         <comment>accessible name of the placeholder strip preview shown when the screen is not scrolling yet</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1063"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1110"/>
         <source>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1065"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1112"/>
         <source>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="940"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="987"/>
         <source>This monitor uses %1, which is not in your layout list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="990"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1037"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="879"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="926"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
         <translation>Fästning</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1049"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1096"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1049"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1096"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1067"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1114"/>
         <source>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1076"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1123"/>
         <source>Pick another template to replace it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1078"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1125"/>
         <source>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</source>
         <oldsource>This screen has no template of its own, so it follows the default template from the Layouts page.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1095"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1142"/>
         <source>Every starting column is in use, so further columns open at the template&apos;s own width and display.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1095"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1142"/>
         <source>This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="879"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="926"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
         <translation>Panelindelning</translation>

@@ -32,6 +32,7 @@
 #include "core/interfaces/settings_interfaces.h"
 #include "settings/utils/dbusutils.h"
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
@@ -591,6 +592,20 @@ QVariantList parseRunningWindowsJson(const QString& json)
     return result;
 }
 
+// The most tabs a strip preview will draw pills for. The daemon is a
+// same-user peer rather than a hostile one, so this is version-skew and
+// daemon-bug insurance, not a security boundary — but it is the only bound on
+// the path: the count is forwarded into a Repeater `model`, so it is a live
+// QQuickItem instantiation count on the GUI thread, once per tile, on every
+// strip read. A column holding more windows than this is already past the
+// point where individual pills are distinguishable in a thumbnail.
+//
+// Only this producer caps. The daemon's in-process twin (stripzones.h) takes
+// the same field straight off the engine's own value type rather than off a
+// wire it has to distrust, so there is nothing there for a cap to defend
+// against. The two therefore disagree above this count by design.
+constexpr int MaxPreviewTabs = 64;
+
 } // namespace
 
 // ── Running window picker (async flow) ──────────────────────────────────────
@@ -728,20 +743,77 @@ QVariantList SettingsController::getScrollingStripPreview(const QString& screenI
         // for a payload from an older daemon that carries no zoneNumber, and it
         // counts EMITTED tiles so a skipped malformed element does not leave a
         // hole in the numbering.
-        zone[PhosphorZones::ZoneJsonKeys::ZoneNumber] =
-            rect.value(PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(emitted);
+        const int zoneNumber = rect.value(PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(emitted);
+        zone[PhosphorZones::ZoneJsonKeys::ZoneNumber] = zoneNumber;
         zone[PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeo;
         // Namespaced, never a bare index. These are render-only synthetic
-        // zones with no persisted identity, so nothing resolves them today —
-        // but a bare "0"/"1"/"2" is indistinguishable from a real zone id, and
-        // any consumer that starts keying on zone.id (a delegate reuse key,
-        // selection state) would collide across screens. CLAUDE.md: zone IDs
-        // everywhere, never indices.
-        zone[PhosphorZones::ZoneJsonKeys::Id] = QStringLiteral("strip:%1:%2").arg(screenId).arg(emitted);
+        // zones with no persisted identity, and nothing on THIS side resolves
+        // them (ZonePreview does match ids against highlightedZoneIds, which
+        // the daemon's OSD populates) — but a bare "0"/"1"/"2" is
+        // indistinguishable from a real zone id, and any consumer that starts
+        // keying on zone.id (a delegate reuse key, selection state) would
+        // collide across screens. CLAUDE.md: zone IDs everywhere, never
+        // indices.
+        //
+        // Keyed on the SAME number the zone carries, not on the emit counter:
+        // the daemon's in-process twin (StripZones::zoneMapsForTiles) builds
+        // its ids from the tile's zoneNumber, and the two id spaces only match
+        // entry-for-entry while both read the same field. The trade is that
+        // uniqueness now depends on the walk numbering densely rather than on
+        // a local counter that could not repeat; the engine stamps it densely
+        // over one walk, and matching the twin is what the ids are for.
+        zone[PhosphorZones::ZoneJsonKeys::Id] = QStringLiteral("strip:%1:%2").arg(screenId).arg(zoneNumber);
         // Nothing reads these two. They keep a synthetic strip zone the same
         // shape as a real one, so the thumbnail delegate takes one path.
         zone[PhosphorZones::ZoneJsonKeys::Name] = QString();
         zone[PhosphorZones::ZoneJsonKeys::UseCustomColors] = false;
+        // The tab indicator the tile's column draws, carried through to the
+        // thumbnail so a tabbed column reads as tabbed rather than as a plain
+        // window. Copied only when the daemon sent a count: an absent key and
+        // a zero both mean "this column draws no indicator" (a daemon from
+        // before this payload sends neither), and forwarding the absence keeps
+        // the renderer's one gate rather than inventing a zeroed triple here.
+        const int rawTabCount = rect.value(PhosphorProtocol::Service::StripPreviewKey::TabCount).toInt();
+        // Capped, and loudly. Every other boundary read in this file refuses a
+        // value it does not believe and says so; this one is the same wire and
+        // deserves the same treatment, because the count is the one field the
+        // renderer cannot bound for itself.
+        const int tabCount = qMin(rawTabCount, MaxPreviewTabs);
+        if (rawTabCount > MaxPreviewTabs) {
+            qCWarning(lcCore) << "getScrollingStripPreview: capping tab count" << rawTabCount << "at" << MaxPreviewTabs
+                              << "for screen" << screenId;
+        }
+        if (tabCount > 0) {
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabCount] = tabCount;
+            // Clamped into the pill row rather than merely defaulted: the count
+            // says an indicator is drawn, so some tab of it is this tile's, and
+            // an index outside the row would leave the band with nothing lit —
+            // which reads as "no tab is current" on a column that always has
+            // one. toInt's default only catches an absent or non-numeric value.
+            const int rawActiveTab = rect.value(PhosphorProtocol::Service::StripPreviewKey::ActiveTab).toInt(0);
+            const int activeTab = qBound(0, rawActiveTab, tabCount - 1);
+            if (rawActiveTab != activeTab) {
+                qCWarning(lcCore) << "getScrollingStripPreview: active tab" << rawActiveTab << "outside 0.."
+                                  << (tabCount - 1) << "for screen" << screenId;
+            }
+            zone[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = activeTab;
+            // Clamped to the four TabIndicatorPosition values. An unknown one
+            // would fall through the renderer's edge test and draw on the
+            // bottom edge, which is a wrong answer that looks like a right one.
+            const int rawTabPosition = rect.value(PhosphorProtocol::Service::StripPreviewKey::TabPosition).toInt(0);
+            const int tabPosition = qBound(0, rawTabPosition, 3);
+            if (rawTabPosition != tabPosition) {
+                qCWarning(lcCore) << "getScrollingStripPreview: tab position" << rawTabPosition
+                                  << "outside 0..3 for screen" << screenId;
+            }
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabPosition] = tabPosition;
+            // Full length is the safe read for a missing or malformed value:
+            // the renderer clamps it into 0..1, and an indicator drawn too
+            // long still says "this column is tabbed", where a zero would
+            // silently drop it for a column that draws one.
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabLength] =
+                rect.value(PhosphorProtocol::Service::StripPreviewKey::TabLength).toDouble(1.0);
+        }
         zones.append(zone);
     }
     return zones;
