@@ -190,30 +190,33 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
         }
         m_connectedWindow = win;
 
-        // Cleared for BOTH branches, not just the detach. The old window's scene
-        // graph owns the node and has already taken it for deletion by the time
-        // windowChanged fires, on a reparent as much as on a detach. Keeping the
-        // pointer through a window-A -> window-B move leaves it dangling AND
-        // makes the destructor's `node && window()` guard pass, because the new
-        // window is attached — so invalidateItem() would run on freed memory.
-        // The next updatePaintNode re-registers, so nothing is lost.
-        m_renderNode.store(nullptr, std::memory_order_release);
+        // Deliberately does NOT clear the tracked node. An earlier version did,
+        // on the theory that the old window's scene graph had already taken the
+        // node for deletion by the time windowChanged fires — but "taken for
+        // deletion" is not "deleted", and the gap between the two is exactly
+        // where a render-thread prepare() still runs. Clearing here dropped the
+        // only handle to a node that was still alive, so a detach-then-destroy
+        // (reparent an item out of its window, then delete it) left the node's
+        // item back-pointer dangling and SIGSEGV'd inside QQuickItem::window().
+        //
+        // Nothing has to be cleared now: the node retracts itself from the
+        // liveness block when the scene graph actually deletes it, so tracking
+        // it across a window change is safe and the destructor keeps a live
+        // handle for as long as one exists. See ShaderNodeLiveness.
 
         if (win) {
             connect(
                 win, &QQuickWindow::sceneGraphAboutToStop, this,
                 [this]() {
-                    if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire)) {
+                    withTrackedNode([](ShaderNodeRhi* node) {
                         node->releaseResources();
-                    }
-                    // The invalidation that follows this signal deletes the
-                    // scene graph's nodes, so the tracked pointer is about to
-                    // dangle. Null it here (render thread, before deletion)
-                    // so late readers — the destructor's sever-backpointer
-                    // guard, releaseIdleGraphicsResources' render job — see
-                    // null instead of freed memory. The next updatePaintNode
-                    // re-registers whatever node it gets handed.
-                    m_renderNode.store(nullptr, std::memory_order_release);
+                    });
+                    // No node deregistration here either: the scene-graph
+                    // invalidation that follows this signal deletes the nodes,
+                    // and each one clears itself out of its liveness block as
+                    // it goes. Raising the dirty flag is still ours to do — the
+                    // node object itself is about to be destroyed, so the next
+                    // updatePaintNode has to re-bake from source.
                     m_shaderDirty.store(true);
                 },
                 Qt::DirectConnection);
@@ -256,13 +259,67 @@ ShaderEffect::~ShaderEffect()
     // the node between now and the node's deletion; without this, the item
     // pointer inside the node would dangle.
     //
-    // If the window (and its scene graph) was already destroyed, the node has
-    // been deleted by the SG and m_renderNode is dangling. window() returns
-    // nullptr once the window is gone, so use that as liveness check.
-    if (ShaderNodeRhi* node = m_renderNode.load(std::memory_order_acquire); node && window()) {
+    // Unconditional, and it has to stay that way. This guard used to also
+    // require window() to be non-null, as a stand-in liveness check for the
+    // node — but a null window only proves the ITEM is detached, not that the
+    // scene graph has deleted the node, and the two are not the same event.
+    // An item reparented out of its window and then destroyed took the skip
+    // path with a live node still holding a back-pointer to it, which the next
+    // prepare() dereferenced after the item was freed. withTrackedNode() asks
+    // the node's own liveness block instead of inferring from a proxy, and
+    // holds that block's lock across the call so the node cannot be deleted
+    // between the check and the invalidation.
+    withTrackedNode([](ShaderNodeRhi* node) {
         node->invalidateItem();
+    });
+    {
+        const std::lock_guard<std::mutex> guard(m_renderNodeMutex);
+        m_renderNodeLink.reset();
     }
-    m_renderNode.store(nullptr, std::memory_order_release);
+}
+
+// ============================================================================
+// Render Node Tracking
+// ============================================================================
+
+void ShaderEffect::registerRenderNode(ShaderNodeRhi* node)
+{
+    // Compare bare pointers before touching the shared_ptr: subclasses
+    // re-register the same node on every frame (the documented contract, so a
+    // window change can't leave the tracking disarmed), and the steady-state
+    // path should cost one uncontended lock, not a pair of refcount atomics.
+    const ShaderNodeLiveness* incoming = node ? node->liveness().get() : nullptr;
+    const std::lock_guard<std::mutex> guard(m_renderNodeMutex);
+    if (m_renderNodeLink.get() == incoming) {
+        return;
+    }
+    m_renderNodeLink = node ? node->liveness() : nullptr;
+}
+
+std::shared_ptr<ShaderNodeLiveness> ShaderEffect::trackedNodeLink() const
+{
+    const std::lock_guard<std::mutex> guard(m_renderNodeMutex);
+    return m_renderNodeLink;
+}
+
+void ShaderEffect::withTrackedNode(const std::function<void(ShaderNodeRhi*)>& fn) const
+{
+    // Copy the shared_ptr out under our own lock first, then release it before
+    // taking the block's. Holding both at once would put m_renderNodeMutex on
+    // the inside of a lock the render thread's ~ShaderNodeRhi also takes, for
+    // no benefit — the copied share already keeps the block alive even if the
+    // node dies and something deregisters it while fn runs.
+    const std::shared_ptr<ShaderNodeLiveness> link = trackedNodeLink();
+    if (!link) {
+        return;
+    }
+    // The block's mutex is what makes this safe rather than merely likely: a
+    // node destructor that has begun is already past its own retract-under-lock
+    // step or is blocked here, so link->node is live for the whole call.
+    const std::lock_guard<std::mutex> livenessLock(link->mutex);
+    if (link->node) {
+        fn(link->node);
+    }
 }
 
 // ============================================================================
@@ -308,12 +365,12 @@ void ShaderEffect::releaseIdleGraphicsResources()
     // (QQuickWindow::NoStage).
     //
     // Lifetime, spelled out because it is the whole safety argument:
-    //   • The job re-reads m_renderNode when it RUNS, on the render thread —
-    //     the same thread that deletes nodes — so it can never race a node
-    //     teardown. Every path that can retire the node without immediately
-    //     re-storing (updatePaintNode's width<=0 branch, windowChanged, and
-    //     scene-graph invalidation via the sceneGraphAboutToStop hook above)
-    //     nulls the atomic first.
+    //   • The job re-reads the tracked node when it RUNS, through
+    //     withTrackedNode(), which holds the node's liveness lock across the
+    //     release call. A node the scene graph has already deleted reads back
+    //     as null, and one it is deleting concurrently cannot complete its
+    //     destructor until the call returns — so the job never touches a dead
+    //     node regardless of which thread retired it.
     //   • The self-token guards effect deletion. A QPointer is not documented
     //     thread-safe against concurrent destruction, and a queued NoStage job
     //     can sit for an unbounded interval (destroyPassiveShell on screen
@@ -343,8 +400,8 @@ void ShaderEffect::releaseIdleGraphicsResources()
         {
             // Hold the token's mutex across the node access: a destructor
             // that begins while this job runs blocks on the same mutex, so
-            // the effect (and its m_renderNode atomic) cannot be freed out
-            // from under the release call.
+            // the effect (and its node tracking) cannot be freed out from
+            // under the release call.
             const std::lock_guard<std::mutex> tokenLock(m_token->mutex);
             ShaderEffect* effect = m_token->effect;
             if (!effect) {
@@ -356,9 +413,9 @@ void ShaderEffect::releaseIdleGraphicsResources()
             // line is the check — if it never appears after the idle grace
             // fires, the reclaim is a no-op in that configuration.
             qCDebug(lcShaderNode) << "ReleaseIdleResourcesJob: releasing idle shader GPU resources";
-            if (ShaderNodeRhi* node = effect->m_renderNode.load(std::memory_order_acquire)) {
+            effect->withTrackedNode([](ShaderNodeRhi* node) {
                 node->releaseResources();
-            }
+            });
         }
 
     private:
@@ -578,12 +635,12 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            // Invalidate oldNode DIRECTLY, not the tracked pointer: if
-            // m_renderNode were ever null while oldNode is live, keying off the
-            // tracked pointer would delete the node without severing its item
-            // back-pointer. Both subclass overrides already do it this way.
+            // Invalidate oldNode DIRECTLY, not the tracked node: the scene
+            // graph handed us this exact pointer, so it is live by definition,
+            // and going through the tracking would be a longer route to the
+            // same object. Both subclass overrides already do it this way.
             static_cast<ShaderNodeRhi*>(oldNode)->invalidateItem();
-            m_renderNode.store(nullptr, std::memory_order_release);
+            registerRenderNode(nullptr);
             delete oldNode;
         }
         return nullptr;
@@ -593,17 +650,16 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     bool freshNode = false;
     if (!node) {
         // Scene graph deleted the previous node (e.g. releaseResources), or first call.
-        m_renderNode.store(nullptr, std::memory_order_release);
         node = createShaderNode();
         freshNode = true;
     }
-    // Register unconditionally, not only on the fresh-node path. windowChanged
-    // clears m_renderNode, and a reuse-path frame after that would otherwise
-    // leave it null forever, so the destructor's `node && window()` guard would
-    // never sever the node's item back-pointer. QQuickItemPrivate::derefWindow()
-    // makes that sequence unreachable today, but the guard must not depend on
-    // it. One release store per frame is unmeasurable.
-    m_renderNode.store(node, std::memory_order_release);
+    // Register unconditionally, not only on the fresh-node path: the scene
+    // graph can hand back a node this item is not currently tracking (it
+    // deletes and recreates behind our back), and a reuse-path frame is the
+    // only chance to pick that up. registerRenderNode early-outs when the node
+    // is already the tracked one, so the steady-state cost is one uncontended
+    // lock per frame.
+    registerRenderNode(node);
 
     // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper, user textures) ──
     syncBasePropertiesToNode(node);
@@ -754,9 +810,13 @@ void ShaderEffect::itemChange(ItemChange change, const ItemChangeData& value)
         // still perfectly valid. The two real teardown paths are covered
         // independently — scene-graph invalidation (Vulkan window hide) goes
         // through the sceneGraphAboutToStop hook, which raises m_shaderDirty
-        // and nulls the node; and any path that leaves the node null makes
-        // the next updatePaintNode's freshNode branch load regardless.
-        if (!m_renderNode.load(std::memory_order_acquire)) {
+        // directly; and any path that deletes the node makes the next
+        // updatePaintNode's freshNode branch load regardless.
+        bool nodeAlive = false;
+        withTrackedNode([&nodeAlive](ShaderNodeRhi*) {
+            nodeAlive = true;
+        });
+        if (!nodeAlive) {
             m_shaderDirty = true;
         }
         update();
