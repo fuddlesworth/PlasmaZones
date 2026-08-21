@@ -983,6 +983,14 @@ namespace {
 /// path — overwhelmingly the common one — parses rules.json once per startup
 /// instead of once per fix-up.
 ///
+/// Not serialised against a RUNNING daemon that already holds the rule set in
+/// memory: `ensureJsonConfig` runs once at process startup, so launching the
+/// settings app beside a live daemon can rewrite rules.json underneath it. The
+/// exposure is the same one `pruneRetiredProviderDefaultRule` has always had,
+/// and it converges — a fix-up only fires while the shape it repairs is still
+/// on disk, so a clobbering save is repaired again on the next daemon start
+/// and stops firing for good once it sticks.
+///
 /// @param jsonPath config.json; only gates on the conversion having happened.
 /// @param what     fix-up name, for the failure warning.
 /// @return true on success or a clean no-op; false only on a write failure.
@@ -1071,6 +1079,22 @@ bool ConfigMigration::repairSeededSteamRule(const QString& jsonPath)
         // it. The NAME is re-stamped along with them, so the row says what it
         // now guards rather than keeping a title for a rule that no longer
         // matches what it says.
+        //
+        // Two known consequences, both deliberate:
+        //
+        //  - A user who turned the rule off BECAUSE it unmanaged their games
+        //    keeps it off and gets no toast guard. Re-enabling on their behalf
+        //    would be the compositor overriding an explicit choice on the
+        //    strength of guessing why it was made, which is worse. The
+        //    changelog entry says the rule is corrected and that a disabled
+        //    copy stays disabled, so re-enabling it is one click.
+        //
+        //  - The priority carried across is whatever band the rule was in
+        //    before. The retired shape nested a None{} and so sat in Advanced,
+        //    while the corrected shape also nests a group and files there too,
+        //    so the two now agree — but a rule the user had re-prioritised
+        //    keeps their number rather than being re-stamped, which is the
+        //    same contract every other user-owned field gets here.
         PhosphorRules::Rule repaired = *stored;
         applySteamDefaultRuleShape(repaired);
         if (!ruleSet.updateRule(repaired)) {

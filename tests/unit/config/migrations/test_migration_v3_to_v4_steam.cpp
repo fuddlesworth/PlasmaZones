@@ -187,10 +187,7 @@ private Q_SLOTS:
     void testSteamRuleLeavesGamesAndOrdinaryWindowsAlone()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
         QVERIFY(set.has_value());
@@ -257,10 +254,7 @@ private Q_SLOTS:
     void testSteamRuleRepairedInAnAlreadyConvertedConfig()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         // Put the retired shape back on disk under the seeded rule's fixed id,
         // exactly as a config converted before the narrowing carries it.
@@ -349,10 +343,7 @@ private Q_SLOTS:
     void testSteamRuleRepairKeepsEnabledFlagAndPriority()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         const QString rulesPath = ConfigDefaults::rulesFilePath();
         auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
@@ -398,10 +389,7 @@ private Q_SLOTS:
     void testSteamRuleRepairDoesNotResurrectADeletedRule()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         const QString rulesPath = ConfigDefaults::rulesFilePath();
         auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
@@ -428,10 +416,7 @@ private Q_SLOTS:
     void testSteamRuleRepairLeavesAUserEditAlone()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         const QString rulesPath = ConfigDefaults::rulesFilePath();
         auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
@@ -469,10 +454,7 @@ private Q_SLOTS:
     void testSteamRuleRepairLeavesAnActionOnlyEditAlone()
     {
         IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertBareV3Config());
 
         const QString rulesPath = ConfigDefaults::rulesFilePath();
         auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);

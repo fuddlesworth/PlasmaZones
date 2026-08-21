@@ -16,6 +16,7 @@
 #include <QTest>
 
 #include "config/configdefaults.h"
+#include "config/configmigration.h"
 
 namespace PlasmaZones {
 
@@ -184,6 +185,29 @@ protected:
         }
         types.sort();
         return types;
+    }
+
+    /// Stage a bare v3 config carrying nothing but its version stamp, then run
+    /// the conversion. The preamble every slot needs when it only cares about
+    /// the SEEDED rules — no assignments, no disable lists, no stashes.
+    /// @return whatever ensureJsonConfig returned, so the caller still asserts it.
+    bool convertBareV3Config()
+    {
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 3);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+        return ConfigMigration::ensureJsonConfig();
+    }
+
+    /// Stage the full v3 fixture (config + assignments), then run the
+    /// conversion. The preamble every slot needs when it exercises the
+    /// assignment or disable cascade.
+    /// @return whatever ensureJsonConfig returned, so the caller still asserts it.
+    bool convertFullV3Fixture()
+    {
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        writeJson(assignmentsPath(), makeAssignments());
+        return ConfigMigration::ensureJsonConfig();
     }
 
     /// The action object of @p type on @p rule, or an empty object when the

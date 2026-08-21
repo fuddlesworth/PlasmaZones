@@ -48,6 +48,9 @@ private Q_SLOTS:
     void moveRuleReorders();
     void flatPriorityIgnoresBandsOnReorder();
     void authoringMetadata();
+    void operatorMetadata();
+    void actionMetadata();
+    void boolActionPolaritySweep();
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
     void asyncCommitAndRevertAreInvokable();
@@ -530,6 +533,24 @@ void TestRuleController::authoringMetadata()
     QVERIFY(widthOps.contains(QStringLiteral("greaterThan")));
     QVERIFY(widthOps.contains(QStringLiteral("equals")));
     QCOMPARE(opWires(QStringLiteral("isTransient")), QSet<QString>{QStringLiteral("equals")});
+}
+
+void TestRuleController::operatorMetadata()
+{
+    RuleController controller;
+
+    const auto opWires = [&](const QString& fieldWire) {
+        QSet<QString> wires;
+        for (const QVariant& f : controller.matchFields()) {
+            if (f.toMap().value(QStringLiteral("wire")).toString() != fieldWire) {
+                continue;
+            }
+            for (const QVariant& o : controller.operatorsForField(f.toMap().value(QStringLiteral("value")).toInt())) {
+                wires.insert(o.toMap().value(QStringLiteral("wire")).toString());
+            }
+        }
+        return wires;
+    };
 
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
@@ -557,6 +578,11 @@ void TestRuleController::authoringMetadata()
         QVERIFY2(allOperatorWires.contains(v.toMap().value(QStringLiteral("wire")).toString()),
                  "operatorsForField returned an operator absent from allOperators()");
     }
+}
+
+void TestRuleController::actionMetadata()
+{
+    RuleController controller;
 
     const QVariantList actions = controller.actionTypes();
     QVERIFY(!actions.isEmpty());
@@ -693,12 +719,19 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
                                             QString(StripAxisToken::Vertical)),
              QStringLiteral("Top to bottom"));
+}
 
+void TestRuleController::boolActionPolaritySweep()
+{
     // The bool-phrase canary: EVERY registered action whose Value param is a
     // bool must answer boolActionStateLabel with a non-empty, distinct phrase
     // for both polarities. A new bool action added without its phrases used
     // to render the raw wire string in the rule row with the whole suite
     // green — this is the future-miss net.
+    //
+    // Its own slot, because QVERIFY aborts the whole slot: as the tail of a
+    // 345-line authoringMetadata it was unreachable whenever anything above
+    // it failed, which is exactly when a net matters most.
     int boolActions = 0;
     const QStringList allTypes = PhosphorRules::ActionRegistry::instance().registeredTypes();
     for (const QString& type : allTypes) {
