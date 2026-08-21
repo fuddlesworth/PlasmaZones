@@ -7,7 +7,6 @@
 #include <QJsonValue>
 
 #include "rulelogging.h"
-#include "ruleaction_builtins_p.h"
 
 #include <algorithm>
 

@@ -222,12 +222,12 @@ SettingsFlickable {
         // =================================================================
         // Tabs Card
         // =================================================================
-        // Three of the thirteen tab-indicator knobs: whether it shows, and
+        // Three of the eighteen tab-indicator knobs: whether it shows, and
         // the two that change what you actually see. The rest (thickness,
-        // length, the two gaps, corner radius, colours, place-within-column,
-        // hide-for-single-tab) are tuning for an indicator you have already
-        // decided you want, which is advanced-mode depth — they live on
-        // Scrolling → Tabs.
+        // length, the two gaps, corner radius, colours, the five label-font
+        // knobs, place-within-column, hide-for-single-tab) are tuning for an
+        // indicator you have already decided you want, which is advanced-mode
+        // depth — they live on Scrolling → Tabs.
         //
         // These keys are OWNED by scrolling-tabs, so this page has no
         // pageOwnedConfigKeys entry for them; dirtiness, Reset and Discard
@@ -259,7 +259,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Style")
                     searchAnchor: "simpleTabIndicatorStyle"
-                    description: i18n("Titled chips name each window. A segment bar is thinner and shows only how many there are.")
+                    description: i18n("Titled chips label each window. A segment bar is thinner and shows only how many there are.")
                     enabled: appSettings.scrollingTabIndicatorEnabled
 
                     WideComboBox {

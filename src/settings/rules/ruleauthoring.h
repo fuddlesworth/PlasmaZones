@@ -65,6 +65,16 @@ QString actionTypeLabel(const QString& typeWire);
 /// string for a non-boolean or unknown action type.
 QString boolActionStateLabel(const QString& typeWire, bool on);
 
+/// Translated name for the state an EXPLICIT empty value puts action @p
+/// typeWire's param @p key into, for the params where empty is a real choice
+/// rather than an unset one — today only the tab label font family, whose
+/// empty string selects the system font. Published to QML as `emptyLabel` so
+/// the read-only rule summary names that state instead of drawing a blank
+/// pill, and read by `RuleModel` so the two summaries use one word for it.
+/// Returns an empty string for every param whose empty value genuinely means
+/// unset, which leaves those rendering blank as before.
+QString paramEmptyValueLabel(const QString& typeWire, const QString& key);
+
 /// Translated label for one enum wire value on action @p typeWire, param @p key.
 /// Structural enum membership lives on the descriptor; the human-facing label is
 /// per `(type, key, wireValue)`. Shared by the action editor's enum options and

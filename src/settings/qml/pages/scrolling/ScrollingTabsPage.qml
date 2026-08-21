@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -10,10 +11,11 @@ import org.plasmazones.common as QFZCommon
 /**
  * @brief Scrolling → Tabs: the indicator drawn alongside a tabbed column.
  *
- * Its own leaf rather than a card on the Columns page: the family is thirteen
- * knobs across three concerns (whether it shows, how it is laid out, what
- * colour it is), which is a page's worth of surface, and none of it is
- * per-monitor overridable the way the Columns page's New columns card is.
+ * Its own leaf rather than a card on the Columns page: the family is eighteen
+ * knobs across four concerns (whether it shows, how it is laid out, what
+ * colour it is, and how its labels are typeset), which is a page's worth of
+ * surface, and none of it is per-monitor overridable the way the Columns
+ * page's New columns card is.
  *
  * WHICH columns are tabbed is deliberately NOT here. That is the New columns
  * card on Scrolling → Columns (per-monitor overridable, unlike anything on
@@ -22,8 +24,9 @@ import org.plasmazones.common as QFZCommon
  *
  * The cards narrow the search, so a user hunting for one knob picks a card
  * rather than scanning the whole list. Layout is split across two of them
- * (Tab indicator carries style and position, Size and spacing carries the
- * measurements) because there are more measurements than anything else.
+ * (Tab indicator carries style, position and the label font, Size and spacing
+ * carries the measurements) because there are more measurements than anything
+ * else.
  */
 SettingsFlickable {
     id: root
@@ -38,6 +41,22 @@ SettingsFlickable {
     /// Every row below the master switch is dead while the indicator is off.
     /// Named once here rather than repeated per row so the gate cannot drift.
     readonly property bool indicatorOn: appSettings.scrollingTabIndicatorEnabled
+
+    /// The shipped tab label weight, named once so the Font row's reset button
+    /// and the predicate that shows it cannot drift apart. Only the weight
+    /// needs a name: the other four defaults are an empty family and three
+    /// false flags, which read as their own defaults where they are written.
+    readonly property int _defaultTabFontWeight: Font.Bold
+
+    // The ISettings object (the `appSettings` context property), captured at
+    // page scope. FontPickerDialog declares its own `appSettings:
+    // settingsController` (the controller carries the QFontDatabase helper
+    // invokables it needs), which SHADOWS the context property inside the
+    // dialog's onAccepted, so a write to `appSettings.scrollingTabIndicatorFont*`
+    // there would hit a nonexistent property on the controller and throw. The
+    // font writes go through this reference instead (same capture
+    // SnappingOverlayAppearancePage makes for the zone label font).
+    readonly property var appSettingsObj: appSettings
 
     // PAGE-LEVEL, shared by the three colour rows: a page rebuild while the
     // dialog is open would destroy a row-scoped dialog and tear the popup down
@@ -54,7 +73,7 @@ SettingsFlickable {
     // Publish the open state so page-stepping cannot swap the page out from
     // under the open dialog — same pattern (and standalone-host guard) as
     // RulesPage.
-    readonly property bool anyModalOpen: tabColorDialog.visible
+    readonly property bool anyModalOpen: tabColorDialog.visible || fontPickerDialog.visible
     onAnyModalOpenChanged: {
         if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
             window._pageOwnedModalOpen = anyModalOpen;
@@ -125,7 +144,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Style")
                     searchAnchor: "tabIndicatorStyle"
-                    description: i18n("Titled chips name each window. A segment bar is thinner and shows only how many there are.")
+                    description: i18n("Titled chips label each window. A segment bar is thinner and shows only how many there are.")
                     enabled: root.indicatorOn
 
                     WideComboBox {
@@ -151,6 +170,61 @@ SettingsFlickable {
                         model: settingsController.valueOptions("Scrolling.TabIndicator", "Position")
                         storedValue: appSettings.scrollingTabIndicatorPosition
                         onActivated: appSettings.scrollingTabIndicatorPosition = currentValue
+                    }
+                }
+
+                // Shape rather than metric, so it sits with Style and Position
+                // instead of on the Size and spacing card. There is no size row
+                // on purpose: the effect fits each title to the indicator, so
+                // Thickness on the next card already is the size control.
+                SettingsRow {
+                    title: i18n("Font")
+                    searchAnchor: "tabIndicatorFont"
+                    description: i18n("Typeface and style for the tab labels. Their size comes from Thickness, so there is no size to set here. A segment bar draws no labels, so it ignores this.")
+                    enabled: root.indicatorOn
+
+                    RowLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Button {
+                            text: appSettings.scrollingTabIndicatorFontFamily || i18n("System font")
+                            font.family: appSettings.scrollingTabIndicatorFontFamily
+                            font.weight: appSettings.scrollingTabIndicatorFontWeight
+                            font.italic: appSettings.scrollingTabIndicatorFontItalic
+                            font.underline: appSettings.scrollingTabIndicatorFontUnderline
+                            font.strikeout: appSettings.scrollingTabIndicatorFontStrikeout
+                            icon.name: "font-select-symbolic"
+                            // Names the family, so a screen reader reads out
+                            // the same thing the button shows. A static name
+                            // left the current setting readable only to
+                            // sighted users.
+                            Accessible.name: i18n("Tab label font: %1", appSettings.scrollingTabIndicatorFontFamily || i18n("System font"))
+                            onClicked: {
+                                fontPickerDialog.selectedFamily = appSettings.scrollingTabIndicatorFontFamily;
+                                fontPickerDialog.selectedWeight = appSettings.scrollingTabIndicatorFontWeight;
+                                fontPickerDialog.selectedItalic = appSettings.scrollingTabIndicatorFontItalic;
+                                fontPickerDialog.selectedUnderline = appSettings.scrollingTabIndicatorFontUnderline;
+                                fontPickerDialog.selectedStrikeout = appSettings.scrollingTabIndicatorFontStrikeout;
+                                fontPickerDialog.open();
+                            }
+                        }
+
+                        Button {
+                            icon.name: "edit-clear"
+                            // The defaults: no family (follow the system font),
+                            // bold, and none of the three effects.
+                            visible: appSettings.scrollingTabIndicatorFontFamily !== "" || appSettings.scrollingTabIndicatorFontWeight !== root._defaultTabFontWeight || appSettings.scrollingTabIndicatorFontItalic || appSettings.scrollingTabIndicatorFontUnderline || appSettings.scrollingTabIndicatorFontStrikeout
+                            ToolTip.visible: hovered
+                            ToolTip.text: i18n("Reset the tab label font")
+                            Accessible.name: i18n("Reset the tab label font")
+                            onClicked: {
+                                appSettings.scrollingTabIndicatorFontFamily = "";
+                                appSettings.scrollingTabIndicatorFontWeight = root._defaultTabFontWeight;
+                                appSettings.scrollingTabIndicatorFontItalic = false;
+                                appSettings.scrollingTabIndicatorFontUnderline = false;
+                                appSettings.scrollingTabIndicatorFontStrikeout = false;
+                            }
+                        }
                     }
                 }
             }
@@ -217,7 +291,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Thickness")
                     searchAnchor: "tabIndicatorWidth"
-                    description: i18n("How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their titles, which on a left or right edge means a lot.")
+                    description: i18n("How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their labels, which on a left or right edge means a lot.")
 
                     SettingsSpinBox {
                         id: tabWidthSpin
@@ -402,6 +476,29 @@ SettingsFlickable {
                     }
                 }
             }
+        }
+    }
+
+    // PAGE-LEVEL like the colour dialog above, for the same reason.
+    FontPickerDialog {
+        id: fontPickerDialog
+
+        // The controller on purpose: it carries the QFontDatabase helper
+        // invokables (fontStylesForFamily / fontStyleWeight / fontStyleItalic)
+        // the dialog calls. It does NOT carry the scrollingTabIndicatorFont*
+        // settings, so the writes below go through root.appSettingsObj rather
+        // than the bare `appSettings` this declaration shadows in the dialog's
+        // scope (see appSettingsObj above).
+        appSettings: settingsController
+        // The shared dialog names the zone labels in its own title, so say what
+        // this instance edits instead.
+        title: i18n("Choose Tab Font")
+        onAccepted: {
+            root.appSettingsObj.scrollingTabIndicatorFontFamily = selectedFamily;
+            root.appSettingsObj.scrollingTabIndicatorFontWeight = selectedWeight;
+            root.appSettingsObj.scrollingTabIndicatorFontItalic = selectedItalic;
+            root.appSettingsObj.scrollingTabIndicatorFontUnderline = selectedUnderline;
+            root.appSettingsObj.scrollingTabIndicatorFontStrikeout = selectedStrikeout;
         }
     }
 }

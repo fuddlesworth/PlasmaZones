@@ -1563,12 +1563,20 @@ public:
         Q_EMIT scrollingRestoreFloatedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
-    // The scrolling tab-indicator family: all seven pairs are DEFAULTED
+    // The scrolling tab-indicator family: all twelve pairs are DEFAULTED
     // virtuals on ISettings that answer frozen constants, which makes any
-    // consumer predicate (overlayservice scrolltabs reads enabled/style)
-    // untestable through an unoverridden stub — the same hazard the
-    // scrollingRestoreFloatedWindowsOnLogin comment above records. Override
-    // all seven, member-backed and ConfigDefaults-seeded.
+    // consumer predicate untestable through an unoverridden stub — the same
+    // hazard the scrollingRestoreFloatedWindowsOnLogin comment above records.
+    // The consumer is the D-Bus settings registry
+    // (settingsadaptor_registry_scrolling.cpp), which reads these through
+    // ISettings and pushes them to the KWin effect's tab loader. There is no
+    // overlayservice tab surface at all. The tab GEOMETRY keys (position,
+    // width, gap, length, place-within-column, hide-for-single-tab) are NOT
+    // among these twelve and have no ISettings getter: the engine reads those
+    // through PhosphorEngine::IScrollSettings in
+    // ScrollEngine::refreshConfigFromSettings(), which of the twelve here
+    // touches only scrollingTabIndicatorEnabled(). Override all twelve,
+    // member-backed and ConfigDefaults-seeded.
     bool scrollingTabIndicatorEnabled() const override
     {
         return m_scrollingTabIndicatorEnabled;
@@ -1651,6 +1659,66 @@ public:
             return;
         m_scrollingTabIndicatorUrgentColor = color;
         Q_EMIT scrollingTabIndicatorUrgentColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString scrollingTabIndicatorFontFamily() const override
+    {
+        return m_scrollingTabIndicatorFontFamily;
+    }
+    void setScrollingTabIndicatorFontFamily(const QString& family) override
+    {
+        if (m_scrollingTabIndicatorFontFamily == family)
+            return;
+        m_scrollingTabIndicatorFontFamily = family;
+        Q_EMIT scrollingTabIndicatorFontFamilyChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingTabIndicatorFontWeight() const override
+    {
+        return m_scrollingTabIndicatorFontWeight;
+    }
+    void setScrollingTabIndicatorFontWeight(int weight) override
+    {
+        if (m_scrollingTabIndicatorFontWeight == weight)
+            return;
+        m_scrollingTabIndicatorFontWeight = weight;
+        Q_EMIT scrollingTabIndicatorFontWeightChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingTabIndicatorFontItalic() const override
+    {
+        return m_scrollingTabIndicatorFontItalic;
+    }
+    void setScrollingTabIndicatorFontItalic(bool italic) override
+    {
+        if (m_scrollingTabIndicatorFontItalic == italic)
+            return;
+        m_scrollingTabIndicatorFontItalic = italic;
+        Q_EMIT scrollingTabIndicatorFontItalicChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingTabIndicatorFontUnderline() const override
+    {
+        return m_scrollingTabIndicatorFontUnderline;
+    }
+    void setScrollingTabIndicatorFontUnderline(bool underline) override
+    {
+        if (m_scrollingTabIndicatorFontUnderline == underline)
+            return;
+        m_scrollingTabIndicatorFontUnderline = underline;
+        Q_EMIT scrollingTabIndicatorFontUnderlineChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingTabIndicatorFontStrikeout() const override
+    {
+        return m_scrollingTabIndicatorFontStrikeout;
+    }
+    void setScrollingTabIndicatorFontStrikeout(bool strikeout) override
+    {
+        if (m_scrollingTabIndicatorFontStrikeout == strikeout)
+            return;
+        m_scrollingTabIndicatorFontStrikeout = strikeout;
+        Q_EMIT scrollingTabIndicatorFontStrikeoutChanged();
         Q_EMIT settingsChanged();
     }
     // The scrolling drop-indicator family: all six pairs are DEFAULTED
@@ -2747,6 +2815,11 @@ private:
     QString m_scrollingTabIndicatorActiveColor = ConfigDefaults::scrollingTabIndicatorActiveColor();
     QString m_scrollingTabIndicatorInactiveColor = ConfigDefaults::scrollingTabIndicatorInactiveColor();
     QString m_scrollingTabIndicatorUrgentColor = ConfigDefaults::scrollingTabIndicatorUrgentColor();
+    QString m_scrollingTabIndicatorFontFamily = ConfigDefaults::scrollingTabIndicatorFontFamily();
+    int m_scrollingTabIndicatorFontWeight = ConfigDefaults::scrollingTabIndicatorFontWeight();
+    bool m_scrollingTabIndicatorFontItalic = ConfigDefaults::scrollingTabIndicatorFontItalic();
+    bool m_scrollingTabIndicatorFontUnderline = ConfigDefaults::scrollingTabIndicatorFontUnderline();
+    bool m_scrollingTabIndicatorFontStrikeout = ConfigDefaults::scrollingTabIndicatorFontStrikeout();
     bool m_scrollingDropIndicatorEnabled = ConfigDefaults::scrollingDropIndicatorEnabled();
     // The FALLBACK colour, matching what the defaulted interface getter (and
     // production with no palette) resolves to for the empty stored string.

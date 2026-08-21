@@ -49,7 +49,16 @@ QtObject {
             text: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
             placeholderText: _param.label
             Accessible.name: _param.label
-            onEditingFinished: row.actionEdited(row._withParam(_param.key, text))
+            // The descriptor publishes its cap as `max`, so the field cannot
+            // author a value the load-time validator would then drop. Guarded
+            // because `max` is optional on a string param.
+            maximumLength: _param.max !== undefined ? _param.max : 32767
+            // Stored trimmed. The validators measure the trimmed value, so
+            // committing the raw text would let a padded entry read as set
+            // while resolving to something else entirely — for the tab label
+            // font that is the difference between a family and a silent
+            // fallback face.
+            onEditingFinished: row.actionEdited(row._withParam(_param.key, text.trim()))
         }
     }
 

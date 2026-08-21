@@ -25,11 +25,12 @@ namespace PhosphorRules {
 //
 // Param-key vocabulary shared across every wire-shape reader (the registry
 // validators in ruleaction_builtins_engine.cpp /
-// ruleaction_builtins_appearance.cpp, the config-layer v3→v4 migration that ports
-// legacy AnimationAppRule entries, the rule-editor UI, and the KWin-effect-
-// side resolvers in `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
+// ruleaction_builtins_appearance.cpp / ruleaction_builtins_indicators.cpp, the
+// config-layer v3→v4 migration that ports legacy AnimationAppRule entries, the
+// rule-editor UI, and the KWin-effect-side resolvers in
+// `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
 // A future rename (e.g. `effectId` → `effect_id`) updates one entry here and
-// flows everywhere instead of being hard-coded at four call sites.
+// flows everywhere instead of being hard-coded once per reader.
 namespace ActionParam {
 // OverrideAnimation{Shader,Timing,Curve} family. `Params` is the exception:
 // it is the shared nested-payload key for every action carrying a free-form
@@ -112,6 +113,21 @@ inline constexpr int MaxZoneOrdinal = 64;
 /// ParamSchema `max` so the editor can read it from the schema).
 inline constexpr int MaxZoneNameLength = 128;
 
+/// Upper bound on a tab label font FAMILY (`SetTabIndicatorFontFamily`), in
+/// characters, measured on the TRIMMED value. Same posture and same number as
+/// MaxZoneNameLength: a grossly-malformed-payload guard, not a real limit —
+/// installed family names run well under it, and the value normally arrives
+/// from a QFontDatabase enumeration rather than being typed. It exists because
+/// this is the one free-form string in the tab-indicator family, so without it
+/// a hand-edited rules file could carry an unbounded one through the resolver
+/// and onto the wire. EMPTY stays legal and is NOT a length failure: it is the
+/// documented "use the system font" value. Consumers: the descriptor validator
+/// (ruleaction_builtins_indicators.cpp), the settings-layer config validator
+/// for both family keys (settingsschema_scrolling.cpp and settingsschema.cpp),
+/// and the `value` ParamSchema `max`, which the rule editor's text field reads
+/// so it cannot author a value the validator would then drop.
+inline constexpr int MaxFontFamilyLength = 128;
+
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
 /// load-time descriptor validators (ruleaction_builtins_appearance.cpp for
@@ -133,7 +149,7 @@ inline constexpr double MaxBorderRadius = 20.0;
 /// the same lockstep reason as the border bounds above: the load-time
 /// descriptor validators (via the private percent pair in
 /// ruleaction_builtins_p.h), the zones-layer context resolver
-/// (layoutregistry_contextresolve.cpp), and the per-window open-params consumer
+/// (layoutregistry_contextparams.cpp), and the per-window open-params consumer
 /// (windowtrackingadaptor/rules.cpp) all validate against these — a private
 /// copy in any of them would drift by hand-mirroring. A column or window may
 /// legitimately take the whole work area, so the upper bound is 1.0.
@@ -142,8 +158,8 @@ inline constexpr double MaxColumnWidthRatio = 1.0;
 
 /// Bounds for the tab-indicator numeric slots. Installed here, next to the
 /// column-width pair and for the same reason: the descriptor validators
-/// (ruleaction_builtins_appearance.cpp) and the per-context consumer
-/// (layoutregistry_contextresolve.cpp) both check against these, so a private
+/// (ruleaction_builtins_indicators.cpp) and the per-context consumer
+/// (layoutregistry_contextparams.cpp) both check against these, so a private
 /// copy in either would drift by hand-mirroring.
 ///
 /// Two floors are NEGATIVE and neither is a mistake. A negative GAP draws the
@@ -164,6 +180,32 @@ inline constexpr double TabIndicatorCornerRadiusPill = -1.0;
 inline constexpr double MaxTabIndicatorCornerRadius = 64.0;
 inline constexpr double MinTabIndicatorLengthRatio = 0.05;
 inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
+
+/// Bounds for the tab label's font WEIGHT, the CSS/QFont::Weight scale where
+/// 400 is regular and 700 is bold. Kept beside the other tab-indicator bounds
+/// and shared by the same two consumers, so the descriptor validator and the
+/// context resolver check one number rather than two hand-mirrored ones.
+///
+/// Inside this library it is one pair; outside it the SAME 100..900 band
+/// is mirrored at three more sites, so widening it means editing four places.
+/// The config layer owns the canonical pair
+/// (ConfigDefaults::scrollingTabIndicatorFontWeight{Min,Max}() in
+/// src/config/configdefaults_scrolling.h). The KWin effect mirrors it twice:
+/// kFontWeightMin / kFontWeightMax in kwin-effect/tilinghandler/scrolltabs.cpp
+/// name it, and the global loader in
+/// kwin-effect/plasmazoneseffect/daemon_settings_scrolltabs.cpp spells it as
+/// bare literals.
+///
+/// The floor is 100, not 0 — a zero weight is not a lighter font, it is an
+/// out-of-scale value the font stack rounds to whatever it likes. So this pair
+/// takes the EXPLICIT-FLOOR validator helper, like the signed bounds above,
+/// even though both ends are positive.
+///
+/// The family beside it has no bounds constant because it is a free string,
+/// and the three style FLAGS have none because they are booleans. There is no
+/// font-SIZE pair at all: the painter fits the label to the pill thickness.
+inline constexpr double MinTabIndicatorFontWeight = 100.0;
+inline constexpr double MaxTabIndicatorFontWeight = 900.0;
 
 /// Drop-indicator numeric bounds, mirroring the config layer's
 /// (ConfigDefaults::scrollingDropIndicator*Min/Max) so a rule cannot author a

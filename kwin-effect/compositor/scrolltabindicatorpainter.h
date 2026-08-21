@@ -95,7 +95,10 @@ struct ScrollTabIndicatorStyle
     int style = 1;
     /// Gap between individual tabs, in logical pixels. Negative values are
     /// treated as 0 by the layout (the setting's floor is 0; a negative one
-    /// can only arrive through a garbled override).
+    /// can only arrive through a garbled override), and the layout also caps
+    /// the gap against the space the indicator has, so a large gap on a short
+    /// indicator draws smaller than it was set rather than pushing the tail
+    /// tabs out of the indicator.
     int gapsBetweenTabs = 0;
     /// Per-tab corner radius. NEGATIVE means fully rounded (half the tab's
     /// short extent), which is how the chips pill has always looked.
@@ -116,8 +119,13 @@ struct ScrollTabIndicatorStyle
     QColor themeText;
     QColor themeBackground;
     QColor themeNegativeText;
-    /// Already scaled by the caller from family / size scale / weight /
-    /// italic / underline / strikeout.
+    /// The label TYPEFACE, resolved by the caller from family / weight /
+    /// italic / underline / strikeout. Its SIZE is a fallback only: the chip
+    /// style re-sizes the label to fit each chip's thickness before drawing
+    /// it, so the pill's Width setting is what sizes these labels. The
+    /// segment-bar style draws no text and reads this field not at all.
+    /// Still part of operator==, because a typeface change must dirty the
+    /// model even though it cannot move a rect.
     QFont font;
     /// Kirigami.Units.smallSpacing equivalent (Kirigami is not available in
     /// the compositor, so the caller supplies the number).

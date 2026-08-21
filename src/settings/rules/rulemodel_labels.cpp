@@ -774,6 +774,35 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return *px < 0 ? PhosphorI18n::tr("Tab corners: fully rounded")
                            : PhosphorI18n::tr("Tab corner radius: %1 px").arg(*px);
         }
+        // Tab label font. "Tab label" rather than "Tab indicator" so a list
+        // mixing these with the pill's own geometry rules stays readable, and
+        // because the prefixes have to stay distinct from the ten entries
+        // above. The three style flags come out of boolActionStateLabel.
+        if (action.type == ActionType::SetTabIndicatorFontFamily) {
+            // Three states, kept apart the way SetSplitRatio keeps them.
+            // Absent or null is present-but-unset and gets the bare label, so
+            // a staged payload never reads as a font choice. An EXPLICIT empty
+            // string is a real value meaning the system font, and it is named
+            // through the same descriptor vocabulary the rule editor's value
+            // pill uses so the two summaries cannot drift. Anything else is
+            // the reject case, matching the numeric branches above.
+            if (raw.isUndefined() || raw.isNull()) {
+                return PhosphorI18n::tr("Tab label font");
+            }
+            if (!raw.isString()) {
+                return PhosphorI18n::tr("Tab label font (invalid)");
+            }
+            const QString family = raw.toString();
+            return PhosphorI18n::tr("Tab label font: %1")
+                .arg(family.isEmpty()
+                         ? RuleAuthoring::paramEmptyValueLabel(action.type, QString(PhosphorRules::ActionParam::Value))
+                         : family);
+        }
+        if (action.type == ActionType::SetTabIndicatorFontWeight) {
+            const auto weight = intValueParam(action.type, raw);
+            return weight ? PhosphorI18n::tr("Tab label weight: %1").arg(*weight)
+                          : PhosphorI18n::tr("Tab label weight (invalid)");
+        }
         if (action.type == ActionType::SetTabIndicatorActiveColor
             || action.type == ActionType::SetTabIndicatorInactiveColor
             || action.type == ActionType::SetTabIndicatorUrgentColor || action.type == ActionType::TabColorActive

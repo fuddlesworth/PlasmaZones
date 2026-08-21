@@ -3,6 +3,7 @@
 
 #include "scrolltabindicatorpainter.h"
 
+#include <QFontInfo>
 #include <QFontMetricsF>
 #include <QPainter>
 #include <QPainterPath>
@@ -11,6 +12,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <vector>
 
 // Layout + rasterisation of the scrolling strip's tab indicators.
 //
@@ -162,10 +165,24 @@ struct IndicatorAxes
     int longExtent = 0;
     int shortExtent = 0;
     int tabCount = 0;
-    /// Inter-tab gap, floored at 0: a negative value can only arrive through
-    /// a garbled per-screen override (the setting's own floor is 0), and
-    /// below zero the segment offsets would walk backwards over each other.
+    /// Inter-tab gap, floored at 0 and then capped by axesOf() against the
+    /// space the indicator has: a negative value can only arrive through a
+    /// garbled per-screen override (the setting's own floor is 0), and below
+    /// zero the segment offsets would walk backwards over each other, while a
+    /// gap the run cannot afford would push the tail tabs outside the
+    /// indicator to be clipped away. The cap can drive a nonzero setting to 0,
+    /// which the segment bar then draws as one continuous run with square
+    /// interior joints (the `axes.gaps == 0` test further down). That is the
+    /// correct look for a bar with no room between its segments, not a
+    /// regression.
     int gaps = 0;
+    /// The chip pill's inset from the indicator's edge, derived from the
+    /// theme's small spacing. Lives here rather than in ChipMetrics because
+    /// the gap cap above has to know it: the chip run is budgeted against the
+    /// long extent MINUS both insets, so a cap computed against the full
+    /// extent would let the run overrun by up to one inset and lose the tail
+    /// chip to the clip. The bar style does not use it.
+    int inset = 1;
 };
 
 IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style)
@@ -177,6 +194,24 @@ IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicat
     axes.shortExtent = axes.vertical ? indicator.rect.width() : indicator.rect.height();
     axes.tabCount = int(indicator.tabs.size());
     axes.gaps = std::max(0, style.gapsBetweenTabs);
+    axes.inset = std::max(1, int(std::lround(style.smallSpacing / 2.0)));
+    // Then capped against the space there actually is. Every per-tab share
+    // floors at 1px, but tabOffset() still accumulates the FULL gap per tab,
+    // so a gap the run cannot afford walks the tail off the end of the
+    // indicator — where the clip discards it and layoutPills intersects it
+    // away, leaving those tabs undrawn AND unclickable. The cap leaves room
+    // for one pixel per tab plus the gaps between them.
+    //
+    // It is capped against the extent the STYLE actually budgets in, not the
+    // raw long extent: the chip run starts one inset in and ends one inset
+    // short, so capping against the full extent leaves it able to overrun by
+    // up to one inset and lose the tail chip anyway. Applied here, in
+    // the one place both styles and the hit test read their axes from, so draw
+    // rects and hit rects can never disagree about the gap.
+    if (axes.tabCount > 1) {
+        const int usable = style.style == 1 ? axes.longExtent : axes.longExtent - axes.inset * 2;
+        axes.gaps = std::min(axes.gaps, std::max(0, (usable - axes.tabCount) / (axes.tabCount - 1)));
+    }
     return axes;
 }
 
@@ -191,23 +226,99 @@ struct ChipMetrics
     int trailingBudget = 1;
 };
 
-ChipMetrics chipMetricsOf(const IndicatorAxes& axes, const ScrollTabIndicatorStyle& style)
+ChipMetrics chipMetricsOf(const IndicatorAxes& axes)
 {
     ChipMetrics metrics;
-    metrics.inset = std::max(1, int(std::lround(style.smallSpacing / 2.0)));
+    // The inset is derived in axesOf(), because the gap cap there has to budget
+    // against the same inner extent this arm does. Read from the axes so the
+    // two cannot disagree — which is also why this takes no style: every input
+    // it needs now travels on the axes.
+    metrics.inset = axes.inset;
     metrics.thickness = std::max(1, axes.shortExtent - metrics.inset * 2);
     const int neighbours = std::max(0, axes.tabCount - 1);
     const int inner = axes.longExtent - metrics.inset * 2;
     // Floored at 1, NOT at some legible minimum: a floor big enough to keep a
     // title readable would let the run overflow the pill once there were
     // enough tabs, and an overflowing run is clipped — those tabs would be
-    // undrawn AND unclickable, which is worse than thin.
+    // undrawn AND unclickable, which is worse than thin. While `inner` has at
+    // least one pixel per tab, axesOf()'s gap cap keeps the run inside it: the
+    // cap budgets against this same `inner` extent, so the run ends flush with
+    // the pill's inner edge rather than one inset past it. With fewer INNER
+    // pixels than tabs the 1px floor cannot help and the tail is clipped
+    // regardless, which is the trade the floor exists to make. Note the
+    // precondition is `inner >= tabCount`, not `longExtent >= tabCount`: the
+    // band between them still overruns the pill's inner edge, and past
+    // `longExtent - inset` the clip is what handles it.
     metrics.longBudget = std::max(1, (inner - axes.gaps * neighbours) / std::max(1, axes.tabCount));
     // The last chip absorbs the division remainder so the run ends flush with
     // the pill's inner edge instead of leaving up to tabCount-1 px that
     // belongs to no tab.
     metrics.trailingBudget = std::max(1, inner - (metrics.longBudget + axes.gaps) * neighbours);
     return metrics;
+}
+
+/// Vertical breathing room, in logical px, left between the chip's two long
+/// edges and the label's line box (one px each side). Small on purpose: the
+/// chip is already inset from the pill, so this only has to stop the
+/// ascender and descender from touching the chip's rounded ends.
+constexpr qreal kLabelChipMargin = 2.0;
+
+/// The chip label font and its metrics, fitted to one chip thickness.
+struct FittedLabel
+{
+    int thickness = 0;
+    QFont font;
+    QFontMetricsF metrics;
+};
+
+/// @p base re-sized so its rendered line height fits inside a chip of
+/// @p thickness logical px, measured on @p device (the same paint device the
+/// text is drawn on, so the fit, the elide width and the rendered glyphs all
+/// resolve against one font engine).
+///
+/// The estimate-then-verify shape is deliberate. A fixed pixelSize-to-height
+/// ratio is NOT safe across families: height() is ascent + descent + leading,
+/// and how much of the em box each takes varies by typeface (and by hinting
+/// at small sizes), so a ratio tuned on one font overflows on another. So the
+/// ratio is MEASURED from this very font at its own size, used to land the
+/// first guess, and then the guess is checked by measurement and walked down
+/// until it really fits. The walk terminates: every step decrements, and the
+/// floor is 1px. A font that cannot honour pixelSize at all (a bitmap face)
+/// walks to that floor and is then clipped by the indicator clip rect, which
+/// is the same outcome the un-fitted code had.
+///
+/// The fit is a property of the FONT, not of the STRING. A title Qt renders
+/// through its fallback chain — a script this family does not cover — can
+/// report a taller line box than the fitted face does, and the excess is
+/// clipped by the indicator clip rect. Keying the memo on the title as well
+/// would cost a fit per tab instead of one per indicator, so what the fitted
+/// size promises is that THIS font fits, not that every title will.
+FittedLabel fitLabelFont(const QFont& base, int thickness, const QPaintDevice* device)
+{
+    const qreal budget = std::max(1.0, qreal(thickness) - kLabelChipMargin);
+    QFont probe = base;
+    // Measure the ratio in PIXEL terms: the base font is usually point-sized
+    // (it comes from the system font database), and a point size cannot be
+    // scaled against a pixel budget without knowing the device's DPI.
+    const int probeSize = std::max(1, QFontInfo(base).pixelSize());
+    probe.setPixelSize(probeSize);
+    const qreal probeHeight = QFontMetricsF(probe, device).height();
+
+    int pixelSize = probeSize;
+    if (probeHeight > 0.0) {
+        pixelSize = int(std::floor(probeSize * budget / probeHeight));
+    }
+    pixelSize = std::max(1, pixelSize);
+
+    QFont font = base;
+    font.setPixelSize(pixelSize);
+    QFontMetricsF metrics(font, device);
+    while (pixelSize > 1 && metrics.height() > budget) {
+        --pixelSize;
+        font.setPixelSize(pixelSize);
+        metrics = QFontMetricsF(font, device);
+    }
+    return {thickness, font, metrics};
 }
 
 /// Offset along the long axis of tab @p index, in indicator-local px.
@@ -240,7 +351,11 @@ QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes
         // Segment bar: each segment takes an equal share of the long axis
         // after the inter-tab gaps are removed, floored at 1 so a bar too
         // short for its tab count still carries every segment rather than
-        // silently dropping the tail to zero.
+        // silently dropping the tail to zero. While the bar has at least one
+        // pixel per tab, axesOf()'s gap cap is what keeps the run inside it —
+        // the floor alone does not, because the offsets still accumulate the
+        // gap. Below one pixel per tab the tail segments are clipped and
+        // nothing here can prevent it.
         const int baseLength = std::max(1, (axes.longExtent - axes.gaps * (axes.tabCount - 1)) / axes.tabCount);
         for (int i = 0; i < axes.tabCount; ++i) {
             const int offset = tabOffset(i, baseLength, axes.gaps);
@@ -249,7 +364,7 @@ QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes
         }
         return out;
     }
-    const ChipMetrics metrics = chipMetricsOf(axes, style);
+    const ChipMetrics metrics = chipMetricsOf(axes);
     for (int i = 0; i < axes.tabCount; ++i) {
         const int along = i == axes.tabCount - 1 ? metrics.trailingBudget : metrics.longBudget;
         const int offset = metrics.inset + tabOffset(i, metrics.longBudget, axes.gaps);
@@ -313,10 +428,17 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
     // Draw in ABSOLUTE logical coordinates throughout; the image simply is
     // the window onto them at `bounds`.
     painter.translate(-bounds.topLeft());
-    painter.setFont(style.font);
-    // Metrics from the SAME paint device the text is drawn on, so the elide
-    // width and the rendered width resolve against one font engine.
-    const QFontMetricsF metrics(style.font, &image);
+    // The label font is NOT hoisted, because it is not one font: the chip
+    // style sizes it to the chip's thickness, which is per indicator. Fitted
+    // fonts are memoised by thickness for the length of this call — the
+    // indicators of one output nearly always share a thickness (it comes from
+    // the one Width setting), so in practice this is one fit per raster, and
+    // a linear scan over a handful of entries is cheaper than any keyed
+    // container. The cache is per-call by design: the style's font can change
+    // between rasters and a longer-lived cache would need its own
+    // invalidation. The segment-bar style returns before any of this and pays
+    // nothing.
+    std::vector<FittedLabel> fitted;
 
     for (const ScrollTabIndicator& indicator : indicators) {
         const IndicatorAxes axes = axesOf(indicator, style);
@@ -360,7 +482,7 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
         }
 
         // ── Title-chip pill ──────────────────────────────────────────────
-        const ChipMetrics chip = chipMetricsOf(axes, style);
+        const ChipMetrics chip = chipMetricsOf(axes);
         const qreal pillRadius = tabRadius(style, axes.shortExtent);
         // The 1px border is a deliberate hairline. Qt Quick draws a
         // Rectangle's border fully INSIDE its bounds, while QPainter centres
@@ -375,6 +497,23 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
         painter.setPen(Qt::NoPen);
 
         const qreal chipRadius = tabRadius(style, chip.thickness);
+        // Fit the label to THIS indicator's chip thickness (memoised above).
+        // Done once per indicator rather than per tab: every chip of one
+        // indicator shares the thickness, which is the indicator's short
+        // extent minus the inset.
+        auto fittedIt = std::find_if(fitted.begin(), fitted.end(), [&](const FittedLabel& f) {
+            return f.thickness == chip.thickness;
+        });
+        if (fittedIt == fitted.end()) {
+            fitted.push_back(fitLabelFont(style.font, chip.thickness, &image));
+            // Re-derived AFTER the push: a growing vector reallocates, which
+            // would leave the iterator above dangling.
+            fittedIt = std::prev(fitted.end());
+        }
+        const FittedLabel& label = *fittedIt;
+        painter.setFont(label.font);
+        const QFontMetricsF& metrics = label.metrics;
+
         for (int i = 0; i < axes.tabCount; ++i) {
             const ScrollTabPill& pill = indicator.tabs.at(i);
             const QRectF rect = rects.at(i);
@@ -407,7 +546,19 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
                 painter.rotate(angle);
             }
             painter.setPen(QPen(pill.active || pill.urgent ? style.themeHighlightedText : style.themeText));
-            painter.drawText(QRectF(-width / 2.0, -height / 2.0, width, height), Qt::AlignCenter, text);
+            // Widened symmetrically for the CLIP only. drawText clips to this
+            // rect, and a slanted or swashed final glyph can carry ink past
+            // its own advance, which `width` is measured in — newly visible
+            // now that italic is a user setting. AlignCenter means the text
+            // still draws in exactly the same place, in both orientations;
+            // only the boundary moves, and only bearing ink can appear in the
+            // margin. Qt::TextDontClip is deliberately NOT used: that would
+            // also let a mis-measured elide spill across the neighbouring
+            // chip. Widened on the text axis only — the vertical extent is the
+            // fitted line box, and growing it would defeat the fit.
+            const qreal clipSlack = height;
+            painter.drawText(QRectF(-width / 2.0 - clipSlack, -height / 2.0, width + clipSlack * 2.0, height),
+                             Qt::AlignCenter, text);
             painter.restore();
         }
         painter.restore();

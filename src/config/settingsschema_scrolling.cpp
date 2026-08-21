@@ -11,6 +11,7 @@
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "configdefaults.h"
@@ -22,6 +23,7 @@ using namespace Qt::StringLiterals;
 
 namespace PlasmaZones {
 
+using SchemaValidators::canonicalFontFamily;
 using SchemaValidators::canonicalProportionList;
 using SchemaValidators::clampDouble;
 using SchemaValidators::clampInt;
@@ -347,6 +349,23 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          canonicalThemeFallbackColor},
+        // The label font. The family is free-form with no validator: EMPTY
+        // means the system font, and no closed set can express that alongside
+        // an arbitrary installed family. There is no size key — Width gives
+        // the pill its thickness and the painter fits the label to it.
+        {CD::fontFamilyKey(),
+         CD::scrollingTabIndicatorFontFamily(),
+         QMetaType::QString,
+         {},
+         canonicalFontFamily(PhosphorRules::MaxFontFamilyLength)},
+        {CD::fontWeightKey(),
+         CD::scrollingTabIndicatorFontWeight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingTabIndicatorFontWeightMin(), CD::scrollingTabIndicatorFontWeightMax())},
+        {CD::fontItalicKey(), CD::scrollingTabIndicatorFontItalic(), QMetaType::Bool},
+        {CD::fontUnderlineKey(), CD::scrollingTabIndicatorFontUnderline(), QMetaType::Bool},
+        {CD::fontStrikeoutKey(), CD::scrollingTabIndicatorFontStrikeout(), QMetaType::Bool},
     };
 
     // ─── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────

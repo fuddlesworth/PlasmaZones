@@ -146,11 +146,15 @@ public:
     // Only the subset that changes resolved rects lives here; it lands in
     // ScrollLayoutParams::tabIndicator (TabIndicatorParams, ScrollTypes.h,
     // where each field is documented in full). The indicator's PAINT settings
-    // — style, gaps between tabs, corner radius, the three colours — are
-    // deliberately absent: they never affect layout, so the daemon reads them
-    // through its own ISettings and applies them to the overlay directly. Keep
-    // that split when adding a knob, or this library grows a dependency on how
-    // the indicator happens to be drawn.
+    // — style, gaps between tabs, corner radius, the three colours and the
+    // five label-font keys (family, weight, italic, underline, strikeout) —
+    // are deliberately absent: they never affect layout, so they go to the
+    // KWin effect, which draws the indicator itself. The global keys travel
+    // over the settings channel the effect pulls; per-screen rule overrides
+    // are pushed by the daemon through
+    // TilingAdaptor::setScrollTabPaintOverrides. Keep that split when adding a
+    // knob, or this library grows a dependency on how the indicator happens to
+    // be drawn.
 
     /// Master switch. Off, no indicator rect resolves and nothing is reserved.
     virtual bool scrollingTabIndicatorEnabled() const = 0;

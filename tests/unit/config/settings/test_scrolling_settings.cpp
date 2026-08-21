@@ -7,8 +7,13 @@
 // and the scrolling schema guards read each other's fixtures and pin the
 // SAME defaults table, so a split would duplicate the advertised-chord
 // pins across two files and let them drift apart — the exact defect class
-// this suite exists to prevent. If a genuinely separate concern lands,
-// it takes a sibling rather than growing this.
+// this suite exists to prevent. The tab-label typography guards belong to
+// that same table rather than being a new concern: the font weight's clamp
+// is only legible beside the tab-indicator enum rows it must not be
+// confused with, and the family's deliberately absent validator is the
+// counterpart of the colour trio's present one two blocks above. If a
+// genuinely separate concern lands, it takes a sibling rather than growing
+// this.
 
 /**
  * @file test_scrolling_settings.cpp
@@ -57,6 +62,7 @@
 #include <PhosphorConfig/Schema.h>
 // For the drop indicator's radius default, which is deliberately the zone
 // overlay's constant rather than a literal.
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorZones/ZoneDefaults.h>
 
 #include "config/configdefaults.h"
@@ -367,6 +373,62 @@ private Q_SLOTS:
         QCOMPARE(length->defaultValue.toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportion());
         QCOMPARE(length->validator(0.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMin());
         QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
+
+        // ── the label font ──
+        // The three style flags are plain bools with nothing to validate. The
+        // weight is a ranged key and it CLAMPS rather than snapping back — a
+        // hand-edited 9999 is a user asking for the boldest face, not junk.
+        // The family is free-form (EMPTY means the system font, which no
+        // closed set can express alongside an arbitrary installed family), but
+        // it is canonicalised: trimmed, and snapped back to empty when it is
+        // implausibly long.
+        const auto* fontFamily = findKey(schema, tabGroup, ConfigDefaults::fontFamilyKey());
+        QVERIFY(fontFamily && fontFamily->validator);
+        QCOMPARE(fontFamily->defaultValue.toString(), ConfigDefaults::scrollingTabIndicatorFontFamily());
+        // The shipped default IS the empty sentinel, which is what makes the
+        // page's explicit-empty reset write meaningful rather than decorative.
+        QVERIFY(fontFamily->defaultValue.toString().isEmpty());
+        // A real family survives untouched.
+        QCOMPARE(fontFamily->validator(QStringLiteral("Noto Sans")).toString(), QStringLiteral("Noto Sans"));
+        // Trimmed, which is the load-bearing half: a padded value is NOT the
+        // empty sentinel, so without this it would pass an isEmpty() check and
+        // reach QFont::setFamily, which substitutes an arbitrary face rather
+        // than the system font the user asked for.
+        QCOMPARE(fontFamily->validator(QStringLiteral("  Noto Sans  ")).toString(), QStringLiteral("Noto Sans"));
+        QCOMPARE(fontFamily->validator(QStringLiteral("   ")).toString(), QString());
+        // Empty stays empty rather than being treated as a length failure.
+        QCOMPARE(fontFamily->validator(QString()).toString(), QString());
+        // Implausibly long SNAPS to the system font rather than truncating,
+        // because a truncated family names a face that does not exist and Qt
+        // would substitute something arbitrary for it.
+        const QString overlong(PhosphorRules::MaxFontFamilyLength + 1, QLatin1Char('x'));
+        QCOMPARE(fontFamily->validator(overlong).toString(), QString());
+        // …and the boundary itself is accepted, so the cap is off-by-one safe.
+        const QString atCap(PhosphorRules::MaxFontFamilyLength, QLatin1Char('x'));
+        QCOMPARE(fontFamily->validator(atCap).toString(), atCap);
+
+        const auto* fontWeight = findKey(schema, tabGroup, ConfigDefaults::fontWeightKey());
+        QVERIFY(fontWeight && fontWeight->validator);
+        QCOMPARE(fontWeight->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorFontWeight());
+        QCOMPARE(fontWeight->validator(-5).toInt(), ConfigDefaults::scrollingTabIndicatorFontWeightMin());
+        QCOMPARE(fontWeight->validator(9999).toInt(), ConfigDefaults::scrollingTabIndicatorFontWeightMax());
+        // The identity row is the one that tells clampInt from validIntOr: 400
+        // is a perfectly legal weight that is NOT the default, so a validator
+        // swapped for the snap-back kind would hand back the default here while
+        // still passing both clamp rows above.
+        QCOMPARE(fontWeight->validator(400).toInt(), 400);
+
+        // The three flags carry no validator, like the two bools above; what
+        // matters is that they are reachable through the SCHEMA at all, since
+        // that is what carries them into reset, discard and the profile blobs.
+        for (const auto& pair : QList<QPair<QString, bool>>{
+                 {ConfigDefaults::fontItalicKey(), ConfigDefaults::scrollingTabIndicatorFontItalic()},
+                 {ConfigDefaults::fontUnderlineKey(), ConfigDefaults::scrollingTabIndicatorFontUnderline()},
+                 {ConfigDefaults::fontStrikeoutKey(), ConfigDefaults::scrollingTabIndicatorFontStrikeout()}}) {
+            const auto* entry = findKey(schema, tabGroup, pair.first);
+            QVERIFY2(entry, qPrintable(pair.first));
+            QCOMPARE(entry->defaultValue.toBool(), pair.second);
+        }
 
         // The colours carry canonicalThemeFallbackColor (not a closed set —
         // EMPTY is the meaningful "follow the theme" value). Pin the
@@ -725,6 +787,101 @@ private Q_SLOTS:
         // ...and said so, which is the half that was missing.
         QCOMPARE(gapSpy.count(), 1);
         QCOMPARE(withinSpy.count(), 1);
+    }
+
+    /// The five tab-label font keys follow the standard emit-once contract,
+    /// survive a save/reload round trip, and — the one thing peculiar to this
+    /// family — announce an EXPLICIT EMPTY family.
+    ///
+    /// The page's reset button writes the empty string to walk the labels back
+    /// to the system font. Empty is ALSO the shipped default, so a setter that
+    /// treated "the value equals the default" as "nothing to say" would leave
+    /// the page showing the old family over a store that had already forgotten
+    /// it. That is why the empty write below is driven from a NON-default
+    /// family rather than from a fresh config.
+    void tabIndicatorFontSettersEmitOnceAndPersist()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        // A fresh config answers the shipped defaults.
+        QCOMPARE(settings.scrollingTabIndicatorFontFamily(), ConfigDefaults::scrollingTabIndicatorFontFamily());
+        QCOMPARE(settings.scrollingTabIndicatorFontWeight(), ConfigDefaults::scrollingTabIndicatorFontWeight());
+        QCOMPARE(settings.scrollingTabIndicatorFontItalic(), ConfigDefaults::scrollingTabIndicatorFontItalic());
+        QCOMPARE(settings.scrollingTabIndicatorFontUnderline(), ConfigDefaults::scrollingTabIndicatorFontUnderline());
+        QCOMPARE(settings.scrollingTabIndicatorFontStrikeout(), ConfigDefaults::scrollingTabIndicatorFontStrikeout());
+
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy familySpy(&settings, &Settings::scrollingTabIndicatorFontFamilyChanged);
+        QVERIFY(changedSpy.isValid() && familySpy.isValid());
+
+        // The family is a free string with no validator: the config layer
+        // stores what it is handed and the font LOOKUP happens in the painter.
+        // Spelled as a family that is deliberately not installed anywhere, so
+        // the test pins the storage boundary rather than this machine's font
+        // database (and so it does not depend on a CI image having fonts).
+        const QString family = QStringLiteral("PlasmaZones Test Family");
+        settings.setScrollingTabIndicatorFontFamily(family);
+        QCOMPARE(settings.scrollingTabIndicatorFontFamily(), family);
+        QCOMPARE(familySpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+        // Same value again: a full no-op.
+        settings.setScrollingTabIndicatorFontFamily(family);
+        QCOMPARE(familySpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+
+        // The reset path. An EXPLICIT empty family, written from a non-default
+        // state, must announce itself. This is what the page's reset button
+        // depends on, and what a "skip writes that equal the default" shortcut
+        // in the setter would break.
+        settings.setScrollingTabIndicatorFontFamily(QString());
+        QCOMPARE(settings.scrollingTabIndicatorFontFamily(), QString());
+        QCOMPARE(familySpy.count(), 2);
+        QCOMPARE(changedSpy.count(), 2);
+
+        QSignalSpy weightSpy(&settings, &Settings::scrollingTabIndicatorFontWeightChanged);
+        const int preWeight = changedSpy.count();
+        settings.setScrollingTabIndicatorFontWeight(400);
+        QCOMPARE(settings.scrollingTabIndicatorFontWeight(), 400);
+        QCOMPARE(weightSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preWeight + 1);
+        // Out of range: the schema clamps on the way in and the setter compares
+        // the value the STORE came back with, so the clamped maximum is a real
+        // change from 400 and announces itself. A setter comparing the value it
+        // was HANDED would leave the page showing 9999 over a stored 900.
+        settings.setScrollingTabIndicatorFontWeight(9999);
+        QCOMPARE(settings.scrollingTabIndicatorFontWeight(), ConfigDefaults::scrollingTabIndicatorFontWeightMax());
+        QCOMPARE(weightSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preWeight + 2);
+
+        // The three style flags, each flipped off its default exactly once,
+        // plus one same-value rewrite to pin the no-op half.
+        QSignalSpy italicSpy(&settings, &Settings::scrollingTabIndicatorFontItalicChanged);
+        QSignalSpy underlineSpy(&settings, &Settings::scrollingTabIndicatorFontUnderlineChanged);
+        QSignalSpy strikeoutSpy(&settings, &Settings::scrollingTabIndicatorFontStrikeoutChanged);
+        settings.setScrollingTabIndicatorFontItalic(!ConfigDefaults::scrollingTabIndicatorFontItalic());
+        settings.setScrollingTabIndicatorFontUnderline(!ConfigDefaults::scrollingTabIndicatorFontUnderline());
+        settings.setScrollingTabIndicatorFontStrikeout(!ConfigDefaults::scrollingTabIndicatorFontStrikeout());
+        QCOMPARE(italicSpy.count(), 1);
+        QCOMPARE(underlineSpy.count(), 1);
+        QCOMPARE(strikeoutSpy.count(), 1);
+        settings.setScrollingTabIndicatorFontItalic(!ConfigDefaults::scrollingTabIndicatorFontItalic());
+        QCOMPARE(italicSpy.count(), 1);
+
+        // Round trip through a real file, with a NON-default family — the only
+        // shape sparse persistence actually writes. Deliberately NO assertion
+        // about which keys exist on disk: a default-equal value is PRUNED by
+        // design, so pinning key presence would pin the opposite of the
+        // storage contract.
+        settings.setScrollingTabIndicatorFontFamily(family);
+        QVERIFY(settings.save());
+
+        Settings reloaded;
+        QCOMPARE(reloaded.scrollingTabIndicatorFontFamily(), family);
+        QCOMPARE(reloaded.scrollingTabIndicatorFontWeight(), ConfigDefaults::scrollingTabIndicatorFontWeightMax());
+        QCOMPARE(reloaded.scrollingTabIndicatorFontItalic(), !ConfigDefaults::scrollingTabIndicatorFontItalic());
+        QCOMPARE(reloaded.scrollingTabIndicatorFontUnderline(), !ConfigDefaults::scrollingTabIndicatorFontUnderline());
+        QCOMPARE(reloaded.scrollingTabIndicatorFontStrikeout(), !ConfigDefaults::scrollingTabIndicatorFontStrikeout());
     }
 
     /// Flipping the tab-indicator STYLE re-seeds the shared Width key, but

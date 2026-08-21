@@ -370,9 +370,23 @@ public:
     /// Gap between the indicator and the window, in logical pixels. NEGATIVE
     /// IS MEANINGFUL and matches niri: it pulls the indicator on top of the
     /// window instead of away from it, so the floor is negative rather than 0.
+    ///
+    /// Placed OUTSIDE the column (the shipped PlaceWithinColumn is off), the
+    /// indicator's far edge lands `gap + thickness` beyond the column edge, so
+    /// the two together have to fit the gutter between columns or the bar ends
+    /// up flush against — or over — the neighbouring window. niri's own 5 is
+    /// sized for niri's 16 px gaps; ours are Defaults::InnerGap, so the figure
+    /// is DERIVED rather than copied: half of whatever the gutter has left
+    /// after the bar's thickness, which centres the bar in it and leaves the
+    /// same air on both sides. Clamped at 0 so a gutter narrower than the bar
+    /// still yields a placement gap rather than pulling the bar onto its own
+    /// window. The chips style is far thicker than any gutter and is expected
+    /// to be paired with PlaceWithinColumn or a Top/Bottom position, so it is
+    /// not what this figure is sized for.
     static constexpr int scrollingTabIndicatorGap()
     {
-        return 5;
+        const int spare = Defaults::InnerGap - scrollingTabIndicatorWidthForBar();
+        return spare > 0 ? spare / 2 : 0;
     }
     static constexpr int scrollingTabIndicatorGapMin()
     {
@@ -389,7 +403,10 @@ public:
     /// is unusable for the other.
     ///
     /// The bar figure is niri's. The chip figure is a comfortable line box at
-    /// the default overlay font; a user who scales that font up will want more.
+    /// the system's small font size, which is what the painter starts its fit
+    /// from. The label is fitted to this thickness rather than the other way
+    /// round, so a user who wants bigger text raises the Width setting; there
+    /// is no font scale to raise.
     static constexpr int scrollingTabIndicatorWidthForBar()
     {
         return 4;
@@ -502,6 +519,59 @@ public:
     static QString scrollingTabIndicatorUrgentColor()
     {
         return QString();
+    }
+    /// The font the tab labels are drawn in. EMPTY MEANS THE SYSTEM FONT: the
+    /// painter asks the platform for its default family rather than naming one
+    /// here, so a user who never touches this follows their desktop font.
+    ///
+    /// This family exists so the pills stop borrowing the snapping zone-label
+    /// font, which is a different surface with different sizing pressure. That
+    /// decoupling is not free for everyone: an install that CUSTOMISED the
+    /// zone-label font loses that choice here in every dimension, because the
+    /// pills no longer read it at all. Only an install that left it alone sees
+    /// the same typeface and weight as before.
+    ///
+    /// THERE IS NO SIZE KEY, on purpose. The pill's thickness comes from the
+    /// Width setting, and the painter fits the label to the band it was given.
+    /// A size of its own would let the text draw outside that band, which is
+    /// the same reasoning that makes Width exact for every style. This is the
+    /// one dimension that changes for EVERY install: the labels no longer
+    /// follow the zone labels' FontSizeScale, which now moves those labels
+    /// alone.
+    static QString scrollingTabIndicatorFontFamily()
+    {
+        return QString();
+    }
+    /// Bold, which is the weight the pills used to inherit from the snapping
+    /// zone label, so an install that left that font alone keeps the weight it
+    /// had. See the family accessor above for what does NOT carry over.
+    ///
+    /// Whether it renders as bold also depends on the platform font itself:
+    /// the painter clears the inherited style name before applying this, so a
+    /// system font that shipped one now takes a weight it previously ignored.
+    static constexpr int scrollingTabIndicatorFontWeight()
+    {
+        return 700;
+    }
+    static constexpr int scrollingTabIndicatorFontWeightMin()
+    {
+        return 100;
+    }
+    static constexpr int scrollingTabIndicatorFontWeightMax()
+    {
+        return 900;
+    }
+    static constexpr bool scrollingTabIndicatorFontItalic()
+    {
+        return false;
+    }
+    static constexpr bool scrollingTabIndicatorFontUnderline()
+    {
+        return false;
+    }
+    static constexpr bool scrollingTabIndicatorFontStrikeout()
+    {
+        return false;
     }
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling.DropIndicator — the drop-target highlight painted during a drag
@@ -1025,6 +1095,11 @@ static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadius()
 static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusMin()
                   == ConfigDefaultsScrolling::scrollingTabIndicatorCornerRadiusPill(),
               "The corner-radius floor must be the pill sentinel — see the accessor comment");
+static_assert(ConfigDefaultsScrolling::scrollingTabIndicatorFontWeight()
+                      >= ConfigDefaultsScrolling::scrollingTabIndicatorFontWeightMin()
+                  && ConfigDefaultsScrolling::scrollingTabIndicatorFontWeight()
+                      <= ConfigDefaultsScrolling::scrollingTabIndicatorFontWeightMax(),
+              "ConfigDefaults::scrollingTabIndicatorFontWeight() outside the declared [min, max] range");
 // The drop indicator's three ranged defaults, same guard as the tab
 // indicator's above. The colour pair is unranged (empty means follow the
 // scheme) and Enabled is a bool, so neither has anything to check.

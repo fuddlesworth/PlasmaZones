@@ -468,7 +468,7 @@ struct ContextTilingParams
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
  * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
- * behaviour toggles, the thirteen SetTabIndicator* slots and the six
+ * behaviour toggles, the eighteen SetTabIndicator* slots and the six
  * SetDropIndicator* slots, each documented in its own block below); an unset
  * field means "use the config value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
@@ -526,9 +526,11 @@ struct ContextScrollingParams
     /// The tab indicator's overrides, niri's `tab-indicator` layout block.
     /// Split the way IScrollSettings splits the family: the GEOMETRY fields
     /// are layered onto the scrolling engine's per-screen override map, while
-    /// the PAINT fields never reach that library and are applied to the
-    /// overlay daemon-side. Each is independently optional so a context rule
-    /// that sets one property leaves the other twelve alone.
+    /// the PAINT fields never reach that library. The daemon pushes those to
+    /// the KWin effect through TilingAdaptor::setScrollTabPaintOverrides and
+    /// the effect draws the indicator from them. Each is independently
+    /// optional so a context rule that sets one property leaves the other
+    /// seventeen alone.
     std::optional<bool> tabIndicatorEnabled;
     std::optional<bool> tabIndicatorHideWhenSingleTab;
     std::optional<bool> tabIndicatorPlaceWithinColumn;
@@ -542,6 +544,16 @@ struct ContextScrollingParams
     std::optional<QString> tabIndicatorActiveColor;
     std::optional<QString> tabIndicatorInactiveColor;
     std::optional<QString> tabIndicatorUrgentColor;
+    /// The label font, all PAINT. Empty FAMILY is a set value meaning "the
+    /// system font", not an unset one, which is why the resolver stores the
+    /// empty string here instead of leaving the optional disengaged. There is
+    /// no size field to go with these: the painter fits the label to the pill
+    /// thickness, so a stored size would never survive a paint.
+    std::optional<QString> tabIndicatorFontFamily;
+    std::optional<int> tabIndicatorFontWeight; ///< CSS scale, 100..900; 400 regular, 700 bold
+    std::optional<bool> tabIndicatorFontItalic;
+    std::optional<bool> tabIndicatorFontUnderline;
+    std::optional<bool> tabIndicatorFontStrikeout;
 
     /// The drop indicator's overrides. ALL PAINT — unlike the tab indicator
     /// there is no geometry half, because the indicator's rect comes from the
@@ -568,13 +580,14 @@ struct ContextScrollingParams
             || dropIndicatorBorderWidth || dropIndicatorBorderRadius;
     }
 
-    /// True when at least one of the thirteen tab-indicator slots resolved.
+    /// True when at least one of the eighteen tab-indicator slots resolved.
     bool hasTabIndicatorOverrides() const
     {
         return tabIndicatorEnabled || tabIndicatorHideWhenSingleTab || tabIndicatorPlaceWithinColumn || tabIndicatorGap
             || tabIndicatorWidth || tabIndicatorLength || tabIndicatorPosition || tabIndicatorStyle
             || tabIndicatorGapsBetweenTabs || tabIndicatorCornerRadius || tabIndicatorActiveColor
-            || tabIndicatorInactiveColor || tabIndicatorUrgentColor;
+            || tabIndicatorInactiveColor || tabIndicatorUrgentColor || tabIndicatorFontFamily || tabIndicatorFontWeight
+            || tabIndicatorFontItalic || tabIndicatorFontUnderline || tabIndicatorFontStrikeout;
     }
 
     /// True when at least one of the seven behaviour toggles resolved.

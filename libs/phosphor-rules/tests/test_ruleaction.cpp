@@ -121,6 +121,14 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetTabIndicatorActiveColor,
     ActionType::SetTabIndicatorInactiveColor,
     ActionType::SetTabIndicatorUrgentColor,
+    // Tab label font — context-domain like the rest of the paint half. The
+    // labels belong to the indicator, not to any one window in the column, so
+    // there is no per-window twin of these the way the tab colours have one.
+    ActionType::SetTabIndicatorFontFamily,
+    ActionType::SetTabIndicatorFontWeight,
+    ActionType::SetTabIndicatorFontItalic,
+    ActionType::SetTabIndicatorFontUnderline,
+    ActionType::SetTabIndicatorFontStrikeout,
     // Drop indicator — context-domain for the whole family, because the
     // indicator describes an empty SLOT on a screen and a window-matching rule
     // has no referent for it. The two per-window COLOURS below are the
@@ -870,14 +878,20 @@ private Q_SLOTS:
         // The tab-indicator family is the largest Value-keyed group in the
         // vocabulary. One of each SHAPE covers it: the stray-key path is the
         // descriptor's, not the validator's, so a bool, a signed-range number,
-        // a fraction, a zero-floored number, a token and a colour exercise
-        // every distinct descriptor form the thirteen are built from.
+        // a fraction, a zero-floored number, a token, a colour and an
+        // empty-admitting string exercise every distinct descriptor form the
+        // eighteen are built from.
         rejectsStray(ActionType::SetTabIndicatorEnabled, QJsonValue(true));
         rejectsStray(ActionType::SetTabIndicatorGap, QJsonValue(-4));
         rejectsStray(ActionType::SetTabIndicatorLength, QJsonValue(0.5));
         rejectsStray(ActionType::SetTabIndicatorGapsBetweenTabs, QJsonValue(2));
         rejectsStray(ActionType::SetTabIndicatorStyle, QJsonValue(QString(TabIndicatorStyleToken::Bar)));
         rejectsStray(ActionType::SetTabIndicatorActiveColor, QJsonValue(QStringLiteral("#ff224466")));
+        // The seventh shape, and the only one in the whole vocabulary whose
+        // validator admits the EMPTY string. rejectsStray asserts the good
+        // payload LOADS before it tries the stray key, so this line doubles as
+        // the empty-family acceptance pin at the fromJson boundary.
+        rejectsStray(ActionType::SetTabIndicatorFontFamily, QJsonValue(QString()));
         // …and the window-domain half, which is a separate registration path.
         rejectsStray(ActionType::TabColorUrgent, QJsonValue(QStringLiteral("#ff884422")));
         // The drop-indicator family, one per distinct descriptor shape for the
