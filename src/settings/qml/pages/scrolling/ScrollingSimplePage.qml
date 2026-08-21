@@ -224,8 +224,9 @@ SettingsFlickable {
         // =================================================================
         // Three of the eighteen tab-indicator knobs: whether it shows, and
         // the two that change what you actually see. The rest (thickness,
-        // length, the two gaps, corner radius, colours, place-within-column,
-        // hide-for-single-tab) are tuning for an indicator you have already
+        // length, the two gaps, corner radius, colours, the five label-font
+        // knobs, place-within-column, hide-for-single-tab) are tuning for an
+        // indicator you have already
         // decided you want, which is advanced-mode depth — they live on
         // Scrolling → Tabs.
         //

@@ -180,8 +180,8 @@ struct IndicatorAxes
     /// theme's small spacing. Lives here rather than in ChipMetrics because
     /// the gap cap above has to know it: the chip run is budgeted against the
     /// long extent MINUS both insets, so a cap computed against the full
-    /// extent would let the run overflow by exactly this much. The bar style
-    /// does not use it.
+    /// extent would let the run overrun by up to one inset and lose the tail
+    /// chip to the clip. The bar style does not use it.
     int inset = 1;
 };
 
@@ -204,8 +204,8 @@ IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicat
     //
     // It is capped against the extent the STYLE actually budgets in, not the
     // raw long extent: the chip run starts one inset in and ends one inset
-    // short, so capping against the full extent would leave the run able to
-    // overrun by both insets and lose the tail chip anyway. Applied here, in
+    // short, so capping against the full extent leaves it able to overrun by
+    // up to one inset and lose the tail chip anyway. Applied here, in
     // the one place both styles and the hit test read their axes from, so draw
     // rects and hit rects can never disagree about the gap.
     if (axes.tabCount > 1) {
@@ -240,12 +240,14 @@ ChipMetrics chipMetricsOf(const IndicatorAxes& axes)
     // Floored at 1, NOT at some legible minimum: a floor big enough to keep a
     // title readable would let the run overflow the pill once there were
     // enough tabs, and an overflowing run is clipped — those tabs would be
-    // undrawn AND unclickable, which is worse than thin. While the pill has at
+    // undrawn AND unclickable, which is worse than thin. While `inner` has at
     // least one pixel per tab, axesOf()'s gap cap keeps the run inside it: the
     // cap budgets against this same `inner` extent, so the run ends flush with
-    // the pill's inner edge rather than one inset past it. With fewer pixels
-    // than tabs the 1px floor cannot help and the tail is clipped regardless,
-    // which is the trade the floor exists to make.
+    // the pill's inner edge rather than one inset past it. With fewer INNER
+    // pixels than tabs the 1px floor cannot help and the tail is clipped
+    // regardless, which is the trade the floor exists to make. Note the
+    // precondition is `inner >= tabCount`, not `longExtent >= tabCount`: the
+    // band between them still overruns, and the clip is what handles it.
     metrics.longBudget = std::max(1, (inner - axes.gaps * neighbours) / std::max(1, axes.tabCount));
     // The last chip absorbs the division remainder so the run ends flush with
     // the pill's inner edge instead of leaving up to tabCount-1 px that

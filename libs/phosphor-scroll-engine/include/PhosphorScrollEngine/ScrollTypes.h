@@ -313,7 +313,7 @@ struct TabIndicatorParams
     /// Indicator thickness (its short axis) in pixels, EXACT for every style.
     ///
     /// Load-bearing for @c reservedThickness: this library cannot measure
-    /// text, so an overlay style that sized itself to its own font would draw
+    /// text, so a style that sized itself to its own font would draw
     /// outside the band reserved for it and over the window. Both sides agree
     /// on this one number instead, and a style whose content does not fit
     /// clips.

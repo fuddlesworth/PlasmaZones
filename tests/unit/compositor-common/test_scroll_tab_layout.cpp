@@ -91,6 +91,7 @@ private Q_SLOTS:
     void rasteriseSmoke_data();
     void rasteriseSmoke();
     void chipLabelFitsInsideTheChip();
+    void chipRunStaysInsideThePillAtLargeGaps();
 };
 
 void TestScrollTabLayout::barSingleTabFillsRect()
@@ -313,6 +314,39 @@ void TestScrollTabLayout::rasteriseSmoke()
     QVERIFY2(bandAlpha > 0 && bandAlpha < 255,
              qPrintable(
                  QStringLiteral("inset band alpha %1: expected the translucent pill, not a chip fill").arg(bandAlpha)));
+}
+
+void TestScrollTabLayout::chipRunStaysInsideThePillAtLargeGaps()
+{
+    // A gap the run cannot afford. Each chip's share floors at 1px, but the
+    // offsets accumulate the FULL gap per tab, so without axesOf()'s cap the
+    // run walks past the pill and the tail chips are clipped away — undrawn
+    // AND unclickable, because layoutPills intersects against the same rect.
+    //
+    // The cap has to budget against the pill's INNER extent (long extent less
+    // both insets), not the raw extent: capping against the raw extent leaves
+    // the run able to overrun by up to one inset, which is exactly enough to
+    // lose the last chip. That is the regression this pins.
+    // These numbers are the discriminating case, not a round guess: with a
+    // 20px extent, 3 tabs and the shipped 2px inset, a cap against the RAW
+    // extent leaves gap 8, which puts the last chip's origin at x=20 on an
+    // indicator spanning 0..19 — wholly outside, so it is clipped and
+    // intersected away. Capping against the inner extent lands it at 16 and
+    // ends the run flush at 17. Change any of the three and the case stops
+    // discriminating.
+    const QRect rect(0, 0, 20, 30);
+    const int tabCount = 3;
+    const int inset = 2; // max(1, round(smallSpacing / 2)) at the shipped spacing
+    const auto hits = ScrollTabRaster::layoutPills(makeIndicator(rect, 2, tabCount), makeStyle(0, 8));
+
+    // Every tab survives with a non-empty rect: none was intersected away.
+    QCOMPARE(hits.size(), tabCount);
+    for (const ScrollTabHitRect& hit : hits) {
+        QVERIFY2(!hit.rect.isEmpty(), qPrintable(QStringLiteral("tab %1 was clipped away").arg(hit.windowId)));
+        QVERIFY(rect.contains(hit.rect));
+    }
+    // …and the run ends flush with the pill's inner edge rather than past it.
+    QCOMPARE(hits.last().rect.right(), rect.right() - inset);
 }
 
 void TestScrollTabLayout::chipLabelFitsInsideTheChip()

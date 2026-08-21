@@ -1567,12 +1567,16 @@ public:
     // virtuals on ISettings that answer frozen constants, which makes any
     // consumer predicate untestable through an unoverridden stub — the same
     // hazard the scrollingRestoreFloatedWindowsOnLogin comment above records.
-    // The consumers are the D-Bus settings registry
+    // The consumer is the D-Bus settings registry
     // (settingsadaptor_registry_scrolling.cpp), which reads these through
-    // ISettings and pushes them to the KWin effect's tab loader, and
-    // ScrollEngine::applyConfig, which reads the geometry half. There is no
-    // overlayservice tab surface at all. Override all twelve, member-backed
-    // and ConfigDefaults-seeded.
+    // ISettings and pushes them to the KWin effect's tab loader. There is no
+    // overlayservice tab surface at all. The tab GEOMETRY keys (position,
+    // width, gap, length, place-within-column, hide-for-single-tab) are NOT
+    // among these twelve and have no ISettings getter: the engine reads those
+    // through PhosphorEngine::IScrollSettings in
+    // ScrollEngine::refreshConfigFromSettings(), which of the twelve here
+    // touches only scrollingTabIndicatorEnabled(). Override all twelve,
+    // member-backed and ConfigDefaults-seeded.
     bool scrollingTabIndicatorEnabled() const override
     {
         return m_scrollingTabIndicatorEnabled;
