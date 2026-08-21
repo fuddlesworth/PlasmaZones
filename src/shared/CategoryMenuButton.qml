@@ -85,10 +85,22 @@ ComboBox {
 
     required property var items
     property string currentId: ""
+    // Recompute the checkmarks if the selection changes while the menu is
+    // already open. They are otherwise only computed on open, so a host that
+    // writes currentId under an open menu would leave both the item marks and
+    // the "selection is in here" submenu marks showing the previous choice.
+    onCurrentIdChanged: {
+        if (categoryMenu.visible)
+            categoryMenu.updateChecks();
+    }
     property string noneId: ""
     property bool includeNoneEntry: false
     property string noneText: i18nc("@item:inlistbox", "None")
     property string placeholderText: i18nc("@action:button", "Select…")
+    /// Hover text for the closed button. Defaults to a generic line; a host
+    /// that can say what is being chosen (the rule editor's field and action
+    /// pickers, the shader choosers) should set it to something specific.
+    property string tooltipText: i18nc("@info:tooltip", "Choose from the categorized list")
     // Icon size for the leaf ItemDelegates' checkmark. The org.kde.desktop
     // MenuItem sizes its content icon from a fixed style metric (this exact
     // expression) and ignores `icon.width`, so the category-submenu checkmark
@@ -96,10 +108,35 @@ ComboBox {
     // ItemDelegates — whose IconLabel DOES honour `icon.width` — render their
     // checkmark at the identical size in both pointer and touch modes.
     readonly property real _menuIconSize: Kirigami.Settings.hasTransientTouchInput ? Kirigami.Units.iconSizes.smallMedium : Kirigami.Units.iconSizes.small
+    /// Opacity for an item marked incompatible. Kirigami has no token for a
+    /// disabled-looking-but-still-clickable state, so this is a local constant
+    /// rather than a hardcoded literal buried in the delegate. Low enough to
+    /// read as unavailable, high enough to stay legible next to its warning
+    /// icon.
+    readonly property real _dimmedOpacity: 0.45
     // Re-entry guard against rapid press / Space-down events queueing two
     // `showMenu` callbacks before the first one returns. `_opening` is set
     // when we hand off to `Qt.callLater` and cleared on `aboutToShow`.
     property bool _opening: false
+    /// Split a category string into `{ top, sub }`. The ONE place the `/`
+    /// convention is interpreted: `_categoryTree` builds the menu from it and
+    /// `_selectedCategoryPath` locates the current item with it, so a change to
+    /// the convention cannot leave the two disagreeing. An empty `top` means
+    /// uncategorised (the flat tail).
+    function _splitCategory(category) {
+        var cat = (category || "").trim();
+        if (cat === "")
+            return {
+                "top": "",
+                "sub": ""
+            };
+
+        var slashIdx = cat.indexOf("/");
+        return {
+            "top": slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat,
+            "sub": slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : ""
+        };
+    }
     readonly property var _currentItemInfo: {
         if (!items || !currentId)
             return null;
@@ -117,30 +154,15 @@ ComboBox {
     // contains it, so the user can tell which submenu holds the current value
     // without hovering into each one. `sub` is "" for a single-level category.
     readonly property var _selectedCategoryPath: {
-        if (!items || !currentId)
+        var current = root._currentItemInfo;
+        if (!current)
             return null;
 
-        for (var i = 0; i < items.length; i++) {
-            if (!items[i] || items[i].id !== currentId)
-                continue;
-
-            var cat = (items[i].category || "").trim();
-            if (cat === "")
-                return null;
-
-            var slashIdx = cat.indexOf("/");
-            var top = slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat;
-            // Mirror _categoryTree: a leading-slash / empty-top category is
-            // treated as uncategorised (flat tail), so it has no submenu to mark.
-            if (top === "")
-                return null;
-
-            return {
-                "top": top,
-                "sub": slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : ""
-            };
-        }
-        return null;
+        // Same splitter _categoryTree uses, so the two can never disagree about
+        // where an item lives. A leading-slash / empty-top category counts as
+        // uncategorised (flat tail) and has no submenu to mark.
+        var path = root._splitCategory(current.category);
+        return path.top === "" ? null : path;
     }
     readonly property var _sortedItems: {
         if (!items || items.length === 0)
@@ -166,14 +188,9 @@ ComboBox {
         var uncategorized = [];
         for (var i = 0; i < sorted.length; i++) {
             var s = sorted[i];
-            var cat = (s.category || "").trim();
-            if (cat === "") {
-                uncategorized.push(s);
-                continue;
-            }
-            var slashIdx = cat.indexOf("/");
-            var top = slashIdx >= 0 ? cat.substring(0, slashIdx).trim() : cat;
-            var sub = slashIdx >= 0 ? cat.substring(slashIdx + 1).trim() : "";
+            var path = root._splitCategory(s.category);
+            var top = path.top;
+            var sub = path.sub;
             if (top === "") {
                 uncategorized.push(s);
                 continue;
@@ -196,7 +213,12 @@ ComboBox {
             // category — hosts that supply it (the rule editor's field/action
             // pickers) get that order; hosts that don't (shaders) fall back to
             // alphabetical via the Infinity default.
-            var ord = (s.categoryOrder !== undefined && s.categoryOrder !== null) ? Number(s.categoryOrder) : Infinity;
+            // Number() on a non-numeric value yields NaN, and every `<`
+            // comparison against NaN is false, so a bad order would silently
+            // leave the bucket at Infinity and fall back to alphabetical with
+            // no clue why. Treat it as absent explicitly instead.
+            var rawOrd = (s.categoryOrder !== undefined && s.categoryOrder !== null) ? Number(s.categoryOrder) : Infinity;
+            var ord = isFinite(rawOrd) ? rawOrd : Infinity;
             if (ord < tree[top].order)
                 tree[top].order = ord;
 
@@ -231,7 +253,9 @@ ComboBox {
         });
         var categories = [];
         for (var k = 0; k < keys.length; k++) {
-            var node = tree[keys[k]];
+            // `let`, not `var`: the comparator below closes over this, and a
+            // function-scoped binding would be shared across iterations.
+            let node = tree[keys[k]];
             var subKeys = Object.keys(node.subcats);
             subKeys.sort(function (a, b) {
                 var oa = node.subcats[a].order, ob = node.subcats[b].order;
@@ -285,7 +309,7 @@ ComboBox {
     // label is the currently-selected item's name.
     Accessible.role: Accessible.Button
     Accessible.name: displayText
-    ToolTip.text: i18nc("@info:tooltip", "Choose from the categorized list")
+    ToolTip.text: root.tooltipText
     ToolTip.visible: hovered && !categoryMenu.visible
     ToolTip.delay: Kirigami.Units.toolTipDelay
     displayText: {
@@ -351,10 +375,14 @@ ComboBox {
             property bool itemDimmed: false
             property string dimReason: ""
 
-            opacity: itemDimmed ? 0.45 : 1
+            opacity: itemDimmed ? root._dimmedOpacity : 1
             icon.name: isSelected ? "checkmark" : (itemDimmed ? "dialog-warning" : "")
             icon.width: root._menuIconSize
             icon.height: root._menuIconSize
+            // Also on Accessible.description: the tooltip is pointer-only, so
+            // without this a screen-reader user gets no signal that the action
+            // is incompatible. The name comes from `text` automatically.
+            Accessible.description: dimReason
             ToolTip.text: dimReason
             ToolTip.visible: itemDimmed && hovered && dimReason !== ""
             ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -432,6 +460,13 @@ ComboBox {
                     entry.owner.removeMenu(entry.obj);
                 else if (typeof entry.owner.removeItem === "function")
                     entry.owner.removeItem(entry.obj);
+                // Both remove* calls destroy their argument via deleteLater(),
+                // and so does destroy(), so this is not a double free: the
+                // object is still alive in this tick and QObject drops the
+                // duplicate deferred delete. It is NOT redundant either —
+                // removeItem() returns early WITHOUT destroying when the item
+                // is not in the content model, and this is the only thing that
+                // frees such an entry. Do not "clean it up".
                 entry.obj.destroy();
             }
             _owned = [];
@@ -572,7 +607,6 @@ ComboBox {
 
         function showMenu() {
             if (!_built) {
-                _built = true;
                 if (root.includeNoneEntry) {
                     _addItem(categoryMenu, {
                         "text": root.noneText,
@@ -626,11 +660,19 @@ ComboBox {
                         });
                         var subMenuItem = subMenu.itemAt(subMenu.count - 1);
                         _sizeSubmenuIcon(subMenuItem);
-                        _categorySubmenus.push({
-                            "menuItem": subMenuItem,
-                            "top": cat.name,
-                            "sub": subcats[sc].name
-                        });
+                        // Only record a real item. A null one would be pushed
+                        // and then silently skipped by updateChecks(), so the
+                        // "your selection is in here" mark would just never
+                        // appear for this submenu with nothing to show why.
+                        if (subMenuItem) {
+                            _categorySubmenus.push({
+                                "menuItem": subMenuItem,
+                                "top": cat.name,
+                                "sub": subcats[sc].name
+                            });
+                        } else {
+                            console.warn("CategoryMenuButton: addMenu did not append an item for", cat.name + "/" + subcats[sc].name);
+                        }
                         for (var ss = 0; ss < subItems.length; ss++)
                             _addItem(subSubMenu, _itemProps(subItems[ss]));
                     }
@@ -641,8 +683,19 @@ ComboBox {
 
                 for (var u = 0; u < uncategorized.length; u++)
                     _addItem(categoryMenu, _itemProps(uncategorized[u]));
+
+                // Set only now that the build has completed. Setting it up
+                // front meant a throw anywhere in the build left a
+                // half-populated menu flagged as built, and because popup()
+                // below was never reached, onAboutToShow never fired and
+                // `_opening` latched true — which makes the picker refuse to
+                // open again for the rest of its life.
+                _built = true;
             }
             updateChecks();
+            // Cleared here as well as in onAboutToShow, so the open latch does
+            // not depend on the popup actually being shown.
+            root._opening = false;
             categoryMenu.popup(root, 0, root.height);
         }
 

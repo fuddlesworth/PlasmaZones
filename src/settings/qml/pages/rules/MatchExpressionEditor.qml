@@ -32,10 +32,10 @@ ColumnLayout {
     /// The match node JSON — a leaf or a composite.
     required property var node
     /// The RuleController, threaded down for leaf field/operator lists.
-    required property var controller
+    required property QtObject controller
     /// The SettingsController, threaded into MatchLeafEditor so picker-kind
     /// leaves (screen / activity) can populate their dropdowns.
-    required property var appSettings
+    required property QtObject appSettings
     /// Cached `controller.matchFields()` from RuleEditorSheet — the Q_INVOKABLE
     /// allocates a fresh list per call, so it is cached once at the root and
     /// threaded down rather than re-invoked here.
@@ -48,6 +48,18 @@ ColumnLayout {
     required property real widestOperatorTextWidth
     /// True when this node may be removed (the root cannot).
     property bool removable: false
+    /// Nesting level of this node, 0 at the root. Mirrors the `depth` argument
+    /// `MatchExpression::fromJsonAtDepth` recurses with, so the gate below
+    /// speaks the same units the parser does.
+    property int depth: 0
+    /// `MatchExpression::kMaxParseDepth`. A node deeper than this makes the
+    /// LOADER reject the whole expression, not just the offending branch, so a
+    /// rule authored past it would be silently unloadable next start. Nobody
+    /// reaches 32 levels by clicking, but an ungated path into an unloadable
+    /// rule is still a path into an unloadable rule.
+    readonly property int _maxParseDepth: 32
+    /// Room for one more group below this node.
+    readonly property bool _canAddGroup: matchEditor.depth + 1 <= matchEditor._maxParseDepth
     readonly property bool _isLeaf: matchEditor.node && matchEditor.node.field !== undefined
     readonly property string _compositeKind: {
         if (!matchEditor.node)
@@ -64,10 +76,11 @@ ColumnLayout {
     readonly property var _children: matchEditor.node ? (matchEditor.node[matchEditor._compositeKind] || []) : []
     /// No registered match fields ⇒ nothing for the user to ever pick, so
     /// adding a condition would hand them an empty field picker. Held here
-    /// rather than inline on the buttons because both the composite block and
-    /// the leaf-root promote row gate on it, and a guard that only half the
-    /// add-paths honour is worse than no guard.
-    readonly property bool _canAddCondition: matchEditor.matchFieldOptions.length > 0
+    /// rather than inline on the buttons because all four add-paths gate on it
+    /// — both Add condition buttons and both Add group buttons — and a guard
+    /// that only some of them honour is worse than no guard. A group you can
+    /// never put a condition into is no more useful than an empty picker.
+    readonly property bool _canAddCondition: matchEditor.matchFieldOptions ? matchEditor.matchFieldOptions.length > 0 : false
 
     // `nodeEdited`, not `nodeChanged`, because `property var node` already
     // auto-generates a `nodeChanged()` change-signal and QML rejects the
@@ -162,6 +175,9 @@ ColumnLayout {
             appSettings: matchEditor.appSettings
             fieldOptions: matchEditor.matchFieldOptions
             widestOperatorTextWidth: matchEditor.widestOperatorTextWidth
+            // The root leaf has no enclosing group, so nothing handles
+            // removeRequested there and the trash button would be inert.
+            removable: matchEditor.removable
             onLeafChanged: function (updated) {
                 matchEditor.nodeEdited(updated);
             }
@@ -202,7 +218,8 @@ ColumnLayout {
                 text: i18n("Add group")
                 icon.name: "list-add"
                 flat: true
-                Accessible.name: i18n("Add a condition group, grouping it with this condition")
+                enabled: matchEditor._canAddCondition && matchEditor._canAddGroup
+                Accessible.name: i18n("Add a condition group alongside this condition")
                 onClicked: matchEditor._promoteRootToGroup({
                     "all": []
                 })
@@ -259,11 +276,17 @@ ColumnLayout {
                     ]
                     textRole: "label"
                     valueRole: "value"
-                    currentIndex: ["all", "any", "none"].indexOf(matchEditor._compositeKind)
+                    // storedValue, not a `currentIndex:` binding. Activating
+                    // the combo commits currentIndex imperatively, which would
+                    // sever such a binding for good — and this delegate is
+                    // reused when a sibling group is removed, so a severed
+                    // binding would leave the kind of the group that moved into
+                    // this slot displayed wrongly.
+                    storedValue: matchEditor._compositeKind
                     Accessible.name: i18n("Condition group type")
-                    onActivated: function (index) {
-                        if (currentValue !== matchEditor._compositeKind)
-                            matchEditor._changeKind(currentValue);
+                    onActivated: {
+                        if (kindCombo.currentValue !== matchEditor._compositeKind)
+                            matchEditor._changeKind(kindCombo.currentValue);
                     }
                 }
 
@@ -295,6 +318,8 @@ ColumnLayout {
                 // so the rail just fills — it never drives the height solve).
                 Kirigami.Separator {
                     Layout.fillHeight: true
+                    // 1 device-independent px, the same hairline the other
+                    // rails in the settings tree use.
                     Layout.preferredWidth: 1
                 }
 
@@ -326,11 +351,14 @@ ColumnLayout {
                                     }),
                                     "controller": matchEditor.controller,
                                     "appSettings": matchEditor.appSettings,
-                                    "matchFieldOptions": matchEditor.matchFieldOptions,
+                                    "matchFieldOptions": Qt.binding(function () {
+                                        return matchEditor.matchFieldOptions;
+                                    }),
                                     "widestOperatorTextWidth": Qt.binding(function () {
                                         return matchEditor.widestOperatorTextWidth;
                                     }),
-                                    "removable": true
+                                    "removable": true,
+                                    "depth": matchEditor.depth + 1
                                 });
                             }
 
@@ -364,6 +392,7 @@ ColumnLayout {
                             text: i18n("Add group")
                             icon.name: "list-add"
                             flat: true
+                            enabled: matchEditor._canAddCondition && matchEditor._canAddGroup
                             Accessible.name: i18n("Add a nested condition group")
                             onClicked: matchEditor._addGroupChild()
                         }
