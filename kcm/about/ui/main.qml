@@ -42,16 +42,14 @@ KCMUtils.SimpleKCM {
                     text: kcm.currentVersion.length > 0 ? i18n("Version %1", kcm.currentVersion) : i18n("Version unknown")
                     opacity: 0.7
                 }
-
             }
-
         }
 
         Label {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
             horizontalAlignment: Text.AlignHCenter
-            text: i18n("Window tiling and zone management for Wayland compositors")
+            text: i18n("Window snapping, tiling and scrolling for Wayland compositors")
             wrapMode: Text.WordWrap
             opacity: 0.7
         }
@@ -71,7 +69,7 @@ KCMUtils.SimpleKCM {
         Label {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            text: i18n("Configure zones, tiling, appearance, shortcuts, and more")
+            text: i18n("Configure zones, tiling, scrolling, appearance, shortcuts, and more")
             opacity: 0.5
             font: Kirigami.Theme.smallFont
         }
@@ -102,13 +100,10 @@ KCMUtils.SimpleKCM {
                 icon.name: "documentation"
                 onClicked: Qt.openUrlExternally("https://phosphor-works.github.io/plasmazones/")
             }
-
         }
 
         Item {
             Layout.fillHeight: true
         }
-
     }
-
 }

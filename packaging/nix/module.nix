@@ -25,7 +25,7 @@ let
 in
 {
   options.programs.plasmazones = {
-    enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6.6+";
+    enable = lib.mkEnableOption "PlasmaZones window snapping, tiling and scrolling for KDE Plasma 6.6+";
 
     package = lib.mkOption {
       type = lib.types.package;

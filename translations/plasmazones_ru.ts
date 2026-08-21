@@ -1223,8 +1223,8 @@
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="231"/>
-        <source>Window tiling and zone management</source>
-        <translation>Мозаичное размещение окон и управление зонами</translation>
+        <source>Window snapping, tiling and scrolling</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="236"/>
@@ -10244,33 +10244,35 @@
         <translation>Версия неизвестна</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="54"/>
-        <source>Window tiling and zone management for Wayland compositors</source>
-        <translation>Мозаичное размещение окон и управление зонами для композиторов Wayland</translation>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="52"/>
+        <source>Window snapping, tiling and scrolling for Wayland compositors</source>
+        <oldsource>Window tiling and zone management for Wayland compositors</oldsource>
+        <translation type="unfinished">Мозаичное размещение окон и управление зонами для композиторов Wayland</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="63"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="61"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="55"/>
         <source>Open PlasmaZones Settings</source>
         <translation>Открыть параметры PlasmaZones</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="74"/>
-        <source>Configure zones, tiling, appearance, shortcuts, and more</source>
-        <translation>Настройка зон, мозаичного размещения, внешнего вида, комбинаций клавиш и других параметров</translation>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="72"/>
+        <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
+        <oldsource>Configure zones, tiling, appearance, shortcuts, and more</oldsource>
+        <translation type="unfinished">Настройка зон, мозаичного размещения, внешнего вида, комбинаций клавиш и других параметров</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="87"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="85"/>
         <source>GitHub</source>
         <translation>GitHub</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="94"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="92"/>
         <source>Report Bug</source>
         <translation>Сообщить об ошибке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="99"/>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="50"/>
         <source>Documentation</source>
         <translation>Документация</translation>
@@ -12773,8 +12775,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
-        <source>A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.</source>
-        <translation>Инструмент мозаичного размещения окон и управления зонами для композиторов Wayland. Организуйте рабочий стол с помощью настраиваемых зон, автоматических мозаичных раскладок и размещения окон с клавиатуры.</translation>
+        <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
+        <oldsource>A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.</oldsource>
+        <translation type="unfinished">Инструмент мозаичного размещения окон и управления зонами для композиторов Wayland. Организуйте рабочий стол с помощью настраиваемых зон, автоматических мозаичных раскладок и размещения окон с клавиатуры.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="20"/>
@@ -12824,8 +12827,9 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="121"/>
-        <source>Inspired by FancyZones, extended with automatic tiling.</source>
-        <translation>Создано под влиянием FancyZones, расширено автоматическим мозаичным размещением.</translation>
+        <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
+        <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
+        <translation type="unfinished">Создано под влиянием FancyZones, расширено автоматическим мозаичным размещением.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="129"/>

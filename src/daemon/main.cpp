@@ -228,7 +228,7 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PhosphorI18n::tr("Window tiling and zone management"));
+    parser.setApplicationDescription(PhosphorI18n::tr("Window snapping, tiling and scrolling"));
     parser.addHelpOption();
     parser.addVersionOption();
 

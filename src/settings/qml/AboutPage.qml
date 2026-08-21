@@ -16,7 +16,7 @@ PhosphorUi.AboutPageShell {
     appName: i18n("PlasmaZones")
     appIcon: "plasmazones"
     appVersion: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
-    description: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
+    description: i18n("Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.")
     license: i18n("PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).")
     homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
     // ── Extras: Links / Credits cards rendered below the homepage URL ──
@@ -118,7 +118,7 @@ PhosphorUi.AboutPageShell {
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Inspired by FancyZones, extended with automatic tiling.")
+                    text: i18n("Snapping is inspired by FancyZones and scrolling by the niri compositor.")
                     opacity: 0.7
                 }
 

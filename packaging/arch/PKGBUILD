@@ -9,7 +9,7 @@ pkgname=plasmazones
 # before publishing. See packaging/arch/update-aur.sh.
 pkgver=0.0.0
 pkgrel=1
-pkgdesc='Window tiling and autotiling for KDE Plasma'
+pkgdesc='Window snapping, tiling and scrolling for KDE Plasma'
 arch=('x86_64')
 url='https://github.com/fuddlesworth/PlasmaZones'
 license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')

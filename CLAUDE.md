@@ -1,8 +1,16 @@
 # PlasmaZones — Claude Code Configuration
-# KDE/Plasma Window Tiling — Qt6/C++20/QML/Kirigami
+# KDE/Plasma Window Placement — Qt6/C++20/QML/Kirigami
 
 ## Project
-PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami, C++20, Wayland-only.
+PlasmaZones: window snapping, tiling, and scrolling for KDE Plasma. Qt6, KF6, Kirigami, C++20, Wayland-only.
+
+### Placement Modes
+Three mutually exclusive modes. Each screen runs exactly one, resolved per (screen, desktop, activity):
+- **Snapping** — drag a window with a modifier held, drop it into a user-drawn zone. Engine: `libs/phosphor-snap-engine`. Artifacts: layouts (`data/layouts`, user copies in `~/.local/share/plasmazones/layouts/`).
+- **Tiling** — windows place themselves via a scripted algorithm. Engine: `libs/phosphor-tile-engine` running Luau through `phosphor-tiles` / `phosphor-scripting`. Artifacts: algorithms (`data/algorithms/*.luau`).
+- **Scrolling** — windows form columns on an endless strip, modeled on niri. Engine: `libs/phosphor-scroll-engine`. Artifacts: templates (`data/scrolling-templates`).
+
+Shared placement policy lives in `libs/phosphor-engine`. A verdict from one mode never gates another — see the float-is-per-mode invariant. When adding a cross-cutting feature, check whether all three modes need an arm before calling it done.
 
 ## Behavioral Rules (Always Enforced)
 - NEVER question or doubt what the user says they did (installed, restarted, tested, etc.) — trust them and focus on the code
@@ -69,7 +77,8 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Zone IDs (QUuid), never indices — `Accessible.name` on interactive elements
 
 ## Architecture
-- Service-oriented: `ILayoutService`, `ZoneManager`, `SnappingService`; DI via constructor
+- Service-oriented with DI via constructor (the editor's `ILayoutService`, `ZoneManager`, `SnappingService` are the reference shape)
+- Placement runs in the daemon behind the three engines above; the KWin effect draws overlays, decorations, and tab indicators
 - Business logic in C++, UI in QML; controllers bridge via `Q_PROPERTY`
 - Zone IDs everywhere, never indices
 - JSON persistence in `~/.local/share/plasmazones/layouts/` with relative geometry (0.0–1.0)
@@ -81,7 +90,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Extract: `cmake --build build --target update-ts`
 
 ## User-Facing Text (Plain Prose)
-User-facing strings MUST read like plain, human-written prose with no LLM tics. This applies to every surface a user reads: `description`/`name` fields in `data/**/*.json` (animation, shader, layout metadata), `data/whatsnew.json` highlights, `data/algorithms/*.luau` `description` fields, `CHANGELOG.md` entries, and every translatable string (`PhosphorI18n::tr()`, QML `i18n()`/`i18nc()`).
+User-facing strings MUST read like plain, human-written prose with no LLM tics. This applies to every surface a user reads: `description`/`name` fields in `data/**/*.json` (animation, shader, layout, and scrolling-template metadata), `data/whatsnew.json` highlights, `data/algorithms/*.luau` `description` fields, `CHANGELOG.md` entries, the `.desktop` `Name`/`GenericName`/`Comment` fields, AppStream `.metainfo.xml` summaries and descriptions, packaging descriptions (`packaging/**` pkgdesc / Summary / %description / Debian Description / Nix meta), and every translatable string (`PhosphorI18n::tr()`, QML `i18n()`/`i18nc()`).
 
 - NEVER use an em-dash (`—`, or the `—` escape) to splice clauses or tack on an appositive. Write two sentences, or join with a plain word (and, with, where, so, because).
 - NEVER use a clause-splicing semicolon to join two independent clauses. Split into sentences or use "and". Semicolons inside backticked code, and semicolons separating genuine comma-bearing list items, are fine.
@@ -167,17 +176,25 @@ cd build && ctest --output-on-failure
 ### Directory Structure
 ```
 src/core/        — Domain models (Zone, Layout, ScreenManager)
-src/daemon/      — Background service
-src/editor/      — Layout editor
+src/daemon/      — Background service; hosts the three placement engines
+src/editor/      — Layout editor (zone layouts + scrolling templates)
 src/settings/    — Standalone settings app
+src/shell/       — Shell surfaces (OSDs, pickers, selectors)
+src/ui/          — Shared QML controls
 src/dbus/        — D-Bus adaptors
 src/config/      — Configuration backends
-src/autotile/    — Tiling algorithms (scripted Luau via phosphor-tiles)
+src/common/      — Cross-target helpers
+src/shared/      — Code shared between daemon and apps
+libs/            — phosphor-* component libraries (LGPL; see License above)
 kcm/             — System Settings module
 kwin-effect/     — KWin effect (C++)
 tests/           — Unit tests (Qt Test)
-data/layouts/    — Default layout templates (JSON)
-data/algorithms/ — Bundled Luau tiling algorithms
+data/layouts/    — Default layout templates (JSON) — snapping
+data/algorithms/ — Bundled Luau tiling algorithms — tiling
+data/scrolling-templates/ — Bundled strip templates — scrolling
+data/animations/ — Window animation shader packs
+data/overlays/   — Zone overlay shader packs
+data/surface/    — Window/shell decoration packs
 ```
 
 ## Testing

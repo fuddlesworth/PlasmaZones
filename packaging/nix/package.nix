@@ -236,13 +236,18 @@ stdenv.mkDerivation (finalAttrs: {
 
   # ── Metadata ──────────────────────────────────────────────────────────────
   meta = with lib; {
-    description = "FancyZones-style window tiling and autotiling for KDE Plasma";
+    description = "Window snapping, tiling and scrolling for KDE Plasma";
     longDescription = ''
-      PlasmaZones brings Windows PowerToys FancyZones-style zone management
-      to KDE Plasma. Define zones on your screen, then drag windows into them
-      to snap and resize. Supports autotiling with a library of bundled
-      tiling algorithms, a visual layout editor, GLSL shader effects on zone
-      overlays, per-monitor and per-virtual-desktop layouts, and full KDE
+      PlasmaZones gives every monitor on KDE Plasma one of three window
+      placement modes. Snapping drops windows into zones you drew, the way
+      FancyZones does on Windows. Tiling places them automatically with a
+      bundled Luau algorithm. Scrolling arranges them as columns on
+      an endless strip, modelled on the niri compositor, so opening a window
+      never resizes the ones already open.
+
+      It ships a visual layout editor, GLSL shader effects on zone overlays,
+      window decoration packs and animations, per-application window rules,
+      per-monitor and per-virtual-desktop assignments, and full KDE
       integration via a KWin effect plugin and System Settings module.
 
       The daemon (plasmazonesd) runs as a systemd user service and communicates

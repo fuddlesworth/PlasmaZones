@@ -1223,7 +1223,7 @@
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="231"/>
-        <source>Window tiling and zone management</source>
+        <source>Window snapping, tiling and scrolling</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -10234,33 +10234,35 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="54"/>
-        <source>Window tiling and zone management for Wayland compositors</source>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="52"/>
+        <source>Window snapping, tiling and scrolling for Wayland compositors</source>
+        <oldsource>Window tiling and zone management for Wayland compositors</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="63"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="61"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="55"/>
         <source>Open PlasmaZones Settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="74"/>
-        <source>Configure zones, tiling, appearance, shortcuts, and more</source>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="72"/>
+        <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
+        <oldsource>Configure zones, tiling, appearance, shortcuts, and more</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="87"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="85"/>
         <source>GitHub</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="94"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="92"/>
         <source>Report Bug</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/kcm/about/ui/main.qml.cpp" line="99"/>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="50"/>
         <source>Documentation</source>
         <translation type="unfinished"></translation>
@@ -12759,7 +12761,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
-        <source>A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.</source>
+        <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
+        <oldsource>A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -12810,7 +12813,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="121"/>
-        <source>Inspired by FancyZones, extended with automatic tiling.</source>
+        <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
+        <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>

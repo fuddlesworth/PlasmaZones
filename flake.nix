@@ -17,7 +17,7 @@
 #   formatter.default              — `nix fmt` (Nix + C++ + QML).
 #   checks.package                 — `nix flake check`.
 {
-  description = "FancyZones-style window tiling and autotiling for KDE Plasma 6.7+";
+  description = "Window snapping, tiling and scrolling for KDE Plasma 6.7+";
 
   inputs = {
     # Tracks nixos-unstable for the most current KDE Frameworks and KWin
