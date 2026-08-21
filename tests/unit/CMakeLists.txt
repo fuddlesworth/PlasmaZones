@@ -564,6 +564,16 @@ target_link_libraries(test_stripcard_serialize
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
 
+# The daemon's in-process strip-preview payload (StripZones::zoneMapsForTiles),
+# which the OSD strip card renders without crossing the bus. Its wire twin is
+# covered by test_scrolling_adaptor; this pins the tab keys on THIS side so the
+# two producers cannot drift into drawing a tabbed column differently.
+add_executable(test_stripzones_tabkeys daemon/test_stripzones_tabkeys.cpp)
+target_link_libraries(test_stripzones_tabkeys
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine
+            PhosphorProtocol::PhosphorProtocol)
+add_test(NAME test_stripzones_tabkeys COMMAND test_stripzones_tabkeys)
+
 # Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
 # per-instance scope construction in osd.cpp / selector.cpp /
 # snapassist.cpp so a divergence from the PhosphorRoles base scopePrefix

@@ -53,6 +53,14 @@
  * 15. blueprintProgressJson carries the same ownership gates, answers zeroes
  *     (not an empty object) for an owned screen with no blueprint, and its
  *     `used` counter SPENDS: it does not fall back when a column closes.
+ * 16. A tabbed column's tile carries the tab-indicator keys and an untabbed
+ *     one carries none at all — the only thing on the wire distinguishing a
+ *     stack of tabs from the single window the walk emits for it.
+ * 17. stripChanged relays the engine's placement changes as a wake-up for
+ *     anyone rendering the strip, naming the screen that changed and gated on
+ *     the screens the engine owns. Nothing reaches the bus after clearEngine
+ *     either, though that one is the relay's own null guard rather than the
+ *     disconnect — see the note in testClearedEngine_stopsRelayingSignals.
  */
 
 #include <QTest>
@@ -277,6 +285,52 @@ private Q_SLOTS:
         }
         QCOMPARE(stackedTiles.at(0).zoneNumber, 1);
         QCOMPARE(stackedTiles.at(1).zoneNumber, 2);
+    }
+
+    // A tabbed column's payload has to say so. The walk emits only the SHOWN
+    // tab, so without these keys the wire describes a five-window stack
+    // exactly as it describes a single window, and the settings app's strip
+    // thumbnail draws them identically.
+    void testVisibleStripJson_tabIndicatorKeys()
+    {
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->consumeWindowIntoColumn(QStringLiteral("DP-1"));
+
+        // Stacked but NOT tabbed: no tab key on either element. The absent
+        // key is the contract, not a zero — the settings app forwards only
+        // what is present, so a stray zeroed triple here would be indis-
+        // tinguishable from a daemon that genuinely has no tab data.
+        const QJsonArray plain =
+            QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8()).array();
+        QCOMPARE(plain.size(), 2);
+        for (const QJsonValue& value : plain) {
+            QVERIFY(!value.toObject().contains(QLatin1String("tabCount")));
+            QVERIFY(!value.toObject().contains(QLatin1String("activeTab")));
+            QVERIFY(!value.toObject().contains(QLatin1String("tabPosition")));
+            QVERIFY(!value.toObject().contains(QLatin1String("tabLength")));
+        }
+
+        m_engine->toggleColumnTabbed(QStringLiteral("DP-1"));
+
+        const QVector<ScrollEngine::VisibleTile> tiles = m_engine->visibleTiles(QStringLiteral("DP-1"));
+        QCOMPARE(tiles.size(), 1);
+        const QJsonArray tabbed =
+            QJsonDocument::fromJson(m_adaptor->visibleStripJson(QStringLiteral("DP-1")).toUtf8()).array();
+        QCOMPARE(tabbed.size(), 1);
+        const QJsonObject obj = tabbed.at(0).toObject();
+        // Relayed off the tile, cross-checked field by field against the
+        // engine read the adaptor consumes — the same shape as the rect
+        // cross-check above, and it catches a transposed count/index pair.
+        QCOMPARE(obj.value(QLatin1String("tabCount")).toInt(-1), tiles.at(0).tabCount);
+        QCOMPARE(obj.value(QLatin1String("activeTab")).toInt(-1), tiles.at(0).activeTabIndex);
+        QCOMPARE(obj.value(QLatin1String("tabPosition")).toInt(-1), static_cast<int>(tiles.at(0).tabIndicatorPosition));
+        QCOMPARE(obj.value(QLatin1String("tabLength")).toDouble(-1.0), tiles.at(0).tabLengthProportion);
+        // Both tabs counted, hidden one included: the pills stand for the
+        // stack, not for what is on screen.
+        QCOMPARE(obj.value(QLatin1String("tabCount")).toInt(-1), 2);
+        QVERIFY(obj.value(QLatin1String("tabLength")).toDouble(-1.0) > 0.0);
     }
 
     // The screenId argument has to select the strip. With one owned screen
@@ -703,10 +757,104 @@ private Q_SLOTS:
     void testClearedEngine_stopsRelayingSignals()
     {
         QSignalSpy spy(m_adaptor, &ScrollingAdaptor::scrollingScreensChanged);
+        // The strip wake-up rides the same sweep, but be clear about what this
+        // spy can and cannot show: its relay lambda tests `!m_engine` before
+        // touching the engine, so a surviving connection would be inert and
+        // this assertion holds with the disconnect deleted. The screen-set spy
+        // above is the discriminating one — that lambda has no such guard, and
+        // clearEngine also clears the last-broadcast set it compares against.
+        QSignalSpy stripSpy(m_adaptor, &ScrollingAdaptor::stripChanged);
         m_adaptor->clearEngine();
 
         m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         QCOMPARE(spy.count(), 0);
+        QCOMPARE(stripSpy.count(), 0);
+    }
+
+    // The strip wake-up the Monitors page's thumbnail subscribes to. What it
+    // pins is the RELAY and its ownership gate, not a payload: the signal
+    // deliberately carries none and is not compared against the strip (see
+    // its declaration), so "fires on a change" and "names the right screen"
+    // are the whole contract.
+    void testStripChanged_wakesForOwnedScreensOnly()
+    {
+        // TWO owned screens, so the id the relay forwards is load-bearing.
+        // With only one, an implementation that ignored its argument and
+        // named the sole owned screen would pass every assertion below.
+        m_engine->setActiveScreens({QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripChanged);
+
+        // Opening a window is a placement change on an owned screen.
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        QVERIFY(spy.count() >= 1);
+        QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-1"));
+
+        // The other owned screen names itself, not the first one.
+        spy.clear();
+        m_engine->windowOpened(QStringLiteral("app|d"), QStringLiteral("DP-2"), 0, 0);
+        QVERIFY(spy.count() >= 1);
+        QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
+
+        // A tab switch is the case the poll could not see quickly: it moves
+        // which tile the strip shows without moving a single rect.
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->consumeWindowIntoColumn(QStringLiteral("DP-1"));
+        m_engine->toggleColumnTabbed(QStringLiteral("DP-1"));
+        // The consume left focus on the pulled-in tile, so the column shows
+        // its LAST tab. Asserted rather than assumed: switching to the tab
+        // that is already shown is a no-op verb that emits nothing, and this
+        // test would then pass without a tab switch ever happening.
+        QCOMPARE(m_engine->visibleTiles(QStringLiteral("DP-1")).first().activeTabIndex, 1);
+        spy.clear();
+        // Through the VERB, which is the deterministic trigger. The other
+        // route to the same change — a windowFocused report from the
+        // compositor — reaches the same emit through
+        // ScrollStrip::focusWindow, so this arm covers both; what neither
+        // route emits is a wake-up for a focus that moves nothing, which is
+        // the emit-on-change rule and not a gap.
+        // The premise, enforced rather than asserted in prose: this really is
+        // a change no rect-watching poll could have seen. Captured either side
+        // of the verb — if a future relayout DID move a rect here, the case
+        // would quietly stop covering what it was written for.
+        const QVector<QRect> rectsBefore = m_engine->visibleTileRects(QStringLiteral("DP-1"));
+        m_engine->focusWindowTop(QStringLiteral("DP-1"));
+        QCOMPARE(m_engine->visibleTiles(QStringLiteral("DP-1")).first().activeTabIndex, 0);
+        QCOMPARE(m_engine->visibleTileRects(QStringLiteral("DP-1")), rectsBefore);
+        QVERIFY2(spy.count() >= 1, "a tab switch must wake the preview: no rect moves, so nothing else would");
+    }
+
+    // The ownership gate on the relay, on its own. A released screen answers
+    // "[]" from visibleStripJson, so a wake-up naming it could only ever say
+    // "nothing". Whether any production path emits a placement change for a
+    // released screen is NOT established here — this drives the signal itself
+    // — so read this as "if one ever does, the gate is what stops it".
+    void testStripChanged_staysSilentForAReleasedScreen()
+    {
+        m_engine->setActiveScreens({QStringLiteral("DP-2")});
+        QSignalSpy spy(m_adaptor, &ScrollingAdaptor::stripChanged);
+
+        // Driven at the engine's own signal rather than through a verb: every
+        // verb refuses a screen outside the scrolling set before it reaches an
+        // emit, so a verb-driven leg proves only that the ENGINE declined —
+        // it never reaches the adaptor's gate at all, and passes just as well
+        // with that gate deleted.
+        Q_EMIT m_engine->placementChanged(QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 0);
+
+        // Positive control: the same emit for an OWNED screen does surface,
+        // so the silence above is the gate and not a dead signal path.
+        Q_EMIT m_engine->placementChanged(QStringLiteral("DP-2"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.last().at(0).toString(), QStringLiteral("DP-2"));
+
+        // An empty screen id surfaces nothing either. Documents the outcome
+        // rather than isolating the relay's `isEmpty()` conjunct: the active
+        // screen set never holds an empty string, so the ownership lookup
+        // already answers false and deleting that conjunct keeps this green.
+        Q_EMIT m_engine->placementChanged(QString());
+        QCOMPARE(spy.count(), 1);
     }
 
     // The scrollingScreens property's DocString promises that changes are
@@ -740,6 +888,11 @@ private Q_SLOTS:
         // A relayed PropertiesChanged would arrive over the bus, which is
         // asynchronous — give it a window rather than concluding from the
         // same turn that emitted the signal above.
+        //
+        // Known limitation of asserting an ABSENCE on a wall clock: a loaded
+        // machine that merely delayed the relay past this window passes too.
+        // There is no positive control available (the whole claim is that
+        // nothing is emitted on this path), so the window is the guarantee.
         QTest::qWait(200);
 
         QCOMPARE(m_propertiesChangedCount, 0);

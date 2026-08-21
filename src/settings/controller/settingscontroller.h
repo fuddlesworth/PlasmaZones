@@ -579,11 +579,11 @@ public:
 
     // ── Screen state query ─────────────────────────────────────────────────
     Q_INVOKABLE QVariantList getScreenStates() const;
-    /// The live scrolling strip of @p screenId as zone maps for
-    /// LayoutThumbnail (relativeGeometry + zoneNumber per visible tile),
-    /// fetched from org.plasmazones.Scrolling. Empty when the screen has
-    /// no strip right now (not scrolling, no windows, daemon down) — the
-    /// Monitors page then falls back to a representative static strip.
+    /// The live scrolling strip of @p screenId as zone maps for LayoutThumbnail
+    /// (relativeGeometry + zoneNumber per tile, plus the StripPreviewKey tab
+    /// fields on a tabbed column's tile), from org.plasmazones.Scrolling. Empty
+    /// when the screen has no strip right now (not scrolling, no windows,
+    /// daemon down) — the Monitors page falls back to a static strip.
     Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
     /// How far @p screenId has worked through its scrolling template's seed
     /// blueprint, as {"total": int, "used": int}, fetched from
@@ -815,6 +815,9 @@ Q_SIGNALS:
     void activitiesChanged();
     void screenLayoutChanged();
     void quickLayoutSlotsChanged();
+
+    // A wake-up, not a difference — contract in settingscontroller_dbuswire.cpp.
+    void scrollingStripChanged(const QString& screenId);
 
     /**
      * @brief Fresh running-windows list has arrived from the daemon.
