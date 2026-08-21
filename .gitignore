@@ -16,8 +16,11 @@ compile_commands.json
 CTestTestfile.cmake
 _deps/
 *.cmake
-!CMakeLists.txt
-!cmake/*.cmake
+# Rescue hand-written CMake modules at any depth. `!cmake/*.cmake` alone covers
+# only the top-level cmake/ directory, so a future cmake/modules/Foo.cmake or
+# libs/phosphor-foo/cmake/Bar.cmake would be silently untracked with no error.
+!cmake/**/*.cmake
+!**/cmake/*.cmake
 .cmake/
 
 # -----------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 
 <img src="icons/hicolor/scalable/apps/plasmazones.svg" alt="PlasmaZones" width="96">
 
-**Window snapping, tiling, and scrolling for KDE Plasma**
+**Window snapping, tiling and scrolling for KDE Plasma**
 
 Three placement modes in one daemon. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own.
 
@@ -24,7 +24,7 @@ Three placement modes in one daemon. Snap windows into zones you drew, let an al
 
 ## Three Placement Modes
 
-Each monitor runs one mode, chosen per virtual desktop and per activity, so a widescreen can scroll while the laptop panel tiles. `Meta+Shift+T` cycles the focused screen through all three, and any mode can be turned off entirely.
+Each monitor runs one mode, chosen per virtual desktop and per activity, so a widescreen can scroll while the laptop panel tiles. `Meta+Shift+T` cycles the focused screen through the enabled modes, and any mode can be turned off entirely.
 
 ### Snapping
 
@@ -50,7 +50,7 @@ Zones are named regions you draw yourself, in a visual editor with drag-to-resiz
 
 Windows place themselves as they open, with no drag and no zones to draw. The bundled algorithms are written in Luau and run in a sandbox, covering the usual master-and-stack, BSP, columns, grid, spiral, and monocle families along with less common ones. Write your own in the same language and the daemon hot-reloads it from disk while you edit.
 
-[Autotile gallery →](https://phosphor-works.github.io/plasmazones/autotile/) · [Authoring guide →](https://phosphor-works.github.io/guides/tiling/)
+[Autotile gallery →](https://phosphor-works.github.io/plasmazones/autotile/) · [Authoring guide →](https://phosphor-works.github.io/plasmazones/guides/tiling/)
 
 ### Scrolling
 
@@ -72,16 +72,21 @@ A shortcut family on `Meta+Alt` covers the whole vocabulary: [Keyboard shortcuts
 
 ## Beyond Placement
 
-<!-- SHOWCASE GIF PLACEHOLDER — record the layout editor dragging zone boundaries, and a shader
-     overlay running during a drag. Produce with docs/media/videos/convert.sh and commit as
-     docs/media/videos/editor.gif and docs/media/videos/shaders.gif, then uncomment:
+<!-- SHOWCASE GIF PLACEHOLDER — record the layout editor dragging zone boundaries. Produce with
+     docs/media/videos/convert.sh and commit as docs/media/videos/editor.gif, then uncomment:
 <p align="center">
   <img src="docs/media/videos/editor.gif" alt="Layout editor" />
+</p>
+-->
+
+<!-- SHOWCASE GIF PLACEHOLDER — record a shader overlay running during a drag. Produce with
+     docs/media/videos/convert.sh and commit as docs/media/videos/shaders.gif, then uncomment:
+<p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader overlays" />
 </p>
 -->
 
-- **Appearance** — GLSL shader overlays for zones (audio-reactive, procedural, distro-themed) with up to 4 image textures each, window decoration packs, and animation packs for open, close, minimize, and desktop switching — [Shader gallery →](https://phosphor-works.github.io/plasmazones/shaders/) · [authoring guide →](https://phosphor-works.github.io/guides/shaders/)
+- **Appearance** — GLSL shader overlays for zones (audio-reactive, procedural, distro-themed) with up to 4 image textures each, window decoration packs, and animation packs for open, close, minimize, and desktop switching — [Shader gallery →](https://phosphor-works.github.io/plasmazones/shaders/) · [authoring guide →](https://phosphor-works.github.io/plasmazones/guides/shaders/)
 - **Per-monitor, per-desktop, per-activity** — layouts, algorithms, templates, and mode assignments are all scoped, and virtual screens subdivide a physical monitor into independent logical workspaces with their own everything
 - **Window rules** — match on class, title, active layout, screen orientation, and more, then act on placement, floating, opacity, borders, animations, scroll speed, and per-app behavior in every mode
 - **Scriptable** — a D-Bus API on `org.plasmazones` covering every mode — [scripting guide →](https://phosphor-works.github.io/plasmazones/dbus/)
@@ -90,9 +95,16 @@ A shortcut family on `Meta+Alt` covers the whole vocabulary: [Keyboard shortcuts
 
 ## Install
 
+Arch (AUR, prebuilt):
+
 ```bash
-yay -S plasmazones-bin                                                # Arch (AUR, prebuilt)
-sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones   # Fedora (COPR)
+yay -S plasmazones-bin
+```
+
+Fedora (COPR):
+
+```bash
+sudo dnf copr enable fuddlesworth/PlasmaZones && sudo dnf install plasmazones
 ```
 
 openSUSE Tumbleweed, a portable tarball for Fedora Atomic / no-root setups, and source-build instructions (including the `-DUSE_KDE_FRAMEWORKS=OFF` portable build): **[Install page →](https://phosphor-works.github.io/plasmazones/#install)**.
@@ -104,7 +116,7 @@ systemctl --user enable --now plasmazones.service
 kbuildsycoca6 --noincremental    # KDE only — refresh the service cache
 ```
 
-Requirements: KDE Plasma 6 on Wayland — the integration runs as a KWin effect — plus Qt 6.6+, CMake 3.16+, and a C++20 compiler. Optional: KDE Frameworks 6.6+ for the settings KCM and KGlobalAccel shortcuts, PlasmaActivities for activity-based layouts. The portable build (`-DUSE_KDE_FRAMEWORKS=OFF`) drops the framework deps.
+Requirements: KDE Plasma 6.7+ on Wayland — the integration runs as a KWin effect, and KWin must be compositing with OpenGL — plus Qt 6.10+, CMake 3.16+, and a C++20 compiler. Kirigami is required for the settings app in every build. Optional: the rest of KDE Frameworks 6.26+ for the settings KCM and KGlobalAccel shortcuts, PlasmaActivities for activity-based layouts. The portable build (`-DUSE_KDE_FRAMEWORKS=OFF`) drops those optional framework deps.
 
 ### Nix / NixOS
 
@@ -149,10 +161,10 @@ nix profile install github:fuddlesworth/PlasmaZones
 ## Quick Start
 
 1. Enable the daemon: `systemctl --user enable --now plasmazones.service`
-2. Open the settings app: `plasmazones-settings` (or **System Settings → PlasmaZones** on KDE)
-3. Enable the effect in **System Settings → Window Management → Desktop Effects → PlasmaZones**. This is required — PlasmaZones runs as a KWin effect, so nothing works until it is ticked.
+2. Open the settings app: `plasmazones-settings` (or **System Settings → Apps → PlasmaZones** on KDE)
+3. Check that the effect is ticked in **System Settings → Window Management → Desktop Effects → PlasmaZones**. It is enabled by default, so this is usually just a confirmation. PlasmaZones runs as a KWin effect and needs KWin on OpenGL compositing, so the entry is unavailable under QPainter compositing.
 4. **Drag any window while holding Alt** — zones appear, drop to snap.
-5. To try the other modes, open **Monitors** in the settings app and assign Tiling or Scrolling to a screen, or press `Meta+Shift+T` to cycle the focused one.
+5. To try the other modes, open **Overview** in the settings app and assign Tiling or Scrolling to a screen, or press `Meta+Shift+T` to cycle the focused one through the enabled modes.
 
 Full first-run tour: **[Getting started →](https://phosphor-works.github.io/plasmazones/getting-started/)**.
 
@@ -202,7 +214,7 @@ Daemon startup, verbose logging, KWin minimum-size rules, and the full support-r
 
 **Better Blur DX:** the force-blur mode blurs every window not on its allowlist, which catches PlasmaZones' overlay surfaces and makes the screen look blurred all the time. To fix it, open System Settings → Window Management → Desktop Effects → Better Blur DX → Configure → **Force blur** tab, select **"Blur all except matching"**, then add this line:
 
-```
+```text
 /^plasmazones/
 ```
 

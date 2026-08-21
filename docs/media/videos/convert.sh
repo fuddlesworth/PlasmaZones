@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
 # Adapted from https://gist.github.com/Potherca/18423260e2c9a4324c9ecb0c0a284066
 
 INPUT="$1"
