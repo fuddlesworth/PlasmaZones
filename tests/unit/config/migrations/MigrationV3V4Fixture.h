@@ -186,6 +186,21 @@ protected:
         return types;
     }
 
+    /// The action object of @p type on @p rule, or an empty object when the
+    /// rule carries no such action. `RuleAction::toJson` writes params INLINE
+    /// beside `type` rather than nesting them under a `params` key, so the
+    /// action object itself is what carries `mode` / `layoutId` / `algorithm`.
+    QJsonObject actionParams(const QJsonObject& rule, const QString& type)
+    {
+        for (const QJsonValue& v : rule.value(QStringLiteral("actions")).toArray()) {
+            const QJsonObject action = v.toObject();
+            if (action.value(QStringLiteral("type")).toString() == type) {
+                return action;
+            }
+        }
+        return {};
+    }
+
     /// Flatten a rule's match expression to its leaf objects. A bare leaf
     /// match yields a one-element list; an All{} match yields its children.
     QList<QJsonObject> matchLeaves(const QJsonObject& rule)

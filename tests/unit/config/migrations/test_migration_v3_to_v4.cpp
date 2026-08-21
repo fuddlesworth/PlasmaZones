@@ -31,8 +31,9 @@
  *
  * The animation folds live in test_migration_v3_to_v4_animations.cpp; the
  * exclusion fold and zone-overlay group rename live in
- * test_migration_v3_to_v4_exclusions.cpp. The shared config/rules JSON
- * helpers are in MigrationV3V4Fixture.h.
+ * test_migration_v3_to_v4_exclusions.cpp; the premade Steam rule and its
+ * repair live in test_migration_v3_to_v4_steam.cpp. The shared config/rules
+ * JSON helpers are in MigrationV3V4Fixture.h.
  */
 
 #include <QDir>
@@ -71,30 +72,6 @@ class TestMigrationV3ToV4 : public QObject, public MigrationV3V4Fixture
 {
     Q_OBJECT
 
-private:
-    // Plain helpers, kept OUT of the Q_SLOTS section so moc does not register
-    // them as test slots.
-
-    /// The premade Steam rule's deterministic id, derived here from the SPEC
-    /// rather than read back off the seed: UUIDv5 over the exclusion-migration
-    /// namespace and the length-prefixed segment encoding ("<size>:<bytes>").
-    /// Pinning it independently is the point — `repairSeededSteamRule` finds a
-    /// stored rule by this id, so a change to the namespace or the segment
-    /// string would silently orphan every existing user's rule while a test
-    /// that re-derived the id from its own seed stayed green.
-    static QUuid expectedSteamRuleId()
-    {
-        const QUuid kExclusionNamespace(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
-        const QString segment = QStringLiteral("steam-default-exclude");
-        return QUuid::createUuidV5(kExclusionNamespace, QString::number(segment.size()) + QLatin1Char(':') + segment);
-    }
-
-    /// The seeded premade-Steam rule, located by its deterministic id.
-    static std::optional<PhosphorRules::Rule> seededSteamRule(const PhosphorRules::RuleSet& set)
-    {
-        return set.ruleById(expectedSteamRuleId());
-    }
-
 private Q_SLOTS:
 
     // ─── Full conversion ──────────────────────────────────────────────────
@@ -111,6 +88,11 @@ private Q_SLOTS:
         QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
         const QJsonObject wr = readJson(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
+
+        // And it actually PRODUCED rules. The slot is named for that, but a
+        // valid-but-rule-less store would satisfy the version stamp and the
+        // stash-key absences below on its own.
+        QVERIFY2(!rulesFromRules().isEmpty(), "the conversion must emit rules, not just a versioned shell");
 
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         // The migration chain now runs v3 → v4 → v5, so config.json lands at
@@ -394,14 +376,45 @@ private Q_SLOTS:
         // (a rule that sets an engine mode and does NOT disable an engine) keeps
         // the lookup unambiguous regardless.
 
+        // Each priority is tied to the assignment that produced it, by the
+        // dimensions its match pins. Asserting only that SOME assignment rule
+        // exists at each value would pass just as well if the nudges were
+        // scrambled across the four rules.
+        const auto leafAt = [&](int priority, const QString& field) {
+            return matchLeafValue(findAssignmentRuleByPriority(rules, priority), field);
+        };
+
         // Exact (screen+desktop+activity) → 306.
-        QVERIFY(hasAssignmentAtPriority(rules, 306));
+        QCOMPARE(leafAt(306, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QCOMPARE(leafAt(306, QStringLiteral("virtualDesktop")), QStringLiteral("2"));
+        QCOMPARE(leafAt(306, QStringLiteral("activity")), QStringLiteral("work-uuid"));
+
         // Screen + activity → 304 (activity nudge beats desktop).
-        QVERIFY(hasAssignmentAtPriority(rules, 304));
+        QCOMPARE(leafAt(304, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QCOMPARE(leafAt(304, QStringLiteral("activity")), QStringLiteral("play-uuid"));
+        QVERIFY(leafAt(304, QStringLiteral("virtualDesktop")).isEmpty());
+
         // Screen + desktop → 303.
-        QVERIFY(hasAssignmentAtPriority(rules, 303));
+        QCOMPARE(leafAt(303, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QCOMPARE(leafAt(303, QStringLiteral("virtualDesktop")), QStringLiteral("3"));
+        QVERIFY(leafAt(303, QStringLiteral("activity")).isEmpty());
+
         // Screen only → 301.
-        QVERIFY(hasAssignmentAtPriority(rules, 301));
+        QCOMPARE(leafAt(301, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QVERIFY(leafAt(301, QStringLiteral("virtualDesktop")).isEmpty());
+        QVERIFY(leafAt(301, QStringLiteral("activity")).isEmpty());
+
+        // Exactly four, so a spurious fifth assignment rule (or a nudge that
+        // landed two of them on the same value) is caught rather than ignored.
+        int assignmentCount = 0;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            const QStringList types = actionTypes(r);
+            if (types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"))) {
+                ++assignmentCount;
+            }
+        }
+        QCOMPARE(assignmentCount, 4);
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -420,11 +433,23 @@ private Q_SLOTS:
         // (300), so none collides with an assignment rule; the
         // assignment-filtered lookup is used uniformly so the three sites stay
         // consistent.
+        // The PAYLOADS are asserted alongside the type list, not just the
+        // types. "Lossless" is a claim about the values: a conversion that
+        // swapped snapping for autotile, emptied every layout id, or paired
+        // the wrong layout with the wrong rule would satisfy a type-list-only
+        // check exactly as well as a correct one does.
         const QJsonObject exact = findAssignmentRuleByPriority(rules, 306);
         QVERIFY(!exact.isEmpty());
         QCOMPARE(actionTypes(exact),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
                               QStringLiteral("setTilingAlgorithm")}));
+        QCOMPARE(actionParams(exact, QStringLiteral("setEngineMode")).value(QStringLiteral("mode")).toString(),
+                 QStringLiteral("autotile"));
+        QCOMPARE(actionParams(exact, QStringLiteral("setSnappingLayout")).value(QStringLiteral("layoutId")).toString(),
+                 QStringLiteral("{snap-exact}"));
+        QCOMPARE(
+            actionParams(exact, QStringLiteral("setTilingAlgorithm")).value(QStringLiteral("algorithm")).toString(),
+            QStringLiteral("dwindle"));
 
         // The screen+activity rule (304) had snapping mode + a layout, no
         // tiling algorithm → SetEngineMode + SetSnappingLayout only.
@@ -432,12 +457,26 @@ private Q_SLOTS:
         QVERIFY(!scrAct.isEmpty());
         QCOMPARE(actionTypes(scrAct),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
+        QCOMPARE(actionParams(scrAct, QStringLiteral("setEngineMode")).value(QStringLiteral("mode")).toString(),
+                 QStringLiteral("snapping"));
+        QCOMPARE(actionParams(scrAct, QStringLiteral("setSnappingLayout")).value(QStringLiteral("layoutId")).toString(),
+                 QStringLiteral("{snap-act}"));
+
+        // The screen+desktop rule (303) is the third distinct layout id, so a
+        // conversion that reused one payload across rules is caught.
+        const QJsonObject scrDesk = findAssignmentRuleByPriority(rules, 303);
+        QVERIFY(!scrDesk.isEmpty());
+        QCOMPARE(
+            actionParams(scrDesk, QStringLiteral("setSnappingLayout")).value(QStringLiteral("layoutId")).toString(),
+            QStringLiteral("{snap-desk}"));
 
         // The screen-only rule (301) was mode-only autotile (both layout
         // fields empty) → just SetEngineMode.
         const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 301);
         QVERIFY(!scrOnly.isEmpty());
         QCOMPARE(actionTypes(scrOnly), (QStringList{QStringLiteral("setEngineMode")}));
+        QCOMPARE(actionParams(scrOnly, QStringLiteral("setEngineMode")).value(QStringLiteral("mode")).toString(),
+                 QStringLiteral("autotile"));
     }
 
     // ─── Disable-list rules ───────────────────────────────────────────────
@@ -554,16 +593,20 @@ private Q_SLOTS:
         QCOMPARE(snapMonitor->value(QStringLiteral("priority")).toInt(),
                  PhosphorRules::ContextRuleBridge::kContextBandBase);
 
-        // makeDisableRule must agree with the migration output: every disable
-        // rule is seeded at the band base regardless of the pinned dimensions.
-        const PhosphorRules::Rule directDesktop =
-            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(),
-                                 QStringLiteral("snapping"), PhosphorRules::ContextRuleBridge::kContextBandBase);
-        QCOMPARE(directDesktop.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
-        const PhosphorRules::Rule directActivity =
-            CRB::makeDisableRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"),
-                                 QStringLiteral("autotile"), PhosphorRules::ContextRuleBridge::kContextBandBase);
-        QCOMPARE(directActivity.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
+        // Tie the migration's OUTPUT to the bridge's identity derivation.
+        // Asserting that makeDisableRule returns the priority it was handed
+        // would be tautological — it assigns the argument straight through —
+        // so pin the thing that can actually drift instead: the id the
+        // migration writes for a (screen, desktop, activity, mode) tuple must
+        // be the one the bridge derives for it, or a later run would emit a
+        // duplicate rule beside the user's instead of recognising it.
+        const auto ruleIdFor = [&](const QString& screenId, int desktop, const QString& activity, const QString& mode) {
+            return CRB::disableRuleIdFor(screenId, desktop, activity, mode).toString();
+        };
+        QCOMPARE(snapDesktop->value(QStringLiteral("id")).toString(),
+                 ruleIdFor(QStringLiteral("DP-1"), 4, QString(), QStringLiteral("snapping")));
+        QCOMPARE(autotileActivity->value(QStringLiteral("id")).toString(),
+                 ruleIdFor(QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile")));
     }
 
     // ─── Idempotency ──────────────────────────────────────────────────────
@@ -574,12 +617,22 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
 
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-        const QByteArray firstRun = [&] {
-            QFile f(ConfigDefaults::rulesFilePath());
+        // Every file the conversion writes, not just rules.json: a second run
+        // that reordered a config.json key or re-touched the quick-layout
+        // sidecar would be invisible to a rules.json-only comparison.
+        const auto readBytes = [](const QString& path) {
+            QFile f(path);
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
-        }();
-        QVERIFY(!firstRun.isEmpty());
+        };
+        const QStringList written{ConfigDefaults::rulesFilePath(), ConfigDefaults::configFilePath(),
+                                  ConfigDefaults::quickLayoutsFilePath()};
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QList<QByteArray> firstRun;
+        for (const QString& path : written) {
+            firstRun.append(readBytes(path));
+        }
+        QVERIFY(!firstRun.at(0).isEmpty());
 
         // The process-level migration guard would normally short-circuit;
         // reset it so the second call re-runs the full logic against the
@@ -587,16 +640,14 @@ private Q_SLOTS:
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QByteArray secondRun = [&] {
-            QFile f(ConfigDefaults::rulesFilePath());
-            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
-        }();
         // The `rulesAlreadyConverted` probe loads rules.json as a
         // v4 RuleSet; on the second run it succeeds, so finalize takes
         // the already-converted branch and only retries the idempotent
-        // cleanup steps instead of rebuilding — rules.json is
+        // cleanup steps instead of rebuilding — every written file is
         // byte-identical.
-        QCOMPARE(secondRun, firstRun);
+        for (int i = 0; i < written.size(); ++i) {
+            QVERIFY2(readBytes(written.at(i)) == firstRun.at(i), qPrintable(written.at(i)));
+        }
     }
 
     // ─── No-assignments fixture ───────────────────────────────────────────
@@ -629,444 +680,6 @@ private Q_SLOTS:
             QVERIFY2(!(emptyAll && actionTypes(r).contains(QLatin1String("setEngineMode"))),
                      "no empty-All{} provider-default rule may be emitted");
         }
-    }
-
-    // ─── Premade Steam rule ───────────────────────────────────────────────
-    // Every fresh install and every v3→v4 upgrade is seeded with the built-in
-    // Steam fix: keep Steam's self-drawn `notificationtoasts_<N>_desktop`
-    // top-levels out of placement. Everything else Steam opens — the library
-    // window, Friends List, chat, Big Picture, Settings — and every
-    // Steam-LAUNCHED GAME places like any other window.
-
-    void testSteamDefaultRule_seeded()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QJsonArray rules = rulesFromRules();
-        QJsonObject steam;
-        for (const QJsonValue& v : rules) {
-            const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam notifications")) {
-                steam = r;
-            }
-        }
-        QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
-        QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
-
-        // Golden id. The repair looks the stored rule up by exactly this
-        // value, so it is part of the on-disk contract with every existing
-        // user, not an implementation detail.
-        QCOMPARE(steam.value(QStringLiteral("id")).toString(), expectedSteamRuleId().toString());
-
-        // The match nests an Any{} group, so it is not a flat conjunction and
-        // assignBandPrioritiesToZeroRules files it in the Advanced band
-        // [500,600). The band follows the shape; the shape is chosen for
-        // correctness (see the Any{} rationale in applySteamDefaultRuleShape),
-        // not to land a particular number.
-        const int steamPriority = steam.value(QStringLiteral("priority")).toInt();
-        QVERIFY2(steamPriority >= 500 && steamPriority < 600, qPrintable(QString::number(steamPriority)));
-
-        // ExcludePlacement, not the blanket Exclude: a toast has no business
-        // being placed, but stripping its decorations and animations too was
-        // never the point.
-        QCOMPARE(actionTypes(steam), (QStringList{QStringLiteral("excludePlacement")}));
-
-        // Match shape:
-        //   All{ WindowClass endsWith "steam",
-        //        Any{ Title contains "notificationtoasts",
-        //             WindowClass contains "notificationtoasts" } }
-        const QJsonObject match = steam.value(QStringLiteral("match")).toObject();
-        QVERIFY(match.contains(QStringLiteral("all")));
-        const QJsonArray all = match.value(QStringLiteral("all")).toArray();
-        QCOMPARE(all.size(), 2);
-
-        // endsWith, NOT contains. The field carries KWin's raw "resourceName
-        // resourceClass" pair, and a Steam-launched game reports its own app
-        // id in both halves, so `Contains "steam"` matched every game — see
-        // steamRuleLeavesGamesAndOrdinaryWindowsAlone below, which pins that
-        // regression against the real strings.
-        QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("windowClass"), QStringLiteral("endsWith")),
-                 QStringLiteral("steam"));
-
-        // The toast-name half is an Any{} over the same token on two fields,
-        // because which field carries `notificationtoasts_<N>_desktop` is not
-        // established (classically the WM_CLASS resourceName half; the retired
-        // rule was written as though it were the caption). Pin both arms so a
-        // future edit cannot quietly drop the one that turns out to be load-
-        // bearing.
-        QJsonObject anyGroup;
-        for (const QJsonValue& v : all) {
-            if (v.toObject().contains(QStringLiteral("any"))) {
-                anyGroup = v.toObject();
-            }
-        }
-        QVERIFY2(!anyGroup.isEmpty(), "the toast-name half must be an Any{} over title and class");
-        const QJsonArray anyChildren = anyGroup.value(QStringLiteral("any")).toArray();
-        QCOMPARE(anyChildren.size(), 2);
-        QStringList anyFields;
-        for (const QJsonValue& v : anyChildren) {
-            const QJsonObject leaf = v.toObject();
-            QCOMPARE(leaf.value(QStringLiteral("op")).toString(), QStringLiteral("contains"));
-            QCOMPARE(leaf.value(QStringLiteral("value")).toString(), QStringLiteral("notificationtoasts"));
-            anyFields.append(leaf.value(QStringLiteral("field")).toString());
-        }
-        anyFields.sort();
-        QCOMPARE(anyFields, (QStringList{QStringLiteral("title"), QStringLiteral("windowClass")}));
-
-        // No None{} guard any more: the rule names the windows it guards
-        // rather than excluding everything that is not the library window.
-        for (const QJsonValue& v : all) {
-            QVERIFY2(!v.toObject().contains(QStringLiteral("none")),
-                     "the retired title-negation guard must not come back");
-        }
-
-        // The rule is sliced into the placement-exclusion set the daemon and
-        // effect consume — i.e. it actually participates in the gate. The
-        // blanket-Exclude slice is empty: nothing seeded uses that action now.
-        const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
-        QVERIFY(set.has_value());
-        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*set).count(), 0);
-        QCOMPARE(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*set).count(), 1);
-    }
-
-    /// The regression the narrowing exists for, evaluated against the exact
-    /// strings a live KWin session reports.
-    ///
-    /// `WindowQuery::windowClass` carries KWin's `windowClass()`, which is the
-    /// raw `"resourceName resourceClass"` pair. Steam's own UI reports
-    /// `"steamwebhelper steam"`, but a game launched THROUGH Steam reports its
-    /// own app id in both halves — `"steam_app_2342813033
-    /// steam_app_2342813033"` for World of Warcraft. The retired
-    /// `Contains "steam"` leaf matched that, and the blanket `Exclude` action
-    /// then left every Steam-launched game unmanaged and undecorated.
-    void steamRuleLeavesGamesAndOrdinaryWindowsAlone()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
-        QVERIFY(set.has_value());
-        const PhosphorRules::RuleSet placement = PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*set);
-        QCOMPARE(placement.count(), 1);
-        const PhosphorRules::MatchExpression& match = placement.rules().first().match;
-
-        const auto matches = [&match](const QString& windowClass, const QString& title) {
-            PhosphorRules::WindowQuery q;
-            q.windowClass = windowClass;
-            q.title = title;
-            return match.evaluate(q);
-        };
-
-        // The window the rule exists for.
-        QVERIFY2(matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("notificationtoasts_20993166_desktop")),
-                 "a Steam notification toast must still be guarded");
-
-        // The regression: a Steam-launched game must be left alone.
-        QVERIFY2(
-            !matches(QStringLiteral("steam_app_2342813033 steam_app_2342813033"), QStringLiteral("World of Warcraft")),
-            "a Steam-launched game must never be excluded");
-
-        // The row that actually falsifies endsWith-vs-contains. Every OTHER
-        // negative here carries a toast-free name, so the Any{} half decides
-        // them on its own and the class operator never has to hold — revert
-        // this leaf to the retired `Contains "steam"` and they all stay green.
-        // A game id both CONTAINS "steam" and carries the toast token, so only
-        // the suffix anchor keeps it out.
-        QVERIFY2(!matches(QStringLiteral("steam_app_2342813033 steam_app_2342813033"),
-                          QStringLiteral("notificationtoasts_5_desktop")),
-                 "endsWith must pin the class token: a steam_app_* id that also "
-                 "carries the toast name must still be left alone");
-
-        // Steam's other ordinary windows place like anything else.
-        QVERIFY2(!matches(QStringLiteral("steamwebhelper steam"), QStringLiteral("Friends List")),
-                 "the Friends List must place normally");
-
-        // The toast token on the CLASS side is guarded too. Which field
-        // carries `notificationtoasts_<N>_desktop` is not established, so the
-        // rule accepts either; this pins the arm the title-only shape missed.
-        //
-        // The title is left DISENGAGED here, not set to an empty string —
-        // that is the real late-caption state. The effect stamps the caption
-        // only once it is non-empty and caches the exclusion verdict without a
-        // captionChanged invalidation, so a title-only rule that resolves in
-        // this state answers "not excluded" and stays pinned that way. The
-        // class arm has no such window.
-        PhosphorRules::WindowQuery noCaption;
-        noCaption.windowClass = QStringLiteral("notificationtoasts_1_desktop steam");
-        QVERIFY2(match.evaluate(noCaption),
-                 "a toast whose class carries the token must be guarded before "
-                 "any caption has been stamped");
-
-        // The older X11 two-token spelling still resolves, so an upgrading
-        // user on an older Steam keeps the guard.
-        QVERIFY2(matches(QStringLiteral("steam Steam"), QStringLiteral("notificationtoasts_1_desktop")),
-                 "the X11-era \"steam Steam\" class pair must still resolve");
-    }
-
-    /// An already-converted config carrying the RETIRED rule verbatim is
-    /// repaired in place on the next startup, because the seeder only runs on
-    /// the rebuild path and would never otherwise reach it.
-    void steamRuleRepairedInAnAlreadyConvertedConfig()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        // Put the retired shape back on disk under the seeded rule's fixed id,
-        // exactly as a config converted before the narrowing carries it.
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(setOpt.has_value());
-        PhosphorRules::RuleSet stale = *setOpt;
-        const auto seeded = seededSteamRule(stale);
-        QVERIFY(seeded.has_value());
-        const QUuid steamId = seeded->id;
-        PhosphorRules::Rule retired = *seeded;
-        retired.name = QStringLiteral("Steam");
-        // A real pre-narrowing config carries this rule in the ADVANCED band:
-        // the retired shape nested a None{}, so it was never a flat
-        // conjunction. Seeding the fixture at the current band would let a
-        // regression that re-stamped the priority pass unnoticed.
-        retired.priority = 517;
-        retired.match = PhosphorRules::MatchExpression::makeAll(
-            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
-                                                      PhosphorRules::Operator::Contains, QStringLiteral("steam")),
-             PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
-                 PhosphorRules::Field::Title, PhosphorRules::Operator::Equals, QStringLiteral("Steam"))})});
-        retired.actions.clear();
-        PhosphorRules::RuleAction blanket;
-        blanket.type = QString(PhosphorRules::ActionType::Exclude);
-        retired.actions.append(blanket);
-        QVERIFY(stale.updateRule(retired));
-        QVERIFY(stale.saveToFile(rulesPath));
-
-        // Re-run the converted path.
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const auto repairedSet = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(repairedSet.has_value());
-        // Rewritten IN PLACE: the rule keeps its id, so a second startup finds
-        // the corrected shape and does nothing, and the user's row does not
-        // jump position in the Rules page.
-        const auto repairedRule = repairedSet->ruleById(steamId);
-        QVERIFY2(repairedRule.has_value(), "the repair must rewrite the rule, not replace it with a new id");
-        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*repairedSet).count(), 0);
-        QCOMPARE(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*repairedSet).count(), 1);
-
-        // The priority is carried across, not re-stamped. The fixture put the
-        // rule in the Advanced band where a real pre-narrowing config has it.
-        QCOMPARE(repairedRule->priority, 517);
-        // The name is re-stamped, so the row says what it now guards.
-        QCOMPARE(repairedRule->name, QStringLiteral("Steam notifications"));
-
-        const PhosphorRules::MatchExpression& match =
-            PhosphorRules::ExclusionRules::excludePlacementRulesFrom(*repairedSet).rules().first().match;
-
-        // POSITIVE shape check. Without this the negative below is decided by
-        // the title leaf alone, so a repair that stamped only half the match
-        // would still pass.
-        PhosphorRules::WindowQuery toast;
-        toast.windowClass = QStringLiteral("steamwebhelper steam");
-        toast.title = QStringLiteral("notificationtoasts_20993166_desktop");
-        QVERIFY2(match.evaluate(toast), "the repaired rule must still guard a toast");
-
-        PhosphorRules::WindowQuery game;
-        game.windowClass = QStringLiteral("steam_app_2342813033 steam_app_2342813033");
-        game.title = QStringLiteral("World of Warcraft");
-        QVERIFY2(!match.evaluate(game), "the repaired rule must stop excluding Steam-launched games");
-
-        // Idempotent. A third startup must find the corrected shape and do
-        // nothing at all — asserted on the bytes, not in prose.
-        QFile repaired(rulesPath);
-        QVERIFY(repaired.open(QIODevice::ReadOnly));
-        const QByteArray afterRepair = repaired.readAll();
-        repaired.close();
-
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        QFile again(rulesPath);
-        QVERIFY(again.open(QIODevice::ReadOnly));
-        const QByteArray afterSecondRun = again.readAll();
-        again.close();
-        QCOMPARE(afterSecondRun, afterRepair);
-    }
-
-    /// The repair carries the user's enabled flag and priority across. A user
-    /// who turned the premade rule off meant it, and must not find it back on
-    /// after an upgrade.
-    void steamRuleRepairKeepsEnabledFlagAndPriority()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(setOpt.has_value());
-        PhosphorRules::RuleSet stale = *setOpt;
-        const auto seeded = seededSteamRule(stale);
-        QVERIFY(seeded.has_value());
-        const QUuid steamId = seeded->id;
-
-        PhosphorRules::Rule retired = *seeded;
-        retired.enabled = false;
-        retired.priority = 543;
-        retired.match = PhosphorRules::MatchExpression::makeAll(
-            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
-                                                      PhosphorRules::Operator::Contains, QStringLiteral("steam")),
-             PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
-                 PhosphorRules::Field::Title, PhosphorRules::Operator::Equals, QStringLiteral("Steam"))})});
-        retired.actions.clear();
-        PhosphorRules::RuleAction blanket;
-        blanket.type = QString(PhosphorRules::ActionType::Exclude);
-        retired.actions.append(blanket);
-        QVERIFY(stale.updateRule(retired));
-        QVERIFY(stale.saveToFile(rulesPath));
-
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const auto repairedSet = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(repairedSet.has_value());
-        const auto repairedRule = repairedSet->ruleById(steamId);
-        QVERIFY(repairedRule.has_value());
-
-        // The shape WAS corrected...
-        QCOMPARE(repairedRule->actions.size(), 1);
-        QCOMPARE(repairedRule->actions.first().type, QString(PhosphorRules::ActionType::ExcludePlacement));
-        // ...but the two things the user owns were left alone.
-        QVERIFY2(!repairedRule->enabled, "a rule the user disabled must stay disabled");
-        QCOMPARE(repairedRule->priority, 543);
-    }
-
-    /// A rule the user DELETED must not be resurrected. The repair matches by
-    /// a fixed id, so a missing rule is nothing of ours to repair.
-    void steamRuleRepairDoesNotResurrectADeletedRule()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(setOpt.has_value());
-        PhosphorRules::RuleSet trimmed = *setOpt;
-        const auto seeded = seededSteamRule(trimmed);
-        QVERIFY(seeded.has_value());
-        const QUuid steamId = seeded->id;
-        const int countBefore = trimmed.count();
-        QVERIFY(trimmed.removeRule(steamId));
-        QVERIFY(trimmed.saveToFile(rulesPath));
-
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const auto afterSet = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(afterSet.has_value());
-        QVERIFY2(!afterSet->ruleById(steamId).has_value(), "a deleted premade rule must not come back");
-        QCOMPARE(afterSet->count(), countBefore - 1);
-    }
-
-    /// A user who EDITED the seeded rule keeps their edit. The repair only
-    /// reclaims rules that still carry the retired shape verbatim.
-    void steamRuleRepairLeavesAUserEditAlone()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(setOpt.has_value());
-        PhosphorRules::RuleSet edited = *setOpt;
-        const auto seeded = seededSteamRule(edited);
-        QVERIFY(seeded.has_value());
-        const QUuid steamId = seeded->id;
-        PhosphorRules::Rule mine = *seeded;
-        // A plausible user edit: keep the id, narrow it to one's own liking.
-        mine.match = PhosphorRules::MatchExpression::makeLeaf(
-            PhosphorRules::Field::Title, PhosphorRules::Operator::Contains, QStringLiteral("Friends"));
-        mine.actions.clear();
-        PhosphorRules::RuleAction blanket;
-        blanket.type = QString(PhosphorRules::ActionType::Exclude);
-        mine.actions.append(blanket);
-        const QJsonObject mineJson = mine.toJson();
-        QVERIFY(edited.updateRule(mine));
-        QVERIFY(edited.saveToFile(rulesPath));
-
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const auto after = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(after.has_value());
-        const auto survivor = after->ruleById(steamId);
-        QVERIFY2(survivor.has_value(), "the user's edited rule must survive the repair");
-        QCOMPARE(survivor->toJson(), mineJson);
-    }
-
-    /// The other half of the reclaim predicate. A user who kept the stock
-    /// match but changed only the ACTION has still edited the rule, and
-    /// `isRetiredSteamRuleShape` checks the action before it compares the
-    /// match — without this, deleting that check leaves the whole suite green.
-    void steamRuleRepairLeavesAnActionOnlyEditAlone()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QString rulesPath = ConfigDefaults::rulesFilePath();
-        auto setOpt = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(setOpt.has_value());
-        PhosphorRules::RuleSet edited = *setOpt;
-        const auto seeded = seededSteamRule(edited);
-        QVERIFY(seeded.has_value());
-        const QUuid steamId = seeded->id;
-
-        PhosphorRules::Rule mine = *seeded;
-        // The retired MATCH, verbatim...
-        mine.match = PhosphorRules::MatchExpression::makeAll(
-            {PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::WindowClass,
-                                                      PhosphorRules::Operator::Contains, QStringLiteral("steam")),
-             PhosphorRules::MatchExpression::makeNone({PhosphorRules::MatchExpression::makeLeaf(
-                 PhosphorRules::Field::Title, PhosphorRules::Operator::Equals, QStringLiteral("Steam"))})});
-        // ...but the user swapped the blanket Exclude for the scoped action
-        // themselves. That is their edit, and it must be left alone.
-        mine.actions.clear();
-        PhosphorRules::RuleAction scoped;
-        scoped.type = QString(PhosphorRules::ActionType::ExcludePlacement);
-        mine.actions.append(scoped);
-        const QJsonObject mineJson = mine.toJson();
-        QVERIFY(edited.updateRule(mine));
-        QVERIFY(edited.saveToFile(rulesPath));
-
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const auto after = PhosphorRules::RuleSet::loadFromFile(rulesPath);
-        QVERIFY(after.has_value());
-        const auto survivor = after->ruleById(steamId);
-        QVERIFY2(survivor.has_value(), "an action-only edit must survive the repair");
-        QCOMPARE(survivor->toJson(), mineJson);
     }
 
     // ─── Superseding: assignments.json retired to .migrated ───────────────
@@ -1148,12 +761,14 @@ private Q_SLOTS:
         QVERIFY2(slots.contains(QStringLiteral("autotile")), "the nested format always carries both mode keys");
         QVERIFY2(!slots.contains(QStringLiteral("3")), "slots must be nested by mode, not written flat");
 
-        // The QuickLayouts data must not have leaked into rules.json as
-        // a rule — it is not a rule.
-        const QJsonArray rules = rulesFromRules();
-        for (const QJsonValue& v : rules) {
-            QVERIFY(!actionTypes(v.toObject()).contains(QStringLiteral("quickLayout")));
-        }
+        // The QuickLayouts data must not have leaked into rules.json — it is
+        // not a rule. Checked on the slot VALUE rather than on an action type
+        // named "quickLayout": no such type exists in the vocabulary, so a
+        // guard on it could never have failed whatever the migration did.
+        const QJsonDocument rulesDoc(rulesFromRules());
+        QVERIFY2(
+            !QString::fromUtf8(rulesDoc.toJson(QJsonDocument::Compact)).contains(QStringLiteral("{quick-layout-id}")),
+            "a QuickLayouts slot value must not appear anywhere in rules.json");
     }
 
     // ─── Idempotency of the superseding behaviour ─────────────────────────
