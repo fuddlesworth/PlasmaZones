@@ -226,9 +226,8 @@ SettingsFlickable {
         // the two that change what you actually see. The rest (thickness,
         // length, the two gaps, corner radius, colours, the five label-font
         // knobs, place-within-column, hide-for-single-tab) are tuning for an
-        // indicator you have already
-        // decided you want, which is advanced-mode depth — they live on
-        // Scrolling → Tabs.
+        // indicator you have already decided you want, which is advanced-mode
+        // depth — they live on Scrolling → Tabs.
         //
         // These keys are OWNED by scrolling-tabs, so this page has no
         // pageOwnedConfigKeys entry for them; dirtiness, Reset and Discard

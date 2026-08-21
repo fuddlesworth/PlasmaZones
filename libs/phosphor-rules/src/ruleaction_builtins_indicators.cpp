@@ -47,8 +47,8 @@ void ActionRegistry::registerBuiltinsIndicators()
     // bool descriptors seed the INVERSE of their global default, so a freshly
     // added rule row does the one thing a user adding it can mean rather than
     // restating the global. The numeric ones seed the shipped value itself, so
-    // a fresh row is a no-op the user then edits. The two enum rows (style,
-    // position) carry no defaultDisplay and are not covered by either half.
+    // a fresh row is a no-op the user then edits. The enum, colour and string
+    // rows carry no defaultDisplay at all and are covered by neither half.
     // The bool half is also stated in ruleaction_builtins_appearance.cpp,
     // which the behaviour toggles follow.
 

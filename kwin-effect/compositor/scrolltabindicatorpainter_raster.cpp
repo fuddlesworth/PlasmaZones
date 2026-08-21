@@ -247,7 +247,8 @@ ChipMetrics chipMetricsOf(const IndicatorAxes& axes)
     // pixels than tabs the 1px floor cannot help and the tail is clipped
     // regardless, which is the trade the floor exists to make. Note the
     // precondition is `inner >= tabCount`, not `longExtent >= tabCount`: the
-    // band between them still overruns, and the clip is what handles it.
+    // band between them still overruns the pill's inner edge, and past
+    // `longExtent - inset` the clip is what handles it.
     metrics.longBudget = std::max(1, (inner - axes.gaps * neighbours) / std::max(1, axes.tabCount));
     // The last chip absorbs the division remainder so the run ends flush with
     // the pill's inner edge instead of leaving up to tabCount-1 px that
