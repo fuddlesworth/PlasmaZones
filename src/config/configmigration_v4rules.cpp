@@ -291,6 +291,12 @@ void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules)
         if (m.kind() != MatchExpression::Kind::All) {
             return false;
         }
+        // An empty All{} is the match-everything catch-all, not a plain
+        // per-window rule — file it with the composites so it does not read as
+        // an Application-band window rule.
+        if (m.children().isEmpty()) {
+            return false;
+        }
         for (const MatchExpression& child : m.children()) {
             if (!child.isLeaf()) {
                 return false;
@@ -406,11 +412,28 @@ QUuid steamDefaultRuleId()
 /// GAME reports its own app id in both halves — `"steam_app_2342813033
 /// steam_app_2342813033"` for a live World of Warcraft. That string CONTAINS
 /// "steam", so the old rule unmanaged every game launched from Steam.
-/// Anchoring on the suffix pins the class token instead: it holds for both the
-/// modern Wayland pair (`"steamwebhelper steam"`) and the older X11 one
-/// (`"steam Steam"`), and no `steam_app_*` id can end in it. The comparison is
-/// case-insensitive, as is `Contains` on the title (see MatchTypes operator
-/// semantics).
+/// Anchoring on the suffix pins the class token instead: it holds for the
+/// current Steam client's pair (`"steamwebhelper steam"`, the Chromium-based
+/// steamwebhelper) and for the older `"steam Steam"` spelling, and no
+/// `steam_app_*` id can end in it. Steam is an X11 client, so under a Wayland
+/// session it runs on XWayland and reports WM_CLASS — which is why this field
+/// carries a two-token pair at all. The comparison is case-insensitive, as is
+/// `Contains` (see MatchTypes operator semantics), so `"steam Steam"` resolves.
+///
+/// The second half is an `Any` over the SAME token on two different fields,
+/// and that is not belt-and-braces. Steam names a toast
+/// `notificationtoasts_<N>_desktop`, but which field carries that name is not
+/// established: classically it is the WM_CLASS resourceName half (giving
+/// `windowClass() == "notificationtoasts_1_desktop steam"`), while the rule
+/// this replaced was written as though it were the window caption. No probe of
+/// a live toast settled it, so the rule accepts either and is correct whichever
+/// side the token lands on. The class arm matters for a second reason: the
+/// caption arrives late and the effect's exclusion verdict is cached per
+/// window WITHOUT a captionChanged invalidation (see
+/// kwin-effect/plasmazoneseffect/window_connections.cpp, where that omission is
+/// deliberate), so a title-only rule can resolve "not excluded" before the
+/// caption exists and stay pinned that way for the window's life. The class is
+/// stamped at first resolve, so the class arm has no such window.
 ///
 /// The action is `ExcludePlacement`, not the blanket `Exclude`: a toast has no
 /// business being placed, but stripping its decorations and animations too was
@@ -428,7 +451,10 @@ void applySteamDefaultRuleShape(PhosphorRules::Rule& rule)
     rule.name = QStringLiteral("Steam notifications");
     rule.match = MatchExpression::makeAll(
         {MatchExpression::makeLeaf(Field::WindowClass, Operator::EndsWith, QStringLiteral("steam")),
-         MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("notificationtoasts"))});
+         MatchExpression::makeAny(
+             {MatchExpression::makeLeaf(Field::Title, Operator::Contains, QStringLiteral("notificationtoasts")),
+              MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains,
+                                        QStringLiteral("notificationtoasts"))})});
     rule.actions.clear();
     RuleAction action;
     action.type = QString(ActionType::ExcludePlacement);
@@ -443,7 +469,7 @@ bool isRetiredSteamRuleShape(const PhosphorRules::Rule& rule)
     // single blanket Exclude action. Compared structurally rather than by a
     // stored version stamp, so a user who edited either half keeps their
     // edit — the repair only reclaims rules that are still verbatim ours.
-    if (rule.actions.size() != 1 || rule.actions.first().type != QLatin1String(ActionType::Exclude)) {
+    if (rule.actions.size() != 1 || rule.actions.first().type != ActionType::Exclude) {
         return false;
     }
     Rule retired;
@@ -462,9 +488,10 @@ void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules)
     rule.id = steamDefaultRuleId();
     rule.enabled = true;
     // Left at 0 here; assignBandPrioritiesToZeroRules stamps the real band
-    // priority once the full list is assembled (composite match → Advanced
-    // band). An exclusion rule's precedence is irrelevant to the boolean
-    // slice the effect evaluates, but a band value displays better than 0.
+    // priority once the full list is assembled. The match nests an Any group,
+    // so it is not a flat conjunction and lands in the Advanced band. An
+    // exclusion rule's precedence is irrelevant to the boolean slice the effect
+    // evaluates, but a band value displays better than 0.
     rule.priority = 0;
     applySteamDefaultRuleShape(rule);
     rules.append(rule);

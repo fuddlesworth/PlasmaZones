@@ -287,9 +287,11 @@ public:
     /// the rebuild path, so an already-converted config would never otherwise
     /// see the correction.
     ///
-    /// Only rewrites a rule that still carries the retired shape verbatim (see
-    /// `isRetiredSteamRuleShape`); a user-edited or already-corrected rule is
-    /// left untouched, as is a deleted one. The enabled flag and priority are
+    /// Only rewrites a rule whose match and action are both still the retired
+    /// shape verbatim (see `isRetiredSteamRuleShape`); a rule with either half
+    /// edited is left untouched, as is an already-corrected or deleted one. A
+    /// rule that was only RENAMED is still repaired, and its name is re-stamped
+    /// along with the match and action. The enabled flag and priority are
     /// carried across. Idempotent: after the rewrite the shape check no longer
     /// fires.
     ///
