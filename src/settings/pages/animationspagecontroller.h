@@ -286,6 +286,24 @@ public:
     // pass it down rather than call that accessor in a loop. And each is now
     // directly testable without driving QML.
     //
+    // The tree is not memoised ON PURPOSE, and the reason is worth writing down
+    // because the cost is real: a rebuild is a store read, a QVariantMap →
+    // QJsonObject conversion, a parse and a prune walk, and a card refresh
+    // takes several of them. The obvious memo — cache the tree, invalidate on
+    // `ISettings::shaderProfileTreeChanged` — is UNSAFE. That signal has
+    // exactly one emit site, `Settings::setShaderProfileTree`, so it fires when
+    // this process writes the tree and at no other time: a config reload, a
+    // settings-profile switch, or an edit arriving from outside would all leave
+    // the memo serving a tree that no longer exists, and every card would then
+    // render shader state that is simply wrong. Reading fresh is
+    // unconditionally correct, which is worth more than the rebuild.
+    //
+    // `m_treeDirtyCache` is memoised on that same signal and is safe, but not
+    // by the same argument: it also invalidates on baseline capture, and a
+    // stale dirty VERDICT self-corrects on the next write, where a stale TREE
+    // would be shown to the user. A future memo needs an invalidation set that
+    // covers every path the store can move under it, not just this one signal.
+    //
     // What deliberately stays in the card: the `_committing` /
     // `_committingShader` re-entrancy latches and the refresh that follows a
     // group write. Those are view state about which signals the card should
@@ -510,6 +528,12 @@ public:
     /// to inheritance. Distinct from writing the engaged-empty sentinel, which
     /// is an explicit "None" that BLOCKS inheritance.
     /// One tree read and one write for the whole group, like its setter twin.
+    ///
+    /// Deliberately does NOT skip a path that cannot host a shader leg, which
+    /// its setter twin does. Clearing is idempotent and converges toward a
+    /// clean tree, and such an entry can exist — from an import, or from a path
+    /// that lost leg support after it was written — so refusing to clear it
+    /// would strand it with nothing able to remove it.
     /// @return the number of paths whose override was removed, or -1 if the
     /// call was refused because an async discard owns the tree (it toasts).
     Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& rawPaths);
@@ -702,13 +726,23 @@ public:
     /// state.
     bool clearShaderOverride(const QString& path);
 
-    /// Count of shader overrides on paths strictly DEEPER than @p path
-    /// (i.e. paths whose first component up to a `.` matches @p path).
+    /// Count of shader overrides on paths strictly DEEPER than @p path,
+    /// meaning the ones that literally begin `<path>.`.
     /// Used by parent-node cards to surface "N deeper overrides shadow
     /// this parent" — without it, a stale leaf set in a previous
     /// session silently wins the deeper-leaf-overlay merge inside
     /// `ShaderProfileTree::resolve` and the parent's value never
     /// reaches runtime even though the UI control shows it set.
+    ///
+    /// "Deeper" is a STRING PREFIX, which is narrower than the cascade the
+    /// resolver walks. `ProfilePaths::parentPath` sends every category root up
+    /// to the bare literal `global`, and `global` is a prefix of nothing — so
+    /// `window`, `popup`, `osd` and their kin genuinely resolve THROUGH the
+    /// global node while none of them counts as its descendant here. Passing
+    /// `global` therefore always answers 0, however many category-level
+    /// overrides exist. Inert today because no card is built for the global
+    /// node, and the QML documents the same gap from its side; it would have to
+    /// be revisited before one is.
     int shaderOverrideDescendantCount(const QString& path) const;
 
     /// Clear every shader override whose path is strictly DEEPER than

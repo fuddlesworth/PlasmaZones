@@ -301,6 +301,17 @@ bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, co
     // See the header doc. Routed through the canonical predicate
     // (shaderEffectAppliesToEventPath) — the same one the settings pickers
     // filter with — so runtime refusal and picker filtering can never drift.
+    //
+    // `effect()` returns BY VALUE, so this copies the whole descriptor — a
+    // dozen-odd QStrings, two QStringLists and a texture-slot list — to read
+    // two fields. Implicit sharing makes that refcount traffic rather than
+    // allocation, but this is reachable per geometry apply, which during an
+    // autotile-reorder drag means per frame. Left alone deliberately: the fix
+    // is a narrow "does this effect apply to this path" accessor on the
+    // registry, which is a library arm and belongs with a measurement rather
+    // than ahead of one. Do not "optimise" it by caching the descriptor here —
+    // the registry rescans, and a stale copy would refuse a pack that had just
+    // become valid.
     const auto eff = m_shaderManager.m_animationShaderRegistry.effect(effectId);
     if (!eff.isValid()) {
         // Unknown id: pass through. The pack may still be scanning, and
@@ -758,6 +769,17 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
             dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree, v,
                                 [this](const QJsonObject& obj) {
                                     auto& tree = m_shaderManager.profileTree();
+                                    // Assigned unconditionally: fromJson is TOTAL, so it
+                                    // cannot report a bad payload the way RuleSet::fromJson
+                                    // can, and an object carrying no `overrides` array
+                                    // simply yields the empty tree. That is the right
+                                    // outcome for a user who cleared every override, and
+                                    // there is no shape that reaches here meaning anything
+                                    // else: a non-object payload is rejected by
+                                    // dispatchJsonSetting before this runs, and a
+                                    // non-string variant never parses. Distinguishing
+                                    // "empty" from "malformed" would need the parser to
+                                    // say so, which is a library arm, not a guard here.
                                     tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(obj);
                                     qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
                                                       << tree.overriddenPaths().size()

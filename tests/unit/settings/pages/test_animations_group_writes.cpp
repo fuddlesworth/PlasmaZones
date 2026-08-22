@@ -29,6 +29,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -950,6 +951,39 @@ private Q_SLOTS:
         const QJsonObject obj = QJsonDocument::fromJson(onDisk.readAll()).object();
         QVERIFY2(!obj.contains(QStringLiteral("bogusKey")), "an unknown field was written to the profile file");
         QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 900);
+    }
+
+    /// A PARTIAL failure reports the count that landed, not the refusal
+    /// sentinel.
+    ///
+    /// The whole reason this writer returns int rather than bool. The
+    /// all-paths-fail case is pinned above at 0, which a blanket `return -1`
+    /// regression would also fail — but a MIXED batch is the case the
+    /// distinction exists for, and nothing reached it: the card stops
+    /// re-issuing on a refusal, so folding a partial failure into -1 would
+    /// abandon the paths that did write.
+    ///
+    /// One path is made unwritable by putting a DIRECTORY where its profile
+    /// file belongs, which leaves its sibling and the directory itself alone.
+    void aPartialFailureReportsTheCountThatLanded()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QVERIFY(QDir(tmp.path()).mkpath(kMirror + QStringLiteral(".json")));
+
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        const int written =
+            c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 640}}, QVariant());
+
+        QVERIFY2(written == 1,
+                 qPrintable(QStringLiteral("expected the one writable path to be counted, got %1").arg(written)));
+        QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("duration")).toInt(), 640);
+        // And the user is told, once, that not everything saved.
+        QCOMPARE(toasts.count(), 1);
+        QCOMPARE(toasts.first().at(0).toString(), PhosphorI18n::tr("Some animation settings could not be saved."));
     }
 
     /// An over-long value is dropped rather than written.
