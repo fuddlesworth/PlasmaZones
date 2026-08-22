@@ -107,8 +107,11 @@ inline QStringList shaderConsumedLeafEventPaths()
         // isolation — see shaderPathResolvesInIsolation.
         PP::ScrollingTabSwitch,
         // Plasma applet popups — the launcher, the tray flyouts, a widget's
-        // expanded view. Per-window legs like the window family above, from
-        // the same windowAdded / windowClosed hooks in window_lifecycle.cpp:
+        // expanded view. Installed from a window surface's lifecycle hooks like
+        // the window family above, but NOT per-window in the sense
+        // ProfilePaths::eventPathResolvesPerWindow means: these resolve
+        // WINDOWLESS, which is what keeps the rule tier off them. Same
+        // windowAdded / windowClosed hooks in window_lifecycle.cpp:
         // tryBeginShaderForEvent routes a shell surface's open and close onto
         // these paths instead of window.appearance.{open,close}, so what the
         // user chose for their windows never plays on plasmashell's surfaces.

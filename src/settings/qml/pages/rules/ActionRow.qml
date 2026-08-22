@@ -3,9 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
 
@@ -78,15 +76,28 @@ ColumnLayout {
         }
         return parts.join("\n");
     }
+    /// The animation-shader effect id whose schema the row should resolve, or
+    /// "" when this action is not an animation-shader override or has no effect
+    /// picked yet.
+    ///
+    /// A `string` property so its change signal fires only when the VALUE
+    /// changes, for the same reason as `_algorithmParamAlgoId` below:
+    /// `_withParam` replaces the whole `row.action` object on every uniform
+    /// write, so a schema binding reading `row.action.effectId` directly
+    /// re-fires on each write. `shaderParameters()` builds a fresh QVariantList
+    /// per call, so that hands ShaderParamsEditor a new array identity on every
+    /// slider tick, which resets its Repeater and destroys the delegate holding
+    /// the drag. Routing through this id keeps the schema stable for the whole
+    /// edit and re-resolves it only when the chosen effect actually changes.
+    readonly property string _animationShaderEffectId: (row.action.type === "overrideAnimationShader" && row.action.effectId) ? row.action.effectId : ""
+    /// The overlay-shader equivalent, value-stable for the same reason.
+    readonly property string _overlayShaderEffectId: (row.action.type === "overrideOverlayShader" && row.action.effectId) ? row.action.effectId : ""
     /// Shader-uniform schema for the action's currently-selected effect. Empty
     /// when the action is not a shader-override, no effect is set, or the
     /// effect declares no parameters. Drives the inline shader editor below
-    /// the row.
+    /// the row. Depends only on `_animationShaderEffectId`, not `row.action`.
     readonly property var _shaderParamSchema: {
-        if (row.action.type !== "overrideAnimationShader")
-            return [];
-
-        var effectId = row.action.effectId || "";
+        var effectId = row._animationShaderEffectId;
         if (effectId.length === 0)
             return [];
 
@@ -99,11 +110,9 @@ ColumnLayout {
     /// Shader-uniform schema for OverrideOverlayShader — same shape as
     /// `_shaderParamSchema` but sourced from the overlay/snapping shader
     /// registry (the catalog entry's `parameters`), not the animation one.
+    /// Depends only on `_overlayShaderEffectId`, not `row.action`.
     readonly property var _overlayShaderParamSchema: {
-        if (row.action.type !== "overrideOverlayShader")
-            return [];
-
-        var effectId = row.action.effectId || "";
+        var effectId = row._overlayShaderEffectId;
         if (effectId.length === 0)
             return [];
 
@@ -122,10 +131,17 @@ ColumnLayout {
     /// The active shader-uniform schema for whichever shader-override action is
     /// being edited (animation or overlay) — drives the inline
     /// ShaderParamsEditor below the row.
+    ///
+    /// Selects on `_shaderActionType` rather than `row.action.type` so the last
+    /// hop is value-stable too. A `var` property activates its change signal on
+    /// every write regardless of equality, so reading `row.action` here would
+    /// re-publish the schema on each uniform write even though both sources
+    /// above are now stable.
+    readonly property string _shaderActionType: (row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") ? row.action.type : ""
     readonly property var _activeShaderParamSchema: {
-        if (row.action.type === "overrideAnimationShader")
+        if (row._shaderActionType === "overrideAnimationShader")
             return row._shaderParamSchema;
-        if (row.action.type === "overrideOverlayShader")
+        if (row._shaderActionType === "overrideOverlayShader")
             return row._overlayShaderParamSchema;
         return [];
     }
@@ -135,7 +151,7 @@ ColumnLayout {
     /// write, so a binding reading `row.action.algorithm` directly would re-fire on
     /// each write; routing the schema through this value-stable id keeps the params
     /// editor from rebuilding its sliders mid-drag (matching the shader editor,
-    /// whose schema binding returns a cached-identity array).
+    /// whose schema routes through `_animationShaderEffectId` for the same reason).
     readonly property string _algorithmParamAlgoId: (row.action.type === "setAlgorithmParam" && row.action.algorithm) ? row.action.algorithm : ""
     /// The custom-parameter schema for the SetAlgorithmParam action's currently
     /// selected algorithm — drives the inline algorithm-params editor below the

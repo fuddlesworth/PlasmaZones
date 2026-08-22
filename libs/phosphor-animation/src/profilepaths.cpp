@@ -15,6 +15,10 @@ const QString Global = QStringLiteral("global");
 // static-init.
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
+// NOTE: this token is the same STRING as the `Desktop` path root below. The
+// collision is deliberate (both are the user-facing word) and it is the only
+// one among these constants, but it means eventClassForPath(Desktop) returns
+// its own argument. No store may key on "a path or a class token" in one map.
 const QString EventClassDesktop = QStringLiteral("desktop");
 const QString EventClassMove = QStringLiteral("move");
 const QString EventClassStrip = QStringLiteral("strip");
@@ -38,8 +42,10 @@ const QString WindowFocus = QStringLiteral("window.appearance.focus");
 // deliberately omits KWin's resize edge-lock logic, so no pack class had a
 // real story there. Discrete resizes are covered by snapIn / layoutSwitch /
 // maximize. `window.movement.snapResize` was dropped with it: no callsite
-// ever routed it. Stale config overrides on either path are filtered by the
-// allBuiltInPaths()/shaderSupportedEventPaths() membership checks.
+// ever routed it. A stale config override on either path is pruned from the
+// SHADER tree by shaderSupportedEventPaths() on both read and write. The
+// motion tree has no such prune, so a motion override there simply lingers,
+// unreachable from the UI and named by no resolver.
 const QString WindowMovement = QStringLiteral("window.movement");
 const QString WindowMaximize = QStringLiteral("window.movement.maximize");
 const QString WindowMove = QStringLiteral("window.movement.move");
@@ -286,7 +292,10 @@ bool eventPathResolvesPerWindow(const QString& path)
     //   window.movement.maximize / .move
     //                        — tryBeginShaderForEvent from window_connections
     //   window.movement.snapIn / .snapOut / .layoutSwitch
-    //                        — applyWindowGeometry's resolve in drag_snap
+    //                        — applyWindowGeometry's resolve in drag_snap, and
+    //                          every other applyWindowGeometry caller that takes
+    //                          the default profilePath (it defaults to snapIn),
+    //                          which includes the tiling and scrolling reflows
     //   scrolling.tabSwitch  — tryBeginShaderForEvent from the tiling handler's
     //                          tab swap, which passes the arriving window
     static const QStringList kPerWindowPaths{

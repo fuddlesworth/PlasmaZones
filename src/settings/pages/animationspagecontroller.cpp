@@ -25,7 +25,6 @@
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QSet>
-#include <QStandardPaths>
 #include <QtConcurrent/QtConcurrent>
 
 namespace PlasmaZones {
@@ -782,8 +781,9 @@ void AnimationsPageController::asyncRevertPending()
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────
-// `sectionForPath`, `eventLabel`, `parentChain` live in
-// `animationspagecontroller_paths.cpp`. Same class, separate TU, no API change.
+// `eventPathAcceptsWindowRules`, `sectionForPath`, `eventLabel`, `parentChain`
+// live in `animationspagecontroller_paths.cpp`. Same class, separate TU, no
+// API change.
 
 QVariantList AnimationsPageController::eventSections() const
 {
@@ -831,13 +831,17 @@ QVariantList AnimationsPageController::eventSections() const
         // section root (e.g. "window", "popup") rather than a leaf
         // event — i.e. another built-in path uses it as parent.
         entry.insert(QStringLiteral("isCategory"), parentPaths.contains(path));
-        // Whether a per-window Rule can reach this event at all. False for every
-        // event the compositor resolves windowless (the desktop switches, the
-        // scrolling strip, the OSDs, the panels, the editor's own widgets, and
-        // the whole shell subtree), because a rule's animation action is matched
-        // against a window and those events have none to match. Carried on the
-        // entry so the rule editor's picker can filter on data it already
-        // receives instead of spelling a second copy of the list in QML.
+        // Whether a per-window Rule can reach this event at all. True for
+        // exactly ten leaves — the four `window.appearance` leaves, the five
+        // `window.movement` leaves, and `scrolling.tabSwitch` — and false for
+        // EVERY other path, including the `window` category nodes above those
+        // leaves. `ProfilePaths::eventPathResolvesPerWindow` is the authority;
+        // the rest (the desktop switches, the scrolling strip, the OSDs, the
+        // popups, the panels, the cursor, the editor's own actions and widgets,
+        // the whole shell subtree) are resolved without a window, and a rule's
+        // animation action is matched against one. Carried on the entry so the
+        // rule editor's picker can filter on data it already receives instead of
+        // spelling a second copy of the list in QML.
         entry.insert(QStringLiteral("acceptsWindowRules"), ProfilePaths::eventPathResolvesPerWindow(path));
         sectionPaths[section].append(entry);
     }
