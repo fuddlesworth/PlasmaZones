@@ -104,6 +104,8 @@ private Q_SLOTS:
     void centerVisibleColumnsCentersTheSpanAndFallsBack();
     void focusTileAtEndSeeksEndsAndSkipsMinimized();
     void scrollViewByClampsTheDeltaNotThePosition();
+    void scrollViewByDetachesTheViewFromTheCenteringPolicy();
+    void viewDetachmentEndsAtFocusAndAtBothCenteringVerbs();
 };
 
 void TestScrollStripOps::consumePullsNextColumnsWindow()
@@ -1467,6 +1469,142 @@ void TestScrollStripOps::scrollViewByClampsTheDeltaNotThePosition()
     QCOMPARE(viewX(), overshot - 1); // one step back, not a snap to maxViewX
     QVERIFY(!strip.scrollViewBy(1, params));
     QCOMPARE(viewX(), overshot - 1);
+}
+
+void TestScrollStripOps::scrollViewByDetachesTheViewFromTheCenteringPolicy()
+{
+    // The pan's whole promise: a view the USER scrolled to survives the next
+    // applyLayout. updateViewForFocus runs at the top of every one, and under
+    // Always it re-derives unconditionally — so without the detach latch the
+    // second QCOMPARE below reads the centered offset back, and the pan is a
+    // single frame the user never sees.
+    ScrollLayoutParams params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::Always;
+    ScrollStrip strip;
+    const ColumnWidth wide = ColumnWidth::makeProportion(0.55);
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), wide, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), wide, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), wide, ColumnDisplay::Normal, params));
+    const auto viewX = [&]() {
+        return strip.relayout(params).viewOffset;
+    };
+
+    // A strip nobody has panned is the policy's, and stays the policy's across
+    // any number of passes.
+    QVERIFY(!strip.viewDetached());
+    strip.updateViewForFocus(params);
+    const int centered = viewX();
+    strip.updateViewForFocus(params);
+    QCOMPARE(viewX(), centered);
+
+    // Centering the LAST column parks the view past the strip's end by design,
+    // so the pan that is possible from here is the backward one. Its direction
+    // does not matter to the claim under test; that it STICKS does.
+    QVERIFY(strip.scrollViewBy(-20, params));
+    QVERIFY(strip.viewDetached());
+    QCOMPARE(viewX(), centered - 20);
+    strip.updateViewForFocus(params);
+    QCOMPARE(viewX(), centered - 20);
+    QVERIFY(strip.viewDetached());
+
+    // And it is not one pass of grace: the latch holds until something asks
+    // for the policy back.
+    strip.updateViewForFocus(params);
+    strip.updateViewForFocus(params);
+    QCOMPARE(viewX(), centered - 20);
+
+    // No re-clamp on the way out either, and this is the arm that proves it:
+    // the pan inherited a centered anchor and so sits PAST the strip's end,
+    // where clamping a detached view would snap it the whole way back in one
+    // pass — the exact motion scrollViewBy's delta clamp exists to prevent,
+    // arriving through the other door. Derived from the resolve rather than
+    // from the 0.55 literal, because proportions are gap-aware and a hand
+    // computation here would encode a second, drifting copy of that rule.
+    const int maxViewOffset = qMax(0, strip.relayout(params).stripExtent - ScrollTestUtils::kMainExtent);
+    QVERIFY2(viewX() > maxViewOffset,
+             qPrintable(QStringLiteral("expected a past-max viewX, got %1 (max %2)").arg(viewX()).arg(maxViewOffset)));
+
+    // A refused pan leaves the latch exactly as it found it — a caller holding
+    // a scroll key against the strip's end must not change what the next
+    // layout pass does. Probed from the ATTACHED side, where a spurious set is
+    // what would show.
+    QVERIFY(strip.focusColumn(0, params)); // re-attaches, per the sibling test
+    QVERIFY(!strip.viewDetached());
+    QVERIFY(!strip.scrollViewBy(0, params));
+    QVERIFY(!strip.viewDetached());
+}
+
+void TestScrollStripOps::viewDetachmentEndsAtFocusAndAtBothCenteringVerbs()
+{
+    // The three ways back. Each hands the view to the policy, so each must
+    // clear the latch — a verb that moved the view while leaving it detached
+    // would make the NEXT layout pass behave differently than it does
+    // everywhere else, which is the kind of divergence nothing else catches.
+    const auto params = defaultParams();
+    const ColumnWidth wide = ColumnWidth::makeProportion(0.55);
+    // Fills @p s and pans it. A void helper, not a factory: QVERIFY returns
+    // from the enclosing function on failure, so a value-returning lambda
+    // could not carry these preconditions at all.
+    const auto pan = [&](ScrollStrip& s) {
+        QVERIFY(s.insertWindow(QStringLiteral("a"), wide, ColumnDisplay::Normal, params));
+        QVERIFY(s.insertWindow(QStringLiteral("b"), wide, ColumnDisplay::Normal, params));
+        QVERIFY(s.insertWindow(QStringLiteral("c"), wide, ColumnDisplay::Normal, params));
+        QVERIFY(s.scrollViewBy(-30, params));
+        QVERIFY(s.viewDetached());
+    };
+
+    // 1. A focus change. reanchorAfterFocusChange is the chokepoint every
+    //    focus-driven re-anchor passes through, so this covers the focus verbs
+    //    and the structural paths in one.
+    ScrollStrip byFocus;
+    pan(byFocus);
+    QVERIFY(byFocus.focusColumn(0, params));
+    QVERIFY(!byFocus.viewDetached());
+
+    // 2. center-column.
+    ScrollStrip byCenter;
+    pan(byCenter);
+    byCenter.centerActiveColumn(params);
+    QVERIFY(!byCenter.viewDetached());
+
+    // 3. center-visible-columns.
+    ScrollStrip bySpan;
+    pan(bySpan);
+    bySpan.centerVisibleColumns(params);
+    QVERIFY(!bySpan.viewDetached());
+
+    // Centering re-attaches even when it reports no movement: the anchor it
+    // wants can be the one the pan happens to have landed on, and a verb that
+    // answered "nothing to do" while leaving the view detached would strand
+    // the latch where no later verb obviously clears it.
+    ScrollStrip settled;
+    pan(settled);
+    settled.centerActiveColumn(params);
+    QVERIFY(!settled.centerActiveColumn(params)); // no-op second time
+    QVERIFY(!settled.viewDetached());
+
+    // The two halves of a dying screen, which pull opposite ways on purpose.
+    ScrollLayoutParams degenerate = params;
+    degenerate.workArea = QRect();
+
+    // A centering verb that refuses OUTRIGHT changes neither half of the view:
+    // it is a no-op, and a no-op must not hand the view to a policy that
+    // cannot compute a position against nothing.
+    ScrollStrip refused;
+    pan(refused);
+    QVERIFY(!refused.centerVisibleColumns(degenerate));
+    QVERIFY(refused.viewDetached());
+
+    // A focus change is NOT a no-op — the focus moved — so it re-attaches even
+    // here, and leaves the position for the first relayout against a real work
+    // area to derive. Without this arm the latch would outlive the pan's
+    // meaning: nothing revisits the ownership question afterwards.
+    ScrollStrip refocused;
+    pan(refocused);
+    const int anchorBefore = refocused.viewAnchor();
+    QVERIFY(refocused.focusColumn(0, degenerate));
+    QVERIFY(!refocused.viewDetached());
+    QCOMPARE(refocused.viewAnchor(), anchorBefore);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

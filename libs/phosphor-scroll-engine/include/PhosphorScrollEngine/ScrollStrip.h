@@ -33,6 +33,23 @@ namespace PhosphorScrollEngine {
 /// strip never make the focused window drift — `viewOffset` is derived, never
 /// stored.
 ///
+/// ## View detachment
+///
+/// Because the anchor is active-relative, the centering policy owns the view:
+/// `updateViewForFocus` re-derives it at the top of every applyLayout, so a
+/// view the POLICY did not choose cannot survive a layout pass. That is right
+/// for every mutator except one. `scrollViewBy` moves the view because the user
+/// pointed somewhere, not because focus, structure or policy changed, and a pan
+/// the next layout pass undoes is not a pan at all.
+///
+/// So a successful `scrollViewBy` DETACHES the view, and `updateViewForFocus`
+/// then leaves the anchor entirely alone — not even a re-clamp, for the reason
+/// that function documents. The next focus change, or either centering verb,
+/// re-attaches it and the policy takes the view back. Detachment travels with the anchor through the
+/// mode-round-trip stash and the persisted blob for the same reason the anchor
+/// does: restoring the position while dropping the detachment hands the view
+/// straight back to the policy that would move it.
+///
 /// ## Naming exemption
 ///
 /// The public verbs below keep their physical width/height spellings
@@ -330,20 +347,39 @@ public:
     {
         return m_viewAnchor;
     }
+    /// Whether an explicit pan owns the view instead of the centering policy
+    /// (see the class doc). Exposed for the stash and the persisted blob,
+    /// which must carry it beside the anchor.
+    bool viewDetached() const
+    {
+        return m_viewDetached;
+    }
+    /// The other half of restoreViewAnchor: re-assert a captured detachment.
+    /// Only meaningful alongside the anchor it was captured with, so a caller
+    /// that drops that anchor (the stash's axis-mismatch arm) must drop this
+    /// too, or the view stays pinned wherever the focus restore left it.
+    void setViewDetached(bool detached)
+    {
+        m_viewDetached = detached;
+    }
     /// Restore a previously captured view anchor, RAW: a centered anchor
     /// implies an out-of-range derived viewOffset by design (the same shape
     /// centerActiveColumn stores), so no clamp is applied here — later
     /// structural inserts re-clamp when the strip cannot honour the view.
     /// The stash-restore path re-applies the anchor AFTER re-focusing the
     /// stashed active window, overriding the focus change's own
-    /// centering-policy reanchor with the user's actual view.
+    /// centering-policy reanchor with the user's actual view. It does NOT
+    /// touch the detachment latch: that focus call has just cleared it, and
+    /// re-asserting it is the caller's job through setViewDetached, so both
+    /// halves of a captured view are restored by the same code.
     /// @p params is currently UNUSED (the raw restore needs no layout maths)
     /// but stays in the exported signature: every sibling anchor mutator
     /// takes it, and dropping it is an ABI break for no gain.
     void restoreViewAnchor(int anchor, const ScrollLayoutParams& params);
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no
-    /// scroll" baseline.
+    /// scroll" baseline. A DETACHED view is only re-clamped into range, never
+    /// re-derived (see the class doc).
     void updateViewForFocus(const ScrollLayoutParams& params);
     /// Center the active column in the view (niri center-column).
     /// Returns true when the anchor actually moved.
@@ -358,9 +394,11 @@ public:
     /// on a vertical one. The anchor is stored relative to the active column,
     /// so a forward view move shrinks it by the same amount. Returns true when
     /// the anchor actually moved — a caller sitting at either end gets false
-    /// and can stop. This is the only mutator that moves the view without a
-    /// focus, structure or policy change behind it; the drag-insert edge
-    /// auto-scroll is its one caller.
+    /// and can stop. A move DETACHES the view from the centering policy (see
+    /// the class doc); a refusal leaves the latch as it found it. This is the
+    /// only mutator that moves the view without a focus, structure or policy
+    /// change behind it; the drag-insert edge auto-scroll and the keyboard
+    /// view-scroll verbs are its callers.
     bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
@@ -441,6 +479,9 @@ private:
     int m_activeColumnIdx = -1;
     /// Active column's leading edge position within the viewport (see class doc).
     int m_viewAnchor = 0;
+    /// Whether an explicit pan owns the view instead of the centering policy
+    /// (see the class doc's View detachment section).
+    bool m_viewDetached = false;
     /// Pre-maximize width intent for the maximize toggle (single slot:
     /// maximize is a focused-column toggle).
     ColumnWidth m_preMaximizeWidth;

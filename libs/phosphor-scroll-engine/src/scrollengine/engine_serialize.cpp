@@ -53,6 +53,14 @@ inline QLatin1String kViewAnchor()
 {
     return QLatin1String("viewAnchor");
 }
+/// Whether that anchor was an explicit pan (ScrollStrip's View detachment
+/// section). ADDITIVE on the same terms as kAxis above, and absent reads
+/// false — which is what every pre-key blob means, since no session that
+/// wrote one could detach the view in the first place.
+inline QLatin1String kViewDetached()
+{
+    return QLatin1String("viewDetached");
+}
 /// How far the strip had worked through its template blueprint. ADDITIVE on
 /// the same terms as kAxis above, and absent reads 0 — which is exactly what a
 /// blob written before the key existed means, since the reader's floor at the
@@ -294,6 +302,7 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kColumns(), columns);
         obj.insert(kFocused(), stash.focusedWindowId);
         obj.insert(kViewAnchor(), stash.viewAnchor);
+        obj.insert(kViewDetached(), stash.viewDetached);
         obj.insert(kAxis(), static_cast<int>(stash.axis));
         obj.insert(kBlueprintCursor(), stash.blueprintCursor);
         return obj;
@@ -435,8 +444,8 @@ QJsonObject ScrollEngine::serializeStripState() const
         StashedStrip merged = it.value();
         // Live columns first: they are the strip as it stands, and the stash
         // holds only windows that have not come back to it. focusedWindowId,
-        // viewAnchor and the captured axis stay the LIVE ones for the same
-        // reason.
+        // the viewAnchor/viewDetached pair and the captured axis stay the LIVE
+        // ones for the same reason.
         const StashedStrip stash = prunedStashes.take(it.key());
         merged.columns += stash.columns;
         // The blueprint cursor is the one field where the STASH can outrank
@@ -524,6 +533,7 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         // wide enough for any real strip — it stops a hand-edited INT_MIN/MAX
         // from overflowing the viewOffset arithmetic it later feeds.
         stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
+        stash.viewDetached = obj.value(kViewDetached()).toBool(false);
         // Absent reads 0, which is what every pre-key blob means. Bounded for
         // the same boundary-hardening reason as the anchor: the cursor feeds
         // qMax against the live column count and then indexes a blueprint.

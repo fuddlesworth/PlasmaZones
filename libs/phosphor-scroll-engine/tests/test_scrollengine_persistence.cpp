@@ -118,6 +118,18 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     // with, so centering above must genuinely have moved it.
     QVERIFY2(anchorBefore != 0, "the centered anchor must differ from a fresh strip's, or the carry is unfalsifiable");
 
+    // The anchor's OWNER travels with it. Panning here rather than leaving the
+    // centered view alone, because the two halves fail independently: a stash
+    // that carried the position and dropped the detachment restores the view
+    // and then hands it straight back to the centering policy, which moves it
+    // on the first layout pass after the restore — a bug the anchor assertion
+    // at the tail cannot see, since it reads the model before that pass.
+    // Driven through the state's strip because the pan has no engine verb yet;
+    // the stash reads the same model either way.
+    QVERIFY(before->strip().scrollViewBy(-20, ScrollTestUtils::engineParams()));
+    QVERIFY(before->strip().viewDetached());
+    const int pannedAnchorBefore = before->strip().viewAnchor();
+
     // Mode reassignment of the SAME context: teardown stashes the strip.
     engine->setActiveScreens({});
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|c")));
@@ -136,7 +148,8 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     QVERIFY(after);
     QCOMPARE(after->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(after->strip().activeWindowId(), QStringLiteral("app|c"));
-    QCOMPARE(after->strip().viewAnchor(), anchorBefore);
+    QCOMPARE(after->strip().viewAnchor(), pannedAnchorBefore);
+    QVERIFY(after->strip().viewDetached());
 }
 
 void TestScrollEnginePersistence::presetIntentRoundTripsExactly()

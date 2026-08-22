@@ -95,6 +95,12 @@ struct StashedStrip
     QVector<StashedColumn> columns;
     QString focusedWindowId;
     int viewAnchor = 0;
+    /// Whether that anchor was an explicit pan rather than a policy-derived
+    /// view (ScrollStrip's View detachment section). Travels with the anchor
+    /// because restoring one without the other is worse than restoring
+    /// neither: the position lands, the policy immediately reclaims it, and
+    /// the view jumps on the first layout pass after the restore.
+    bool viewDetached = false;
     /// The axis this stash was captured under.
     ///
     /// The stash is a THIRD carrier of axis-dependent state, alongside the
