@@ -296,7 +296,11 @@ public:
     // clearFieldOnPaths, divergentPathCount, the four shader group writers
     // (setShaderOverrideOnPaths, setShaderParametersOnPaths,
     // clearShaderOverrideOnPaths, clearShaderOverrideDescendantsOnPaths) and
-    // shaderOverrideDescendantCountForPaths all SKIP a non-built-in path,
+    // the group readers (shaderOverrideDescendantCountForPaths,
+    // anyPathOwnsShaderPack, anyPathSupportsShaderLeg) all SKIP a non-built-in
+    // path. allPathsHoldShaderEffect is the one exception: it RETURNS FALSE on
+    // one, because "every path holds this id" cannot be true of a path that
+    // cannot hold anything.
     // while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
     // which rejects it and makes the whole call report false — a caller bug
     // surfaces instead of being silently dropped. Either way the WORK is
@@ -415,10 +419,12 @@ public:
     /// distinguish "refused" from "no-op" gets that from -1 alone.
     Q_INVOKABLE int setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters);
 
-    /// Total number of shadowing descendant overrides beneath EVERY path in
-    /// @p rawPaths, summed, using the one definition of "shadowing descendant"
-    /// that clearShaderOverrideDescendantsOnPaths clears — so the count a
-    /// parent card shows is exactly what its clear action would remove.
+    /// Number of DISTINCT shadowing descendant overrides beneath the paths in
+    /// @p rawPaths, using the one definition of "shadowing descendant" that
+    /// clearShaderOverrideDescendantsOnPaths clears — so the count a parent
+    /// card shows is exactly what its clear action would remove. Unioned rather
+    /// than summed, so a group holding both an ancestor and its descendant
+    /// cannot report an override twice that the clear removes once.
     ///
     /// Exists because the per-path shaderOverrideDescendantCount rebuilds the
     /// whole shader tree on every call (a store read, a JSON parse and a prune
@@ -953,6 +959,11 @@ private:
     /// skip rule, and a fix applied to one of them silently not applying to the
     /// other is the failure this removes.
     ///
+    /// @param preflight optional per-call validation, run AFTER the refusal
+    /// gates so those keep precedence. Returning false yields -1. It belongs
+    /// here rather than at the caller because the order is observable: an
+    /// invalid input during an async discard must still toast the discard, and
+    /// one with no ISettings must still report 0.
     /// @param build receives the profile currently stored at the path and
     /// whether there was one at all, and returns the profile to store.
     /// Returning std::nullopt means "store nothing here": any existing entry is
@@ -963,6 +974,7 @@ private:
     /// @return the number of paths holding the requested end state, or -1 when
     /// an async discard owns the tree.
     int applyShaderGroupWrite(const QStringList& rawPaths, QLatin1String context,
+                              const std::function<bool()>& preflight,
                               const std::function<std::optional<PhosphorAnimationShaders::ShaderProfile>(
                                   const PhosphorAnimationShaders::ShaderProfile& stored, bool hasStored)>& build);
 

@@ -131,6 +131,12 @@ ColumnLayout {
     /// after the "no shader" sentinel is written there is no pack to render,
     /// so a control living on the pack row could never undo it.
     property bool shaderOverrideStored: false
+    /// True when this event holds the engaged-EMPTY sentinel specifically, so
+    /// it resolves to no shader AND blocks whatever an ancestor would have
+    /// given it. Narrower than `shaderOverrideStored`, which is any stored
+    /// shape: a params-only override also renders empty once its ancestor's
+    /// pack goes away, and that is not the same statement to make about it.
+    property bool shaderBlocksInherited: false
     /// Whether the remove control has a pack to remove.
     ///
     /// Distinct from `shaderOwnsPack`, which describes THIS event, because the
@@ -617,7 +623,13 @@ ColumnLayout {
             Layout.fillWidth: true
             // Points at the setter only when the setter can actually serve.
             text: {
-                if (root.shaderOverrideStored)
+                // Gated on the SENTINEL, not on any stored override. A
+                // params-only override also renders empty once its ancestor's
+                // pack goes away, and that event was never explicitly set to
+                // no shader, so saying so would be wrong. The revert link
+                // beside this stays gated on any stored override, because it
+                // is useful in both states.
+                if (root.shaderBlocksInherited)
                     return i18n("No shader for this event, and no inherited one either.");
 
                 return root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.");
@@ -631,8 +643,14 @@ ColumnLayout {
         // "Revert to inherited" a few rows from "Revert duration to inherited"
         // reads as though it reverted everything.
         Kirigami.LinkButton {
+            // Never squeezed, and small, matching both sibling revert links:
+            // the actionable half of the row must not elide before the
+            // informational half, and it must not out-size the caption it sits
+            // beside.
+            Layout.minimumWidth: implicitWidth
             visible: root.showOverrideStatus && root.shaderOverrideStored
             text: i18n("Revert shader to inherited")
+            font: Kirigami.Theme.smallFont
             Accessible.name: text
             onClicked: root.shaderRevertRequested()
         }
@@ -702,6 +720,10 @@ ColumnLayout {
                 Label {
                     Layout.fillWidth: true
                     visible: root.showOverrideStatus
+                    // The row carries this same text as its
+                    // Accessible.description, so leaving the Label exposed
+                    // announces it twice.
+                    Accessible.ignored: true
                     text: root._shaderOwnershipCaption
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
@@ -732,7 +754,22 @@ ColumnLayout {
                 // One source for the label so the accessible name and the
                 // tooltip cannot drift, and so neither depends on reading the
                 // other's attached property.
-                readonly property string actionLabel: root.shaderPackRemovable ? i18n("Remove %1", root.shaderName) : i18n("Use no shader for this event")
+                readonly property string actionLabel: {
+                    if (!root.shaderPackRemovable)
+                        return i18n("Use no shader for this event");
+
+                    // Naming the pack is only honest when the group agrees.
+                    // `shaderName` comes from the PRIMARY path's resolved id
+                    // while the click clears every write path, so on a group
+                    // whose members hold different packs the named one need not
+                    // be the one removed. The divergence banner already reports
+                    // the disagreement; the button just stops claiming to know
+                    // which pack it is about.
+                    if (root.shaderOwnsPack !== root.shaderPackRemovable)
+                        return i18n("Remove the shader pack");
+
+                    return i18n("Remove %1", root.shaderName);
+                }
 
                 icon.name: "edit-delete-remove"
                 display: ToolButton.IconOnly

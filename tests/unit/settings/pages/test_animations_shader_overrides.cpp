@@ -31,7 +31,6 @@
  * The shared fixtures are in helpers/AnimationsControllerFixture.h.
  */
 
-#include <QDir>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
@@ -51,9 +50,9 @@
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::ControllerFixture;
-using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using PlasmaZones::TestHelpers::pickerIdsFor;
 using PlasmaZones::TestHelpers::PopulatedControllerFixture;
+using PlasmaZones::TestHelpers::storesEffectId;
 // File-scope, so every slot names paths through the taxonomy rather than
 // through a string literal that a leaf rename would leave quietly asserting
 // against a path that no longer exists.
@@ -139,16 +138,17 @@ private Q_SLOTS:
         // parameter writer makes an everyday shape) has exactly that absence
         // while still being non-empty. Without this line the pair is satisfied
         // by a profile carrying only `parameters`.
-        QVERIFY2(raw.contains(QStringLiteral("effectId")),
-                 "the sentinel must store an ENGAGED effectId, not merely a non-empty profile");
+        QVERIFY2(storesEffectId(raw), "the sentinel must store an ENGAGED effectId, not merely a non-empty profile");
         QCOMPARE(raw.value(QStringLiteral("effectId")).toString(), QString());
     }
 
     /// Set then explicit clear → both calls fire pendingChangesChanged.
     ///
     /// Subsumes the plain set-emits-once slot this replaced: same path, same
-    /// spy attached at the same point, and the set's own emit is pinned by the
-    /// exact count below. Pre-fix, setShaderOverride and clearShaderOverride
+    /// spy attached at the same point. The count below pins the PAIR jointly
+    /// rather than each half, so the set's own single emit is pinned here only
+    /// in sum. It is pinned individually by the empty-id and no-op slots above,
+    /// which is why deleting the third copy cost no real coverage. Pre-fix, setShaderOverride and clearShaderOverride
     /// mutated settings without emitting at all, so the Save button never lit
     /// up for a shader edit — that is the regression this guards.
     void setShaderOverride_thenClear_emitsTwice()
@@ -576,16 +576,14 @@ private Q_SLOTS:
         // it is not redundant with the QCOMPARE beside it: reading a MISSING
         // key through `value()` also yields an empty QString, so a regression
         // that removed the entry outright passed the QCOMPARE unchanged.
-        QVERIFY2(c.rawShaderProfile(path).contains(QStringLiteral("effectId")),
-                 "the sentinel was cleared rather than left engaged-empty");
+        QVERIFY2(storesEffectId(c.rawShaderProfile(path)), "the sentinel was cleared rather than left engaged-empty");
         QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
         QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
 
         // Third identical disable write — same invariant.
         QVERIFY(c.setShaderOverride(path, QString(), {}));
         QCOMPARE(spy.count(), 1);
-        QVERIFY2(c.rawShaderProfile(path).contains(QStringLiteral("effectId")),
-                 "the sentinel was cleared rather than left engaged-empty");
+        QVERIFY2(storesEffectId(c.rawShaderProfile(path)), "the sentinel was cleared rather than left engaged-empty");
         QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
         QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
     }

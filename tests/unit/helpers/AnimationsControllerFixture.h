@@ -78,8 +78,31 @@ struct PopulatedControllerFixture
         registry.addSearchPath(dataDir(), PhosphorFsLoader::LiveReload::Off);
     }
 
+    // Declared AFTER the constructor textually but 4th by declaration order, so
+    // the controller is built BEFORE the scan above runs. Safe, and not by
+    // accident: the controller only stores the registry pointer and reads it
+    // lazily at each use, and it connects to `effectsChanged` in its own
+    // constructor, so it observes the scan. Anyone reordering these members, or
+    // adding one that reads the registry eagerly, has to revisit that.
+
     AnimationsPageController c{&registry, &settings};
 };
+
+/// Whether a raw shader profile map stores an `effectId` AT ALL.
+///
+/// Key presence, not value equality, and every assertion about which state a
+/// path is in has to go through it. `QVariantMap::value()` default-constructs
+/// for a missing key, so `value("effectId").toString()` reads an ABSENT key and
+/// an engaged-EMPTY one identically as "" — and those two are different states
+/// (inheriting the ancestor's pack, versus explicitly refusing it). Several
+/// assertions conflated them and could not fail as written.
+///
+/// Exact, because `shaderProfileToMap` inserts the key if and only if the
+/// optional is engaged.
+inline bool storesEffectId(const QVariantMap& raw)
+{
+    return raw.contains(QStringLiteral("effectId"));
+}
 
 /// The picker's offer for @p path, flattened to plain ids.
 ///

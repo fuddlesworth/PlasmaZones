@@ -1548,8 +1548,9 @@ add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_ov
 
 # Params-only shader writer + the group readers that answer what a path owns.
 # Split from test_animations_shader_overrides rather than added to it: that
-# file sits at 1110 lines against the 1150 hard ceiling, and this is a coherent
-# slice (pack-versus-parameters) on its own.
+# file had reached 1110 lines against the 1150 hard ceiling, and this is a
+# coherent slice (pack-versus-parameters) on its own. Both sit well under the
+# target now.
 add_executable(test_animations_shader_param_writes
     settings/pages/test_animations_shader_param_writes.cpp
     ${_animations_ctrl_SRCS}

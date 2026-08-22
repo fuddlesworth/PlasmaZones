@@ -50,19 +50,8 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::ControllerFixture;
 using PlasmaZones::TestHelpers::PopulatedControllerFixture;
+using PlasmaZones::TestHelpers::storesEffectId;
 namespace PP = PhosphorAnimation::ProfilePaths;
-
-namespace {
-/// Key presence, not value equality. `QVariantMap::value()` returns a default
-/// -constructed QVariant for a missing key, so `value("effectId").toString()`
-/// reads an ABSENT key and an engaged-EMPTY one identically as `""` — and
-/// those two are the whole subject of this file. Every assertion about which
-/// state a path is in has to go through here.
-bool storesEffectId(const QVariantMap& raw)
-{
-    return raw.contains(QStringLiteral("effectId"));
-}
-} // namespace
 
 class TestAnimationsShaderParamWrites : public QObject
 {
@@ -119,14 +108,25 @@ private Q_SLOTS:
         const QString leaf = PP::WindowOpen;
         QVERIFY(c.setShaderOverride(leaf, QStringLiteral("dissolve"), {}));
 
+        // Accumulated then asserted, like the group loops in this file: an
+        // abort on the first bad iteration would hide whether the erosion
+        // starts on the second write or the third, which is the whole point of
+        // repeating.
+        QStringList wrong;
         for (double v : {0.1, 0.5, 0.9}) {
-            QCOMPARE(c.setShaderParametersOnPaths({leaf}, QVariantMap{{QStringLiteral("strength"), v}}), 1);
+            if (c.setShaderParametersOnPaths({leaf}, QVariantMap{{QStringLiteral("strength"), v}}) != 1) {
+                wrong.append(QStringLiteral("write refused at %1").arg(v));
+                continue;
+            }
             const QVariantMap stored = c.rawShaderProfile(leaf);
-            QVERIFY2(storesEffectId(stored), "a repeated params write eroded the stored pack");
-            QCOMPARE(stored.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
-            QCOMPARE(stored.value(QStringLiteral("parameters")).toMap().value(QStringLiteral("strength")).toDouble(),
-                     v);
+            if (!storesEffectId(stored))
+                wrong.append(QStringLiteral("pack dropped at %1").arg(v));
+            else if (stored.value(QStringLiteral("effectId")).toString() != QStringLiteral("dissolve"))
+                wrong.append(QStringLiteral("pack changed at %1").arg(v));
+            if (stored.value(QStringLiteral("parameters")).toMap().value(QStringLiteral("strength")).toDouble() != v)
+                wrong.append(QStringLiteral("parameter not stored at %1").arg(v));
         }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QLatin1String("; "))));
     }
 
     /// The engaged-EMPTY sentinel is an engaged effectId, so it survives a

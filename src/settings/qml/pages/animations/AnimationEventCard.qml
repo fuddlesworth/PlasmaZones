@@ -110,10 +110,14 @@ Item {
     /// drag. The toast's own animation coalesces visually, which is why this
     /// has to be fixed at the source of the repeat rather than at the toast.
     ///
-    /// Cleared by any refresh this card did not drive itself, which is how the
-    /// end of the discard reaches it: the controller broadcasts to every card
-    /// when the tree settles. A card's own writes refresh with `selfDriven`
-    /// set, so the latch survives the drag that tripped it.
+    /// Cleared in two places, and it needs both. A refresh this card did not
+    /// drive itself covers an outside edit; `onPendingChangesChanged` below
+    /// covers the end of the discard. The second is NOT redundant: the
+    /// discard's terminal handler emits `overrideChanged` only for the profile
+    /// files it actually restored, so a card none of those paths reaches would
+    /// otherwise never refresh and would stay latched for the rest of the
+    /// session. A card's own writes refresh with `selfDriven` set, so the latch
+    /// survives the drag that tripped it.
     property bool _writesRefused: false
 
     /// Record whether a write landed. Takes the boolean every group writer
@@ -218,6 +222,12 @@ Item {
     /// included. Gates the revert affordance, which has to reach the state
     /// where the pack row is not rendered at all.
     readonly property bool _storesShaderOverride: Object.keys(root._primaryRawShader).length > 0
+    /// Whether this event holds the engaged-EMPTY sentinel specifically: it
+    /// resolves to no shader AND blocks what an ancestor would have given it.
+    /// Narrower than `_storesShaderOverride`, because a params-only override
+    /// also renders empty once its ancestor's pack goes away and that is a
+    /// different thing to tell the user.
+    readonly property bool _shaderBlocksInherited: typeof root._primaryRawShader.effectId === "string" && root._primaryRawShader.effectId.length === 0
     /// True when ANY path in the write group owns a pack, which is what the
     /// row's remove control keys on.
     ///
@@ -804,6 +814,27 @@ Item {
             root._shaderRegistryRev++;
         }
 
+        // The refusal latch's guaranteed release, and it has to be THIS signal.
+        //
+        // The latch is what stops a drag re-issuing a write the controller is
+        // refusing, and only a refresh the card did not drive itself clears it.
+        // The discard that causes those refusals does NOT end with a
+        // path-agnostic broadcast: its terminal handler emits `overrideChanged`
+        // only for the profile files the worker actually restored, so a card
+        // none of those paths reaches never refreshes, and the latch would stay
+        // set for the rest of the session. Nothing reconstructs the card to
+        // recover, because the list's Loaders latch built and never unload.
+        //
+        // `pendingChangesChanged` is emitted unconditionally by that same
+        // handler, so it is the one signal every card is guaranteed to see when
+        // the discard settles. It also fires on ordinary writes, which is
+        // harmless: a card still mid-drag re-arms the latch on its very next
+        // refused tick, so this costs at most one extra toast per discard and
+        // keeps the anti-repeat property that matters.
+        function onPendingChangesChanged() {
+            root._writesRefused = false;
+        }
+
         target: settingsController.animationsPage
     }
 
@@ -947,6 +978,7 @@ Item {
                 shaderOwnsPack: root._ownsShaderPack
                 shaderOwnsParamsOnly: root._ownsShaderParamsOnly
                 shaderOverrideStored: root._storesShaderOverride
+                shaderBlocksInherited: root._shaderBlocksInherited
                 shaderPackRemovable: root._anyWritePathOwnsShaderPack
                 durationOverridden: root._ownsDurationOverride
                 enableLocking: true

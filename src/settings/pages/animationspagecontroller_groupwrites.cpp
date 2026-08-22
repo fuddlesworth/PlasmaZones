@@ -67,10 +67,12 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
 /// divergence banner. Order is preserved because the primary must stay first.
 ///
 /// LINEAR, via a seen-set. The obvious `if (!out.contains(path))` shape is
-/// O(n^2) in the CALLER's list, and this runs as the first statement of every
-/// group writer, BEFORE `isValidEventPath` can reject anything — so it would be
-/// the one step a 20k-entry Q_INVOKABLE call could still make quadratic on the
-/// GUI thread, which is exactly the dedup the header calls free.
+/// O(n^2) in the CALLER's list, and it runs before `isValidEventPath` can
+/// reject anything — so it would be the one step a 20k-entry Q_INVOKABLE call
+/// could still make quadratic on the GUI thread, which is exactly the dedup the
+/// header calls free. Most writers run it as their first statement;
+/// `applyShaderGroupWrite` runs it after its refusal gates instead, so a call
+/// that is going to be refused does not pay for a list it will not use.
 QStringList distinctPaths(const QStringList& paths)
 {
     QStringList out;
@@ -443,7 +445,7 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
 }
 
 int AnimationsPageController::applyShaderGroupWrite(
-    const QStringList& rawPaths, QLatin1String context,
+    const QStringList& rawPaths, QLatin1String context, const std::function<bool()>& preflight,
     const std::function<std::optional<PhosphorAnimationShaders::ShaderProfile>(
         const PhosphorAnimationShaders::ShaderProfile& stored, bool hasStored)>& build)
 {
@@ -464,6 +466,13 @@ int AnimationsPageController::applyShaderGroupWrite(
         Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
         return -1;
     }
+
+    // Per-call validation the caller supplies, run HERE rather than before the
+    // call so the two gates above keep precedence: a refusal has to toast, and
+    // a missing ISettings has to report 0 rather than the -1 that means
+    // "refused". Optional; the params writer carries no id to validate.
+    if (preflight && !preflight())
+        return -1;
 
     // Deduplicated AFTER the gates, not before: a refused call has no use for
     // the result and should not pay for building it.
@@ -526,27 +535,31 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
                                                        const QVariantMap& parameters)
 {
     using namespace PhosphorAnimationShaders;
-    // The SAME boundary checks the per-path `setShaderOverride` performs. Not
-    // optional: this is the only path QML uses, so skipping them left the id
-    // that reaches the persisted tree entirely unvalidated. Checked once
-    // because an id is per-call, not per-path, and BEFORE the async-discard
-    // gate is irrelevant either way since both return -1.
-    if (!acceptableShaderEffectId(effectId, QLatin1String("setShaderOverrideOnPaths"))) {
-        return -1;
-    }
     // Stamps the id unconditionally and does NOT preserve stored parameters:
     // picking a pack is a switch, and the previous pack's parameter ids mean
     // nothing to the new one. The caller that merely PROMOTES the pack already
     // showing (same id, inherited becoming owned) passes the current parameters
     // in rather than relying on this to keep them.
-    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderOverrideOnPaths"),
-                                 [&](const ShaderProfile&, bool) -> std::optional<ShaderProfile> {
-                                     ShaderProfile profile;
-                                     profile.effectId = effectId;
-                                     if (!parameters.isEmpty())
-                                         profile.parameters = parameters;
-                                     return profile;
-                                 });
+    // The SAME boundary check the per-path `setShaderOverride` performs, and not
+    // optional: this is the only path QML uses, so skipping it left the id that
+    // reaches the persisted tree entirely unvalidated. Passed as a preflight
+    // rather than run here, because ORDER against the two gates is observable
+    // and this is the order the per-writer versions had. Validating first would
+    // mean an invalid id during an async discard returns -1 with no toast (so
+    // the user is told nothing), and an invalid id with no ISettings returns -1
+    // where the contract says 0.
+    return applyShaderGroupWrite(
+        rawPaths, QLatin1String("setShaderOverrideOnPaths"),
+        [&] {
+            return acceptableShaderEffectId(effectId, QLatin1String("setShaderOverrideOnPaths"));
+        },
+        [&](const ShaderProfile&, bool) -> std::optional<ShaderProfile> {
+            ShaderProfile profile;
+            profile.effectId = effectId;
+            if (!parameters.isEmpty())
+                profile.parameters = parameters;
+            return profile;
+        });
 }
 
 int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters)
@@ -555,7 +568,7 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
     // No acceptableShaderEffectId check, and none is missing: this call carries
     // no id at all. The stored one is reused verbatim, and it was validated by
     // whichever write put it there.
-    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderParametersOnPaths"),
+    return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderParametersOnPaths"), {},
                                  [&](const ShaderProfile& stored, bool hasStored) -> std::optional<ShaderProfile> {
                                      // START FROM THE STORED PROFILE, which is what keeps `effectId`
                                      // as it was. Default-constructing here would leave it unengaged
@@ -583,16 +596,25 @@ int AnimationsPageController::shaderOverrideDescendantCountForPaths(const QStrin
     // tree on every call, and the card used to call it once per write path from
     // a refresh that runs at drag rate.
     const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
-    int total = 0;
+    // Unioned, not summed. A group holding both an ancestor and one of its
+    // descendants would count a shadowing override beneath both of them twice,
+    // while the paired clear removes it once — and a count that disagrees with
+    // what its own button does is the defect this accessor exists to serve.
+    // No group is shaped that way today (a card's group is its event path plus
+    // sibling mirrors), which is exactly why it is worth making structural
+    // rather than leaving as an assumption about the caller.
+    QSet<QString> shadowing;
     for (const QString& path : distinctPaths(rawPaths)) {
         // Gated like every other group reader. The per-path accessor lacks this
         // check, but an invalid path yields an empty list there anyway, so the
         // gate is a skip rather than a behaviour change.
         if (!isValidEventPath(path))
             continue;
-        total += int(collectShaderOverrideDescendants(tree, path).size());
+        const QStringList found = collectShaderOverrideDescendants(tree, path);
+        for (const QString& p : found)
+            shadowing.insert(p);
     }
-    return total;
+    return int(shadowing.size());
 }
 
 bool AnimationsPageController::anyPathOwnsShaderPack(const QStringList& rawPaths) const
