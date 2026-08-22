@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QLatin1String>
 #include <QtGlobal>
 #include <algorithm>
@@ -394,6 +395,20 @@ inline int snapAssistThumbnailBoxPx(int zoneMinAxisLogicalPx, int candidateCount
     return std::clamp(int(std::ceil(devicePx)), SnapAssistMinIconLogicalPx, SnapAssistThumbnailMaxDimension);
 }
 
+// One rule for every boolean environment switch in this header: set to any
+// value other than "0" enables, "0" or unset disables. Value-checked rather
+// than presence-checked so an explicit opt-out is honoured, and not parsed as
+// an integer so the presence-style spellings the switches have always been
+// documented with ("=1", "=true", "=yes") keep working. "=0" is the only
+// opt-out; anything else set is an opt-in.
+inline bool envSwitchEnabled(const char* name)
+{
+    if (!qEnvironmentVariableIsSet(name)) {
+        return false;
+    }
+    return qgetenv(name).trimmed() != "0";
+}
+
 // Single accessor for the experimental zero-copy thumbnail gate. Read in
 // FOUR places with different lifetimes (the effect's capture ctor, the
 // daemon's D-Bus slot, the daemon's Vulkan device-extension wiring, and the
@@ -402,9 +417,7 @@ inline int snapAssistThumbnailBoxPx(int zoneMinAxisLogicalPx, int candidateCount
 // process-constant, so callers may cache the result freely.
 inline bool snapAssistDmabufThumbnailsEnabled()
 {
-    // Value-checked, not presence-checked: "=0" disables. The presence check
-    // this replaced turned a user's explicit opt-out into an opt-in.
-    return qEnvironmentVariableIntValue("PLASMAZONES_DMABUF_THUMBNAILS") != 0;
+    return envSwitchEnabled("PLASMAZONES_DMABUF_THUMBNAILS");
 }
 
 // Diagnostic switch for the snap-assist thumbnail pipeline. When set, both
@@ -413,10 +426,11 @@ inline bool snapAssistDmabufThumbnailsEnabled()
 // convert, D-Bus round-trip, cache insert, QML fetch) and byte counts, under
 // the *.snapassist.trace logging categories. Read-only instrumentation: it
 // changes nothing about what is captured or how. Shared here for the same
-// reason as the dma-buf gate above, so both processes agree on the spelling.
+// reason as the dma-buf gate above, so both processes agree on the spelling,
+// and it follows the same "=0 disables" rule.
 inline bool snapAssistThumbnailTraceEnabled()
 {
-    return qEnvironmentVariableIsSet("PLASMAZONES_THUMBNAIL_TRACE");
+    return envSwitchEnabled("PLASMAZONES_THUMBNAIL_TRACE");
 }
 
 } // namespace PhosphorProtocol::Service

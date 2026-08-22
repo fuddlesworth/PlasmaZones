@@ -51,13 +51,13 @@ struct FormatMapping
     bool ok = false;
 };
 
-// For the X-variants the fourth byte is UNDEFINED producer memory: the copy
-// into the owned dst texture carries it verbatim, and only the
-// hasAlphaChannel()==false report (which makes the scene graph pick an
-// opaque material) keeps it invisible. Any future consumer that BLENDS these
-// textures (Image with opacity < 1, a ShaderEffect sampling the provider)
-// would read that byte as alpha and get arbitrary transparency — such a
-// consumer must force alpha to 1 itself or extend the copy to do so.
+// For the X-variants the fourth byte is UNDEFINED producer memory: the
+// import samples the buffer as-is, and only the hasAlphaChannel()==false
+// report (which makes the scene graph pick an opaque material) keeps it
+// invisible. Any future consumer that BLENDS these textures (Image with
+// opacity < 1, a ShaderEffect sampling the provider) would read that byte as
+// alpha and get arbitrary transparency — such a consumer must force alpha
+// to 1 itself, or the import must grow a fix-up pass that does so.
 FormatMapping mapDrmFormat(uint32_t fourcc)
 {
     switch (fourcc) {
@@ -244,8 +244,8 @@ ImportedImage importDmabuf(VkDevice device, VkPhysicalDevice physDev, QVulkanIns
                            << (static_cast<qulonglong>(desc.stride) * desc.height);
     }
     // Prefer a DEVICE_LOCAL memory type; a host-visible/uncached type is
-    // still functionally correct but makes the subsequent GPU copy crawl on
-    // some drivers. Fall back to the lowest set bit when the physical device
+    // still functionally correct but makes every sample of the thumbnail
+    // crawl on some drivers. Fall back to the lowest set bit when the physical device
     // is unavailable or no device-local type is importable.
     uint32_t memoryTypeIndex = UINT32_MAX;
     if (physDev != VK_NULL_HANDLE) {
@@ -543,8 +543,8 @@ private:
         if (!imported.df || imported.device == VK_NULL_HANDLE) {
             return;
         }
-        // The copy recorded in commitTextureOperations may still be in flight
-        // on the GPU when the scene drops this texture (destroying a VkImage
+        // The last frame that sampled this image may still be in flight on
+        // the GPU when the scene drops the texture (destroying a VkImage
         // referenced by a submitted command buffer is a spec violation with
         // driver-dependent fallout, up to device-lost). Waiting the device
         // idle before the destroy is heavyweight but correct on every

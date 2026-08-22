@@ -491,7 +491,7 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
 
     // Framebuffer blits need GL 3.0 / ARB_framebuffer_object; without them
     // the flip below would silently not write and the export would ship the
-    // slot's previous (or uninitialised) content. Fail the render (as a
+    // export texture's cleared (or uninitialised) content. Fail the render (as a
     // CAPABILITY failure, so the session fallback counts it and the pixel
     // path takes over) — same gate the sibling capture site in
     // desktoptransitioncapture.cpp uses.
@@ -541,8 +541,8 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     }
 
     KWin::GLFramebuffer scratchFbo(m_flipScratch.get());
-    KWin::GLFramebuffer slotFbo(texture.get());
-    if (!scratchFbo.valid() || !slotFbo.valid()) {
+    KWin::GLFramebuffer exportFbo(texture.get());
+    if (!scratchFbo.valid() || !exportFbo.valid()) {
         // Incomplete FBO: the render would be dropped by the driver and a
         // cleared (or stale) buffer exported in its place.
         return nullptr;
@@ -571,7 +571,7 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     // Clear the export texture BEFORE the blit: allocate() leaves its content
     // undefined, and exporting a texture the blit failed to write would ship
     // uninitialised VRAM to the daemon as a thumbnail.
-    KWin::GLFramebuffer::pushFramebuffer(&slotFbo);
+    KWin::GLFramebuffer::pushFramebuffer(&exportFbo);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     KWin::GLFramebuffer::popFramebuffer();
@@ -579,7 +579,7 @@ std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExpor
     // Blit-flip scratch → export texture (source = the pushed framebuffer).
     const KWin::Rect fullRect(0, 0, fbSize.width(), fbSize.height());
     KWin::GLFramebuffer::pushFramebuffer(&scratchFbo);
-    slotFbo.blitFromFramebuffer(fullRect, fullRect, GL_NEAREST, /*flipX=*/false, /*flipY=*/true);
+    exportFbo.blitFromFramebuffer(fullRect, fullRect, GL_NEAREST, /*flipX=*/false, /*flipY=*/true);
     KWin::GLFramebuffer::popFramebuffer();
     if (trace) {
         // Render + clear + flip-blit, as submitted. The export that follows
@@ -858,7 +858,7 @@ void SnapAssistThumbnailCapture::postThumbnail(const Pending& p, const QImage& i
     // dimension/byte-count mismatch, post-shutdown engine teardown) —
     // treating those as success would mark the handle in the dedup
     // window, skip the next capture, and strand snap-assist on icons
-    // until the FIFO rolls past.
+    // until the LRU window rolls past.
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
                      [this, internalId, box, trace, roundTrip](QDBusPendingCallWatcher* w) {
                          w->deleteLater();

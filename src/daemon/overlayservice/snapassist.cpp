@@ -282,6 +282,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         // already sized/shown.
         qCInfo(lcOverlay) << "showSnapAssist: refreshed in place on screen=" << resolvedId
                           << "zones=" << emptyZones.size() << "candidates=" << candidates.size();
+        if (traceEnabled) {
+            qCInfo(lcSnapAssistTrace).nospace()
+                << "show refresh zones=" << emptyZones.size() << " candidates=" << candidates.size()
+                << " handler=" << showTimer.nsecsElapsed() / 1000 << "us";
+        }
         Q_EMIT snapAssistShown(resolvedId, emptyZones, candidates);
         return;
     }
@@ -387,8 +392,10 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     // snap-assist for that window re-captures instead of stranding on the
     // icon fallback.
     //
-    // Bounds: a 256² thumbnail is the steady-state size; the shared
-    // protocol ceiling is the cap. Anything larger is almost certainly a
+    // Bounds: the effect captures at the size the card draws (well under
+    // 256² for a crowded show, larger only for a lone candidate on a HiDPI
+    // output); the shared protocol ceiling is the cap. Anything larger is
+    // almost certainly a
     // marshalling bug or a hostile sender that slipped past auth, and
     // consumes excessive bytes to round-trip through the cache.
     static constexpr int MaxDimension = PhosphorProtocol::Service::SnapAssistThumbnailMaxDimension;

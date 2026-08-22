@@ -22,12 +22,6 @@ SnapAssistThumbnailProvider::SnapAssistThumbnailProvider()
 {
 }
 
-qsizetype SnapAssistThumbnailProvider::cacheBytes() const
-{
-    QMutexLocker lock(&m_mutex);
-    return m_cache.totalCost();
-}
-
 QImage SnapAssistThumbnailProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize)
 {
     // QML strips the `image://<provider>/` prefix and hands us the path

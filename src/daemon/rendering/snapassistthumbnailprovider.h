@@ -62,22 +62,27 @@ public:
     ///
     /// Note: only the *sizing input* is shared. Eviction differs — this
     /// side is byte-cost LRU over @ref CacheMaxBytes (urlFor / requestImage
-    /// promotes recency), the effect is a plain FIFO of first-post times
-    /// capped at this entry COUNT. The two agree exactly at the effect's
-    /// 256² capture size; any capture ABOVE it makes this side evict
-    /// earlier than the effect's window expects, and because the effect's
-    /// skip path re-promotes, the affected candidate then shows its icon
-    /// until the trim signal (snapAssistThumbnailCacheTrimmed) resets the
-    /// effect's dedup set — not merely until the next show. Bounded, but
-    /// worth knowing when tuning capture sizes; see the matching comment on
+    /// promotes recency), the effect is an entry-COUNT LRU of posted
+    /// handles (its skip and re-mark paths promote). The effect captures at
+    /// the size the snap-assist card draws (ServiceConstants.h's
+    /// snapAssistThumbnailBoxPx), which is well under 256² for any crowded
+    /// show, so in practice this side holds at least as many entries as the
+    /// effect's window. A run of large captures (a lone candidate in a big
+    /// zone on a HiDPI output) can still make this side evict earlier than
+    /// the effect's window expects, and because the effect's skip path
+    /// re-promotes, the affected candidate then shows its icon until the
+    /// trim signal (snapAssistThumbnailCacheTrimmed) resets the effect's
+    /// dedup set — not merely until the next show. Bounded, but worth
+    /// knowing when tuning capture sizes; see the matching comment on
     /// @c SnapAssistThumbnailCapture::RecentPostedCapacity for the full
     /// treatment.
     static constexpr int CacheCapacity = PhosphorProtocol::Service::SnapAssistThumbnailCacheCapacity;
-    /// Byte-denominated cache bound: the steady-state entry budget at the
-    /// effect's 256² ARGB32 capture size. Inserts carry their image's real
-    /// byte size as cost, so oversized images (the boundary ceiling is
-    /// 1024² = 4 MiB) consume proportionally more of the budget instead of
-    /// silently multiplying the documented cap.
+    /// Byte-denominated cache bound: the entry budget priced at a 256²
+    /// ARGB32 image. Inserts carry their image's real byte size as cost, so
+    /// oversized images (the boundary ceiling is 1024² = 4 MiB) consume
+    /// proportionally more of the budget instead of silently multiplying
+    /// the documented cap, and display-sized captures below 256² fit more
+    /// entries than @ref CacheCapacity names.
     static constexpr int CacheMaxBytes = CacheCapacity * 256 * 256 * 4;
 
     SnapAssistThumbnailProvider();
@@ -112,10 +117,6 @@ public:
      * it; the next snap-assist repopulates from fresh kwin-effect captures.
      */
     void clear();
-
-    /// Bytes currently held by the cache (sum of entry costs). Diagnostic,
-    /// read under the lock; used by the PLASMAZONES_THUMBNAIL_TRACE lines.
-    qsizetype cacheBytes() const;
 
 private:
     /// Cache entry — image plus the URL that names this generation. Storing
