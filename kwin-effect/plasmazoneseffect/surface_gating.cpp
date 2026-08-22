@@ -223,24 +223,38 @@ bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
     // decorated-window count, which is the single biggest lever available while
     // the user is still at the machine.
     //
-    // Shell surfaces are exempt from the focused-only arm (NOT from the idle
-    // arm above): a panel is a dock and never becomes KWin's active window, so
-    // the gate froze every animated pack the user engaged on Decoration →
-    // Shell permanently, with no diagnostic. A panel is always visible and
-    // "in use", so the user asking for an animated panel pack has asked for
-    // the continuous redraw this gate normally trims — the idle pause still
-    // stops it when nobody is at the machine.
+    // PANELS are exempt from the focused-only arm (NOT from the idle arm above):
+    // a panel is a dock and never becomes KWin's active window, so the gate froze
+    // every animated pack the user engaged on Decoration → Shell permanently, with
+    // no diagnostic. A panel is always visible and "in use", so the user asking for
+    // an animated panel pack has asked for the continuous redraw this gate normally
+    // trims — the idle pause still stops it when nobody is at the machine.
     //
-    // This classify MUST agree with the resolved-path shell verdict
-    // (WindowDecoration::isShellSurface, set from decorationPathIsBaseline-
-    // Isolated(resolveSurfacePathFor(...))). It does whenever the decoration
-    // entry is current: resolveSurfacePathFor emits a shell path exactly when
-    // this classifier answers a shell kind, and the stored flag is a snapshot
-    // from the last updateWindowDecoration. Re-classifying here rather than
-    // looking the decoration entry up keeps this gate usable for windows with
-    // no decoration entry and off the id-cache path.
+    // An applet popup is NOT exempt, and the difference is the activation, not the
+    // ownership. Unlike a panel it is transient and it DOES become the active
+    // window: notifyWindowActivated (window_lifecycle.cpp) carries an explicit
+    // isPlasmaShellSurface reject arm, and that arm only needs to exist because
+    // these surfaces arrive there AS the activated window. So the ordinary arm
+    // works for them, and exempting them would hand every open tray flyout and
+    // launcher vsync-rate repaint on a GPU-bound effect for no gain — this gate's
+    // whole purpose is dividing that cost by the decorated-window count, and
+    // popups are the surfaces that open and close most.
+    //
+    // Waking back up is covered: slotWindowActivated calls updateAllDecorations,
+    // and updateWindowDecoration ends in addRepaintFull plus damagePaddedBand, so
+    // a popup paused for the frame before activation lands resumes on the frame it
+    // becomes active.
+    //
+    // The stored WindowDecoration::isShellSurface flag CANNOT stand in for this
+    // classify, and the distinction is easy to lose: that flag is a boolean set
+    // from decorationPathIsBaselineIsolated(resolveSurfacePathFor(...)), so it is
+    // true for a panel AND an applet popup alike, while this gate needs to tell
+    // those two apart. Re-classifying here is therefore required rather than
+    // merely convenient — and it keeps the gate usable for windows with no
+    // decoration entry and off the id-cache path, which is why it was written
+    // this way before the arm narrowed.
     if (m_animateFocusedOnly && KWin::effects->activeWindow() != w
-        && shellSurfaceKindFor(w) == ShellSurfaceKind::None) {
+        && shellSurfaceKindFor(w) != ShellSurfaceKind::Panel) {
         return false;
     }
     return true;
