@@ -505,58 +505,77 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // demotion keyed on the whole tree being empty, so a user with nine
         // overrides on open/close/move legs got a WARNING three times per
         // focus change, forever, because window.appearance.focus had none.
-        // Only an override ON THIS PATH'S CASCADE (exact, or a dotted-path
-        // ancestor like "window.appearance" / "window") makes an empty
-        // resolve genuinely surprising (the documented prune / D-Bus-race
-        // scenarios) — cascade resolution would otherwise have inherited it.
-        // Rules keep a term, but only for the ONE action that can assign a
-        // shader per-window: OverrideAnimationShader (timing/curve overrides
-        // carry no effectId). Gating on the whole rule set restored the
-        // warning for any border/opacity/layer rule — the exact population
-        // the demotion exists to silence.
-        // ...and not for a windowless leg even then: the rule tier was skipped
-        // for it above (empty query, empty window id), so no rule of any kind can
-        // be the reason this resolve came back empty.
-        const bool shaderAssigningRules = !windowlessLeg && m_shaderManager.hasAnimationShaderRules();
+        // Only an override ON THIS PATH'S CASCADE makes an empty resolve
+        // genuinely surprising (the documented prune / D-Bus-race scenarios) —
+        // cascade resolution would otherwise have inherited it.
+        //
+        // A rule that filled this event's shader slot is the first and cheapest
+        // answer. resolveAnimationShaderProfile takes the rule's effectId
+        // VERBATIM and never consults the tree, so an engaged-empty one is the
+        // user's deliberate per-app "no shader for this event" and the cascade
+        // question does not apply to it at all. Asking it anyway warned on
+        // every event of that leg forever, which is the same defect this
+        // demotion exists to prevent, one layer up.
+        if (resolved.shaderSlotFromRule) {
+            qCDebug(lcEffect) << "tryBeginShader[" << profilePath
+                              << "]: no shader assigned (a window rule set this event to none)";
+            return;
+        }
+        // Past that point the profile came from the tree, so no rule can be the
+        // reason it is empty and there is no rule term left to weigh.
         bool cascadeCovered = false;
-        // The by-value QStringList is built ONCE and reused by both the loop
-        // and the warn diagnostic below — the pre-change code paid it twice
-        // (once for the range-for, once for .size() in the warn branch).
-        const QStringList overriddenPaths = profileTree.overriddenPaths();
-        // An ISOLATED path does not have the chain this loop assumes. resolve()
-        // trims everything above the isolation root away, so for a shell leg an
-        // override at `global` — or anywhere else outside the subtree — is not part
-        // of the cascade at all and cannot be why the resolve came back empty.
-        // Empty for every ordinary path, which leaves their behaviour untouched.
+        // Walk the REAL cascade, nearest first, stopping at the first entry
+        // that engages an effectId. That is the same verdict resolve() reaches
+        // from the other end: it overlays root-to-leaf and ShaderProfile::overlay
+        // assigns only engaged fields, so the DEEPEST engaged entry wins.
+        //
+        // Asking instead whether ANY entry anywhere pins a pack, as this used
+        // to, gets the ordinary case wrong: a pack on "window" plus an explicit
+        // None on one leg under it warned on every single event of that leg,
+        // when the user's own None fully explains the empty resolve. It also
+        // made the answer depend on the order the overrides happened to be
+        // created, because the old scan walked insertion order and broke on the
+        // first hit.
         const QString isolationRoot = PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath);
-        const auto insideIsolatedSubtree = [&isolationRoot](const QString& path) {
-            return path == isolationRoot
-                || (path.size() > isolationRoot.size() && path.startsWith(isolationRoot)
-                    && path.at(isolationRoot.size()) == QLatin1Char('.'));
-        };
-        for (const QString& overridden : overriddenPaths) {
-            // The literal "global" root is a genuine chain member of every
-            // NON-isolated path (parentPath terminates every such cascade at
-            // Global), so an override stored there covers this resolve too.
-            // Ancestry is a prefix-plus-dot test rather than a per-entry
-            // concatenation.
-            const bool isChainMember = profilePath == overridden
-                || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
-                    && profilePath.at(overridden.size()) == QLatin1Char('.'))
-                || (isolationRoot.isEmpty() && overridden == PhosphorAnimation::ProfilePaths::Global);
-            if (isChainMember && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))) {
-                cascadeCovered = true;
-                break;
+        if (PhosphorAnimationShaders::shaderPathResolvesInIsolation(profilePath)) {
+            // These legs have no chain at all: resolve() consults ONLY the
+            // direct override and never walks up, so an ancestor's pack is not
+            // part of this resolve and cannot be why it came back empty. This
+            // is a DIFFERENT predicate from an isolation ROOT and the two sets
+            // are disjoint — shaderPathIsolationRoot answers only for the shell
+            // family and is empty for exactly these paths.
+            const auto direct = profileTree.directOverride(profilePath);
+            cascadeCovered = direct.effectId.has_value() && !direct.effectId->isEmpty();
+        } else {
+            for (QString step = profilePath; !step.isEmpty();
+                 step = PhosphorAnimation::ProfilePaths::parentPath(step)) {
+                // directOverride returns BY VALUE and answers with a
+                // default-constructed profile for a path it does not hold, so a
+                // DISENGAGED effectId is the common case here and the engagement
+                // test has to come before any dereference.
+                const auto entry = profileTree.directOverride(step);
+                if (entry.effectId.has_value()) {
+                    cascadeCovered = !entry.effectId->isEmpty();
+                    break;
+                }
+                // The isolation root is itself a chain member — resolve() trims
+                // the chain down to it but keeps it — so it is tested above
+                // before the walk stops here.
+                if (!isolationRoot.isEmpty() && step == isolationRoot) {
+                    break;
+                }
             }
         }
-        if (!cascadeCovered && !shaderAssigningRules) {
+        if (!cascadeCovered) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
                               << "]: no shader assigned (no override on this path's cascade)";
         } else {
+            // overriddenPaths() is read only here: the tree size is a warn-only
+            // diagnostic and the quiet path above must not pay for it.
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << overriddenPaths.size() << " rules=" << m_shaderManager.animationRuleSet().count()
-                                << " shaderAssigningRules=" << shaderAssigningRules << ")";
+                                << profileTree.overriddenPaths().size()
+                                << " rules=" << m_shaderManager.animationRuleSet().count() << ")";
         }
         return;
     }

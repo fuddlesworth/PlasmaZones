@@ -99,6 +99,63 @@ ColumnLayout {
     property bool curveOverridden: false
     /// Same, for the duration field.
     property bool durationOverridden: false
+    /// Same, for the shader slot: true when this event owns a DIRECT pack
+    /// choice, false when the pack shown is inherited from an ancestor.
+    ///
+    /// Worth its own property rather than inferring it from
+    /// `shaderEffectId.length`, because that id is the RESOLVED one and an
+    /// inherited pack renders through it identically to an owned one. Without
+    /// this the row gave the shader axis no ownership cue at all while the two
+    /// timing fields above it both had one, and the remove button claimed to
+    /// remove a pack this event did not have.
+    ///
+    /// Engaged-EMPTY does not count: that is the explicit "no shader here"
+    /// sentinel, not a pack this event chose. The row is hidden in that state
+    /// anyway (it needs a resolved pack to render), which is why the empty
+    /// state below carries its own disclosure.
+    property bool shaderOwnsPack: false
+    /// True when this event inherits its PACK but owns every parameter VALUE.
+    ///
+    /// A third state rather than a shade of the second, because the storage
+    /// really is three-valued and the difference is what the user needs to
+    /// know. `ShaderProfile::overlay` replaces the parameter map wholesale
+    /// rather than merging keys, so the moment a slider moves on an inheriting
+    /// event that event stops following the ancestor's parameter edits while
+    /// still following its pack. Reporting that as "Following the inherited
+    /// value" understated what the event owns, which is the same class of
+    /// mistake the remove button's label made.
+    property bool shaderOwnsParamsOnly: false
+    /// True when this event stores a shader override of ANY shape, including
+    /// the engaged-empty sentinel. Gates the revert affordance, which has to
+    /// stay reachable in exactly the state where the pack row is hidden:
+    /// after the "no shader" sentinel is written there is no pack to render,
+    /// so a control living on the pack row could never undo it.
+    property bool shaderOverrideStored: false
+    /// True when this event holds the engaged-EMPTY sentinel specifically, so
+    /// it resolves to no shader AND blocks whatever an ancestor would have
+    /// given it. Narrower than `shaderOverrideStored`, which is any stored
+    /// shape: a params-only override also renders empty once its ancestor's
+    /// pack goes away, and that is not the same statement to make about it.
+    property bool shaderBlocksInherited: false
+    /// Whether the remove control has a pack to remove.
+    ///
+    /// Distinct from `shaderOwnsPack`, which describes THIS event, because the
+    /// consumer may write a GROUP of paths and the control acts on all of them.
+    /// A caption is a statement about the event in front of the user; a button
+    /// label is a promise about what the click does. Feeding both from the same
+    /// property gave a group whose members disagree a label derived from one of
+    /// them and an action applied to every one.
+    ///
+    /// Defaults to tracking `shaderOwnsPack`, so a consumer that writes exactly
+    /// one path (which is every consumer but the simple page) gets the right
+    /// answer without opting in.
+    property bool shaderPackRemovable: shaderOwnsPack
+    /// Whether naming the shown pack on the remove control is accurate, i.e.
+    /// every path the control writes holds THAT pack. False on a group whose
+    /// members hold different packs, where the row shows one name and the click
+    /// removes several. Defaults to tracking `shaderOwnsPack` so a consumer
+    /// writing exactly one path needs no opinion.
+    property bool shaderPackNameIsExact: shaderOwnsPack
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
@@ -181,6 +238,24 @@ ColumnLayout {
     // returns the first falsy operand, which for an undefined model is
     // `undefined` — a typed bool property rejects that outright.
     readonly property bool _anyPackAvailable: Boolean(availableShaders && availableShaders.length > 0)
+    /// The shader row's ownership caption, spelled once because both the
+    /// visible Label and the row's `Accessible.description` render it and a
+    /// second spelling would drift.
+    ///
+    /// Three states, because the storage has three. The first two reuse the
+    /// wording the curve and duration captions already use, so the axes read
+    /// as one convention. The third has no timing counterpart: only the shader
+    /// slot can own its values while still inheriting the thing those values
+    /// configure.
+    readonly property string _shaderOwnershipCaption: {
+        if (shaderOwnsPack)
+            return i18n("Overridden for this event");
+
+        if (shaderOwnsParamsOnly)
+            return i18n("Following the inherited pack, with settings of its own");
+
+        return i18n("Following the inherited value");
+    }
     /// Wire-format curve string the rule / profile schema expects.
     readonly property string curveString: {
         if (timingMode === CurvePresets.timingModeSpring)
@@ -218,6 +293,15 @@ ColumnLayout {
     /// event follows its ancestors (and the Global defaults) again.
     signal curveRevertRequested
     signal durationRevertRequested
+    /// The shader-axis twin of the two above: drop whatever this event stores
+    /// on the shader slot so it follows its ancestors again.
+    ///
+    /// Deliberately NOT routed through `shaderEffectActivated("")`. That writes
+    /// the engaged-empty sentinel, which is an explicit "no shader for this
+    /// event" and BLOCKS the inherited pack. The two are opposite outcomes and
+    /// the row now offers both: this one removes the event's own choice, the
+    /// picker's None entry blocks what the ancestor gives it.
+    signal shaderRevertRequested
     /// Emitted when the user activates a shader from the picker.
     /// Distinct from `valueChanged` so the consumer can persist a
     /// shader switch (which carries side-effects: dropping the
@@ -263,6 +347,14 @@ ColumnLayout {
         if (timingMode === CurvePresets.timingModeSpring)
             return i18n("ω=%1 · ζ=%2", springOmega.toFixed(1), springZeta.toFixed(2));
 
+        // Bare i18n, not i18nc, and deliberately left that way. A context
+        // marker here would read better for translators, but a message is
+        // keyed on source PLUS context, so adding one orphans the existing
+        // string and `lupdate -no-obsolete` deletes its six approved
+        // translations outright — including the Russian one, which is the only
+        // one that actually differs from the source. Not worth that for a
+        // marker no user sees. The same reasoning is already written down on
+        // the "Select a pack…" placeholder below.
         return i18n("%1 ms", duration);
     }
 
@@ -400,8 +492,14 @@ ColumnLayout {
         // Duration (easing only — spring derives its own settle time). The
         // separator leads the row, so it hides with the timing-mode chrome
         // in simple mode — a section must not open with a divider.
+        //
+        // Gated on simple mode ALONE, not on the timing mode. Exactly one of
+        // the Duration row and the spring hint below occupies this slot, and
+        // the divider leads whichever it is. Testing for Easing here left the
+        // spring hint butting straight against the timing-mode row with no
+        // break in advanced mode.
         SettingsSeparator {
-            visible: root.timingMode === CurvePresets.timingModeEasing && !root.simpleTiming
+            visible: !root.simpleTiming
         }
 
         // Spring stand-in for the hidden Duration row. A spring derives its
@@ -511,15 +609,57 @@ ColumnLayout {
 
     // Empty state, mirroring the decoration chain editor's: an unset
     // shader says so in place of the row, and points at the setter below.
-    Label {
+    //
+    // Two different states render empty and they are NOT the same thing, so
+    // they do not read the same. Nothing stored means the event simply has no
+    // pack. The engaged-empty sentinel means the event was explicitly set to
+    // no shader, which also blocks whatever an ancestor would have given it —
+    // and because the pack row needs a resolved pack to render, that state has
+    // no row of its own. Without this disclosure it looked identical to "no
+    // pack anywhere", with nothing to say why an ancestor's pack was not
+    // reaching the event and no way to undo it.
+    RowLayout {
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
         visible: root.shaderLegSupported && root.shaderEffectId.length === 0
-        // Points at the setter only when the setter can actually serve.
-        text: root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.")
-        wrapMode: Text.WordWrap
-        color: Kirigami.Theme.disabledTextColor
+        spacing: Kirigami.Units.smallSpacing
+
+        Label {
+            Layout.fillWidth: true
+            // Points at the setter only when the setter can actually serve.
+            text: {
+                // Gated on the SENTINEL, not on any stored override. A
+                // params-only override also renders empty once its ancestor's
+                // pack goes away, and that event was never explicitly set to
+                // no shader, so saying so would be wrong. The revert link
+                // beside this stays gated on any stored override, because it
+                // is useful in both states.
+                if (root.shaderBlocksInherited)
+                    return i18n("No shader for this event, and no inherited one either.");
+
+                return root._anyPackAvailable ? i18n("No shader pack. Set one below.") : i18n("No shader pack.");
+            }
+            font: Kirigami.Theme.smallFont
+            wrapMode: Text.WordWrap
+            color: Kirigami.Theme.disabledTextColor
+        }
+
+        // Named for its axis, like the curve and duration links above: a bare
+        // "Revert to inherited" a few rows from "Revert duration to inherited"
+        // reads as though it reverted everything.
+        Kirigami.LinkButton {
+            // Never squeezed, and small, matching both sibling revert links:
+            // the actionable half of the row must not elide before the
+            // informational half, and it must not out-size the caption it sits
+            // beside.
+            Layout.minimumWidth: implicitWidth
+            visible: root.showOverrideStatus && root.shaderOverrideStored
+            text: i18n("Revert shader to inherited")
+            font: Kirigami.Theme.smallFont
+            Accessible.name: text
+            onClicked: root.shaderRevertRequested()
+        }
     }
 
     // Selected-shader row — the same collapsed-row model as a decoration
@@ -541,6 +681,11 @@ ColumnLayout {
         leftPadding: Kirigami.Units.largeSpacing
         rightPadding: Kirigami.Units.largeSpacing
         Accessible.name: root.shaderName
+        // The ownership cue reaches assistive tech here rather than from the
+        // caption Label below, which a screen reader has no reason to
+        // associate with this row. Without it the sighted user learned whether
+        // the pack was the event's own and the AT user did not.
+        Accessible.description: root.showOverrideStatus ? root._shaderOwnershipCaption : ""
         onClicked: {
             if (root.shaderSectionExpandable)
                 root.shaderSectionExpanded = !root.shaderSectionExpanded;
@@ -568,21 +713,95 @@ ColumnLayout {
                     Layout.fillWidth: true
                     visible: root.shaderDescription.length > 0 && !root.shaderSectionExpanded
                     text: root.shaderDescription
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    elide: Text.ElideRight
+                }
+
+                // The ownership cue the two timing fields above this row
+                // already carry, in their wording where the state is the same
+                // one they can be in. Applied to the description Label above as
+                // well as here, because this column is spacing:0 and a single
+                // small line under two body-size ones reads as a mistake.
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.showOverrideStatus
+                    // The row carries this same text as its
+                    // Accessible.description, so leaving the Label exposed
+                    // announces it twice.
+                    Accessible.ignored: true
+                    text: root._shaderOwnershipCaption
+                    font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
             }
 
-            // Clearing the slot, in the same position a decoration pack row
-            // carries its remove button. Routes through the same activation
-            // signal the picker's None entry uses.
+            // Removing the event's own pack, in the same position a decoration
+            // pack row carries its remove button.
+            //
+            // The two arms are genuinely different WRITES, not one write with
+            // two labels, because "remove" and "use nothing" are opposite
+            // outcomes here. With a pack of its own, removing it lets the
+            // ancestor's pack (or the built-in default) reach the event again.
+            // With the pack inherited there is nothing of the event's own to
+            // remove, so the only meaningful action left is the engaged-empty
+            // sentinel, which blocks what the ancestor gives it. Routing both
+            // through the sentinel is what made "Remove <pack>" a lie: it told
+            // the user they were dropping their own choice when the click was
+            // actually refusing everyone else's.
+            //
+            // Blocking an inherited pack from the owned state is still
+            // reachable, through the picker's None entry, which is documented
+            // below as the route that must never be gated away.
             ToolButton {
+                id: shaderRemoveButton
+
+                // One source for the label so the accessible name and the
+                // tooltip cannot drift, and so neither depends on reading the
+                // other's attached property.
+                readonly property string actionLabel: {
+                    if (!root.shaderPackRemovable)
+                        return i18n("Use no shader for this event");
+
+                    // Naming the pack is only honest when every path the click
+                    // writes holds that pack. `shaderName` comes from the
+                    // PRIMARY path's resolved id while the click clears the
+                    // whole group, so where the members differ the named one
+                    // need not be the one removed. The divergence banner
+                    // already reports the disagreement; the button just stops
+                    // claiming to know which pack it is about.
+                    if (!root.shaderPackNameIsExact)
+                        return i18n("Remove the shader pack");
+
+                    return i18n("Remove %1", root.shaderName);
+                }
+
                 icon.name: "edit-delete-remove"
                 display: ToolButton.IconOnly
-                Accessible.name: i18n("Remove %1", root.shaderName)
+                Accessible.name: shaderRemoveButton.actionLabel
+                ToolTip.visible: hovered
+                ToolTip.delay: Kirigami.Units.toolTipDelay
+                ToolTip.text: shaderRemoveButton.actionLabel
                 onClicked: {
-                    root.shaderEffectActivated("");
-                    root.shaderSectionExpanded = false;
+                    // Snapshotted so the collapse below can tell a write that
+                    // landed from one the consumer refused. Both signals are
+                    // handled synchronously and refresh `shaderEffectId` before
+                    // returning.
+                    const shownBefore = root.shaderEffectId;
+                    if (root.shaderPackRemovable)
+                        root.shaderRevertRequested();
+                    else
+                        root.shaderEffectActivated("");
+                    // Collapse only when the slot actually moved. A refused
+                    // write leaves the same pack on the row, and folding away
+                    // its parameters underneath the user is not what "nothing
+                    // happened" should look like. Reverting to an ancestor pack
+                    // that happens to be the same one is the other case this
+                    // catches: the row still shows what it showed, so it stays
+                    // as the user left it.
+                    if (root.shaderEffectId !== shownBefore)
+                        root.shaderSectionExpanded = false;
                 }
             }
 
@@ -764,9 +983,15 @@ ColumnLayout {
             onSelected: function (id) {
                 var sid = id || "";
                 root.shaderEffectActivated(sid);
-                // Picking a shader reveals its description + parameters
-                // right away; clearing to None collapses the section.
-                root.shaderSectionExpanded = sid.length > 0;
+                // Picking a shader reveals its description + parameters right
+                // away, and clearing to None collapses the section. Derived
+                // from what actually LANDED rather than from what was asked
+                // for: the consumer refreshes `shaderEffectId` synchronously
+                // inside the signal, and a write it refused (an async discard
+                // owns the tree) leaves the id where it was. Reading `sid` here
+                // left the old pack's description and parameters expanded under
+                // a row that had not changed.
+                root.shaderSectionExpanded = root.shaderEffectId.length > 0;
             }
         }
     }

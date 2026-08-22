@@ -21,6 +21,17 @@ import org.kde.kirigami as Kirigami
  * an edit made outside this page reaches every card as a tree-wide
  * `overrideChanged("")` broadcast.
  *
+ * The shader axis follows the same per-field principle through a different
+ * store. It lives in the ShaderProfileTree rather than in a profile file, and
+ * it splits into TWO fields: which pack the event uses, and the parameter
+ * values for it. Moving a parameter slider writes only the parameters, so an
+ * event that inherits its pack keeps inheriting it and follows the parent when
+ * the parent's pack changes. Picking from the picker is what writes the pack.
+ * The one asymmetry with timing is worth knowing: parameter values are stored
+ * as a whole map rather than per key, so once an event owns any of them it
+ * owns all of them and stops following the parent's parameter edits. The
+ * shader row's ownership caption is where that is disclosed.
+ *
  * Controls: timing-mode (Easing/Spring), curve thumbnail with
  * "Customize…" dialog, duration slider, inheritance breadcrumb, and — on
  * shader-supported paths — the shader picker and its per-shader parameter
@@ -82,8 +93,38 @@ Item {
     /// write emits does not re-enter refreshFromTree mid-loop.
     property bool _committing: false
 
-    /// The shader-axis counterpart, for _setShaderOverrideOnAll.
+    /// The shader-axis counterpart, for every writer that moves the shader
+    /// tree (_setShaderOverrideOnAll, _setShaderParamsOnAll and the two
+    /// shader clears).
     property bool _committingShader: false
+
+    /// "The controller refused the last write, so stop re-issuing it."
+    ///
+    /// Every group writer returns whether its write landed, and the refusal
+    /// case is an async discard owning the tree. The controller TOASTS that
+    /// reason on every refusal, and a toast announces itself to assistive tech
+    /// on every show. Both continuous edit paths run at pointer rate — a
+    /// duration drag emits per move, and so does a shader parameter drag — so a
+    /// discard that overlapped a drag produced one refused write, one toast and
+    /// one screen-reader announcement per pointer move for the length of the
+    /// drag. The toast's own animation coalesces visually, which is why this
+    /// has to be fixed at the source of the repeat rather than at the toast.
+    ///
+    /// Cleared in two places, and it needs both. A refresh this card did not
+    /// drive itself covers an outside edit; `onPendingChangesChanged` below
+    /// covers the end of the discard. The second is NOT redundant: the
+    /// discard's terminal handler emits `overrideChanged` only for the profile
+    /// files it actually restored, so a card none of those paths reaches would
+    /// otherwise never refresh and would stay latched for the rest of the
+    /// session. A card's own writes refresh with `selfDriven` set, so the latch
+    /// survives the drag that tripped it.
+    property bool _writesRefused: false
+
+    /// Record whether a write landed. Takes the boolean every group writer
+    /// already returns and that every drag-rate caller used to discard.
+    function _noteWriteResult(landed) {
+        root._writesRefused = !landed;
+    }
 
     /// The declared mirrors minus any the controller rejects as an event path.
     /// A misspelled entry is refused by every writer, so it can never receive
@@ -155,6 +196,58 @@ Item {
     /// curve counts only as a non-empty string.
     readonly property bool _ownsDurationOverride: root._primaryRaw.duration !== undefined
     readonly property bool _ownsCurveOverride: typeof root._primaryRaw.curve === "string" && root._primaryRaw.curve.length > 0
+    /// This path's own STORED shader profile, assigned by refreshFromTree from
+    /// the `rawShaderProfile` read it already performs. The shader-axis twin of
+    /// `_primaryRaw` above, and not `readonly` for the same reason: it is
+    /// assigned rather than derived, with refreshFromTree its only writer.
+    ///
+    /// Kept as the raw map so the three ownership tests below are DERIVED from
+    /// it rather than each being assigned separately. The imperative form would
+    /// have re-created, three times over, the staleness the comment on
+    /// refreshShaderFromTree warns about: a future caller running that function
+    /// alone would leave every one of them describing the previous state.
+    property var _primaryRawShader: ({})
+    /// Whether this event DIRECTLY owns its shader pack, as opposed to showing
+    /// one inherited from an ancestor. The id the editor renders is the
+    /// RESOLVED one and cannot answer this on its own.
+    ///
+    /// Engaged-EMPTY is deliberately NOT ownership: that is the explicit "no
+    /// shader here" sentinel, which is a refusal rather than a pack this event
+    /// chose. `_storesShaderOverride` is what covers that state.
+    readonly property bool _ownsShaderPack: typeof root._primaryRawShader.effectId === "string" && root._primaryRawShader.effectId.length > 0
+    /// Whether this event inherits its pack but owns every parameter VALUE —
+    /// what a parameter slider writes on an inheriting event.
+    readonly property bool _ownsShaderParamsOnly: !root._ownsShaderPack && Boolean(root._primaryRawShader.parameters) && Object.keys(root._primaryRawShader.parameters).length > 0
+    /// Whether this event stores a shader override of ANY shape, sentinel
+    /// included. Gates the revert affordance, which has to reach the state
+    /// where the pack row is not rendered at all.
+    readonly property bool _storesShaderOverride: Object.keys(root._primaryRawShader).length > 0
+    /// Whether this event holds the engaged-EMPTY sentinel specifically: it
+    /// resolves to no shader AND blocks what an ancestor would have given it.
+    /// Narrower than `_storesShaderOverride`, because a params-only override
+    /// also renders empty once its ancestor's pack goes away and that is a
+    /// different thing to tell the user.
+    readonly property bool _shaderBlocksInherited: typeof root._primaryRawShader.effectId === "string" && root._primaryRawShader.effectId.length === 0
+    /// True when ANY path in the write group owns a pack, which is what the
+    /// row's remove control keys on.
+    ///
+    /// Separate from `_ownsShaderPack` because the caption describes THIS event
+    /// while that control WRITES the whole group, and a group whose members
+    /// disagree would otherwise get a label derived from one member and an
+    /// action applied to all of them. Assigned by refreshFromTree from a single
+    /// controller call rather than derived, because the answer lives in the
+    /// shader tree and only C++ can read the group in one pass.
+    property bool _anyWritePathOwnsShaderPack: false
+    /// True when EVERY write path stores the pack the row is currently showing,
+    /// which is what makes it honest to name that pack on the remove control.
+    ///
+    /// `shaderName` comes from the primary path's RESOLVED id while the control
+    /// clears the whole group, so on a group whose members hold different packs
+    /// the named one need not be the one removed. Assigned from the same
+    /// shader refresh as the id it is about, for the reason spelled out there:
+    /// `refreshFromTree` cannot compute it, because the id is not current yet
+    /// the first time that function runs.
+    property bool _allWritePathsHoldShownPack: false
     // ── Editor-owned working state (proxied via aliases) ────────────
     // The shared `AnimationProfileEditor` (declared inside the card's
     // body below) owns the timing + shader working state and the
@@ -316,33 +409,94 @@ Item {
     // a registry refresh that fires while the dialog is open could
     // silently retarget the write at a different effect's param map.
     function _writeShaderParam(effectId, paramId, value) {
-        if (!effectId)
+        // Refused writes are dropped WITHOUT restoring the control, and that
+        // asymmetry with `_writeAllShaderParams` below is deliberate. This path
+        // is drag-rate — a parameter slider emits per pointer move — so
+        // refreshing here would reassign `currentShaderParams` from the tree on
+        // every refused tick and drag the handle back out from under the user.
+        // A stale-looking slider for the length of a discard is the better of
+        // the two, and the drag's last value is what the first accepted write
+        // commits.
+        if (!effectId || root._writesRefused)
             return;
 
         // Bail if the user navigated to a different effect while the
-        // dialog (color picker / etc.) was open. Calling
-        // `setShaderOverride` with the stale effect id would silently
-        // reassign the eventPath to the OLD effect, undoing the user's
-        // navigation and reviving a dropped param map. Better to drop the
-        // late accept than to clobber state the user explicitly changed.
+        // dialog (color picker / etc.) was open. The write below carries no
+        // effect id, so a late accept can no longer retarget the event at the
+        // OLD pack — what it would do instead is land a parameter authored for
+        // that pack in the map of the one now showing, where the id means
+        // something else or nothing at all. Better to drop the late accept than
+        // to write it into state the user explicitly changed.
         if (effectId !== root.currentShaderEffectId)
             return;
 
         var next = Object.assign({}, root.currentShaderParams || {});
         next[paramId] = value;
         root.currentShaderParams = next;
-        root._setShaderOverrideOnAll(effectId, next);
+        // Params-only: never restate the pack. `effectId` above is the RESOLVED
+        // id, so on a leaf that inherits its pack, writing it would pin that
+        // pack here and sever the cascade. It is still read for the stale-effect
+        // guard above, which is the only thing it is good for on this path.
+        root._noteWriteResult(root._setShaderParamsOnAll(next));
     }
 
-    /// Batch write — randomize rolls N values that should land as one
-    /// `setShaderOverride` round-trip. Same stale-effect guard as
-    /// `_writeShaderParam`.
+    /// Batch write — randomize and reset roll N values that should land as one
+    /// `setShaderParametersOnPaths` round-trip rather than N of them.
+    ///
+    /// The `effectId` check here is a non-empty test in practice, NOT the
+    /// stale-effect guard `_writeShaderParam` carries. Both call sites pass
+    /// `root.currentShaderEffectId` itself and the editor computes and re-emits
+    /// the map synchronously in the same handler, so there is no asynchronous
+    /// gap for the id to go stale across. It is kept because the empty case is
+    /// real (no pack resolved, nothing to write) and because a future payload
+    /// that DOES carry a snapshotted id should find the comparison already
+    /// here rather than have to reintroduce it.
+    /// Whether this event stores parameter values of its OWN, as opposed to
+    /// resolving an ancestor's. Distinct from `_ownsShaderParamsOnly`, which is
+    /// additionally false when this event owns its pack — here the question is
+    /// only about the parameter map.
+    function _ownsAnyShaderParams() {
+        const own = root._primaryRawShader && root._primaryRawShader.parameters;
+        return Boolean(own) && Object.keys(own).length > 0;
+    }
+
+    /// Flat value-equality over two parameter maps. Parameter values are
+    /// scalars (numbers, bools, strings, colors), so a key-wise `!==` is the
+    /// whole comparison; there is no nested structure to recurse into.
+    function _sameParamValues(a, b) {
+        const left = a || {};
+        const right = b || {};
+        const leftKeys = Object.keys(left);
+        if (leftKeys.length !== Object.keys(right).length)
+            return false;
+        for (var i = 0; i < leftKeys.length; ++i) {
+            const key = leftKeys[i];
+            if (!right.hasOwnProperty(key) || left[key] !== right[key])
+                return false;
+        }
+        return true;
+    }
+
     function _writeAllShaderParams(effectId, allParams) {
         if (!effectId || effectId !== root.currentShaderEffectId)
             return;
 
-        root.currentShaderParams = allParams;
-        root._setShaderOverrideOnAll(effectId, allParams);
+        // Refused: same reasoning as `_writeShaderParam`, and worse here.
+        // Randomize and Reset stage their whole map onto the editor before
+        // emitting, so dropping the write silently leaves every parameter row
+        // showing a value that was never persisted. Discrete actions have no
+        // next tick to correct them either.
+        if (root._writesRefused) {
+            root.refreshShaderFromTree();
+            return;
+        }
+
+        // `currentShaderParams` is deliberately NOT re-staged here. It is an
+        // alias onto the editor's own `shaderParams`, and the editor assigns
+        // the rolled or default map to that property before emitting, so
+        // assigning it again would be writing the value it already holds.
+        // Params-only, for the reason _writeShaderParam gives.
+        root._noteWriteResult(root._setShaderParamsOnAll(allParams));
     }
 
     // ── Group writers ───────────────────────────────────────────────
@@ -353,6 +507,10 @@ Item {
     // signature change needs no edit here.
     function _setShaderOverrideOnAll() {
         return writers._setShaderOverrideOnAll.apply(writers, arguments);
+    }
+
+    function _setShaderParamsOnAll() {
+        return writers._setShaderParamsOnAll.apply(writers, arguments);
     }
     function _setOverrideMerged() {
         return writers._setOverrideMerged.apply(writers, arguments);
@@ -398,22 +556,46 @@ Item {
 
         root.currentShaderEffectId = nextEffectId;
         root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({});
+        // Computed HERE, not in refreshFromTree, because it reads the id
+        // assigned on the line above. Component.onCompleted runs refreshFromTree
+        // FIRST and this second, so computing it there would evaluate it against
+        // an empty id on the card's first frame and never revisit it — a card
+        // that owns a pack would render the group-ambiguous remove label until
+        // something unrelated triggered another timing refresh.
+        // Gated, because `_allWritePathsHold` rebuilds the whole shader tree —
+        // the same non-cheap read this function's comment below warns about,
+        // and this runs at drag rate for every visible card. Its only consumer
+        // is the remove control's label, which is unreachable unless some write
+        // path owns a pack, so the common case (an event inheriting, or with no
+        // pack at all) skips it entirely. `_anyWritePathOwnsShaderPack` is
+        // assigned by refreshFromTree, and every caller that moves the shader
+        // tree runs this function BEFORE that one, so the value read here is
+        // the previous refresh's. That is deliberate and safe: it only gates a
+        // label, the two flags converge on the very next refresh, and being one
+        // refresh stale can at worst cost one extra query or defer the exact
+        // pack name by a frame — never show a wrong name, because the false
+        // branch is the CONSERVATIVE label.
+        root._allWritePathsHoldShownPack = nextEffectId.length > 0 && root._anyWritePathOwnsShaderPack && root._allWritePathsHold(nextEffectId);
         // Recompute deeper-override count on every shader-tree update —
-        // the warning banner below depends on it. Cheap (O(N) over
-        // overriddenPaths). Only meaningful for parent-node cards but
-        // we always refresh so the binding stays consistent.
+        // the warning banner below depends on it. Only meaningful for
+        // parent-node cards but we always refresh so the binding stays
+        // consistent.
         //
         // Summed across every write path to match
         // _clearShaderOverrideDescendantsOnAll, whose button clears the
         // mirrors' descendants too. No card today is both a parent node and
-        // mirrored, so the mirror legs of this loop never run in the current
-        // config. The sum is kept so a future mirrored parent card reports
-        // what the button would actually remove.
-        const countPaths = root._writePaths;
-        var shadowing = 0;
-        for (var i = 0; i < countPaths.length; ++i)
-            shadowing += settingsController.animationsPage.shaderOverrideDescendantCount(countPaths[i]);
-        root._shadowingChildrenCount = shadowing;
+        // mirrored, so the mirror legs never contribute in the current config.
+        // The sum is kept so a future mirrored parent card reports what the
+        // button would actually remove.
+        //
+        // ONE controller call, not one per path. The per-path Q_INVOKABLE is
+        // NOT cheap: it rebuilds the whole shader tree every time (a settings
+        // read, a JSON parse and a prune walk, because `rawShaderProfile` is
+        // not memoised), so looping it here paid that cost once per write path
+        // inside a function that runs at drag rate for every visible card.
+        // That is the read-in-a-loop shape the controller's own Group-writes
+        // block calls out.
+        root._shadowingChildrenCount = settingsController.animationsPage.shaderOverrideDescendantCountForPaths(root._writePaths);
         // Divergence is deliberately NOT recomputed here. refreshFromTree owns
         // it, and every call site of this function calls refreshFromTree
         // alongside it (the three shader group writers' finally blocks and
@@ -466,6 +648,14 @@ Item {
     /// other caller (Component.onCompleted, the two signal handlers) leaves it
     /// undefined, which reads as external.
     function refreshFromTree(selfDriven) {
+        // A refresh this card did not cause means something else moved the
+        // store, which for a refusal-latched card is the discard that was
+        // holding it finishing. Retry from here. Own writes pass `selfDriven`,
+        // so a drag that trips the latch keeps it for the rest of the drag
+        // rather than re-arming on its own refusal refresh.
+        if (!selfDriven)
+            root._writesRefused = false;
+
         var raw = settingsController.animationsPage.rawProfile(root.eventPath);
         // Every caller that can MOVE the timing chain bumps _inheritRev before
         // calling — the three timing group writers and onOverrideChanged — so
@@ -506,6 +696,15 @@ Item {
         var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
         var hasShader = hasShaderEffect || hasShaderParams;
+        // Stored once; the three ownership tests at the top of this file derive
+        // from it. Feeds the editor's ownership caption and the revert
+        // affordance's gate.
+        root._primaryRawShader = rawShader || ({});
+        // The remove control writes the whole group, so its label is answered
+        // for the whole group. One controller call rather than a loop: the
+        // shader tree is not memoised, so a per-path query would rebuild it
+        // once per write path inside a refresh that runs at drag rate.
+        root._anyWritePathOwnsShaderPack = settingsController.animationsPage.anyPathOwnsShaderPack(root._writePaths);
         const wasEnabled = root.overrideEnabled;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // A clear that did not come through the toggle's OFF arm — a page
@@ -561,19 +760,35 @@ Item {
     // rule to both fields in both modes. The controller stamps the `name`
     // field automatically.
     function commitDurationOverride() {
+        // Drag-rate (the slider emits per move), so a refused write is dropped
+        // without restoring the slider — refreshing per tick would pull the
+        // handle back out from under the user. Same trade as
+        // `_writeShaderParam`; `commitCurveOverride` below is discrete and does
+        // restore.
+        if (root._writesRefused)
+            return;
+
         // The merged writer overlays only the fields in `profile`, and the
         // `undefined` curve means "each path keeps its own curve, or keeps
         // inheriting" — decided PER PATH so a mirror that owns a curve is
         // preserved and one that inherits stays inheriting.
-        root._setOverrideMerged({
+        root._noteWriteResult(root._setOverrideMerged({
             "duration": root.currentDuration
-        }, undefined);
+        }, undefined));
     }
 
     function commitCurveOverride() {
+        // Discrete (a combo activation or the curve dialog accepting), so a
+        // refused write leaves the editor showing a curve that never reached
+        // disk with no later tick to correct it. Restore the stored state.
+        if (root._writesRefused) {
+            root.refreshFromTree();
+            return;
+        }
+
         // Empty profile map: nothing but the curve travels. Each path's own
         // stored duration (or its absence) survives the merge untouched.
-        root._setOverrideMerged({}, root.currentCurveString);
+        root._noteWriteResult(root._setOverrideMerged({}, root.currentCurveString));
     }
 
     // Two emitters pass an empty path, and both mean "reload everything":
@@ -683,6 +898,43 @@ Item {
             root._shaderRegistryRev++;
         }
 
+        // The refusal latch's guaranteed release, and it has to be THIS signal.
+        //
+        // The latch is what stops a drag re-issuing a write the controller is
+        // refusing, and only a refresh the card did not drive itself clears it.
+        // The discard that causes those refusals does NOT end with a
+        // path-agnostic broadcast: its terminal handler emits `overrideChanged`
+        // only for the profile files the worker actually restored, so a card
+        // none of those paths reaches never refreshes, and the latch would stay
+        // set for the rest of the session. Nothing reconstructs the card to
+        // recover, because the list's Loaders latch built and never unload.
+        //
+        // `pendingChangesChanged` is emitted unconditionally by that same
+        // handler, so it is the one signal every card is guaranteed to see when
+        // the discard settles. It also fires on ordinary writes, which is
+        // harmless: a card still mid-drag re-arms the latch on its very next
+        // refused tick, so this costs at most one extra toast per discard and
+        // keeps the anti-repeat property that matters.
+        function onPendingChangesChanged() {
+            // Deliberately just the flag, with no refresh alongside it. A card
+            // whose writes were all refused never entered the pending-snapshot
+            // map, so the discard has nothing of its to restore and its working
+            // values are the ones the user dragged, not what is on disk.
+            //
+            // That residue is now drag-rate only: the discrete refusal paths
+            // (`_writeAllShaderParams`, `commitCurveOverride`) restore
+            // themselves, and the two continuous ones deliberately do not,
+            // because refreshing per tick would drag the control back out from
+            // under the user. What is left is a slider still showing the value
+            // the user dragged to. It does NOT correct itself on the next edit
+            // — the next accepted write commits that value — which is the
+            // reasonable outcome for a drag the user meant, so it is left
+            // alone. Refreshing here instead would also be defensible, but it
+            // would put a full timing refresh on a signal every card receives,
+            // for a property that is one bool.
+            root._writesRefused = false;
+        }
+
         target: settingsController.animationsPage
     }
 
@@ -720,8 +972,16 @@ Item {
         // disable and hide every row including the shader picker, so a user
         // could not drop a shader on an event without first creating a timing
         // override they did not want. Picking a shader flips the toggle on by
-        // itself, because refreshFromTree derives it from both axes. The timing
-        // half is gated separately, by showTimingSection below.
+        // itself, because refreshFromTree derives it from both axes — and it
+        // opens the timing section with it, because `showTimingSection` is fed
+        // from `_timingEditorOpen`, which is that same two-axis reading. That
+        // is not an oversight to be fixed by giving the section its own
+        // spelling: `_timingEditorOpen` deliberately drives the toggle, the
+        // section's visibility and both edit guards from ONE expression, and
+        // the fifth site that remembers only half of it is the bug that
+        // spelling prevents. An event with a shader and no timing override
+        // therefore shows the timing rows, with both captions correctly
+        // reporting that it is following inherited values.
         gateBodyOnToggle: false
         collapsible: root.collapsible
         onToggleClicked: function (checked) {
@@ -812,6 +1072,15 @@ Item {
                 simpleTiming: root.simpleTiming
                 showOverrideStatus: true
                 curveOverridden: root._ownsCurveOverride
+                // The caption describes THIS event, the remove control acts on
+                // the whole write group, so the two are fed from different
+                // predicates on purpose. See `_anyWritePathOwnsShaderPack`.
+                shaderOwnsPack: root._ownsShaderPack
+                shaderOwnsParamsOnly: root._ownsShaderParamsOnly
+                shaderOverrideStored: root._storesShaderOverride
+                shaderBlocksInherited: root._shaderBlocksInherited
+                shaderPackRemovable: root._anyWritePathOwnsShaderPack
+                shaderPackNameIsExact: root._allWritePathsHoldShownPack
                 durationOverridden: root._ownsDurationOverride
                 enableLocking: true
                 enableRandomize: true
@@ -889,10 +1158,46 @@ Item {
                         return;
 
                     // "None" picks the engaged-empty inheritance-blocking
-                    // sentinel; otherwise switching effect (or promoting an
-                    // inherited value to a direct override) drops the
-                    // previous effect's parameter map.
-                    root._setShaderOverrideOnAll(sid, ({}));
+                    // sentinel. Otherwise this is one of two different things
+                    // wearing one signal, and they must not write the same
+                    // parameter map.
+                    //
+                    // A SWITCH to a different pack drops the previous pack's
+                    // parameters, because parameter ids are per-pack and the
+                    // old map means nothing to the new one. That is the
+                    // long-standing behaviour and it is correct.
+                    //
+                    // A PROMOTION — picking the pack this event is already
+                    // showing, to own it rather than inherit it — must keep
+                    // them. Passing an empty map here silently deleted the
+                    // parameters the user had just tuned, because the guard
+                    // above cannot short-circuit a promotion: after a
+                    // params-only write the event holds no `effectId` at all,
+                    // and `allPathsHoldShaderEffect` treats an absent id as
+                    // equal to nothing, sentinel included. So the write went
+                    // ahead and `setShaderOverrideOnPaths` rebuilt the profile
+                    // from the id alone.
+                    //
+                    // What is carried is what this event STORES, never
+                    // `currentShaderParams`. That one is the RESOLVED map, so
+                    // on an event that owns nothing it holds the ancestor's
+                    // values, and carrying it would pin a frozen copy of them
+                    // onto an event that had tuned nothing — severing the same
+                    // cascade this handler exists to preserve. Reading the
+                    // stored map instead answers both cases with one test:
+                    // empty means there is nothing of this event's own to
+                    // keep, so an empty map goes down and
+                    // `setShaderOverrideOnPaths` leaves `parameters` unset,
+                    // which keeps the ancestor's values resolving.
+                    const ownParams = (root._primaryRawShader && root._primaryRawShader.parameters) || ({});
+                    const keepParams = sid.length > 0 && sid === root.currentShaderEffectId && Object.keys(ownParams).length > 0;
+                    root._setShaderOverrideOnAll(sid, keepParams ? ownParams : ({}));
+                }
+                // Drop this event's own shader choice so it follows its
+                // ancestors again. The opposite of the None sentinel above,
+                // which BLOCKS them.
+                onShaderRevertRequested: {
+                    root._clearShaderOverrideOnAll();
                 }
                 onShaderParamWriteRequested: function (effectId, paramId, value) {
                     root._writeShaderParam(effectId, paramId, value);
@@ -908,13 +1213,37 @@ Item {
                     // Editor already staged `rolled` onto its
                     // `shaderParams`; this card's persistence is
                     // through the controller, so route the rolled map
-                    // through the batch writer (single setShaderOverride
-                    // call carrying every roll).
+                    // through the batch writer (a single
+                    // setShaderParametersOnPaths call carrying every roll).
                     root._writeAllShaderParams(root.currentShaderEffectId, rolled);
                 }
                 onResetRequested: function (defaults) {
-                    // Same batch path as randomize — one setShaderOverride
-                    // carrying every param at its default.
+                    // Same batch path as randomize — one
+                    // setShaderParametersOnPaths carrying every param at its
+                    // default.
+                    //
+                    // Except when the reset would change nothing a user can
+                    // see. On an event that owns no parameters of its own,
+                    // whose ancestors left theirs at the pack defaults too,
+                    // writing those defaults creates a params-only override
+                    // that renders identically and silently stops the event
+                    // following later parameter edits from its ancestor. There
+                    // is nothing to reset, so nothing is written.
+                    //
+                    // Deliberately here and NOT in `_writeAllShaderParams`:
+                    // randomize shares that writer, and on an inheriting event
+                    // creating ownership is exactly what randomize is for. A
+                    // guard in the shared writer would make it a silent no-op.
+                    //
+                    // The refresh is not optional. The editor assigns the
+                    // default map onto its own `shaderParams` (aliased onto
+                    // this card's `currentShaderParams`) BEFORE emitting, so
+                    // returning without it would leave the parameter rows
+                    // showing values that no longer describe anything stored.
+                    if (!root._ownsAnyShaderParams() && root._sameParamValues(defaults, root.currentShaderParams)) {
+                        root.refreshShaderFromTree();
+                        return;
+                    }
                     root._writeAllShaderParams(root.currentShaderEffectId, defaults);
                 }
             }

@@ -99,8 +99,9 @@ private Q_SLOTS:
                                           {QStringLiteral("presetName"), QStringLiteral("Snappy")}}));
 
         // The card edits ONE field.
-        QVERIFY(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 900}},
-                                           QVariant()));
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 900}},
+                                            QVariant()),
+                 1);
 
         const QVariantMap after = c.rawProfile(kPrimary);
         QCOMPARE(after.value(QStringLiteral("duration")).toInt(), 900);
@@ -120,7 +121,7 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        QVERIFY(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 750}}, QVariant()));
+        QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 750}}, QVariant()), 2);
 
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("duration")).toInt(), 750);
         QCOMPARE(c.rawProfile(kMirror).value(QStringLiteral("duration")).toInt(), 750);
@@ -139,8 +140,10 @@ private Q_SLOTS:
         c.setUserProfilesDirOverride(tmp.path());
 
         QSignalSpy touched(&c, &AnimationsPageController::overrideChanged);
-        QVERIFY(c.setOverrideMergedOnPaths(QStringList{kPrimary, kPrimary, kMirror},
-                                           QVariantMap{{QStringLiteral("duration"), 750}}, QVariant()));
+        // Two, not three: the repeated primary is deduplicated on entry.
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary, kPrimary, kMirror},
+                                            QVariantMap{{QStringLiteral("duration"), 750}}, QVariant()),
+                 2);
         int primaryEmits = 0;
         for (int i = 0; i < touched.count(); ++i) {
             if (touched.at(i).at(0).toString() == kPrimary)
@@ -200,7 +203,7 @@ private Q_SLOTS:
         // Primary owns a curve; the mirror owns none.
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
 
-        QVERIFY(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 300}}, QVariant()));
+        QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 300}}, QVariant()), 2);
 
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("curve")).toString(), QStringLiteral("0.4,0,0.2,1"));
         QVERIFY2(!c.rawProfile(kMirror).contains(QStringLiteral("curve")),
@@ -219,7 +222,7 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
 
-        QVERIFY(c.setOverrideMergedOnPaths(group(), QVariantMap{}, QVariant(QStringLiteral("spring:14.00,0.60"))));
+        QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{}, QVariant(QStringLiteral("spring:14.00,0.60"))), 2);
 
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.00,0.60"));
         QCOMPARE(c.rawProfile(kMirror).value(QStringLiteral("curve")).toString(), QStringLiteral("spring:14.00,0.60"));
@@ -243,10 +246,11 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("duration"), 200}}));
 
-        QVERIFY(c.setOverrideMergedOnPaths(
-            QStringList{kPrimary},
-            QVariantMap{{QStringLiteral("duration"), 400}, {QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}},
-            QVariant()));
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary},
+                                            QVariantMap{{QStringLiteral("duration"), 400},
+                                                        {QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}},
+                                            QVariant()),
+                 1);
 
         const QVariantMap after = c.rawProfile(kPrimary);
         QCOMPARE(after.value(QStringLiteral("duration")).toInt(), 400);
@@ -265,10 +269,54 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
 
-        QVERIFY(c.setOverrideMergedOnPaths(
-            QStringList{kPrimary}, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}}, QVariant()));
+        // ZERO paths written, and that is the assertion rather than an
+        // inconvenience: the path already owns a curve, `fields` cannot
+        // overwrite it, so the merged object matches what is on disk and the
+        // writer correctly finds nothing to do. The count distinguishes that
+        // from a refusal (-1) and from a real write (1), which the old boolean
+        // return could not.
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary},
+                                            QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}},
+                                            QVariant()),
+                 0);
 
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("curve")).toString(), QStringLiteral("0.4,0,0.2,1"));
+    }
+
+    /// A write that cannot reach disk toasts, and toasts ONCE however many
+    /// times it is retried.
+    ///
+    /// The duration slider commits on every pointer move, and every reason a
+    /// write fails after the async gate is persistent, so the next tick fails
+    /// the same way. Without the latch the same sentence is re-emitted at
+    /// pointer rate — which restarts the toast's fade before it can be read and
+    /// pushes the message into the screen reader's queue ~30 times a second.
+    ///
+    /// The failure is induced by pointing the profiles directory at a path that
+    /// cannot be created, because a FILE sits where the directory would go.
+    void aFailedWriteToastsOnceRatherThanOncePerRetry()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString blocker = tmp.filePath(QStringLiteral("blocker"));
+        {
+            QFile f(blocker);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("not a directory");
+        }
+
+        AnimationsPageController c;
+        // mkpath under a regular file fails, so every write returns Failed.
+        c.setUserProfilesDirOverride(blocker + QStringLiteral("/profiles"));
+
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        const QVariantMap fields{{QStringLiteral("duration"), 900}};
+
+        // Three "ticks" of the same failing drag.
+        for (int i = 0; i < 3; ++i)
+            QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, fields, QVariant()), 0);
+
+        QCOMPARE(toasts.count(), 1);
     }
 
     // ─── clearFieldOnPaths ────────────────────────────────────────────────
@@ -413,7 +461,7 @@ private Q_SLOTS:
         AnimationsPageController c;
         c.setUserProfilesDirOverride(tmp.path());
 
-        QVERIFY(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 500}}, QVariant()));
+        QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 500}}, QVariant()), 2);
 
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{kMirror}, /*compareCurve=*/true), 0);
     }
@@ -750,7 +798,11 @@ private Q_SLOTS:
 
         QTest::ignoreMessage(QtWarningMsg,
                              QRegularExpression(QStringLiteral("refusing while an async discard is in flight")));
-        QVERIFY(!c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 900}}, QVariant()));
+        // -1, not merely falsy: the writer now shares the family's sentinel, where
+        // -1 means the call was refused and nothing was attempted. A partial
+        // failure reports the count that did land instead, so a caller can tell
+        // "stop trying" from "some of that did not stick".
+        QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 900}}, QVariant()), -1);
 
         QCOMPARE(toasts.count(), 1);
         QCOMPARE(touched.count(), 0);
