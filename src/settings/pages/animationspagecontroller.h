@@ -298,13 +298,12 @@ public:
     // clearShaderOverrideOnPaths, clearShaderOverrideDescendantsOnPaths) and
     // the group readers (shaderOverrideDescendantCountForPaths,
     // anyPathOwnsShaderPack, anyPathSupportsShaderLeg) all SKIP a non-built-in
-    // path. allPathsHoldShaderEffect is the one exception: it RETURNS FALSE on
-    // one, because "every path holds this id" cannot be true of a path that
-    // cannot hold anything.
-    // while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
-    // which rejects it, so that path is absent from the returned count and
-    // toasts — a caller bug surfaces instead of being silently dropped. Either
-    // way the WORK is
+    // path, while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
+    // which rejects it, so that path is absent from the returned count and the
+    // call toasts — a caller bug surfaces instead of being silently dropped.
+    // allPathsHoldShaderEffect is the one that neither skips nor counts: it
+    // RETURNS FALSE on an invalid path, because "every path holds this id"
+    // cannot be true of a path that cannot hold anything. Either way the WORK is
     // bounded by `ProfilePaths::allBuiltInPaths()` rather than by the
     // caller's list — a repeat costs nothing and an unrecognised entry costs
     // one lookup, never a disk read or a shader-tree rebuild. The dedup
@@ -341,6 +340,12 @@ public:
     /// then also stopped on a disk failure it could have recovered from. A
     /// partial failure now TOASTS and reports the count that did land, exactly
     /// as clearFieldOnPaths does. -1 means only "nothing was attempted".
+    ///
+    /// A path whose merged object already matches disk comes back Unchanged and
+    /// is NOT counted, so a call where every path was already in the desired
+    /// state returns 0. That is the clearFieldOnPaths convention, and the
+    /// OPPOSITE of the shader group writers, which count an already-satisfied
+    /// path as written. Test success with `>= 0`, never with `> 0`.
     Q_INVOKABLE int setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
                                              const QVariant& curveFromCommit);
 
@@ -1068,6 +1073,14 @@ private:
     /// overwrite the first's retained map, producing inconsistent
     /// disk state. Mirrors ApplicationController::m_applying.
     bool m_asyncRevertInFlight = false;
+
+    /// "The current run of failed merged writes has already been toasted."
+    ///
+    /// setOverrideMergedOnPaths is reached from a per-pointer-move commit, and
+    /// a write that fails does so for a persistent reason, so without this the
+    /// same message is re-emitted at drag rate. Set when the failure toast
+    /// fires, cleared by the first call in which every path lands.
+    bool m_mergedWriteFailureToasted = false;
     /// Last observed value of hasPendingChanges() seen by the
     /// pendingChangesChanged → dirtyChanged forwarder. CLAUDE.md:
     /// "Only emit signals when value actually changes". Several call

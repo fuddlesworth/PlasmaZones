@@ -244,8 +244,9 @@ Item {
     /// `shaderName` comes from the primary path's RESOLVED id while the control
     /// clears the whole group, so on a group whose members hold different packs
     /// the named one need not be the one removed. Assigned from the same
-    /// refresh as its sibling above, for the same reason: it is a controller
-    /// round-trip and the label re-evaluates on every shader refresh.
+    /// shader refresh as the id it is about, for the reason spelled out there:
+    /// `refreshFromTree` cannot compute it, because the id is not current yet
+    /// the first time that function runs.
     property bool _allWritePathsHoldShownPack: false
     // ── Editor-owned working state (proxied via aliases) ────────────
     // The shared `AnimationProfileEditor` (declared inside the card's
@@ -511,6 +512,26 @@ Item {
 
         root.currentShaderEffectId = nextEffectId;
         root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({});
+        // Computed HERE, not in refreshFromTree, because it reads the id
+        // assigned on the line above. Component.onCompleted runs refreshFromTree
+        // FIRST and this second, so computing it there would evaluate it against
+        // an empty id on the card's first frame and never revisit it — a card
+        // that owns a pack would render the group-ambiguous remove label until
+        // something unrelated triggered another timing refresh.
+        // Gated, because `_allWritePathsHold` rebuilds the whole shader tree —
+        // the same non-cheap read this function's comment below warns about,
+        // and this runs at drag rate for every visible card. Its only consumer
+        // is the remove control's label, which is unreachable unless some write
+        // path owns a pack, so the common case (an event inheriting, or with no
+        // pack at all) skips it entirely. `_anyWritePathOwnsShaderPack` is
+        // assigned by refreshFromTree, and every caller that moves the shader
+        // tree runs this function BEFORE that one, so the value read here is
+        // the previous refresh's. That is deliberate and safe: it only gates a
+        // label, the two flags converge on the very next refresh, and being one
+        // refresh stale can at worst cost one extra query or defer the exact
+        // pack name by a frame — never show a wrong name, because the false
+        // branch is the CONSERVATIVE label.
+        root._allWritePathsHoldShownPack = nextEffectId.length > 0 && root._anyWritePathOwnsShaderPack && root._allWritePathsHold(nextEffectId);
         // Recompute deeper-override count on every shader-tree update —
         // the warning banner below depends on it. Only meaningful for
         // parent-node cards but we always refresh so the binding stays
@@ -640,7 +661,6 @@ Item {
         // shader tree is not memoised, so a per-path query would rebuild it
         // once per write path inside a refresh that runs at drag rate.
         root._anyWritePathOwnsShaderPack = settingsController.animationsPage.anyPathOwnsShaderPack(root._writePaths);
-        root._allWritePathsHoldShownPack = root.currentShaderEffectId.length > 0 && root._allWritePathsHold(root.currentShaderEffectId);
         const wasEnabled = root.overrideEnabled;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // A clear that did not come through the toggle's OFF arm — a page
@@ -847,10 +867,11 @@ Item {
             // map, so the discard has nothing of its to restore and its working
             // values are the ones the user dragged, not what is on disk. That
             // staleness corrects itself on the next edit, and it is no worse
-            // than the latched state this replaces. Calling refreshFromTree()
-            // here instead would ALSO run its close-the-editor branch on every
-            // pending-changes signal, including ones another card raised, which
-            // could fold the timing editor away under the user mid-edit.
+            // than the latched state this replaces. Refreshing here instead
+            // would also be defensible — its close-the-editor branch only fires
+            // when THIS card's own override really went away — but it would put
+            // a full timing refresh on a signal every card receives, for a
+            // property that is one bool.
             root._writesRefused = false;
         }
 

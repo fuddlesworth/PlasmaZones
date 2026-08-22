@@ -262,9 +262,26 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     // exactly as clearFieldOnPaths does and for the reason it documents: a
     // caller that reads -1 as "stop trying" must not be told that by a failure
     // it could recover from.
-    if (!allWritten)
-        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation settings could not be saved."));
-    return written.size();
+    //
+    // Toasted ONCE per run of failures, not once per call. This is reached from
+    // the duration slider's per-move commit, and every reason a write fails
+    // after the async gate is persistent (an unwritable directory, a failed
+    // snapshot, a QSaveFile that will not commit), so the next tick fails the
+    // same way. Emitting per tick would restart the toast's fade before it
+    // finished, leaving a flickering pill that never reads, and would push the
+    // same sentence into the screen reader's queue at pointer rate. Deliberately
+    // NOT solved by having the caller stop writing: a disk failure can be fixed
+    // while the page is open, and a control the user cannot retry is worse than
+    // a repeated message. The latch clears on the first write that fully lands.
+    if (!allWritten) {
+        if (!m_mergedWriteFailureToasted) {
+            m_mergedWriteFailureToasted = true;
+            Q_EMIT toastRequested(PhosphorI18n::tr("Some animation settings could not be saved."));
+        }
+    } else {
+        m_mergedWriteFailureToasted = false;
+    }
+    return int(written.size());
 }
 
 int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, const QString& field)

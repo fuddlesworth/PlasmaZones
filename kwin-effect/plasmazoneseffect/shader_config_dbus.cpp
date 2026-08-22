@@ -544,10 +544,9 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                 || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
                     && profilePath.at(overridden.size()) == QLatin1Char('.'))
                 || (isolationRoot.isEmpty() && overridden == PhosphorAnimation::ProfilePaths::Global);
-            // has_value(): a params-only entry pins no pack (it overlays onto
-            // whatever an ancestor chose), so an empty resolve beneath it is the
-            // quiet case, not the warn one. The engaged-empty sentinel DOES pin.
-            // Tested last, being the only operand that reads the tree.
+            // has_value(): a params-only entry pins no pack, so an empty resolve
+            // under it is the quiet case. The engaged-empty sentinel DOES pin.
+            // Tested last, being the only operand here that reads the tree.
             if (isChainMember && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))
                 && profileTree.directOverride(overridden).effectId.has_value()) {
                 cascadeCovered = true;

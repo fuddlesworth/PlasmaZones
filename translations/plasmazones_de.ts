@@ -14190,12 +14190,12 @@
         <translation>Animationsvorschauspur</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="392"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Feder · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="393"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="394"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="188"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="240"/>
         <source>%1 · %2 ms</source>
@@ -20992,22 +20992,22 @@
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="103"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="288"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="477"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="658"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="689"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="305"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="494"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="675"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="706"/>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="507"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="426"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation>Dies kann nicht geändert werden, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="266"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="279"/>
         <source>Some animation settings could not be saved.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="394"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="411"/>
         <source>Some animation overrides could not be reverted.</source>
         <translation>Einige Animationsüberschreibungen konnten nicht zurückgesetzt werden.</translation>
     </message>
