@@ -312,9 +312,18 @@ private Q_SLOTS:
         QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
         const QVariantMap fields{{QStringLiteral("duration"), 900}};
 
-        // Three "ticks" of the same failing drag.
-        for (int i = 0; i < 3; ++i)
-            QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, fields, QVariant()), 0);
+        // Three "ticks" of the same failing drag. Accumulated rather than
+        // asserted per iteration, matching the convention this file states
+        // below: QCOMPARE returns from the slot on the first failure, so a
+        // misbehaving first tick would skip the remaining two AND the toast
+        // count, which is the assertion this slot exists for.
+        QStringList wrong;
+        for (int i = 0; i < 3; ++i) {
+            const int written = c.setOverrideMergedOnPaths(QStringList{kPrimary}, fields, QVariant());
+            if (written != 0)
+                wrong.append(QStringLiteral("tick %1 returned %2, expected 0").arg(i).arg(written));
+        }
+        QVERIFY2(wrong.isEmpty(), qPrintable(wrong.join(QLatin1String("; "))));
 
         QCOMPARE(toasts.count(), 1);
     }
@@ -941,6 +950,39 @@ private Q_SLOTS:
         const QJsonObject obj = QJsonDocument::fromJson(onDisk.readAll()).object();
         QVERIFY2(!obj.contains(QStringLiteral("bogusKey")), "an unknown field was written to the profile file");
         QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 900);
+    }
+
+    /// An over-long value is dropped rather than written.
+    ///
+    /// The allowlist bounds which KEYS reach disk; nothing bounded the values
+    /// riding with them, and `presetName` takes an arbitrary string. A profile
+    /// file pushed past the read cap is skipped whole on the way back in, so
+    /// the card renders every field as inherited while `hasOverride` still
+    /// reports true — a card asserting something untrue about itself until the
+    /// next write repairs it.
+    void anOverLongValueIsDroppedRatherThanWritten()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("over-long value")));
+        QCOMPARE(
+            c.setOverrideMergedOnPaths(QStringList{kPrimary},
+                                       QVariantMap{{QStringLiteral("presetName"), QString(64 * 1024, QLatin1Char('x'))},
+                                                   {QStringLiteral("duration"), 850}},
+                                       QVariant()),
+            1);
+
+        QFile onDisk(tmp.path() + QLatin1Char('/') + kPrimary + QStringLiteral(".json"));
+        QVERIFY(onDisk.open(QIODevice::ReadOnly));
+        const QJsonObject obj = QJsonDocument::fromJson(onDisk.readAll()).object();
+        QVERIFY2(!obj.contains(QStringLiteral("presetName")), "an over-long value was written to the profile file");
+        QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 850);
+        // The file stayed readable, which is the point: rawProfile still sees
+        // the field that did land.
+        QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("duration")).toInt(), 850);
     }
 
     /// A non-string curve is treated as "the user did not touch the curve",

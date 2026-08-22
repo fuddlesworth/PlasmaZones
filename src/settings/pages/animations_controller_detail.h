@@ -232,6 +232,57 @@ inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile
 /// cannot drift from the snapshot, preset, and set-file readers.
 constexpr qint64 kMaxProfileReadBytes = animfileutil::kMaxJsonFileBytes;
 
+/// Caps on a QVariantMap arriving from QML at a Q_INVOKABLE boundary.
+///
+/// Generous by design — well above any legitimate parameter set or preset
+/// name — because the point is to bound what reaches disk, not to second-guess
+/// a pack's schema. A pack declaring more than a few dozen parameters, or a
+/// name longer than a sentence, is already outside what the UI can present.
+constexpr int kMaxWrittenMapEntries = 256;
+constexpr int kMaxWrittenMapKeyChars = 128;
+constexpr int kMaxWrittenMapStringChars = 1024;
+
+/// @p in with over-long keys and over-long string values dropped.
+///
+/// The effect id at these writers is already gated, and the merged writer
+/// allowlists its field KEYS, but nothing bounded the VALUES riding with
+/// either. Both are persisted close to verbatim — the shader parameter map is
+/// copied through `ShaderProfile::fromJson` with no validation on the way back
+/// in — so an over-long value written once stays on disk until some later write
+/// happens to rewrite the object.
+///
+/// It is not merely untidy. A profile file pushed past `kMaxProfileReadBytes`
+/// is skipped WHOLE by `readProfileJson`, so `rawProfile` answers empty and the
+/// card renders every field as inherited while `hasOverride` still reports
+/// true. The next write repairs it, but the state in between is a card
+/// asserting something untrue about itself.
+///
+/// Drops rather than refuses, matching the merged writer's treatment of an
+/// unknown field: the rest of the map is still what the user asked for.
+inline QVariantMap boundedWrittenMap(const QVariantMap& in, QLatin1String context)
+{
+    QVariantMap out;
+    for (auto it = in.constBegin(); it != in.constEnd(); ++it) {
+        if (out.size() >= kMaxWrittenMapEntries) {
+            qCWarning(lcConfig) << context << ": dropping entries past the" << kMaxWrittenMapEntries
+                                << "entry cap; map carried" << in.size();
+            break;
+        }
+        if (it.key().size() > kMaxWrittenMapKeyChars) {
+            qCWarning(lcConfig) << context << ": dropping over-long key of" << it.key().size() << "characters";
+            continue;
+        }
+        if (it.value().metaType().id() == QMetaType::QString
+            && it.value().toString().size() > kMaxWrittenMapStringChars) {
+            qCWarning(lcConfig) << context << ": dropping over-long value for key" << it.key() << "of"
+                                << it.value().toString().size() << "characters";
+            continue;
+        }
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
 /// Read the JSON object at @p path. Returns an empty object on missing
 /// file / parse error / non-object root. The `name` field is stripped so
 /// the returned map matches the QML-facing Profile shape. Parse errors

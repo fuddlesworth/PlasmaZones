@@ -420,8 +420,11 @@ public:
     /// NUL-bearing, carrying a path separator, or naming no installed pack — is
     /// the second, and it does NOT toast: it is a caller bug rather than
     /// something the user did, so it warns to the log and nothing else.
-    /// @p parameters is passed through without validation of its keys or
-    /// values; the id is the only half of the write that is gated.
+    /// @p parameters is BOUNDED rather than validated against the pack's
+    /// schema: an over-long key or string value is dropped, and the map is
+    /// capped in size. Which parameter ids a pack declares is not checked here,
+    /// because an id the pack does not know is inert at resolve time, whereas
+    /// an unbounded value reaches disk and stays there.
     Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& rawPaths, const QString& effectId,
                                              const QVariantMap& parameters);
 

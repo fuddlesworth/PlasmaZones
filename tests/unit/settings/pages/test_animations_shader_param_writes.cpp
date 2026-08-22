@@ -335,6 +335,12 @@ private Q_SLOTS:
     /// The group here is DISJOINT, so a sum and a union give the same number
     /// and this slot cannot tell them apart. The overlapping case is the slot
     /// below, which is where the difference lives.
+    ///
+    /// The LITERAL expectation is load-bearing and must not be tidied away as
+    /// redundant. Half of this slot derives its expected value by looping the
+    /// per-path accessor the group method wraps, which on its own is a
+    /// tautology — both sides would move together under a shared regression.
+    /// The literal is what anchors them to a number neither computed.
     void shaderOverrideDescendantCountForPaths_agreesWithThePerPathCounts()
     {
         ControllerFixture fx;

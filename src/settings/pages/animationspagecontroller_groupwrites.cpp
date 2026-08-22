@@ -139,8 +139,14 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
         QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval),
         QLatin1String(PhosphorAnimation::Profile::JsonFieldPresetName),
     };
+    // Keys are allowlisted, VALUES are bounded. The allowlist alone left
+    // `presetName` free to carry an arbitrarily long string straight to disk,
+    // and a profile file pushed past the read cap is skipped whole on the way
+    // back in — so the card would render every field as inherited while
+    // `hasOverride` still reported true, until some later write repaired it.
+    const QVariantMap boundedFields = boundedWrittenMap(fields, QLatin1String("setOverrideMergedOnPaths"));
     QVariantMap acceptedFields;
-    for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
+    for (auto it = boundedFields.constBegin(); it != boundedFields.constEnd(); ++it) {
         if (knownFields.contains(it.key()))
             acceptedFields.insert(it.key(), it.value());
         else
@@ -588,11 +594,14 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
         [&] {
             return acceptableShaderEffectId(effectId, QLatin1String("setShaderOverrideOnPaths"));
         },
-        [&](const ShaderProfile&, bool) -> std::optional<ShaderProfile> {
+        [&, bounded = boundedWrittenMap(parameters, QLatin1String("setShaderOverrideOnPaths"))](
+            const ShaderProfile&, bool) -> std::optional<ShaderProfile> {
             ShaderProfile profile;
             profile.effectId = effectId;
-            if (!parameters.isEmpty())
-                profile.parameters = parameters;
+            // Bounded for the same reason the id is gated: this is the only
+            // path QML uses, and the map rides to disk beside the id.
+            if (!bounded.isEmpty())
+                profile.parameters = bounded;
             return profile;
         });
 }
@@ -603,6 +612,11 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
     // No acceptableShaderEffectId check, and none is missing: this call carries
     // no id at all. The stored one is reused verbatim, and it was validated by
     // whichever write put it there.
+    //
+    // The MAP still needs bounding. The id is the only half of a shader write
+    // that was gated, and this call is all map — persisted close to verbatim,
+    // and copied back in without validation on read.
+    const QVariantMap bounded = boundedWrittenMap(parameters, QLatin1String("setShaderParametersOnPaths"));
     return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderParametersOnPaths"), {},
                                  [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
                                      // START FROM THE STORED PROFILE, which is what keeps `effectId`
@@ -612,10 +626,10 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                      // `hasStored` needs no test here: the shared helper already
                                      // hands over a default-constructed profile when there is none.
                                      ShaderProfile profile = stored;
-                                     if (parameters.isEmpty())
+                                     if (bounded.isEmpty())
                                          profile.parameters.reset();
                                      else
-                                         profile.parameters = parameters;
+                                         profile.parameters = bounded;
                                      // Nothing engaged means there is no override left to store, so
                                      // the entry goes rather than becoming an empty one. This is also
                                      // how "revert my parameters to inherited" lands.
