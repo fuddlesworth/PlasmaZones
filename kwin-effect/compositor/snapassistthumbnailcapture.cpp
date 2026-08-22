@@ -36,6 +36,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusUnixFileDescriptor>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QPoint>
@@ -43,6 +44,10 @@
 #include <QVariant>
 
 Q_LOGGING_CATEGORY(lcSnapAssistCapture, "kwin.effect.plasmazones.snapassist.capture", QtWarningMsg)
+// Info-level by default so PLASMAZONES_THUMBNAIL_TRACE alone surfaces the
+// lines; every emit is additionally gated on m_traceEnabled so the category
+// stays silent without the env var.
+Q_LOGGING_CATEGORY(lcSnapAssistTrace, "kwin.effect.plasmazones.snapassist.trace", QtInfoMsg)
 
 namespace PlasmaZones {
 
@@ -129,7 +134,12 @@ bool isFullyTransparent(const QImage& image)
 SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
     : QObject(parent)
     , m_dmabufEnabled(PhosphorProtocol::Service::snapAssistDmabufThumbnailsEnabled())
+    , m_traceEnabled(PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled())
 {
+    if (m_traceEnabled) {
+        qCInfo(lcSnapAssistTrace) << "PLASMAZONES_THUMBNAIL_TRACE set — per-capture stage timings enabled, path:"
+                                  << (m_dmabufEnabled ? "dma-buf" : "pixels");
+    }
     if (m_dmabufEnabled) {
         qCInfo(lcSnapAssistCapture) << "PLASMAZONES_DMABUF_THUMBNAILS set — snap-assist thumbnails will be exported "
                                        "as dma-bufs (experimental zero-copy path).";
@@ -322,7 +332,7 @@ QSize SnapAssistThumbnailCapture::fittedThumbnailSize(const KWin::RectF& wg, QSi
     return fitted;
 }
 
-QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize box) const
+QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize box, TraceSample* trace) const
 {
     if (!w || box.isEmpty() || !KWin::effects) {
         return {};
@@ -340,6 +350,10 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
     if (fbSize.isEmpty()) {
         return {};
     }
+    if (trace) {
+        trace->fitted = fbSize;
+    }
+    QElapsedTimer stage;
 
     // drawWindow() and the GLFramebuffer path issue raw GL, so the compositor
     // EGL context must be current. We run timer-driven, outside a paint pass, so
@@ -378,6 +392,7 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                 KWin::RenderViewport viewport(wg, scale, renderTarget, QPoint());
 
                 KWin::GLFramebuffer::pushFramebuffer(&fbo);
+                stage.start();
                 glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
                 glClear(GL_COLOR_BUFFER_BIT);
 
@@ -404,10 +419,17 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                                               | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
                                           KWin::Region::infinite(), data);
                 KWin::GLFramebuffer::popFramebuffer();
+                if (trace) {
+                    trace->renderUs = stage.nsecsElapsed() / 1000;
+                    stage.start();
+                }
 
                 // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
                 // origin is bottom-left, so flip to a top-down QImage.
                 result = texture->toImage().flipped(Qt::Vertical);
+                if (trace) {
+                    trace->readbackUs = stage.nsecsElapsed() / 1000;
+                }
             }
         }
         // texture (and the GL state guard) are destroyed HERE, while the GL
@@ -422,11 +444,17 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
     // Ship plain (straight-alpha) ARGB32 so the raw bytes match the daemon's
     // storage format and semi-transparent edges aren't darkened by an
     // unintended premultiplied composite at the image-provider boundary.
-    return result.convertToFormat(QImage::Format_ARGB32);
+    stage.start();
+    QImage converted = result.convertToFormat(QImage::Format_ARGB32);
+    if (trace) {
+        trace->convertUs = stage.nsecsElapsed() / 1000;
+    }
+    return converted;
 }
 
 KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box,
-                                                                         bool* candidateNotRenderable)
+                                                                         bool* candidateNotRenderable,
+                                                                         TraceSample* trace)
 {
     if (candidateNotRenderable) {
         *candidateNotRenderable = false;
@@ -536,6 +564,8 @@ KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::E
     // keep-decorations reason.
     KWin::ItemEffect keepRenderable(w->windowItem());
     KWin::WindowPaintData data;
+    QElapsedTimer stage;
+    stage.start();
     KWin::effects->drawWindow(renderTarget, viewport, w,
                               KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
                               KWin::Region::infinite(), data);
@@ -556,6 +586,12 @@ KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::E
     KWin::GLFramebuffer::pushFramebuffer(&scratchFbo);
     slotFbo.blitFromFramebuffer(fullRect, fullRect, GL_NEAREST, /*flipX=*/false, /*flipY=*/true);
     KWin::GLFramebuffer::popFramebuffer();
+    if (trace) {
+        // Render + clear + flip-blit, as submitted. The export that follows
+        // is timed separately by the caller.
+        trace->fitted = fbSize;
+        trace->renderUs = stage.nsecsElapsed() / 1000;
+    }
 
     // NOTE: m_poolNext is advanced by the caller only after a SUCCESSFUL
     // export — a failed export (or a retry) re-renders into the same slot
@@ -600,6 +636,8 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             return;
         }
 
+        TraceSample trace;
+        TraceSample* const tracePtr = m_traceEnabled ? &trace : nullptr;
         if (m_dmabufEnabled) {
             // Zero-copy path: render the window into a pooled FBO texture and
             // export it as a dma-buf. The render and the EGL export must share
@@ -622,9 +660,12 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             DmabufExport exported;
             const bool haveContext = KWin::effects->makeOpenGLContextCurrent();
             if (haveContext) {
-                texture = renderWindowToPooledTexture(w, p.maxSize, &candidateNotRenderable);
+                texture = renderWindowToPooledTexture(w, p.maxSize, &candidateNotRenderable, tracePtr);
                 if (texture) {
+                    QElapsedTimer exportTimer;
+                    exportTimer.start();
                     exported = exportTextureToDmabuf(texture);
+                    trace.exportUs = exportTimer.nsecsElapsed() / 1000;
                     if (exported.ok) {
                         // Consume the pool slot only on a successful export —
                         // see the pool comment in renderWindowToPooledTexture.
@@ -638,7 +679,7 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
                 return;
             }
             if (exported.ok) {
-                postThumbnailDmabuf(p, exported, generation);
+                postThumbnailDmabuf(p, exported, generation, trace);
             } else if (haveContext && candidateNotRenderable) {
                 // Nothing renderable for THIS candidate (degenerate geometry,
                 // sliver fit below the minimum axis) — not a dma-buf
@@ -673,7 +714,7 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             return;
         }
 
-        const QImage image = grabWindowImage(w, p.maxSize);
+        const QImage image = grabWindowImage(w, p.maxSize, tracePtr);
         // isNull() alone cannot detect the failure this retry exists for: a
         // window with no renderable frame yet draws NOTHING into the cleared
         // FBO, and the readback is a valid, fully transparent image. Posting
@@ -692,7 +733,7 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             // callback inside @ref postThumbnail — see that function for
             // why "we sent it" isn't strong enough to claim the daemon
             // holds the entry.
-            postThumbnail(p.internalId, image);
+            postThumbnail(p.internalId, image, trace);
         } else {
             qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
                                          << "produced empty image after retry";
@@ -701,7 +742,7 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
     });
 }
 
-void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QImage& image)
+void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QImage& image, TraceSample trace)
 {
     // Image is already Format_ARGB32 by the caller. Pack tight (no row
     // padding) so the daemon can reconstruct via QImage(uchar*, w, h,
@@ -713,6 +754,8 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     const int width = image.width();
     const int height = image.height();
     const qsizetype rowBytes = qsizetype(width) * 4;
+    QElapsedTimer packTimer;
+    packTimer.start();
     QByteArray pixels;
     pixels.resize(rowBytes * height);
     char* dst = pixels.data();
@@ -728,6 +771,10 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setSnapAssistThumbnail"));
     msg << internalId.toString() << width << height << pixels;
+    trace.packUs = packTimer.nsecsElapsed() / 1000;
+    trace.payloadBytes = pixels.size();
+    QElapsedTimer roundTrip;
+    roundTrip.start();
 
     // Bound watcher accumulation if the daemon's main thread wedges. The
     // post is genuinely async — `SnapAssistThumbnailPostTimeoutMs` is
@@ -754,9 +801,18 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     // window, skip the next capture, and strand snap-assist on icons
     // until the FIFO rolls past.
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                     [this, internalId](QDBusPendingCallWatcher* w) {
+                     [this, internalId, trace, roundTrip](QDBusPendingCallWatcher* w) {
                          w->deleteLater();
                          QDBusPendingReply<bool> reply = *w;
+                         if (m_traceEnabled) {
+                             qCInfo(lcSnapAssistTrace).nospace()
+                                 << "pixels " << internalId.toString() << " fitted=" << trace.fitted.width() << "x"
+                                 << trace.fitted.height() << " render=" << trace.renderUs
+                                 << "us readback=" << trace.readbackUs << "us convert=" << trace.convertUs
+                                 << "us pack=" << trace.packUs << "us payload=" << trace.payloadBytes
+                                 << "B dbus=" << roundTrip.nsecsElapsed() / 1000 << "us result="
+                                 << (reply.isError() ? "error" : (reply.value() ? "accepted" : "rejected"));
+                         }
                          if (reply.isError()) {
                              qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnail D-Bus call failed for"
                                                           << internalId.toString() << ":" << reply.error().message();
@@ -894,7 +950,8 @@ SnapAssistThumbnailCapture::DmabufExport SnapAssistThumbnailCapture::exportTextu
     return result;
 }
 
-void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation)
+void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation,
+                                                     TraceSample trace)
 {
     // The exported dma-buf aliases the pooled FBO texture, so it ships with a
     // render-completion fence (exported.fenceFd): the daemon waits on it before
@@ -914,6 +971,8 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
         << static_cast<qulonglong>(exported.modifier) << static_cast<uint>(exported.stride)
         << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd))
         << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fenceFd));
+    QElapsedTimer roundTrip;
+    roundTrip.start();
 
     QDBusPendingCall pending =
         QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
@@ -930,9 +989,17 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
     // path. On transport error the handle is simply left unmarked, so the
     // next snap-assist re-captures (mirroring the raw-pixel path).
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                     [this, p, generation](QDBusPendingCallWatcher* w) {
+                     [this, p, generation, trace, roundTrip](QDBusPendingCallWatcher* w) {
                          w->deleteLater();
                          QDBusPendingReply<bool> reply = *w;
+                         if (m_traceEnabled) {
+                             qCInfo(lcSnapAssistTrace).nospace()
+                                 << "dmabuf " << p.internalId.toString() << " fitted=" << trace.fitted.width() << "x"
+                                 << trace.fitted.height() << " render=" << trace.renderUs
+                                 << "us export=" << trace.exportUs << "us dbus=" << roundTrip.nsecsElapsed() / 1000
+                                 << "us result="
+                                 << (reply.isError() ? "error" : (reply.value() ? "accepted" : "rejected"));
+                         }
                          if (reply.isError()) {
                              qCDebug(lcSnapAssistCapture) << "setWindowThumbnailDmabuf D-Bus call failed for"
                                                           << p.internalId.toString() << ":" << reply.error().message();

@@ -17,8 +17,10 @@
 #include "daemon/rendering/dmabuffencewaiter.h"
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QImage>
+#include <QLoggingCategory>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
@@ -32,6 +34,8 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
+
+Q_DECLARE_LOGGING_CATEGORY(lcSnapAssistTrace)
 
 namespace PlasmaZones {
 
@@ -392,9 +396,23 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     // survives @p pixels going out of scope. With dimensions and byte count
     // already validated above the constructor cannot produce a null image,
     // so no isNull guard is needed before .copy().
+    static const bool traceEnabled = PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled();
+    QElapsedTimer receiveTimer;
+    if (traceEnabled) {
+        receiveTimer.start();
+    }
     QImage view(reinterpret_cast<const uchar*>(pixels.constData()), width, height, width * 4, QImage::Format_ARGB32);
     QImage image = view.copy();
-    return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
+    const qint64 copyUs = traceEnabled ? receiveTimer.nsecsElapsed() / 1000 : 0;
+    const bool accepted = updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
+    if (traceEnabled) {
+        // copy = detaching the D-Bus byte buffer into an owned QImage; total
+        // adds the provider insert and the candidate-map/QML push.
+        qCInfo(lcSnapAssistTrace).nospace()
+            << "receive " << compositorHandle << " " << width << "x" << height << " payload=" << pixels.size()
+            << "B copy=" << copyUs << "us total=" << receiveTimer.nsecsElapsed() / 1000 << "us accepted=" << accepted;
+    }
+    return accepted;
 }
 
 bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)

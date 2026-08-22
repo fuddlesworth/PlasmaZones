@@ -147,6 +147,22 @@ private:
         QUuid internalId;
         QSize maxSize;
     };
+    /// Per-capture timing sample for the PLASMAZONES_THUMBNAIL_TRACE flag.
+    /// Filled by the render functions (stage durations in microseconds, the
+    /// fitted size) and completed by the post functions (payload bytes,
+    /// D-Bus round-trip). Only populated when @ref m_traceEnabled; the
+    /// render functions take it as an optional out-param so the untraced
+    /// path pays nothing beyond a null check.
+    struct TraceSample
+    {
+        QSize fitted;
+        qint64 renderUs = 0; ///< drawWindow into the FBO (GPU submit, not completion).
+        qint64 readbackUs = 0; ///< toImage + flip: includes the glReadPixels stall. Pixel path only.
+        qint64 convertUs = 0; ///< premultiplied -> straight ARGB32. Pixel path only.
+        qint64 exportUs = 0; ///< EGLImage + dma-buf export. dma-buf path only.
+        qint64 packUs = 0; ///< memcpy into the D-Bus QByteArray. Pixel path only.
+        qint64 payloadBytes = 0;
+    };
 
     /// Render @p w into an offscreen GLFramebuffer fit within @p box (aspect
     /// ratio preserved) and read it back as a straight-alpha ARGB32 QImage.
@@ -154,7 +170,7 @@ private:
     /// the compositor thread; it makes the GL context current itself, so it is
     /// safe to call outside a paint pass (KWin 6.7's drawWindow/GLFramebuffer
     /// path needs no OutputFrame). This is the raw-pixel path.
-    QImage grabWindowImage(KWin::EffectWindow* w, QSize box) const;
+    QImage grabWindowImage(KWin::EffectWindow* w, QSize box, TraceSample* trace = nullptr) const;
 
     /// Render @p w (blit-flipped to top-down orientation) into a pooled,
     /// persistent GLFramebuffer texture and return it (a borrowed pointer
@@ -179,14 +195,15 @@ private:
     /// toward the session fallback so the pixel path can take over.
     /// Collapsing both into a bare nullptr let a blit-less driver drop
     /// every candidate forever with m_dmabufEnabled still true.
-    KWin::GLTexture* renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box, bool* candidateNotRenderable);
+    KWin::GLTexture* renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box, bool* candidateNotRenderable,
+                                                 TraceSample* trace = nullptr);
 
-    void postThumbnail(const QUuid& internalId, const QImage& image);
+    void postThumbnail(const QUuid& internalId, const QImage& image, TraceSample trace);
     /// @p generation is the queue generation the capture ran under; the
     /// rejection reply honours it the same way attemptCapture's timer lambda
     /// does — a stale rejection still counts toward the capability fallback
     /// but must not re-inject its candidate into a replaced queue.
-    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation);
+    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation, TraceSample trace);
 
     /// Count one dma-buf capture failure toward the session fallback,
     /// flipping to the raw-pixel path at @ref DmabufFailureThreshold.
@@ -283,6 +300,9 @@ private:
     /// runtime, after which the session uses the pixel path (until a
     /// daemon-ready transition re-arms it via @ref rearmDmabufPath).
     bool m_dmabufEnabled = false;
+    /// PLASMAZONES_THUMBNAIL_TRACE: per-capture stage timings to the
+    /// kwin.effect.plasmazones.snapassist.trace category. Process-constant.
+    const bool m_traceEnabled = false;
     /// Consecutive dma-buf capture failures (export or daemon rejection).
     /// Reset on success; triggers the session fallback at
     /// @ref DmabufFailureThreshold.

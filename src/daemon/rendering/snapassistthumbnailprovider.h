@@ -113,6 +113,10 @@ public:
      */
     void clear();
 
+    /// Bytes currently held by the cache (sum of entry costs). Diagnostic,
+    /// read under the lock; used by the PLASMAZONES_THUMBNAIL_TRACE lines.
+    qsizetype cacheBytes() const;
+
 private:
     /// Cache entry — image plus the URL that names this generation. Storing
     /// the URL inside the entry means LRU eviction reclaims the URL state
@@ -126,6 +130,9 @@ private:
 
     mutable QMutex m_mutex;
     QCache<QString, Entry> m_cache;
+    /// PLASMAZONES_THUMBNAIL_TRACE: per-insert and per-fetch timings to the
+    /// plasmazones.daemon.snapassist.trace category. Process-constant.
+    const bool m_traceEnabled;
     /// Monotonic across the daemon's lifetime; never wraps in any realistic
     /// session (32 bits = 4 G captures). Each insert produces a strictly
     /// new URL, so QML's QQuickPixmap cache always re-fetches.

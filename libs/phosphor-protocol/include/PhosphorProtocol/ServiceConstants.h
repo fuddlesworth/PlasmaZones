@@ -378,4 +378,16 @@ inline bool snapAssistDmabufThumbnailsEnabled()
     return qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
 }
 
+// Diagnostic switch for the snap-assist thumbnail pipeline. When set, both
+// the kwin-effect capture side and the daemon receive side log one line per
+// thumbnail with the fitted size, per-stage timings (render, readback,
+// convert, D-Bus round-trip, cache insert, QML fetch) and byte counts, under
+// the *.snapassist.trace logging categories. Read-only instrumentation: it
+// changes nothing about what is captured or how. Shared here for the same
+// reason as the dma-buf gate above, so both processes agree on the spelling.
+inline bool snapAssistThumbnailTraceEnabled()
+{
+    return qEnvironmentVariableIsSet("PLASMAZONES_THUMBNAIL_TRACE");
+}
+
 } // namespace PhosphorProtocol::Service
