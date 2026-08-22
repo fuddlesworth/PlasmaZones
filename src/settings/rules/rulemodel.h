@@ -98,6 +98,17 @@ public:
                                   ///< action paired with a window-property match,
                                   ///< etc). The row delegate shows a warning
                                   ///< badge when this is non-zero.
+        InertAnimationActionCountRole, ///< int — number of animation-override
+                                       ///< actions naming an event the
+                                       ///< compositor resolves WITHOUT a
+                                       ///< window, which a rule therefore
+                                       ///< cannot drive. Deliberately NOT a
+                                       ///< validation issue (that would gate
+                                       ///< canSave on a rule that is merely
+                                       ///< inert), so the collapsed row carries
+                                       ///< its own badge, matching the chip the
+                                       ///< rule editor and the action summary
+                                       ///< already show.
         ManagedRole, ///< bool — true for built-in rules the app owns (the
                      ///< baseline appearance rule). The row delegate hides the
                      ///< delete and drag-reorder affordances when set.

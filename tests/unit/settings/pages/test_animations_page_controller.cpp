@@ -222,6 +222,48 @@ private Q_SLOTS:
         QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
     }
 
+    /// Pin the `acceptsWindowRules` KEY, not just the predicate behind it.
+    ///
+    /// The rule editor's event picker reads this off the entry as a JS property
+    /// (ActionParamEditors.qml), so a typo in the key name yields `undefined`,
+    /// which is falsy, which filters out EVERY event except the one already
+    /// stored — a total picker collapse with nothing else failing. The predicate
+    /// itself is pinned in test_profiletree; what is pinned here is that the
+    /// entry publishes it under the name QML looks for, with the right value.
+    void eventSections_publishesAcceptsWindowRulesKey()
+    {
+        AnimationsPageController c;
+        const QVariantList sections = c.eventSections();
+
+        bool sawPerWindowLeaf = false;
+        bool sawWindowlessLeaf = false;
+        int entriesMissingTheKey = 0;
+
+        for (const QVariant& sectionVar : sections) {
+            const QVariantMap section = sectionVar.toMap();
+            for (const QVariant& entryVar : section.value(QStringLiteral("paths")).toList()) {
+                const QVariantMap entry = entryVar.toMap();
+                if (!entry.contains(QStringLiteral("acceptsWindowRules"))) {
+                    ++entriesMissingTheKey;
+                    continue;
+                }
+                const QString path = entry.value(QStringLiteral("path")).toString();
+                const bool accepts = entry.value(QStringLiteral("acceptsWindowRules")).toBool();
+                if (path == QLatin1String("window.appearance.open")) {
+                    sawPerWindowLeaf = true;
+                    QVERIFY2(accepts, "window.appearance.open is one of the ten a rule can drive");
+                } else if (path == QLatin1String("desktop.switch")) {
+                    sawWindowlessLeaf = true;
+                    QVERIFY2(!accepts, "desktop.switch is resolved windowless, so no rule reaches it");
+                }
+            }
+        }
+
+        QCOMPARE(entriesMissingTheKey, 0);
+        QVERIFY(sawPerWindowLeaf);
+        QVERIFY(sawWindowlessLeaf);
+    }
+
     // ─── Override CRUD ────────────────────────────────────────────────────
 
     void setOverride_writesFileWithNameField()

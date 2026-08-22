@@ -15,6 +15,10 @@ const QString Global = QStringLiteral("global");
 // static-init.
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
+// NOTE: this token is the same STRING as the `Desktop` path root below. The
+// collision is deliberate (both are the user-facing word) and it is the only
+// one among these constants, but it means eventClassForPath(Desktop) returns
+// its own argument. No store may key on "a path or a class token" in one map.
 const QString EventClassDesktop = QStringLiteral("desktop");
 const QString EventClassMove = QStringLiteral("move");
 const QString EventClassStrip = QStringLiteral("strip");
@@ -38,8 +42,10 @@ const QString WindowFocus = QStringLiteral("window.appearance.focus");
 // deliberately omits KWin's resize edge-lock logic, so no pack class had a
 // real story there. Discrete resizes are covered by snapIn / layoutSwitch /
 // maximize. `window.movement.snapResize` was dropped with it: no callsite
-// ever routed it. Stale config overrides on either path are filtered by the
-// allBuiltInPaths()/shaderSupportedEventPaths() membership checks.
+// ever routed it. A stale config override on either path is pruned from the
+// SHADER tree by shaderSupportedEventPaths() on both read and write. The
+// motion tree has no such prune, so a motion override there simply lingers,
+// unreachable from the UI and named by no resolver.
 const QString WindowMovement = QStringLiteral("window.movement");
 const QString WindowMaximize = QStringLiteral("window.movement.maximize");
 const QString WindowMove = QStringLiteral("window.movement.move");
@@ -125,12 +131,6 @@ const QString PanelFadeOut = QStringLiteral("panel.fadeOut");
 const QString Cursor = QStringLiteral("cursor");
 const QString CursorHover = QStringLiteral("cursor.hover");
 const QString CursorClick = QStringLiteral("cursor.click");
-
-// shader.*
-const QString Shader = QStringLiteral("shader");
-const QString ShaderOpen = QStringLiteral("shader.open");
-const QString ShaderClose = QStringLiteral("shader.close");
-const QString ShaderSwitch = QStringLiteral("shader.switch");
 
 // widget.*
 const QString Widget = QStringLiteral("widget");
@@ -218,10 +218,6 @@ QStringList allBuiltInPaths()
         Cursor,
         CursorHover,
         CursorClick,
-        Shader,
-        ShaderOpen,
-        ShaderClose,
-        ShaderSwitch,
         Widget,
         WidgetHover,
         WidgetPress,
@@ -270,6 +266,33 @@ QStringList allEventClassTokens()
     static const QStringList tokens{EventClassGeometry, EventClassAppearance, EventClassDesktop,
                                     EventClassMove,     EventClassStrip,      EventClassTab};
     return tokens;
+}
+
+bool eventPathResolvesPerWindow(const QString& path)
+{
+    // An explicit list rather than a prefix rule, because the boundary does not
+    // follow the taxonomy's shape: `scrolling.tabSwitch` is per-window while its
+    // sibling `scrolling.view` is not, and the `window` category nodes are not
+    // per-window either since the compositor only ever resolves leaves.
+    //
+    // Each entry names the call site that supplies the window, so a reader can
+    // check the claim rather than trust it:
+    //   window.appearance.*  — tryBeginShaderForEvent from window_lifecycle
+    //                          (open/close/focus) and daemon_apply (minimize)
+    //   window.movement.maximize / .move
+    //                        — tryBeginShaderForEvent from window_connections
+    //   window.movement.snapIn / .snapOut / .layoutSwitch
+    //                        — applyWindowGeometry's resolve in drag_snap, and
+    //                          every other applyWindowGeometry caller that takes
+    //                          the default profilePath (it defaults to snapIn),
+    //                          which includes the tiling and scrolling reflows
+    //   scrolling.tabSwitch  — tryBeginShaderForEvent from the tiling handler's
+    //                          tab swap, which passes the arriving window
+    static const QStringList kPerWindowPaths{
+        WindowOpen, WindowClose,  WindowMinimize, WindowFocus,        WindowMaximize,
+        WindowMove, WindowSnapIn, WindowSnapOut,  WindowLayoutSwitch, ScrollingTabSwitch,
+    };
+    return kPerWindowPaths.contains(path);
 }
 
 QString eventClassForPath(const QString& path)

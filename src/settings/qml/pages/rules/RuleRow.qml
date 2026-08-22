@@ -41,6 +41,14 @@ ExpandableRowDelegate {
     /// knows the rule never fires (the picker now prevents the combination
     /// for new rules, but a hand-edited JSON store keeps the offending rule).
     required property int validationIssueCount
+    /// Number of animation-override actions naming an event the compositor
+    /// resolves WITHOUT a window, which a rule therefore cannot drive. A
+    /// non-zero count surfaces its own marker beside the validation one, so an
+    /// inert rule reads as inert while the list is being scanned rather than
+    /// only once the editor is open. Deliberately separate from
+    /// `validationIssueCount`: those gate saving, and a rule that is merely
+    /// inert is not broken enough to block its owner from renaming it.
+    required property int inertAnimationActionCount
     /// The rule's raw priority integer — surfaced as a `Priority N` badge on
     /// every row. In the flat list a rule's position already conveys precedence,
     /// but the number stays important when the filter hides categories: the
@@ -131,6 +139,33 @@ ExpandableRowDelegate {
 
         HoverHandler {
             id: warningHover
+        }
+    }
+
+    // "Nothing here can fire" marker — the collapsed-row twin of the rule
+    // editor's InertAnimationEventChip, so the three surfaces that show an
+    // animation action all say the same thing about it. Same shape as the
+    // validation icon above; a different glyph so the two read apart at a
+    // glance, since one blocks saving and this one does not.
+    Kirigami.Icon {
+        visible: row.inertAnimationActionCount > 0
+        Layout.alignment: Qt.AlignVCenter
+        Layout.preferredWidth: Kirigami.Units.iconSizes.small
+        Layout.preferredHeight: Kirigami.Units.iconSizes.small
+        source: "documentinfo"
+        // StaticText, not AlertMessage: the badge above this one gates saving
+        // and carries no role, so announcing this informational marker as an
+        // alert would invert the urgency the two glyphs exist to convey. A role
+        // is still needed at all, because an icon with none is skipped outright.
+        Accessible.role: Accessible.StaticText
+        Accessible.name: i18np("%n animation action that cannot run", "%n animation actions that cannot run", row.inertAnimationActionCount)
+        Accessible.description: ToolTip.text
+        ToolTip.visible: inertHover.hovered
+        ToolTip.delay: Kirigami.Units.toolTipDelay
+        ToolTip.text: i18np("This rule has %n animation action naming an event that does not belong to a window, so it never runs. Rules match windows.", "This rule has %n animation actions naming events that do not belong to a window, so they never run. Rules match windows.", row.inertAnimationActionCount)
+
+        HoverHandler {
+            id: inertHover
         }
     }
 

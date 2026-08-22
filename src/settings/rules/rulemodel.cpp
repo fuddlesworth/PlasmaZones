@@ -5,6 +5,9 @@
 
 #include "phosphor_i18n.h"
 
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorRules/ActionParams.h>
+#include <PhosphorRules/ActionTypes.h>
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
@@ -133,6 +136,43 @@ bool ruleActionsAreContextOnly(const QList<RuleAction>& actions)
     return true;
 }
 
+/// How many of @p rule's actions name an animation event no rule can drive.
+///
+/// A rule's animation action is resolved through the rule evaluator, which
+/// needs a window to match against. On an event the compositor resolves
+/// windowless the resolvers short-circuit before the evaluator runs, so such an
+/// action is stored, listed, and never consulted. The rule editor's picker no
+/// longer OFFERS those events, so a rule can only carry one if it was authored
+/// before that filter existed or by hand.
+///
+/// The three action types are spelled out rather than tested as "carries an
+/// event param", because a future action could carry an event for some other
+/// purpose — the same reasoning InertAnimationEventChip.qml gives for its own
+/// list. An event this build does not know is NOT counted: that is not "not per
+/// window", it is not an event, and the editor renders it as missing instead.
+int inertAnimationActionCount(const Rule& rule)
+{
+    int count = 0;
+    const QStringList known = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
+    for (const RuleAction& action : rule.actions) {
+        if (action.type != ActionType::OverrideAnimationShader && action.type != ActionType::OverrideAnimationTiming
+            && action.type != ActionType::OverrideAnimationCurve) {
+            continue;
+        }
+        const QString event = action.params.value(PhosphorRules::ActionParam::Event).toString();
+        if (event.isEmpty()) {
+            continue;
+        }
+        if (!known.contains(event)) {
+            continue;
+        }
+        if (!PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(event)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 } // namespace
 
 RuleModel::RuleModel(QObject* parent)
@@ -160,6 +200,7 @@ QHash<int, QByteArray> RuleModel::roleNames() const
         {IsCompositeRole, "isComposite"},
         {ScreenIdsRole, "screenIds"},
         {ValidationIssueCountRole, "validationIssueCount"},
+        {InertAnimationActionCountRole, "inertAnimationActionCount"},
         {ManagedRole, "managed"},
     };
 }
@@ -203,6 +244,10 @@ QVariant RuleModel::data(const QModelIndex& index, int role) const
         // model-side cache would have to be invalidated on every rule edit, so
         // pay the trivial cost over keeping the staleness guard.
         return rule.validationIssues().size();
+    case InertAnimationActionCountRole:
+        // Recomputed per query for the same reason as above, and cheaper still:
+        // a scan of the rule's own action list against a ten-entry predicate.
+        return inertAnimationActionCount(rule);
     case ManagedRole:
         return rule.managed;
     default:

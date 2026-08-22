@@ -148,6 +148,19 @@ bool RuleEvaluator::hasAnyMatch(const WindowQuery& query) const
     return false;
 }
 
+bool RuleEvaluator::hasAnyMatchFiltered(const WindowQuery& query, const std::function<bool(const Rule&)>& admit) const
+{
+    for (const Rule& rule : m_ruleSet.rules()) {
+        // Match first, admit second: `evaluate` is the cheap common rejection
+        // and `admit` walks the rule's actions, so testing admission first
+        // would pay that walk for every rule in the set on every query.
+        if (rule.enabled && rule.match.evaluate(query) && (!admit || admit(rule))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool RuleEvaluator::hasMatchTargetingFields(const WindowQuery& query, const QSet<Field>& fields) const
 {
     for (const Rule& rule : m_ruleSet.rules()) {

@@ -3,9 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
 
@@ -444,6 +442,13 @@ QtObject {
                 }
                 return -1;
             }
+            // A stored token this build's option list does not carry leaves
+            // currentIndex at -1, and ComboBox's default `displayText` is
+            // `currentText`, which is empty there — a blank combo that hides
+            // what the rule pins, while the read-only summary shows the raw
+            // token. Fall back to the token for the same reason the layout,
+            // template, screen and desktop editors below do.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             Accessible.name: _param.label
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
@@ -703,6 +708,20 @@ QtObject {
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
 
+            /// The event path this action currently stores, or "".
+            ///
+            /// A `string` property so its change signal fires only when the VALUE
+            /// changes. `items` below has to know the stored path (it keeps a
+            /// windowless one listed), and `_withParam` replaces the whole
+            /// `row.action` object on every param write, so reading
+            /// `row.action[_param.key]` from inside `items` would rebuild the
+            /// item list on each keystroke and slider tick. `onItemsChanged`
+            /// destroys and rebuilds the entire cascading menu, so that is a
+            /// full teardown per write. Routing through this value-stable id
+            /// keeps the rebuild to an actual event change — the same reason
+            /// ActionRow uses `_algorithmParamAlgoId` for its params editor.
+            readonly property string _storedEvent: row.action[_param.key] || ""
+
             // Map eventSections() into the picker's `{ id, name, category,
             // categoryOrder }` shape: one item per leaf event, grouped under its
             // section. `categoryOrder` preserves the section order (Window,
@@ -726,11 +745,34 @@ QtObject {
                         if (entry.isCategory)
                             continue;
 
+                        // Skip events no rule can reach. The compositor resolves
+                        // these windowless (a desktop switch, the scrolling
+                        // strip, an OSD, a panel, the editor's own widgets, the
+                        // whole shell subtree), and a rule's animation action is
+                        // matched against a window, so one pinned here would
+                        // save cleanly, show in the list, and never fire.
+                        //
+                        // A path ALREADY stored on this action stays listed even
+                        // when it is one of these. Dropping it would render the
+                        // stored value as "(missing: desktop.switch)", which is
+                        // a lie — the event exists and is spelled correctly, it
+                        // just cannot be driven per window. Keeping it means the
+                        // row still reads its real name, and the chip beside it
+                        // explains why nothing happens.
+                        var windowless = !entry.acceptsWindowRules;
+                        if (windowless && entry.path !== _storedEvent)
+                            continue;
+
+                        // The one that survives is dimmed and carries its
+                        // reason, so the menu says why it is there rather than
+                        // reading as an ordinary offer the filter forgot.
                         out.push({
                             "id": entry.path,
                             "name": entry.label,
                             "category": section.label,
-                            "categoryOrder": s
+                            "categoryOrder": s,
+                            "dimmed": windowless,
+                            "dimReason": windowless ? i18n("This event is not driven per window, so a rule cannot change it. It stays here because this action already names it.") : ""
                         });
                     }
                 }
