@@ -147,6 +147,26 @@ void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)
     P_SCROLL_VERB(screenId, state->strip().expandActiveColumnToAvailableWidth(params), "resize", false, QString());
 }
 
+void ScrollEngine::equalizeVisibleColumnWidths(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().equalizeVisibleColumnWidths(params), "resize", false, QString());
+}
+
+void ScrollEngine::minimizeColumnWidth(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().minimizeActiveColumnWidth(params), "resize", false, QString());
+}
+
+void ScrollEngine::resetStripToDefaults(const QString& screenId)
+{
+    // "retile" rather than "resize": this is the scrolling arm of the
+    // mode-neutral Retile shortcut, and the OSD's retile copy is what the
+    // user pressed for. The display default is resolved here because the
+    // strip does not carry it in params (see resetToDefaults).
+    P_SCROLL_VERB(screenId, state->strip().resetToDefaults(effectiveDefaultColumnDisplay(screen), params), "retile",
+                  false, QString());
+}
+
 void ScrollEngine::cycleWindowPresetHeight(int delta, const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().cycleActiveWindowPresetHeight(delta, params), "resize", false, QString());

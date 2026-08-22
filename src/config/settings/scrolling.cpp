@@ -768,5 +768,11 @@ P_STORE_SET_STRING(setScrollingViewPageBackShortcut, shortcutsScrollingGroup, vi
 P_STORE_GET(QString, scrollingViewPageForwardShortcut, shortcutsScrollingGroup, viewPageForwardKey, QString)
 P_STORE_SET_STRING(setScrollingViewPageForwardShortcut, shortcutsScrollingGroup, viewPageForwardKey,
                    scrollingViewPageForwardShortcutChanged)
+P_STORE_GET(QString, scrollingEqualizeColumnWidthsShortcut, shortcutsScrollingGroup, equalizeColumnWidthsKey, QString)
+P_STORE_SET_STRING(setScrollingEqualizeColumnWidthsShortcut, shortcutsScrollingGroup, equalizeColumnWidthsKey,
+                   scrollingEqualizeColumnWidthsShortcutChanged)
+P_STORE_GET(QString, scrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey, QString)
+P_STORE_SET_STRING(setScrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey,
+                   scrollingMinimizeColumnWidthShortcutChanged)
 
 } // namespace PlasmaZones

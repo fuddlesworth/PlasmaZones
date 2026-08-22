@@ -235,6 +235,17 @@ public:
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
     void toggleMaximizeColumn(const QString& screenId);
     void expandColumnToAvailableWidth(const QString& screenId);
+    /// Equal shares of the viewport for every fully visible column
+    /// (Karousel equalize). Refuses with fewer than two.
+    void equalizeVisibleColumnWidths(const QString& screenId);
+    /// The focused column at the smallest preset, or the engine floor when
+    /// the vocabulary is empty (Karousel minimize-width).
+    void minimizeColumnWidth(const QString& screenId);
+    /// Every column on the screen back to the context's default width and
+    /// display, every window back to the even split: the scrolling half of
+    /// the mode-neutral Retile shortcut. Re-applies the layout the way the
+    /// autotile and snapping halves re-apply theirs.
+    void resetStripToDefaults(const QString& screenId);
     void cycleWindowPresetHeight(int delta, const QString& screenId);
     void adjustWindowHeight(qreal deltaPercent, const QString& screenId);
     void resetWindowHeights(const QString& screenId);

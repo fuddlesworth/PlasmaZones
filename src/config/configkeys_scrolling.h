@@ -67,6 +67,8 @@ public:
     P_CONFIG_KEY(viewForwardKey, "ViewForward")
     P_CONFIG_KEY(viewPageBackKey, "ViewPageBack")
     P_CONFIG_KEY(viewPageForwardKey, "ViewPageForward")
+    P_CONFIG_KEY(equalizeColumnWidthsKey, "EqualizeColumnWidths")
+    P_CONFIG_KEY(minimizeColumnWidthKey, "MinimizeColumnWidth")
 };
 
 } // namespace PlasmaZones

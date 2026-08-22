@@ -106,6 +106,9 @@ private Q_SLOTS:
     void scrollViewByClampsTheDeltaNotThePosition();
     void scrollViewByDetachesTheViewFromTheCenteringPolicy();
     void viewDetachmentEndsAtFocusAndAtBothCenteringVerbs();
+    void equalizeSharesTheViewportAmongFullyVisibleColumns();
+    void minimizeColumnWidthTakesTheSmallestPreset();
+    void resetToDefaultsRestoresEveryIntent();
 };
 
 void TestScrollStripOps::consumePullsNextColumnsWindow()
@@ -1605,6 +1608,151 @@ void TestScrollStripOps::viewDetachmentEndsAtFocusAndAtBothCenteringVerbs()
     QVERIFY(refocused.focusColumn(0, degenerate));
     QVERIFY(!refocused.viewDetached());
     QCOMPARE(refocused.viewAnchor(), anchorBefore);
+}
+
+void TestScrollStripOps::equalizeSharesTheViewportAmongFullyVisibleColumns()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    // 0.30 + 0.30 fit the viewport with room to spare; the 0.55 third
+    // column straddles the trailing edge, which is the column the verb must
+    // leave alone. Focus stays on the first so the view sits at the start.
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.55), ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusColumn(0, params));
+    const ColumnWidth straddlerBefore = strip.columns().at(2).width;
+
+    QVERIFY(strip.equalizeVisibleColumnWidths(params));
+    // Two fully visible columns share the MAIN extent net of the gap between
+    // them: (1200 - 10) / 2 = 595 each, remainder 0. Written as Fixed, like
+    // adjustActiveColumnWidth.
+    QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeFixed(595));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(595));
+    // The straddler is untouched, intent and all.
+    QCOMPARE(strip.columns().at(2).width, straddlerBefore);
+    // The group tiles edge to edge: b ends exactly at the viewport's end.
+    const ResolvedStrip after = strip.relayout(params);
+    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("b"))) + Ax::mainLen(rectOf(after, QStringLiteral("b"))),
+             ScrollTestUtils::kMainExtent);
+
+    // Already equal: refuses, so the engine skips a pointless relayout and
+    // the OSD says no_target rather than claiming a change.
+    QVERIFY(!strip.equalizeVisibleColumnWidths(params));
+
+    // Three in view with a remainder: 1200 - 2*10 = 1180, 1180 / 3 = 393 r1.
+    // The odd pixel goes to the LAST column so nothing is left as dead space.
+    ScrollStrip three;
+    for (const char* id : {"a", "b", "c"}) {
+        QVERIFY(three.insertWindow(QString::fromLatin1(id), ColumnWidth::makeProportion(0.30), ColumnDisplay::Normal,
+                                   params));
+    }
+    QVERIFY(three.focusColumn(0, params));
+    QVERIFY(three.equalizeVisibleColumnWidths(params));
+    QCOMPARE(three.columns().at(0).width, ColumnWidth::makeFixed(393));
+    QCOMPARE(three.columns().at(1).width, ColumnWidth::makeFixed(393));
+    QCOMPARE(three.columns().at(2).width, ColumnWidth::makeFixed(394));
+
+    // One column fully visible has nothing to equalize against — that is
+    // maximize's job, and reporting success here would be a lie.
+    ScrollStrip lone;
+    QVERIFY(lone.insertWindow(QStringLiteral("only"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(!lone.equalizeVisibleColumnWidths(params));
+    QCOMPARE(lone.columns().at(0).width, kHalf);
+}
+
+void TestScrollStripOps::minimizeColumnWidthTakesTheSmallestPreset()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.presetColumnWidths = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+
+    // Lands on the smallest preset as a PRESET intent, so it follows the
+    // vocabulary if the list is later edited.
+    QVERIFY(strip.minimizeActiveColumnWidth(params));
+    QCOMPARE(strip.columns().at(0).width, ColumnWidth::makePreset(1.0 / 3.0));
+    // Already there: refuses.
+    QVERIFY(!strip.minimizeActiveColumnWidth(params));
+
+    // Refusal is by RESOLVED pixels, not intent: a Proportion that renders
+    // to the same extent as the smallest preset is already minimized, and
+    // rewriting it would move nothing while reporting success.
+    ScrollStrip same;
+    QVERIFY(
+        same.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(1.0 / 3.0), ColumnDisplay::Normal, params));
+    QVERIFY(!same.minimizeActiveColumnWidth(params));
+
+    // No vocabulary at all: the engine floor, as a Proportion.
+    ScrollLayoutParams noPresets = params;
+    noPresets.presetColumnWidths.clear();
+    ScrollStrip floor;
+    QVERIFY(floor.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, noPresets));
+    QVERIFY(floor.minimizeActiveColumnWidth(noPresets));
+    QCOMPARE(floor.columns().at(0).width, ColumnWidth::makeProportion(MinColumnWidthFraction));
+
+    // A degenerate work area writes nothing: persisted intent must not be
+    // rewritten against a viewport that does not exist.
+    ScrollLayoutParams degenerate = params;
+    degenerate.workArea = QRect();
+    ScrollStrip dying;
+    QVERIFY(dying.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(!dying.minimizeActiveColumnWidth(degenerate));
+    QCOMPARE(dying.columns().at(0).width, kHalf);
+}
+
+void TestScrollStripOps::resetToDefaultsRestoresEveryIntent()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.defaultColumnWidth = ColumnWidth::makeProportion(0.4);
+    ScrollStrip strip;
+    // Two columns, the second tabbed with a stacked pair, every intent
+    // pushed off its default: a Fixed width, a tabbed display, a fixed
+    // window height, and a maximize on the first so the pre-maximize slot
+    // holds something.
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusColumn(1, params));
+    QVERIFY(strip.consumeWindowIntoColumn(params)); // c joins b
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makeFixed(300)));
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeProportion(1.0));
+
+    QVERIFY(strip.resetToDefaults(ColumnDisplay::Normal, params));
+    for (const Column& col : strip.columns()) {
+        QCOMPARE(col.width, params.defaultColumnWidth);
+        QCOMPARE(col.display, ColumnDisplay::Normal);
+        for (const Tile& tile : col.tiles) {
+            QCOMPARE(tile.height, WindowHeight::makeAuto());
+        }
+    }
+    // The pre-maximize slot was cleared: a maximize now stores the DEFAULT
+    // as the pre-intent and un-maximizes back to it, rather than handing the
+    // stale kHalf to the toggle.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(strip.columns().at(0).width, params.defaultColumnWidth);
+
+    // Already at the defaults: refuses.
+    QVERIFY(!strip.resetToDefaults(ColumnDisplay::Normal, params));
+
+    // Intent compare, not pixels: a Fixed that renders to the default's
+    // extent is still reset, because it would not follow a later work-area
+    // change the way the default would.
+    ScrollStrip fixed;
+    const int defaultPx = ScrollStrip::resolveColumnWidthPx(params.defaultColumnWidth, params);
+    QVERIFY(fixed.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(defaultPx), ColumnDisplay::Normal, params));
+    QVERIFY(fixed.resetToDefaults(ColumnDisplay::Normal, params));
+    QCOMPARE(fixed.columns().at(0).width, params.defaultColumnWidth);
+
+    // The display default is an argument, and a Tabbed default is honoured.
+    ScrollStrip tabbed;
+    QVERIFY(tabbed.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(tabbed.resetToDefaults(ColumnDisplay::Tabbed, params));
+    QCOMPARE(tabbed.columns().at(0).display, ColumnDisplay::Tabbed);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

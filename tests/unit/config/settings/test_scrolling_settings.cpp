@@ -235,6 +235,11 @@ private Q_SLOTS:
         // The no-focus view pan, on the pool's last free letter.
         QCOMPARE(ConfigDefaults::scrollingViewBackShortcut(), QStringLiteral("Meta+Alt+Y"));
         QCOMPARE(ConfigDefaults::scrollingViewForwardShortcut(), QStringLiteral("Meta+Alt+Shift+Y"));
+        // The two width re-flows ride Shift twins of existing letters: Retile's
+        // T (outside the Meta+Alt family) and grow-into-empty-space's E.
+        QCOMPARE(ConfigDefaults::scrollingEqualizeColumnWidthsShortcut(), QStringLiteral("Meta+Ctrl+Shift+T"));
+        QCOMPARE(ConfigDefaults::scrollingMinimizeColumnWidthShortcut(), QStringLiteral("Meta+Alt+Shift+E"));
+        QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
 
         // Ships unbound, per the same docs: the edge-stop/wrap focus
         // variants, the one-way float verbs, and the whole-viewport pan

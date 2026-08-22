@@ -250,6 +250,23 @@ public:
     {
         return QString();
     }
+    static QString scrollingEqualizeColumnWidthsShortcut()
+    {
+        // The Shift twin of Retile's Meta+Ctrl+T, deliberately outside the
+        // Meta+Alt family: both verbs re-flow the strip's widths, one back
+        // to the layout's defaults and the other to equal shares of the
+        // viewport, so they belong on one letter. Meta+Ctrl+Shift+T is not
+        // in the externally-owned table.
+        return QStringLiteral("Meta+Ctrl+Shift+T");
+    }
+    static QString scrollingMinimizeColumnWidthShortcut()
+    {
+        // Shift twin of E (grow into empty space): plain E gives the focused
+        // column every spare pixel on screen, Shift+E takes it to its
+        // narrowest. Opposed ends of the same axis, per the family's
+        // letter+Shift convention, and no new letter consumed.
+        return QStringLiteral("Meta+Alt+Shift+E");
+    }
 };
 
 } // namespace PlasmaZones

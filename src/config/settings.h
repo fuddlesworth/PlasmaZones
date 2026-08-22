@@ -656,6 +656,10 @@ public:
                    setScrollingViewPageBackShortcut NOTIFY scrollingViewPageBackShortcutChanged)
     Q_PROPERTY(QString scrollingViewPageForwardShortcut READ scrollingViewPageForwardShortcut WRITE
                    setScrollingViewPageForwardShortcut NOTIFY scrollingViewPageForwardShortcutChanged)
+    Q_PROPERTY(QString scrollingEqualizeColumnWidthsShortcut READ scrollingEqualizeColumnWidthsShortcut WRITE
+                   setScrollingEqualizeColumnWidthsShortcut NOTIFY scrollingEqualizeColumnWidthsShortcutChanged)
+    Q_PROPERTY(QString scrollingMinimizeColumnWidthShortcut READ scrollingMinimizeColumnWidthShortcut WRITE
+                   setScrollingMinimizeColumnWidthShortcut NOTIFY scrollingMinimizeColumnWidthShortcutChanged)
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
@@ -1570,6 +1574,10 @@ public:
     void setScrollingViewPageBackShortcut(const QString& shortcut);
     QString scrollingViewPageForwardShortcut() const;
     void setScrollingViewPageForwardShortcut(const QString& shortcut);
+    QString scrollingEqualizeColumnWidthsShortcut() const;
+    void setScrollingEqualizeColumnWidthsShortcut(const QString& shortcut);
+    QString scrollingMinimizeColumnWidthShortcut() const;
+    void setScrollingMinimizeColumnWidthShortcut(const QString& shortcut);
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;

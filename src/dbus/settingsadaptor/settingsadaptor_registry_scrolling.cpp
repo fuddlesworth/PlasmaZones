@@ -731,6 +731,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingViewPageBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingViewPageForwardShortcut", scrollingViewPageForwardShortcut,
                                  setScrollingViewPageForwardShortcut)
+        REGISTER_CONCRETE_STRING("scrollingEqualizeColumnWidthsShortcut", scrollingEqualizeColumnWidthsShortcut,
+                                 setScrollingEqualizeColumnWidthsShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMinimizeColumnWidthShortcut", scrollingMinimizeColumnWidthShortcut,
+                                 setScrollingMinimizeColumnWidthShortcut)
     }
 
 // Clean up macros (local scope; unity-batch hygiene)

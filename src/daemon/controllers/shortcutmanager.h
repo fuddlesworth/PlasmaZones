@@ -273,6 +273,8 @@ Q_SIGNALS:
     /// user-tunable scrollingViewScrollStepPercent, the page pair a whole
     /// viewport (100). Negative is toward the strip's start.
     void scrollViewRequested(int deltaPercent);
+    void scrollEqualizeColumnWidthsRequested();
+    void scrollMinimizeColumnWidthRequested();
 
 private:
     struct Entry

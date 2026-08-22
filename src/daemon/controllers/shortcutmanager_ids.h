@@ -104,6 +104,8 @@ inline constexpr auto kIdScrollViewBack = "scroll_view_back";
 inline constexpr auto kIdScrollViewForward = "scroll_view_forward";
 inline constexpr auto kIdScrollViewPageBack = "scroll_view_page_back";
 inline constexpr auto kIdScrollViewPageForward = "scroll_view_page_forward";
+inline constexpr auto kIdScrollEqualizeColumnWidths = "scroll_equalize_column_widths";
+inline constexpr auto kIdScrollMinimizeColumnWidth = "scroll_minimize_column_width";
 
 // The indexed slot families are prefix-keyed rather than enumerated above.
 // Exported so the id builders below and the cheatsheet catalog's

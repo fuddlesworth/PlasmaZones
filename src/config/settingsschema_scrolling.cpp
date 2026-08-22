@@ -590,6 +590,8 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::viewForwardKey(), CD::scrollingViewForwardShortcut(), QMetaType::QString},
         {CD::viewPageBackKey(), CD::scrollingViewPageBackShortcut(), QMetaType::QString},
         {CD::viewPageForwardKey(), CD::scrollingViewPageForwardShortcut(), QMetaType::QString},
+        {CD::equalizeColumnWidthsKey(), CD::scrollingEqualizeColumnWidthsShortcut(), QMetaType::QString},
+        {CD::minimizeColumnWidthKey(), CD::scrollingMinimizeColumnWidthShortcut(), QMetaType::QString},
     };
 }
 

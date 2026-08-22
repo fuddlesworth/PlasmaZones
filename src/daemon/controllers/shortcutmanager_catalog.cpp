@@ -60,6 +60,9 @@ using namespace ShortcutIds;
 //    layoutsAvailable). Covers the layout cycle pair, the picker, the
 //    layout lock, and the quick-layout digits — on a non-layout screen
 //    those keys answer with a "not available" OSD, so the sheet hides them.
+//  - "managed" for the engine-managed pair, autotile OR scrolling: Retile
+//    re-applies either engine's layout and is a hard no-op on snapping,
+//    so neither "all" nor one mode tag would tell the truth
 //  - toggle_autotile is the doorway INTO autotile → all modes, always shown
 // A row tagged "all" also has to READ mode-neutrally. A label that names
 // zones on a key which addresses columns in scrolling misinforms the reader
@@ -72,7 +75,7 @@ struct CatalogMeta
     // unallocated) to leave room for a new category between two existing ones
     // without renumbering the table. Gaps are not removed categories.
     int categoryOrder;
-    // "all" | "snapping" | "autotile" | "scrolling" | "layouts" — string form
+    // "all" | "snapping" | "autotile" | "scrolling" | "layouts" | "managed" — string form
     // matches what the QML filter consumes; no enum round-trip needed. The
     // last value is a capability tag (engine layoutSupport), not a mode;
     // see the contract block above.
@@ -257,7 +260,15 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdDecreaseMasterRatio, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdIncreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdDecreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
-        add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        // Mode-neutral since the scrolling arm landed, so it leaves the
+        // Autotile block for General: on a scrolling screen it re-flows the
+        // strip, and the Templates slot carries that wording the way it does
+        // for the layer-focus switch.
+        add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "managed", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Re-applies the tiling algorithm to every window on the screen."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Puts every column back to the screen's default width and display, and every "
+                              "window back to an even share of its column."));
         // Every scrolling row carries an explanation: the column vocabulary
         // (consume, expel, grow) is opaque to anyone who has not used a
         // scrolling tiler before, and the sheet is where they look it up.
@@ -394,6 +405,12 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones",
                               "Scrolls the view toward the end of the strip by a whole screen. "
                               "Focus stays where it is."));
+        add(kIdScrollEqualizeColumnWidths, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Gives every column fully on screen an equal share of the screen. Columns "
+                              "clipped at an edge are left alone."));
+        add(kIdScrollMinimizeColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused column to the smallest size preset."));
         return m;
     }();
 

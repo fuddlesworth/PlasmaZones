@@ -1071,6 +1071,8 @@ Q_SIGNALS:
     void scrollingViewForwardShortcutChanged();
     void scrollingViewPageBackShortcutChanged();
     void scrollingViewPageForwardShortcutChanged();
+    void scrollingEqualizeColumnWidthsShortcutChanged();
+    void scrollingMinimizeColumnWidthShortcutChanged();
 
     // ── Environment signals ─────────────────────────────────────────────────
     // Not setting NOTIFYs: nothing above them in the config schema fires these,

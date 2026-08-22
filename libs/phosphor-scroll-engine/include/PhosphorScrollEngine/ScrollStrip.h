@@ -262,6 +262,27 @@ public:
     /// Grow the active column into the on-screen MAIN-axis space not covered by
     /// any column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
+    /// Give every FULLY visible column an equal share of the work area's MAIN
+    /// extent (Karousel equalize; niri has no equivalent). Fully visible on
+    /// the same terms as centerVisibleColumns: a column clipped by either
+    /// viewport edge is what the split must not be dragged by. Written as
+    /// Fixed pixels like adjustActiveColumnWidth, and the remainder of the
+    /// division goes to the LAST column so the group still tiles the
+    /// viewport edge to edge. Refuses when fewer than two columns are fully
+    /// visible, or when every share is already what it would become.
+    bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
+    /// The active column at its narrowest: the smallest preset, or
+    /// MinColumnWidthFraction when the preset list is empty (Karousel
+    /// minimize-width). Refuses when already there.
+    bool minimizeActiveColumnWidth(const ScrollLayoutParams& params);
+    /// Every column back to the context's default width (params) and
+    /// @p defaultDisplay, and every tile back to the even auto-split: the
+    /// scrolling half of the Retile shortcut, whose other modes re-apply
+    /// their layout the same way. The display is an argument because the
+    /// engine resolves it per screen and it is not carried in params.
+    /// Returns true when any intent changed. Clears the single pre-maximize
+    /// slot, since no column is maximized afterwards.
+    bool resetToDefaults(ColumnDisplay defaultDisplay, const ScrollLayoutParams& params);
     /// Set the active tile's height intent, verbatim. The height twin of
     /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
     /// the restore paths' setWindowHeightIntent, and the absolute

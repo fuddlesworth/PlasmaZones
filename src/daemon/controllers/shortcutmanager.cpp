@@ -501,6 +501,16 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollViewRequested(100);
      }},
+    {kIdScrollEqualizeColumnWidths, &ConfigDefaults::scrollingEqualizeColumnWidthsShortcut,
+     &Settings::scrollingEqualizeColumnWidthsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Equalize Column Widths"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollEqualizeColumnWidthsRequested();
+     }},
+    {kIdScrollMinimizeColumnWidth, &ConfigDefaults::scrollingMinimizeColumnWidthShortcut,
+     &Settings::scrollingMinimizeColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Minimize Column Width"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollMinimizeColumnWidthRequested();
+     }},
 
     // ─── Cheatsheet ────────────────────────────────────────────────────────
     {kIdToggleCheatsheet, &ConfigDefaults::toggleCheatsheetShortcut, &Settings::toggleCheatsheetShortcut,

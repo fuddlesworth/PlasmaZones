@@ -188,6 +188,130 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     return true;
 }
 
+bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
+{
+    const int workW = params.axis.mainSize(params.workArea);
+    if (workW <= 0) {
+        return false; // degenerate area, the sibling width verbs' bail
+    }
+    // FULLY visible columns, the walk centerVisibleColumns performs: a
+    // column clipped by either edge is exactly what must not be dragged into
+    // the split. Zero-extent (fully minimized) columns carry no strip
+    // position and are skipped the way stripExtentPx skips them.
+    const int viewOffset = viewOffsetFor(params);
+    QVector<int> visible;
+    int colMainPos = 0;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        const int colMain = columnExtentPx(m_columns.at(i), params);
+        if (colMain <= 0) {
+            continue;
+        }
+        const int pos = colMainPos - viewOffset;
+        if (pos >= 0 && pos + colMain <= workW) {
+            visible.append(i);
+        }
+        colMainPos += colMain + params.gap;
+    }
+    // One column has nothing to equalize against; "equal" would mean "full
+    // width", which is maximize's job.
+    const int n = visible.size();
+    if (n < 2) {
+        return false;
+    }
+    // Shares of the MAIN extent net of the gaps BETWEEN the group, so the
+    // group still tiles the viewport edge to edge afterwards. The remainder
+    // of the division goes to the last column rather than being dropped:
+    // dropping it would leave a sliver of dead space that expand-column
+    // would then report as reclaimable.
+    const int usable = workW - (n - 1) * params.gap;
+    if (usable < n) {
+        return false; // gaps alone outrun the viewport: no share is a pixel
+    }
+    const int share = usable / n;
+    const int remainder = usable - share * n;
+    bool changed = false;
+    for (int k = 0; k < n; ++k) {
+        Column& col = m_columns[visible.at(k)];
+        const ColumnWidth target = ColumnWidth::makeFixed(share + (k == n - 1 ? remainder : 0));
+        // Compared in RESOLVED pixels, for toggleMaximizeActiveColumn's
+        // reason: a Proportion that already renders to the share must not be
+        // rewritten as a Fixed of the identical extent, which would move
+        // nothing on screen while reporting success and destroying the
+        // proportional anchor a later work-area change would honour.
+        if (resolveColumnWidthPx(col.width, params) == resolveColumnWidthPx(target, params)) {
+            continue;
+        }
+        col.width = target;
+        if (m_preMaximizeColumnIdx == visible.at(k)) {
+            m_preMaximizeColumnIdx = -1;
+        }
+        changed = true;
+    }
+    return changed;
+}
+
+bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
+{
+    Column* col = activeColumnMutable();
+    if (!col) {
+        return false;
+    }
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false; // degenerate area, same bail as the sibling verbs
+    }
+    // The smallest preset is the narrowest width the user has NAMED, which
+    // beats the engine floor when a list exists: a Preset intent follows the
+    // vocabulary if the list is later edited, where a Proportion at the floor
+    // would be stranded at a value nothing else uses. The list is sorted and
+    // deduplicated at the boundary (ScrollTypes.h's preset-list contract), so
+    // the first entry is the minimum.
+    const ColumnWidth target = params.presetColumnWidths.isEmpty()
+        ? ColumnWidth::makeProportion(MinColumnWidthFraction)
+        : ColumnWidth::makePreset(params.presetColumnWidths.first());
+    // Resolved-pixel compare, toggleMaximizeActiveColumn's reason.
+    if (resolveColumnWidthPx(col->width, params) == resolveColumnWidthPx(target, params)) {
+        return false;
+    }
+    col->width = target;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    return true;
+}
+
+bool ScrollStrip::resetToDefaults(ColumnDisplay defaultDisplay, const ScrollLayoutParams& params)
+{
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false; // degenerate area: writes persisted intent, so bail
+    }
+    bool changed = false;
+    for (Column& col : m_columns) {
+        // Intent compare, not resolved pixels: this verb's promise is "back
+        // to what the layout says", and a Fixed that happens to render to the
+        // default's extent is still not the default intent — it would not
+        // follow a later work-area change the way the default would.
+        if (!(col.width == params.defaultColumnWidth)) {
+            col.width = params.defaultColumnWidth;
+            changed = true;
+        }
+        if (col.display != defaultDisplay) {
+            col.display = defaultDisplay;
+            changed = true;
+        }
+        for (Tile& tile : col.tiles) {
+            const WindowHeight even = WindowHeight::makeAuto();
+            if (!(tile.height == even)) {
+                tile.height = even;
+                changed = true;
+            }
+        }
+    }
+    // Nothing is maximized once every column is at the default, so the slot
+    // would otherwise hand a stale intent to the next un-maximize.
+    m_preMaximizeColumnIdx = -1;
+    return changed;
+}
+
 bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
 {
     // Lone tiles included: relayout honors an explicit Fixed/Preset height

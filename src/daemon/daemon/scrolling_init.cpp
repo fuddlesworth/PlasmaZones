@@ -196,6 +196,12 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollViewRequested, intVerb([](Scroll* s, const QString& id, int percent) {
         s->scrollViewByPercent(percent, id);
     }));
+    wire(&ShortcutManager::scrollEqualizeColumnWidthsRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->equalizeVisibleColumnWidths(id);
+    }));
+    wire(&ShortcutManager::scrollMinimizeColumnWidthRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->minimizeColumnWidth(id);
+    }));
 }
 
 } // namespace PlasmaZones

@@ -418,8 +418,11 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->moveFocusedToTiling(QStringLiteral("S1"));
     engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
     engine->scrollViewByPercent(25, QStringLiteral("S1"));
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    engine->minimizeColumnWidth(QStringLiteral("S1"));
+    engine->resetStripToDefaults(QStringLiteral("S1"));
 
-    QCOMPARE(feedback.count(), 11);
+    QCOMPARE(feedback.count(), 14);
     for (int i = 0; i < feedback.count(); ++i) {
         QCOMPARE(feedback.at(i).at(0).toBool(), false);
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_windows"));
