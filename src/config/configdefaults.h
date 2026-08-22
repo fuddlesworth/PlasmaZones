@@ -1029,7 +1029,7 @@ public:
     {
         // T as in re-Tile. NOT Meta+Ctrl+R: Spectacle owns every
         // Meta-modified R chord (that one is its window recording) — see
-        // the externally-owned table in configdefaults_scrolling.h's
+        // the externally-owned table in configdefaults_scrolling_shortcuts.h's
         // Scrolling Shortcuts banner.
         return QStringLiteral("Meta+Ctrl+T");
     }
@@ -1143,7 +1143,7 @@ static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidt
                   && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
               "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
 // The strip selector's ranged defaults. Asserted HERE rather than in
-// configdefaults_scrolling.h because link 6 of that file's include chain
+// configdefaults_scrolling_behavior.h because link 7 of that file's include chain
 // cannot see the shared Min/Max accessors (its own section banner says so) —
 // same placement rationale as the quick-size pair above.
 static_assert(ConfigDefaults::scrollingZoneSelectorTriggerDistance() >= ConfigDefaults::triggerDistanceMin()

@@ -433,6 +433,19 @@ bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
     return effectiveWidthClientDecides(overridesForScreen(screenId));
 }
 
+std::optional<ColumnWidth> ScrollEngine::resetDefaultColumnWidthFor(const QString& screenId,
+                                                                    const ScrollLayoutParams& params) const
+{
+    const QVariantMap overrides = overridesForScreen(screenId);
+    // A rule's width outranks the kind (effectiveDefaultColumnWidth folds it
+    // in first), so only a ClientDecides verdict with NO rule width means
+    // "there is no default width to go back to".
+    if (effectiveWidthClientDecides(overrides) && !ruleColumnWidthFraction(overrides).has_value()) {
+        return std::nullopt;
+    }
+    return params.defaultColumnWidth;
+}
+
 bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) const
 {
     // Kind VALIDATION, not just a read: effectiveDefaultColumnWidth falls

@@ -8,9 +8,11 @@
 // anchoring/centering policies. Each slot is a short self-contained scenario
 // over the same threeColumns fixture; splitting by operation family would
 // duplicate the fixture and the declaration-order table of contents below is
-// what keeps the length navigable. The ENGINE-level behaviour is already
-// split across the sibling test_scrollengine_* files (deliberately uncounted
-// here: the split grows, and a stale number reads as a claim about coverage).
+// what keeps the length navigable. The view-ownership slots (the pan's detach
+// latch) and the group-width verbs live in test_scrollstrip_view.cpp, which
+// needs no shared fixture. The ENGINE-level behaviour is already split across
+// the sibling test_scrollengine_* files (deliberately uncounted here: the
+// split grows, and a stale number reads as a claim about coverage).
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 

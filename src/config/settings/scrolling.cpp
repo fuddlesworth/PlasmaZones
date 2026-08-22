@@ -575,6 +575,10 @@ P_STORE_GET(int, scrollingWindowHeightStepPercent, scrollingBehaviorGroup, windo
 P_STORE_SET_INT(setScrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey,
                 scrollingWindowHeightStepPercentChanged)
 
+P_STORE_GET(int, scrollingViewScrollStepPercent, scrollingBehaviorGroup, viewScrollStepPercentKey, int)
+P_STORE_SET_INT(setScrollingViewScrollStepPercent, scrollingBehaviorGroup, viewScrollStepPercentKey,
+                scrollingViewScrollStepPercentChanged)
+
 // ── Strip-mode selector (Scrolling.ZoneSelector) ────────────────────────────
 // The snapping selector's twin, whose accessors live in settings/uienums.cpp.
 // This family sits here instead, with the rest of the scrolling settings,
@@ -753,5 +757,17 @@ P_STORE_SET_STRING(setScrollingMoveToFloatingShortcut, shortcutsScrollingGroup, 
 P_STORE_GET(QString, scrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey, QString)
 P_STORE_SET_STRING(setScrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey,
                    scrollingMoveToTilingShortcutChanged)
+P_STORE_GET(QString, scrollingViewPageBackShortcut, shortcutsScrollingGroup, viewPageBackKey, QString)
+P_STORE_SET_STRING(setScrollingViewPageBackShortcut, shortcutsScrollingGroup, viewPageBackKey,
+                   scrollingViewPageBackShortcutChanged)
+P_STORE_GET(QString, scrollingViewPageForwardShortcut, shortcutsScrollingGroup, viewPageForwardKey, QString)
+P_STORE_SET_STRING(setScrollingViewPageForwardShortcut, shortcutsScrollingGroup, viewPageForwardKey,
+                   scrollingViewPageForwardShortcutChanged)
+P_STORE_GET(QString, scrollingEqualizeColumnWidthsShortcut, shortcutsScrollingGroup, equalizeColumnWidthsKey, QString)
+P_STORE_SET_STRING(setScrollingEqualizeColumnWidthsShortcut, shortcutsScrollingGroup, equalizeColumnWidthsKey,
+                   scrollingEqualizeColumnWidthsShortcutChanged)
+P_STORE_GET(QString, scrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey, QString)
+P_STORE_SET_STRING(setScrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey,
+                   scrollingMinimizeColumnWidthShortcutChanged)
 
 } // namespace PlasmaZones

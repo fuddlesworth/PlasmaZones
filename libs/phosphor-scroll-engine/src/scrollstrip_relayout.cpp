@@ -74,8 +74,17 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
     if (c.isEmpty() || c.isFullyMinimized()) {
         return 0;
     }
-    int px = resolveColumnWidthPx(c.width, params);
-    if (params.respectMinimumSize) {
+    const int px = qMax(resolveColumnWidthPx(c.width, params), columnMinExtentPx(c, params));
+    return qMin(px, mainExtent(params));
+}
+
+int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const
+{
+    if (!params.respectMinimumSize) {
+        return 0;
+    }
+    int floor = 0;
+    {
         // A tabbed column with a LEFT/RIGHT within-column indicator hands
         // its tiles contentRectFor(rect) = rect minus reservedThickness, so
         // when the min-width clamp is what sets the column width the
@@ -117,12 +126,12 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
             // minMain, not minWidth: this is the column's floor ALONG the
             // strip, which is the client's minimum height on a vertical one.
             const int tileMinMain = tile.minMain(params.axis);
-            if (!tile.minimized && tileMinMain + reservationFloor > px) {
-                px = tileMinMain + reservationFloor;
+            if (!tile.minimized && tileMinMain + reservationFloor > floor) {
+                floor = tileMinMain + reservationFloor;
             }
         }
     }
-    return qMin(px, mainExtent(params));
+    return floor;
 }
 
 int ScrollStrip::columnStripPos(int columnIndex, const ScrollLayoutParams& params) const
@@ -172,7 +181,7 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     return (mainExtent(params) - colMain) / 2;
 }
 
-int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const
+int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params)
 {
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there). Checked here too so the centering arms cannot bypass it.
@@ -185,6 +194,9 @@ int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParam
     // the focused column drifts off-center until the next focus move.
     const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
     if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+        // The policy took the view back; a pan that stayed latched here would
+        // leave the next pass refusing to re-derive the position it has.
+        m_viewDetached = false;
         return centeredAnchorFor(m_activeColumnIdx, params);
     }
     return clampedAnchor(columnStripPos(m_activeColumnIdx, params) - oldViewOffset, params);
@@ -224,8 +236,25 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
 {
     if (m_activeColumnIdx < 0) {
         m_viewAnchor = 0;
+        m_viewDetached = false;
         return;
     }
+    // This is the one chokepoint every focus-driven re-anchor passes through
+    // (the focus verbs, the structural paths, and updateViewForFocus's own
+    // tail), which makes it the place a pan stops owning the view: the policy
+    // is about to choose a position, so the latch that exists to stop it must
+    // go. updateViewForFocus never reaches here while detached — it returns
+    // above — so clearing here cannot undo a live pan.
+    //
+    // ABOVE the degenerate-area guard, unlike every other write here. The
+    // guard's subject is the anchor, which cannot be computed against nothing;
+    // the latch is not a position but an answer to "who owns the view", and
+    // the focus DID move whether or not this screen can lay out right now.
+    // Clearing here lets the first relayout against a real work area re-derive
+    // the position, which is exactly what the guard promises; keeping it would
+    // leave the pan owning the view across a focus change forever, since no
+    // later pass revisits the question.
+    m_viewDetached = false;
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there): every arm below would write 0 over the persisted anchor.
     if (mainExtent(params) <= 0) {
@@ -283,6 +312,26 @@ void ScrollStrip::restoreViewAnchor(int anchor, const ScrollLayoutParams& params
 
 void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
 {
+    // A detached view belongs to the user's pan, not to the policy (class
+    // doc), and this runs at the top of every applyLayout — so re-deriving
+    // here is exactly what would undo the pan on the very next pass: under
+    // Always unconditionally, and under Never/OnOverflow as soon as the pan
+    // carried the focused column off the viewport, which is the only pan
+    // worth making.
+    //
+    // Nothing is re-clamped on the way out, deliberately. A pan can INHERIT an
+    // out-of-range anchor (the centering mutators store one by design) and
+    // scrollViewBy walks such a view back one clamped delta at a time rather
+    // than snapping it — running clampedAnchor here would perform in one
+    // layout pass the very snap that comment forbids, hundreds of pixels
+    // against the direction the user just scrolled. The only way a view that
+    // started IN range leaves it is a viewport growth, which strands it at the
+    // TRAILING end as dead space: the same state removeWindowInternal creates
+    // on purpose and the early-return below already preserves. It heals on the
+    // next pan or focus change.
+    if (m_viewDetached) {
+        return;
+    }
     // Policy re-application only: when the active column is already fully
     // visible under a non-centering policy, leave the anchor alone — this
     // runs at the top of every applyLayout, and re-clamping there would
@@ -306,6 +355,12 @@ bool ScrollStrip::centerActiveColumn(const ScrollLayoutParams& params)
     if (m_activeColumnIdx < 0) {
         return false;
     }
+    // Asking to center is asking for the policy's view back, so the pan stops
+    // owning it — and unconditionally, ahead of the no-move bail below: a pan
+    // that happens to land on the centered anchor still has to re-attach, or
+    // the verb reports "nothing to do" while leaving the view detached and
+    // the next focus change behaving differently than it does everywhere else.
+    m_viewDetached = false;
     const int centered = centeredAnchorFor(m_activeColumnIdx, params);
     if (m_viewAnchor == centered) {
         return false;
@@ -325,6 +380,11 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     if (mainExtent(params) <= 0) {
         return false;
     }
+    // Re-attach for centerActiveColumn's reason, but BELOW this verb's own
+    // refusal, unlike reanchorAfterFocusChange's clear: a centering verb that
+    // bails changes nothing at all, where a focus change has already happened
+    // by the time its guard is reached.
+    m_viewDetached = false;
     const int viewMain = mainExtent(params);
     const int viewOffset = viewOffsetFor(params);
     // FULLY visible columns only (niri center-visible-columns): a partially
@@ -410,6 +470,12 @@ bool ScrollStrip::scrollViewBy(int delta, const ScrollLayoutParams& params)
         return false;
     }
     m_viewAnchor = anchor;
+    // The view is now where the USER put it, so take it out of the centering
+    // policy's hands until a focus change or a centering verb gives it back
+    // (class doc). Set only on a real move: a refusal at either end must not
+    // detach a view the policy still owns, or holding a scroll key against the
+    // strip's end would silently change what the next layout pass does.
+    m_viewDetached = true;
     return true;
 }
 

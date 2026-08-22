@@ -292,12 +292,19 @@ private Q_SLOTS:
                                           QStringLiteral("layout_picker"), QStringLiteral("toggle_layout_lock"),
                                           QStringLiteral("quick_layout_1")};
         const QSet<QString> expectAll{QStringLiteral("resnap_to_new_layout"), QStringLiteral("snap_all_windows")};
+        // Retile acts on either engine mode and is a no-op on snapping, so it
+        // carries the mode-union tag; a retag back to "autotile" would hide
+        // the row on every scrolling screen with nothing else failing.
+        const QSet<QString> expectManaged{QStringLiteral("retile")};
 
         QHash<QString, QString> modeById;
+        QHash<QString, int> categoryOrderById;
         const QVariantList rows = manager.cheatsheetModel();
         for (const QVariant& v : rows) {
             const QVariantMap row = v.toMap();
             modeById.insert(row.value(QStringLiteral("id")).toString(), row.value(QStringLiteral("mode")).toString());
+            categoryOrderById.insert(row.value(QStringLiteral("id")).toString(),
+                                     row.value(QStringLiteral("categoryOrder")).toInt());
         }
         // The quick-layout family compresses into one row keyed by its first
         // member, so quick_layout_1 stands in for the whole digit family.
@@ -320,6 +327,14 @@ private Q_SLOTS:
         };
         checkTag(expectLayouts, QStringLiteral("layouts"));
         checkTag(expectAll, QStringLiteral("all"));
+        checkTag(expectManaged, QStringLiteral("managed"));
+        // And the row moved to General (order 0) with the retag: a
+        // mode-neutral verb filed under an Autotile heading would read as
+        // autotile-only on the sheet whatever its tag says.
+        if (categoryOrderById.value(QStringLiteral("retile"), -1) != 0) {
+            failures.append(QStringLiteral("retile sits at category order %1, expected 0 (General)")
+                                .arg(categoryOrderById.value(QStringLiteral("retile"), -1)));
+        }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
     }
 };

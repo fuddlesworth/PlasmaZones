@@ -66,6 +66,7 @@ private Q_SLOTS:
     void focusWindowTopBottomWalkTheColumn();
     void absoluteWidthAndHeightIntents();
     void centerVisibleColumnsCentersOnceThenRefuses();
+    void scrollViewByPercentPansWithoutMovingFocus();
     void everyVerbAnswersNoWindowsOnAnEmptyScreen();
     void moveToFloatingAndBackAnswersEveryPress();
     void switchFocusRoundTripsBetweenLayers();
@@ -334,6 +335,78 @@ void TestScrollEngineVerbs::centerVisibleColumnsCentersOnceThenRefuses()
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
 }
 
+void TestScrollEngineVerbs::scrollViewByPercentPansWithoutMovingFocus()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    // Three columns at 0.55 overflow the viewport, so there is somewhere to
+    // pan to; the last-opened window holds focus and the view sits at the
+    // strip's END (the minimum scroll that shows it), so the first pan that
+    // can succeed is the backward one.
+    for (const char* id : {"app|a", "app|b", "app|c"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.55), QStringLiteral("S1"));
+    }
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const auto params = ScrollTestUtils::engineParams();
+    const auto viewX = [&]() {
+        return state->strip().relayout(params).viewOffset;
+    };
+    const int before = viewX();
+    QVERIFY2(before > 0, "the view must start scrolled, or a backward pan has nowhere to go");
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // The pan: by exactly the percent, reported as a "scroll" whose reason is
+    // the travel direction (the OSD's arrow), with focus untouched on both
+    // the model and the feedback's target slot. The anchor moved, so the
+    // persistence producer fires — the verb has no other emit path.
+    engine->scrollViewByPercent(-25, QStringLiteral("S1"));
+    QCOMPARE(viewX(), before - qRound(0.25 * ScrollTestUtils::kMainExtent));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("scroll"));
+    QCOMPARE(feedback.last().at(2).toString(), Ax::navLead());
+    QCOMPARE(feedback.last().at(4).toString(), QStringLiteral("app|c"));
+    QCOMPARE(placement.count(), 1);
+
+    // The whole point, at the engine level: the pan survives the layout pass
+    // the engine itself runs. applyLayout ran inside the verb above, and the
+    // view is still where the pan put it.
+    engine->retile();
+    QCOMPARE(viewX(), before - qRound(0.25 * ScrollTestUtils::kMainExtent));
+    // And the retile neither moved focus nor handed the view back.
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(state->strip().viewDetached());
+
+    // A pan pinned at the end it is asked to move toward refuses with
+    // no_target and emits no placement change — there is nothing to save.
+    // The refusal leaves the latch as it found it: the view is still the
+    // user's.
+    engine->scrollViewByPercent(100, QStringLiteral("S1"));
+    engine->scrollViewByPercent(100, QStringLiteral("S1"));
+    const int placementAfterPin = placement.count();
+    engine->scrollViewByPercent(100, QStringLiteral("S1"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    QCOMPARE(placement.count(), placementAfterPin);
+    QVERIFY(state->strip().viewDetached());
+
+    // A percent too small to reach a pixel is a refusal too, not a success
+    // that moved nothing, and under its OWN token: the OSD must not call a
+    // step that rounded away "the end of the strip". 0.01% of the fixture's
+    // extent rounds to zero.
+    engine->scrollViewByPercent(-0.01, QStringLiteral("S1"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
+    QCOMPARE(placement.count(), placementAfterPin);
+}
+
 void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
 {
     QObject owner;
@@ -353,8 +426,12 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->moveFocusedToFloating(QStringLiteral("S1"));
     engine->moveFocusedToTiling(QStringLiteral("S1"));
     engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
+    engine->scrollViewByPercent(25, QStringLiteral("S1"));
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    engine->minimizeColumnWidth(QStringLiteral("S1"));
+    engine->resetStripToDefaults(QStringLiteral("S1"));
 
-    QCOMPARE(feedback.count(), 10);
+    QCOMPARE(feedback.count(), 14);
     for (int i = 0; i < feedback.count(); ++i) {
         QCOMPARE(feedback.at(i).at(0).toBool(), false);
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_windows"));

@@ -5,12 +5,13 @@
 // Daemon — scrolling-mode shortcut wiring
 //
 // Connects the ShortcutManager's scroll-specific signals to the concrete
-// ScrollEngine — the column vocabulary, the edge-stop/wrap focus variants,
-// the top/bottom window focus, and the one-way float verbs. The GENERIC
-// directional move/focus/swap chords and the mode-neutral floating/tiling
-// focus switch are not here: they route through the generic navigation
-// handlers (navigation.cpp), which reach the scroll engine via
-// ScreenModeRouter.
+// ScrollEngine — the column vocabulary (including the group-width verbs,
+// equalize and minimize), the view page pan, the edge-stop/wrap focus
+// variants, the top/bottom window focus, and the one-way float verbs. The
+// GENERIC directional move/focus/swap chords, the mode-neutral
+// floating/tiling focus switch and the mode-neutral Retile are not here:
+// they route through the generic navigation handlers (navigation.cpp),
+// which reach the scroll engine via ScreenModeRouter.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -192,6 +193,15 @@ void Daemon::connectScrollingShortcuts()
     // swap-silently hazard as the focus-end wire above.
     wire(&ShortcutManager::scrollMoveToFloatRequested, boolVerb([](Scroll* s, const QString& id, bool floating) {
         floating ? s->moveFocusedToFloating(id) : s->moveFocusedToTiling(id);
+    }));
+    wire(&ShortcutManager::scrollViewRequested, intVerb([](Scroll* s, const QString& id, int percent) {
+        s->scrollViewByPercent(percent, id);
+    }));
+    wire(&ShortcutManager::scrollEqualizeColumnWidthsRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->equalizeVisibleColumnWidths(id);
+    }));
+    wire(&ShortcutManager::scrollMinimizeColumnWidthRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->minimizeColumnWidth(id);
     }));
 }
 

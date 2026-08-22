@@ -1090,10 +1090,17 @@ target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                       PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 
-add_executable(test_scrolling_adaptor dbus/test_scrolling_adaptor.cpp)
+add_executable(test_scrolling_adaptor dbus/test_scrolling_adaptor.cpp dbus/scrollingadaptortestfixture.h)
 target_link_libraries(test_scrolling_adaptor PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                                                      PhosphorScrollEngine::PhosphorScrollEngine)
 add_test(NAME test_scrolling_adaptor COMMAND test_scrolling_adaptor)
+# The wire verbs (wheel pair, absolute setters), split out of the suite
+# above once it passed the size ceiling; same fixture header.
+add_executable(test_scrolling_adaptor_verbs dbus/test_scrolling_adaptor_verbs.cpp
+                                            dbus/scrollingadaptortestfixture.h)
+target_link_libraries(test_scrolling_adaptor_verbs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                                                           PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_scrolling_adaptor_verbs COMMAND test_scrolling_adaptor_verbs)
 
 # Close/reopen restore on the scroll engine through the unified placement
 # store: a reopened window's fresh uuid must match its record by appId FIFO

@@ -346,6 +346,9 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
     // trip re-anchored the strip on whichever window arrived first.
     out.focusedWindowId = state->strip().activeWindowId();
     out.viewAnchor = state->strip().viewAnchor();
+    // Both halves or neither: an anchor restored without its detachment is
+    // handed straight back to the centering policy (StashedStrip::viewDetached).
+    out.viewDetached = state->strip().viewDetached();
     // Stamped so the restore can tell whether that anchor still means
     // anything. The state's RESOLVED axis is the right source: it advances on
     // every relayout, where the applied basis only advances on an emitted
@@ -616,8 +619,9 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // this the first arrival kept the focus it won on the empty strip and
     // every mode round trip re-anchored on an arbitrary window. The anchor
     // is restored after the focus so the user's actual view wins over the
-    // focus change's centering-policy reanchor (clamped against the partial
-    // strip now; later arrivals re-clamp as the strip grows).
+    // focus change's centering-policy reanchor. Restored RAW, by
+    // restoreViewAnchor's contract; later structural inserts re-clamp as the
+    // strip grows (insertWindowAt's anchor re-clamp).
     //
     // Re-asserted on EVERY arrival once the focused window is on the strip,
     // not only on the arrival that IS it: inserts steal focus (both insert
@@ -636,6 +640,12 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         // still lands, and the centering policy re-derives a view around it.
         if (stashStrip.axis == params.axis.axis()) {
             state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+            // After the anchor, and only in this arm: the focus call above
+            // cleared the latch, restoreViewAnchor deliberately leaves it
+            // alone, and the axis-mismatch arm that drops the anchor must
+            // drop the detachment with it — a latch with no anchor behind it
+            // would pin the view to wherever the focus restore landed.
+            state->strip().setViewDetached(stashStrip.viewDetached);
         }
     }
     const int total = stashStrip.tileCount();

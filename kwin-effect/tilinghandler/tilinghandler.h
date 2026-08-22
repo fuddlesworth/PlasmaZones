@@ -1079,14 +1079,22 @@ private:
     /// consulted per pointer move and needs nothing.
     void applyScrollEffectBehaviour(const QVariantMap& behaviour);
     void fetchActiveLayouts();
-    /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
+    /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel), and
+    /// Meta+Shift+wheel for scrolling the VIEW one step without moving focus
+    /// (Karousel's scroll verbs; the keyboard carries the page-sized pan).
     /// Registered while ANY screen runs the scrolling engine, unregistered
     /// (by destroying the QActions — KWin drops an axis shortcut with its
-    /// action) when none does, so Meta+wheel is only consumed in sessions
-    /// that can actually use it. The trigger itself re-gates on the
-    /// CURSOR's screen being a scrolling screen.
+    /// action) when none does, so the chords are only consumed in sessions
+    /// that can actually use them. The triggers themselves re-gate on the
+    /// CURSOR's screen being a scrolling screen. One enable setting and one
+    /// inversion setting govern both quads: a user who inverted the wheel
+    /// for focus means the same direction for the view.
     void updateScrollWheelShortcuts();
     void wheelFocusColumn(int delta);
+    void wheelScrollView(int delta);
+    /// The cursor-screen resolution and ownership gate both wheel triggers
+    /// share. Empty when the chord should be consumed but stay inert.
+    QString wheelTargetScreen(int& delta) const;
     QList<QAction*> m_scrollWheelActions;
     /// Pause the effect's own focus-follows-mouse after an ENGINE-driven
     /// strip movement on a scrolling screen (tile batch or activation).

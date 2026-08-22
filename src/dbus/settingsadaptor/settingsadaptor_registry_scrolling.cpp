@@ -658,6 +658,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
                               setScrollingColumnWidthStepPercent)
         REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,
                               setScrollingWindowHeightStepPercent)
+        REGISTER_CONCRETE_INT("scrollingViewScrollStepPercent", scrollingViewScrollStepPercent,
+                              setScrollingViewScrollStepPercent)
 
         // Scrolling shortcuts
         REGISTER_CONCRETE_STRING("scrollingFocusColumnFirstShortcut", scrollingFocusColumnFirstShortcut,
@@ -722,6 +724,14 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingMoveToFloatingShortcut)
         REGISTER_CONCRETE_STRING("scrollingMoveToTilingShortcut", scrollingMoveToTilingShortcut,
                                  setScrollingMoveToTilingShortcut)
+        REGISTER_CONCRETE_STRING("scrollingViewPageBackShortcut", scrollingViewPageBackShortcut,
+                                 setScrollingViewPageBackShortcut)
+        REGISTER_CONCRETE_STRING("scrollingViewPageForwardShortcut", scrollingViewPageForwardShortcut,
+                                 setScrollingViewPageForwardShortcut)
+        REGISTER_CONCRETE_STRING("scrollingEqualizeColumnWidthsShortcut", scrollingEqualizeColumnWidthsShortcut,
+                                 setScrollingEqualizeColumnWidthsShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMinimizeColumnWidthShortcut", scrollingMinimizeColumnWidthShortcut,
+                                 setScrollingMinimizeColumnWidthShortcut)
     }
 
 // Clean up macros (local scope; unity-batch hygiene)

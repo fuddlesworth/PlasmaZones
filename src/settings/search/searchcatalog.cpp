@@ -854,6 +854,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingWindowHeightStep"),
                PhosphorI18n::tr("Height adjustment step"),
                {PhosphorI18n::tr("step"), PhosphorI18n::tr("height"), PhosphorI18n::tr("shortcut")});
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingViewScrollStep"),
+        PhosphorI18n::tr("View scroll step"),
+        {PhosphorI18n::tr("step"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("view"), PhosphorI18n::tr("wheel")});
     // The Strip direction card, shared with scrolling-simple like the Focus
     // card below, so the pair registers against both hosting page ids.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("stripDirection"),
@@ -884,7 +888,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Focus follows mouse"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusEnabled"),
-               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
+               PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("scroll")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusInverted"),
                PhosphorI18n::tr("Invert wheel direction"),

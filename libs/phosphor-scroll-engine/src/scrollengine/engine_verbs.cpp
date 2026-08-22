@@ -147,6 +147,34 @@ void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)
     P_SCROLL_VERB(screenId, state->strip().expandActiveColumnToAvailableWidth(params), "resize", false, QString());
 }
 
+void ScrollEngine::equalizeVisibleColumnWidths(const QString& screenId)
+{
+    // "equalize" in the reason slot: the OSD's generic resize copy names one
+    // column, and this verb rewrote a group. The failure token stays the
+    // shared no_target.
+    P_SCROLL_VERB(screenId, state->strip().equalizeVisibleColumnWidths(params), "resize", false,
+                  QStringLiteral("equalize"));
+}
+
+void ScrollEngine::minimizeColumnWidth(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().minimizeActiveColumnWidth(params), "resize", false, QString());
+}
+
+void ScrollEngine::resetStripToDefaults(const QString& screenId)
+{
+    // "retile" rather than "resize": this is the scrolling arm of the
+    // mode-neutral Retile shortcut, and the OSD's retile copy is what the
+    // user pressed for. Both defaults are resolved here because the strip
+    // does not carry the display in params, and the width may be "the
+    // client decides", which has no value to hand down (see
+    // resetDefaultColumnWidthFor and resetToDefaults).
+    P_SCROLL_VERB(screenId,
+                  state->strip().resetToDefaults(resetDefaultColumnWidthFor(screen, params),
+                                                 effectiveDefaultColumnDisplay(screen), params),
+                  "retile", false, QString());
+}
+
 void ScrollEngine::cycleWindowPresetHeight(int delta, const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().cycleActiveWindowPresetHeight(delta, params), "resize", false, QString());
@@ -167,6 +195,40 @@ void ScrollEngine::centerVisibleColumns(const QString& screenId)
     // "span" distinguishes the whole-group centering from centerColumn's
     // single-column copy in the OSD (both ride the "center" action).
     P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center", false, QStringLiteral("span"));
+}
+
+void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
+{
+    // Resolved by hand rather than through P_SCROLL_VERB: the pixel delta
+    // needs params BEFORE the op expression runs, and the macro only brings
+    // params into scope for the expression itself.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("scroll"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    // Against the MAIN extent, so a percent means the same thing on either
+    // axis and "100" is exactly one viewport, which is what the page variant
+    // asks for. Rounded, then refused if it collapses to nothing, under its
+    // OWN token: a 1% step on a tiny work area is not "the end of the
+    // strip", and the OSD names the two refusals differently.
+    const int deltaPx = qRound(percent / 100.0 * params.axis.mainSize(params.workArea));
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
+    const QString refusal = deltaPx == 0 ? QStringLiteral("no_movement") : QStringLiteral("no_target");
+    if (changed) {
+        // focusAfter=false for the same reason the sizing verbs pass it: a pan
+        // moves geometry and nothing else, and must not yank focus off a
+        // floating window.
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    // The active window is unchanged either way — that is the verb's whole
+    // point — so the target slot carries it back unchanged on success too.
+    Q_EMIT navigationFeedback(changed, QStringLiteral("scroll"),
+                              changed ? Detail::physicalTokenForMain(deltaPx > 0 ? 1 : -1, params.axis) : refusal,
+                              sourceWindow, changed ? sourceWindow : QString(), screen);
 }
 
 void ScrollEngine::focusWindowTop(const QString& screenId)

@@ -602,48 +602,65 @@ void TilingHandler::updateScrollWheelShortcuts()
     // once the accumulated delta clears KWin's 1.0 threshold (processAxis
     // only fires on |delta| >= 1.0).
     //
-    // Meta ONLY — no Meta+Alt fallback, and the mechanics matter (verified
-    // against KWin 6.7 source): KWin's GlobalShortcutsManager APPENDS
-    // duplicate axis registrations and match() returns the FIRST entry, so
-    // whoever registered earlier wins. KWin core registers
-    // Meta+Alt+WheelUp/Down for Switch to Next/Previous Desktop at init,
-    // before any effect loads — a Meta+Alt pair here could only ever lose
-    // that match and sit dead. Plain Meta is free on a stock setup: the
-    // zoom effect's axis modifiers default to Meta+Ctrl, not Meta. A user
-    // who rebinds zoom onto plain Meta creates a duplicate whose winner is
-    // whichever effect registered earlier in the session.
-    const auto add = [this](Qt::KeyboardModifiers mods, KWin::PointerAxisDirection axis, int delta,
-                            const QString& name) {
+    // Meta ONLY for the focus quad — no Meta+Alt fallback, and the mechanics
+    // matter (verified against KWin 6.7 source): KWin's
+    // GlobalShortcutsManager APPENDS duplicate axis registrations and
+    // match() returns the FIRST entry, so whoever registered earlier wins.
+    // KWin core registers Meta+Alt+WheelUp/Down for Switch to Next/Previous
+    // Desktop at init, before any effect loads — a Meta+Alt pair here could
+    // only ever lose that match and sit dead. Plain Meta is free on a stock
+    // setup: the zoom effect's axis modifiers default to Meta+Ctrl, not
+    // Meta. A user who rebinds zoom onto plain Meta creates a duplicate
+    // whose winner is whichever effect registered earlier in the session.
+    //
+    // Meta+Shift for the VIEW quad, one modifier step from the focus quad
+    // for one step of difference in meaning (move focus along the strip /
+    // move the view along it). KWin core registers nothing on Meta+Shift+
+    // wheel and no stock effect defaults to it, so it sits in the same
+    // free-on-a-stock-setup class as plain Meta, with the same rebind caveat.
+    const auto add = [this](Qt::KeyboardModifiers mods, KWin::PointerAxisDirection axis, int delta, const QString& name,
+                            void (TilingHandler::*trigger)(int)) {
         auto* action = new QAction(this);
         action->setObjectName(name);
-        connect(action, &QAction::triggered, this, [this, delta]() {
-            wheelFocusColumn(delta);
+        connect(action, &QAction::triggered, this, [this, delta, trigger]() {
+            (this->*trigger)(delta);
         });
         KWin::effects->registerAxisShortcut(mods, axis, action);
         m_scrollWheelActions.append(action);
     };
-    add(Qt::MetaModifier, KWin::PointerAxisDown, 1, QStringLiteral("pz-scroll-column-next"));
-    add(Qt::MetaModifier, KWin::PointerAxisUp, -1, QStringLiteral("pz-scroll-column-prev"));
-    add(Qt::MetaModifier, KWin::PointerAxisRight, 1, QStringLiteral("pz-scroll-column-next-h"));
-    add(Qt::MetaModifier, KWin::PointerAxisLeft, -1, QStringLiteral("pz-scroll-column-prev-h"));
-    qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel focuses columns)";
+    add(Qt::MetaModifier, KWin::PointerAxisDown, 1, QStringLiteral("pz-scroll-column-next"),
+        &TilingHandler::wheelFocusColumn);
+    add(Qt::MetaModifier, KWin::PointerAxisUp, -1, QStringLiteral("pz-scroll-column-prev"),
+        &TilingHandler::wheelFocusColumn);
+    add(Qt::MetaModifier, KWin::PointerAxisRight, 1, QStringLiteral("pz-scroll-column-next-h"),
+        &TilingHandler::wheelFocusColumn);
+    add(Qt::MetaModifier, KWin::PointerAxisLeft, -1, QStringLiteral("pz-scroll-column-prev-h"),
+        &TilingHandler::wheelFocusColumn);
+    const Qt::KeyboardModifiers metaShift = Qt::MetaModifier | Qt::ShiftModifier;
+    add(metaShift, KWin::PointerAxisDown, 1, QStringLiteral("pz-scroll-view-forward"), &TilingHandler::wheelScrollView);
+    add(metaShift, KWin::PointerAxisUp, -1, QStringLiteral("pz-scroll-view-back"), &TilingHandler::wheelScrollView);
+    add(metaShift, KWin::PointerAxisRight, 1, QStringLiteral("pz-scroll-view-forward-h"),
+        &TilingHandler::wheelScrollView);
+    add(metaShift, KWin::PointerAxisLeft, -1, QStringLiteral("pz-scroll-view-back-h"), &TilingHandler::wheelScrollView);
+    qCInfo(lcEffect) << "Scroll wheel shortcuts registered"
+                     << "(Meta+wheel focuses columns, Meta+Shift+wheel scrolls the view)";
 }
 
-void TilingHandler::wheelFocusColumn(int delta)
+QString TilingHandler::wheelTargetScreen(int& delta) const
 {
     if (!m_effect->m_daemonGate.serviceRegistered) {
-        return;
+        return QString();
     }
     // Re-gate on the enable flag: between setWheelFocusEnabled(false)'s
     // deleteLater and the deferred delete actually landing, the doomed
     // action is still registered and can fire one more tick.
     if (!m_wheelFocusEnabled) {
-        return;
+        return QString();
     }
     if (m_wheelFocusInverted) {
         delta = -delta;
     }
-    // The strip that moves is the one under the CURSOR (Meta+wheel is a
+    // The strip that moves is the one under the CURSOR (a wheel chord is a
     // pointer gesture, not a focus verb): resolve the cursor's effective
     // screen — virtual subdivisions included — and only forward when it
     // actually runs the scrolling engine. On any other screen the chord is
@@ -652,19 +669,40 @@ void TilingHandler::wheelFocusColumn(int delta)
     const QPoint rounded(qRound(pos.x()), qRound(pos.y()));
     const auto* output = KWin::effects->screenAt(rounded);
     if (!output) {
-        return;
+        return QString();
     }
     const QString screenId = m_effect->resolveEffectiveScreenId(rounded, output);
     // isScrollingScreen, not the raw set: it intersects with the managed union,
     // so a screen the union already dropped cannot still swallow the chord and
-    // forward a focusColumn the engine no longer owns.
+    // forward a verb the engine no longer owns.
     if (!isScrollingScreen(screenId)) {
+        return QString();
+    }
+    return screenId;
+}
+
+void TilingHandler::wheelFocusColumn(int delta)
+{
+    const QString screenId = wheelTargetScreen(delta);
+    if (screenId.isEmpty()) {
         return;
     }
     qCDebug(lcEffect) << "Wheel focus column: delta" << delta << "on" << screenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
                                                    QStringLiteral("focusColumn"), {screenId, delta},
                                                    QStringLiteral("focusColumn"));
+}
+
+void TilingHandler::wheelScrollView(int delta)
+{
+    const QString screenId = wheelTargetScreen(delta);
+    if (screenId.isEmpty()) {
+        return;
+    }
+    qCDebug(lcEffect) << "Wheel scroll view: delta" << delta << "on" << screenId;
+    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
+                                                   QStringLiteral("scrollView"), {screenId, delta},
+                                                   QStringLiteral("scrollView"));
 }
 
 } // namespace PlasmaZones

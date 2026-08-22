@@ -462,8 +462,13 @@ void Daemon::connectOverlaySignals()
         [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
                const QString& targetZoneId, const QString& screenId) {
             // Suppress resnap OSD when triggered by a mode/layout change
-            // (layout switch OSD already provides feedback)
-            if (m_suppressResnapOsd > 0 && (action == QLatin1String("resnap") || action == QLatin1String("retile"))) {
+            // (layout switch OSD already provides feedback). "resnap" only:
+            // every armResnapOsdSuppression site pairs with a SnapAdaptor
+            // resnap producer, and the only "retile" feedback reaching this
+            // relay is the user's own scrolling Retile / Resnap press, which
+            // an outstanding count must not eat (and then mis-count against
+            // the resnap it was armed for).
+            if (m_suppressResnapOsd > 0 && action == QLatin1String("resnap")) {
                 m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                 return;
             }

@@ -1033,6 +1033,7 @@ Q_SIGNALS:
     void scrollingRestoreFloatedWindowsOnLoginChanged();
     void scrollingColumnWidthStepPercentChanged();
     void scrollingWindowHeightStepPercentChanged();
+    void scrollingViewScrollStepPercentChanged();
 
     // Scrolling shortcuts
     void scrollingFocusColumnFirstShortcutChanged();
@@ -1066,6 +1067,10 @@ Q_SIGNALS:
     void scrollingFocusColumnRightOrFirstShortcutChanged();
     void scrollingMoveToFloatingShortcutChanged();
     void scrollingMoveToTilingShortcutChanged();
+    void scrollingViewPageBackShortcutChanged();
+    void scrollingViewPageForwardShortcutChanged();
+    void scrollingEqualizeColumnWidthsShortcutChanged();
+    void scrollingMinimizeColumnWidthShortcutChanged();
 
     // ── Environment signals ─────────────────────────────────────────────────
     // Not setting NOTIFYs: nothing above them in the config schema fires these,

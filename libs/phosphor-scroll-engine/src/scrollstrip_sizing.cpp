@@ -5,6 +5,8 @@
 
 #include <QtGlobal>
 
+#include <algorithm>
+
 namespace PhosphorScrollEngine {
 
 qreal ScrollStrip::currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const
@@ -186,6 +188,205 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
         m_preMaximizeColumnIdx = -1;
     }
     return true;
+}
+
+bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
+{
+    const int workW = params.axis.mainSize(params.workArea);
+    if (workW <= 0) {
+        return false; // degenerate area, the sibling width verbs' bail
+    }
+    // FULLY visible columns, the walk centerVisibleColumns performs: a
+    // column clipped by either edge is exactly what must not be dragged into
+    // the split. Zero-extent (fully minimized) columns carry no strip
+    // position and are skipped the way stripExtentPx skips them.
+    const int viewOffset = viewOffsetFor(params);
+    QVector<int> visible;
+    int colMainPos = 0;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        const int colMain = columnExtentPx(m_columns.at(i), params);
+        if (colMain <= 0) {
+            continue;
+        }
+        const int pos = colMainPos - viewOffset;
+        if (pos >= 0 && pos + colMain <= workW) {
+            visible.append(i);
+        }
+        colMainPos += colMain + params.gap;
+    }
+    // One column has nothing to equalize against; "equal" would mean "full
+    // width", which is maximize's job.
+    const int n = visible.size();
+    if (n < 2) {
+        return false;
+    }
+    // The active column must be IN the group: the anchor is re-derived
+    // below to put the group's first column at the lead edge, and an active
+    // column that straddles an edge (a pan leaves it there) would be pushed
+    // fully off screen by that, where a detached view would then keep it.
+    if (!visible.contains(m_activeColumnIdx)) {
+        return false;
+    }
+    // Shares of the MAIN extent net of the gaps BETWEEN the group, so the
+    // group still tiles the viewport edge to edge afterwards.
+    const int usable = workW - (n - 1) * params.gap;
+    if (usable < n) {
+        return false; // gaps alone outrun the viewport: no share is a pixel
+    }
+    // A column whose tiles' minimum exceeds its share cannot take it: what
+    // renders is columnExtentPx, which floors at that minimum, so writing the
+    // share would push the group past the trailing edge and then read back
+    // as "already there" on the next press. Such a column keeps its floor
+    // and the others split what is left, repeated until every share clears
+    // the floors it was measured against.
+    QVector<int> extents(n);
+    QVector<bool> floorBound(n, false);
+    for (int k = 0; k < n; ++k) {
+        extents[k] = columnMinExtentPx(m_columns.at(visible.at(k)), params);
+    }
+    int pool = usable;
+    int free = n;
+    for (bool settled = false; !settled;) {
+        settled = true;
+        if (free == 0) {
+            break;
+        }
+        const int share = pool / free;
+        for (int k = 0; k < n; ++k) {
+            if (!floorBound.at(k) && extents.at(k) > share) {
+                floorBound[k] = true;
+                pool -= extents.at(k);
+                --free;
+                settled = false;
+            }
+        }
+    }
+    if (pool < free) {
+        return false; // the floors alone outrun the viewport: nothing to share
+    }
+    // The remainder of the division goes to the LAST free column rather
+    // than being dropped: dropping it would leave a sliver of dead space that
+    // expand-column would then report as reclaimable. With every column
+    // floor-bound there is nothing to equalize.
+    if (free == 0) {
+        return false;
+    }
+    const int share = pool / free;
+    int remainder = pool - share * free;
+    for (int k = n - 1; k >= 0; --k) {
+        if (!floorBound.at(k)) {
+            extents[k] = share + remainder;
+            remainder = 0;
+        }
+    }
+    bool changed = false;
+    for (int k = 0; k < n; ++k) {
+        Column& col = m_columns[visible.at(k)];
+        const ColumnWidth target = ColumnWidth::makeFixed(extents.at(k));
+        // Compared in RENDERED pixels, for toggleMaximizeActiveColumn's
+        // reason: a Proportion that already renders to the share must not be
+        // rewritten as a Fixed of the identical extent, which would move
+        // nothing on screen while reporting success and destroying the
+        // proportional anchor a later work-area change would honour.
+        if (columnExtentPx(col, params) == extents.at(k)) {
+            continue;
+        }
+        col.width = target;
+        if (m_preMaximizeColumnIdx == visible.at(k)) {
+            m_preMaximizeColumnIdx = -1;
+        }
+        changed = true;
+    }
+    // The anchor is ACTIVE-relative (viewOffset = columnStripPos(active) -
+    // anchor), so rewriting a column LEAD of the active one would slide the
+    // whole group under the active column's pinned screen position and clip
+    // the first column at the lead edge. The shares were measured against
+    // the whole viewport, so the group's lead column now belongs AT the lead
+    // edge: re-derive the anchor to put it there. A lead-edge straddler is
+    // pushed fully out of view by that, which is the only place a column
+    // the group did not absorb can go.
+    //
+    // And DETACH the view, the way a pan does: edge to edge is this verb's
+    // promise, and under Always the next layout pass would otherwise
+    // re-center the active column, clip the group's last column, and hand a
+    // second press a different group to split. A detached view is left
+    // alone until the next focus change, so the second press finds the
+    // group exactly as the first left it and refuses. Deliberately NOT a
+    // centering verb (those re-attach): it chose a view position the policy
+    // did not.
+    if (changed) {
+        m_viewAnchor = columnStripPos(m_activeColumnIdx, params) - columnStripPos(visible.first(), params);
+        m_viewDetached = true;
+    }
+    return changed;
+}
+
+bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
+{
+    Column* col = activeColumnMutable();
+    if (!col) {
+        return false;
+    }
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false; // degenerate area, same bail as the sibling verbs
+    }
+    // The smallest preset is the narrowest width the user has NAMED, which
+    // beats the engine floor when a list exists: a Preset intent follows the
+    // vocabulary if the list is later edited, where a Proportion at the floor
+    // would be stranded at a value nothing else uses. The list is deduplicated
+    // at the boundary but NOT sorted: every producer (the settings schema's
+    // canonicalProportionList, refreshConfigFromSettings' parsePresets, the
+    // template override list) preserves the order the user typed, so the
+    // minimum has to be searched for rather than read off the front.
+    const QList<qreal>& presets = params.presetColumnWidths;
+    const ColumnWidth target = presets.isEmpty()
+        ? ColumnWidth::makeProportion(MinColumnWidthFraction)
+        : ColumnWidth::makePreset(*std::min_element(presets.cbegin(), presets.cend()));
+    // Resolved-pixel compare, toggleMaximizeActiveColumn's reason.
+    if (resolveColumnWidthPx(col->width, params) == resolveColumnWidthPx(target, params)) {
+        return false;
+    }
+    col->width = target;
+    if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
+        m_preMaximizeColumnIdx = -1;
+    }
+    return true;
+}
+
+bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth, ColumnDisplay defaultDisplay,
+                                  const ScrollLayoutParams& params)
+{
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false; // degenerate area: writes persisted intent, so bail
+    }
+    bool changed = false;
+    for (Column& col : m_columns) {
+        // Intent compare, not resolved pixels: this verb's promise is "back
+        // to what the layout says", and a Fixed that happens to render to the
+        // default's extent is still not the default intent — it would not
+        // follow a later work-area change the way the default would. No
+        // default width at all means the client's own size IS the default,
+        // and the width the column opened at is the closest thing to it.
+        if (defaultWidth && !(col.width == *defaultWidth)) {
+            col.width = *defaultWidth;
+            changed = true;
+        }
+        if (col.display != defaultDisplay) {
+            col.display = defaultDisplay;
+            changed = true;
+        }
+        for (Tile& tile : col.tiles) {
+            const WindowHeight even = WindowHeight::makeAuto();
+            if (!(tile.height == even)) {
+                tile.height = even;
+                changed = true;
+            }
+        }
+    }
+    // Nothing is maximized once every column is at the default, so the slot
+    // would otherwise hand a stale intent to the next un-maximize.
+    m_preMaximizeColumnIdx = -1;
+    return changed;
 }
 
 bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)

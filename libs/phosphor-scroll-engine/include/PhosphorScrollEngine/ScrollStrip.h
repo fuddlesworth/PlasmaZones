@@ -33,6 +33,26 @@ namespace PhosphorScrollEngine {
 /// strip never make the focused window drift — `viewOffset` is derived, never
 /// stored.
 ///
+/// ## View detachment
+///
+/// Because the anchor is active-relative, the centering policy owns the view:
+/// `updateViewForFocus` re-derives it at the top of every applyLayout, so a
+/// view the POLICY did not choose cannot survive a layout pass. That is right
+/// for every mutator except one. `scrollViewBy` moves the view because the user
+/// pointed somewhere, not because focus, structure or policy changed, and a pan
+/// the next layout pass undoes is not a pan at all.
+///
+/// So a successful `scrollViewBy` DETACHES the view, and `updateViewForFocus`
+/// then leaves the anchor entirely alone — not even a re-clamp, for the reason
+/// that function documents. `equalizeVisibleColumnWidths` detaches too: it
+/// positions the group edge to edge on purpose, and a policy that re-centered
+/// the active column afterwards would hand a second press a different group.
+/// The next focus change, or either centering verb,
+/// re-attaches it and the policy takes the view back. Detachment travels with the anchor through the
+/// mode-round-trip stash and the persisted blob for the same reason the anchor
+/// does: restoring the position while dropping the detachment hands the view
+/// straight back to the policy that would move it.
+///
 /// ## Naming exemption
 ///
 /// The public verbs below keep their physical width/height spellings
@@ -245,6 +265,41 @@ public:
     /// Grow the active column into the on-screen MAIN-axis space not covered by
     /// any column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
+    /// Give every FULLY visible column an equal share of the work area's MAIN
+    /// extent (Karousel equalize; niri has no equivalent). Fully visible on
+    /// the same terms as centerVisibleColumns: a column clipped by either
+    /// viewport edge is what the split must not be dragged by. Written as
+    /// Fixed pixels like adjustActiveColumnWidth, and the remainder of the
+    /// division goes to the LAST column so the group still tiles the
+    /// viewport edge to edge. A column whose minimum size (columnMinExtentPx)
+    /// exceeds its share keeps that minimum and the rest share what is left.
+    /// The group's lead column lands AT the viewport's lead edge: the anchor
+    /// is re-derived after the rewrite so a column ahead of the active one
+    /// growing does not slide the group under the active column, and a
+    /// lead-edge straddler is pushed fully out of view. The view is then
+    /// DETACHED like a pan's (see the class doc), so the centering policy
+    /// does not undo the edge-to-edge position on the next pass and a second
+    /// press finds nothing to change. Refuses when fewer than two columns
+    /// are fully visible, when the active column is not one of them, when
+    /// the minimums alone fill the viewport, or when every extent is already
+    /// what it would become.
+    bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
+    /// The active column at its narrowest: the smallest preset, or
+    /// MinColumnWidthFraction when the preset list is empty (Karousel
+    /// minimize-width). Refuses when already there.
+    bool minimizeActiveColumnWidth(const ScrollLayoutParams& params);
+    /// Every column back to @p defaultWidth and @p defaultDisplay, and every
+    /// tile back to the even auto-split: the scrolling half of the Retile
+    /// shortcut, whose other modes re-apply their layout the same way. Both
+    /// defaults are arguments because the engine resolves them per screen:
+    /// the display is not carried in params at all, and the width is
+    /// std::nullopt when the context's default is "the client decides" (the
+    /// engine's ClientDecides kind with no rule pinning a width), in which
+    /// case every column keeps the width it has and only display and
+    /// heights are reset. Returns true when any intent changed. Clears the
+    /// single pre-maximize slot, since no column is maximized afterwards.
+    bool resetToDefaults(const std::optional<ColumnWidth>& defaultWidth, ColumnDisplay defaultDisplay,
+                         const ScrollLayoutParams& params);
     /// Set the active tile's height intent, verbatim. The height twin of
     /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
     /// the restore paths' setWindowHeightIntent, and the absolute
@@ -330,20 +385,39 @@ public:
     {
         return m_viewAnchor;
     }
+    /// Whether an explicit pan owns the view instead of the centering policy
+    /// (see the class doc). Exposed for the stash and the persisted blob,
+    /// which must carry it beside the anchor.
+    bool viewDetached() const
+    {
+        return m_viewDetached;
+    }
+    /// The other half of restoreViewAnchor: re-assert a captured detachment.
+    /// Only meaningful alongside the anchor it was captured with, so a caller
+    /// that drops that anchor (the stash's axis-mismatch arm) must drop this
+    /// too, or the view stays pinned wherever the focus restore left it.
+    void setViewDetached(bool detached)
+    {
+        m_viewDetached = detached;
+    }
     /// Restore a previously captured view anchor, RAW: a centered anchor
     /// implies an out-of-range derived viewOffset by design (the same shape
     /// centerActiveColumn stores), so no clamp is applied here — later
     /// structural inserts re-clamp when the strip cannot honour the view.
     /// The stash-restore path re-applies the anchor AFTER re-focusing the
     /// stashed active window, overriding the focus change's own
-    /// centering-policy reanchor with the user's actual view.
+    /// centering-policy reanchor with the user's actual view. It does NOT
+    /// touch the detachment latch: that focus call has just cleared it, and
+    /// re-asserting it is the caller's job through setViewDetached, so both
+    /// halves of a captured view are restored by the same code.
     /// @p params is currently UNUSED (the raw restore needs no layout maths)
     /// but stays in the exported signature: every sibling anchor mutator
     /// takes it, and dropping it is an ABI break for no gain.
     void restoreViewAnchor(int anchor, const ScrollLayoutParams& params);
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no
-    /// scroll" baseline.
+    /// scroll" baseline. A DETACHED view is left entirely alone, not even
+    /// re-clamped (see the class doc and the body's comment for why).
     void updateViewForFocus(const ScrollLayoutParams& params);
     /// Center the active column in the view (niri center-column).
     /// Returns true when the anchor actually moved.
@@ -358,9 +432,12 @@ public:
     /// on a vertical one. The anchor is stored relative to the active column,
     /// so a forward view move shrinks it by the same amount. Returns true when
     /// the anchor actually moved — a caller sitting at either end gets false
-    /// and can stop. This is the only mutator that moves the view without a
-    /// focus, structure or policy change behind it; the drag-insert edge
-    /// auto-scroll is its one caller.
+    /// and can stop. A move DETACHES the view from the centering policy (see
+    /// the class doc); a refusal leaves the latch as it found it. This is the
+    /// only mutator that moves the view without a focus, structure or policy
+    /// change behind it; the drag-insert edge auto-scroll and the engine's
+    /// view-scroll verb (behind the wheel and the keyboard page pair) are its
+    /// callers.
     bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
@@ -405,6 +482,12 @@ private:
     /// Pixel MAIN extent of column @p c under @p params including its tiles'
     /// min-MAIN clamp (a fully-minimized column resolves to 0).
     int columnExtentPx(const Column& c, const ScrollLayoutParams& params) const;
+    /// The MAIN-extent floor columnExtentPx raises column @p c to under
+    /// @p params: its visible tiles' min-MAIN plus the tab-indicator
+    /// reservation when the indicator eats the main axis. 0 when minimum
+    /// sizes are not respected. Shared with equalizeVisibleColumnWidths so a
+    /// share the floor would overrule is never written as if it could render.
+    int columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const;
     /// Strip-coordinate LEADING edge of @p columnIndex under @p params.
     int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;
     /// Total strip MAIN extent under @p params.
@@ -422,11 +505,26 @@ private:
     /// deliberately stricter than removeWindowInternal's leading-edge-only
     /// clamp; see that function's comment for why a removal does not reclaim
     /// trailing dead space) unless the centering policy says the focused
-    /// column re-centers, in which case RECENTER wins.
-    int keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const;
+    /// column re-centers, in which case RECENTER wins and the view is
+    /// re-attached (the policy visibly took it, so a detach latch left set
+    /// would only stop the next pass from re-deriving what it just chose).
+    int keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params);
     /// Apply the center-focused-column policy after the active column moved
     /// from @p prevIdx at @p oldViewOffset (strip coords) to the current active.
+    /// Clears the detach latch: this is the chokepoint the focus verbs and
+    /// the structural inserts pass through, so "a focus change re-attaches"
+    /// is enforced here. A writer of m_activeColumnIdx that does NOT route
+    /// through it must clear the latch itself (noteActiveColumnChanged).
     void reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const ScrollLayoutParams& params);
+    /// The re-attach half of a focus change for the writers that bypass
+    /// reanchorAfterFocusChange: the strip emptying, the first insert into an
+    /// empty strip, and a removal taking the active column with it. The
+    /// class doc promises a focus change ends a pan, and these are focus
+    /// changes.
+    void noteActiveColumnChanged()
+    {
+        m_viewDetached = false;
+    }
     // scrollstrip_sizing.cpp
     /// The tile's current height as a fraction of the column's CROSS extent, or -1
     /// when it has no determinate fraction (Auto weight). Preset anchors
@@ -441,6 +539,9 @@ private:
     int m_activeColumnIdx = -1;
     /// Active column's leading edge position within the viewport (see class doc).
     int m_viewAnchor = 0;
+    /// Whether an explicit pan owns the view instead of the centering policy
+    /// (see the class doc's View detachment section).
+    bool m_viewDetached = false;
     /// Pre-maximize width intent for the maximize toggle (single slot:
     /// maximize is a focused-column toggle).
     ColumnWidth m_preMaximizeWidth;
