@@ -272,6 +272,30 @@ QStringList allEventClassTokens()
     return tokens;
 }
 
+bool eventPathResolvesPerWindow(const QString& path)
+{
+    // An explicit list rather than a prefix rule, because the boundary does not
+    // follow the taxonomy's shape: `scrolling.tabSwitch` is per-window while its
+    // sibling `scrolling.view` is not, and the `window` category nodes are not
+    // per-window either since the compositor only ever resolves leaves.
+    //
+    // Each entry names the call site that supplies the window, so a reader can
+    // check the claim rather than trust it:
+    //   window.appearance.*  — tryBeginShaderForEvent from window_lifecycle
+    //                          (open/close/focus) and daemon_apply (minimize)
+    //   window.movement.maximize / .move
+    //                        — tryBeginShaderForEvent from window_connections
+    //   window.movement.snapIn / .snapOut / .layoutSwitch
+    //                        — applyWindowGeometry's resolve in drag_snap
+    //   scrolling.tabSwitch  — tryBeginShaderForEvent from the tiling handler's
+    //                          tab swap, which passes the arriving window
+    static const QStringList kPerWindowPaths{
+        WindowOpen, WindowClose,  WindowMinimize, WindowFocus,        WindowMaximize,
+        WindowMove, WindowSnapIn, WindowSnapOut,  WindowLayoutSwitch, ScrollingTabSwitch,
+    };
+    return kPerWindowPaths.contains(path);
+}
+
 QString eventClassForPath(const QString& path)
 {
     // The dotted sub-tree prefixes, built once. This runs per row per repaint

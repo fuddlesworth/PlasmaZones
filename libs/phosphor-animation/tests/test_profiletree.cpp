@@ -161,6 +161,49 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::ShellAppletPopupHide));
     }
 
+    /// The per-window set is EXACTLY these ten, and the compositor's own
+    /// routing reads the same predicate.
+    ///
+    /// Pinned as an exact set rather than as spot checks on purpose. The list
+    /// decides two things at once — whether the effect resolves an event
+    /// windowless, and whether the rule editor offers it — so a taxonomy
+    /// addition that silently defaulted either way would either hand a new
+    /// event a rule tier it cannot use or hide one that works. Failing here
+    /// forces the author to make the call.
+    void testEventPathResolvesPerWindowIsExactlyTheTenLiveLegs()
+    {
+        const QStringList expected{
+            PP::WindowOpen, PP::WindowClose,  PP::WindowMinimize, PP::WindowFocus,        PP::WindowMaximize,
+            PP::WindowMove, PP::WindowSnapIn, PP::WindowSnapOut,  PP::WindowLayoutSwitch, PP::ScrollingTabSwitch,
+        };
+
+        QStringList actual;
+        for (const QString& path : PP::allBuiltInPaths()) {
+            if (PP::eventPathResolvesPerWindow(path))
+                actual.append(path);
+        }
+        actual.sort();
+
+        QStringList wanted = expected;
+        wanted.sort();
+        QCOMPARE(actual, wanted);
+
+        // The near misses that make the boundary a real decision rather than a
+        // family rule: tabSwitch is per-window while its own sibling is not,
+        // and the category nodes above the live leaves are not either, because
+        // the compositor only ever resolves leaves.
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::ScrollingView));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::Scrolling));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::Window));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::WindowAppearance));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::WindowMovement));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::Global));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::DesktopSwitch));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::ShellAppletPopupShow));
+        QVERIFY(!PP::eventPathResolvesPerWindow(QString()));
+        QVERIFY(!PP::eventPathResolvesPerWindow(QStringLiteral("window.appearance.openx")));
+    }
+
     // Pin the post-rename taxonomy: every new path constant from the
     // zone.* → window.* / editor.* / widget.* split must appear in
     // allBuiltInPaths(), and no legacy zone.* string may slip back in.

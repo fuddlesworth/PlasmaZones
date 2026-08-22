@@ -150,6 +150,13 @@ public:
     /// `"overlays"`, and `cursor` into `"widget"`. Empty for an empty path.
     Q_INVOKABLE QString sectionForPath(const QString& path) const;
 
+    /// Whether a per-window Rule can reach @p path. Mirrors the
+    /// `acceptsWindowRules` flag on each `eventSections()` entry, for the
+    /// callers that hold a path rather than a model row — notably a rule that
+    /// ALREADY stores a windowless event, which the picker no longer lists and
+    /// which therefore has no row to read the flag from.
+    Q_INVOKABLE bool eventPathAcceptsWindowRules(const QString& path) const;
+
     /// Translated label for @p path's last segment (e.g. `"editor.snapIn"`
     /// → `"Snap In"`), through @ref segmentLabel. Empty for an empty path.
     Q_INVOKABLE QString eventLabel(const QString& path) const;

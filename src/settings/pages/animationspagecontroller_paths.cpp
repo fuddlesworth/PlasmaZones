@@ -18,6 +18,11 @@
 
 namespace PlasmaZones {
 
+bool AnimationsPageController::eventPathAcceptsWindowRules(const QString& path) const
+{
+    return PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(path);
+}
+
 QString AnimationsPageController::sectionForPath(const QString& path) const
 {
     if (path.isEmpty())

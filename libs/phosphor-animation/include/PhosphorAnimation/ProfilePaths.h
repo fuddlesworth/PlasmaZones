@@ -365,6 +365,33 @@ PHOSPHORANIMATION_EXPORT QStringList allEventClassTokens();
 /// root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
+/// True when @p path is resolved AGAINST A PARTICULAR WINDOW, so per-window
+/// state can reach it.
+///
+/// The property this answers is narrow and mechanical: does the compositor
+/// reach this event holding the window it is for. Ten paths do — the four
+/// `window.appearance` leaves, the five `window.movement` leaves, and
+/// `scrolling.tabSwitch`. Every other path in the taxonomy is resolved
+/// windowless, either because its subject is not a window at all (a desktop
+/// switch, the scrolling strip itself, an OSD, a panel, the editor's own
+/// widgets) or because it is a surface no application owns (the `shell`
+/// subtree, deliberately, so a rule cannot retarget a pack engaged on the
+/// Shell page).
+///
+/// WHY IT MATTERS TO CALLERS: a Rule's animation actions are stored per event
+/// path and resolved through the rule evaluator, which needs a window to match
+/// against. On a windowless path the resolvers short-circuit before the
+/// evaluator runs, so a rule naming one is stored, shown, and never consulted.
+/// The rule editor uses this to avoid offering such a path in the first place.
+///
+/// KEEPING IT HONEST: the effect consults this to decide whether to resolve an
+/// event windowless (see tryBeginShaderForEvent), so the list below is not a
+/// description of the routing that could drift from it — it IS the routing.
+/// Add a windowless leg without adding it here and the effect will resolve it
+/// with a window, which its own gate then rejects. The exact set is pinned by
+/// test_profiletree so a taxonomy addition has to make the call explicitly.
+PHOSPHORANIMATION_EXPORT bool eventPathResolvesPerWindow(const QString& path);
+
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 

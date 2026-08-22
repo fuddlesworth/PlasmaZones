@@ -726,6 +726,23 @@ QtObject {
                         if (entry.isCategory)
                             continue;
 
+                        // Skip events no rule can reach. The compositor resolves
+                        // these windowless (a desktop switch, the scrolling
+                        // strip, an OSD, a panel, the editor's own widgets, the
+                        // whole shell subtree), and a rule's animation action is
+                        // matched against a window, so one pinned here would
+                        // save cleanly, show in the list, and never fire.
+                        //
+                        // A path ALREADY stored on this action stays listed even
+                        // when it is one of these. Dropping it would render the
+                        // stored value as "(missing: desktop.switch)", which is
+                        // a lie — the event exists and is spelled correctly, it
+                        // just cannot be driven per window. Keeping it means the
+                        // row still reads its real name, and the chip beside it
+                        // explains why nothing happens.
+                        if (!entry.acceptsWindowRules && entry.path !== (row.action[_param.key] || ""))
+                            continue;
+
                         out.push({
                             "id": entry.path,
                             "name": entry.label,

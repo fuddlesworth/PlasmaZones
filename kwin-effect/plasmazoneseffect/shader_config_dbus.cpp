@@ -352,7 +352,17 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // another TU, and this flag gates the rule tier. Inferring it means the day
     // animationEventPathFor learns any other remap, the rule tier silently re-opens
     // on these surfaces while the comment above still claims it is closed.
-    const bool shellSurfaceLeg = !PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath).isEmpty();
+    // Ask the taxonomy whether this event is resolved against a particular
+    // window. Every path that is not is resolved WINDOWLESS below, which is what
+    // keeps the rule tier off it.
+    //
+    // Consulting the predicate rather than testing for shell-ness is what makes
+    // it load-bearing: eventPathResolvesPerWindow is the same list the rule
+    // editor filters its event picker with, so the picker cannot come to offer a
+    // path this function then refuses to consult rules for. Today the two sets
+    // coincide exactly (the shell legs are the only windowless paths that reach
+    // this function at all), so this is behaviour-identical.
+    const bool windowlessLeg = !PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(profilePath);
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
     // app / class) AND lets a Rule carrying any appearance/animation
@@ -369,7 +379,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // probes, the resolver pass below reuses it instead of walking the ~30
     // KWin accessors a second time per animated event.
     std::optional<PhosphorRules::WindowQuery> sharedQuery;
-    if (!shellSurfaceLeg && !shouldAnimateWindow(window, &sharedQuery)) {
+    if (!windowlessLeg && !shouldAnimateWindow(window, &sharedQuery)) {
         return;
     }
     // Cascade: per-window animation Rule → ShaderProfileTree
@@ -399,9 +409,9 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // is still used everywhere else below — this pair is the rule tier's input,
     // not the transition's identity.
     const PhosphorRules::WindowQuery query =
-        shellSurfaceLeg ? PhosphorRules::WindowQuery{} : (sharedQuery ? *sharedQuery : ruleQuery(window));
+        windowlessLeg ? PhosphorRules::WindowQuery{} : (sharedQuery ? *sharedQuery : ruleQuery(window));
     const QString windowId = getWindowId(window);
-    const QString ruleWindowId = shellSurfaceLeg ? QString() : windowId;
+    const QString ruleWindowId = windowlessLeg ? QString() : windowId;
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event motion profile (curve + duration) in ONE walk, via the shared
     // SSOT: global animator profile → category "All" → per-node motion-tree
@@ -475,7 +485,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // ...and not for a shell leg even then: the rule tier was skipped for it
         // above (empty query, empty window id), so no rule of any kind can be the
         // reason this resolve came back empty.
-        const bool shaderAssigningRules = !shellSurfaceLeg && m_shaderManager.hasAnimationShaderRules();
+        const bool shaderAssigningRules = !windowlessLeg && m_shaderManager.hasAnimationShaderRules();
         bool cascadeCovered = false;
         // The by-value QStringList is built ONCE and reused by both the loop
         // and the warn diagnostic below — the pre-change code paid it twice

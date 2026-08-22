@@ -442,6 +442,14 @@ ColumnLayout {
             animationsController: row.appSettings ? row.appSettings.animationsController : null
         }
 
+        // "This event is not driven per window" chip — for a rule that still
+        // names an event the picker no longer offers. Same shared-component
+        // shape as the conflict chip above.
+        InertAnimationEventChip {
+            action: row.action
+            animationsController: row.appSettings ? row.appSettings.animationsController : null
+        }
+
         // One editor per parameter — the shape comes from the param `kind`,
         // never an action-type ladder. The param-editor Components live on the
         // `paramEditors` handle (ActionParamEditors.qml, instantiated above) so

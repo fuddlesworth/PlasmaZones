@@ -1830,8 +1830,8 @@
         <translation>Отмена изменений уже выполняется.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="866"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="876"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="874"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="884"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Невозможно изменить предустановки, пока выполняется отмена изменений.</translation>
     </message>
@@ -17088,24 +17088,24 @@
         <translation>Выберите рабочий стол…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="740"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="757"/>
         <source>Choose an event…</source>
         <translation>Выберите событие…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="852"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="869"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation>Добавить пакет…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="970"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="987"/>
         <source>Choose a shader…</source>
         <translation>Выберите шейдер…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="997"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1014"/>
         <source>Choose an overlay shader…</source>
         <translation>Выберите шейдер наложения…</translation>
     </message>
@@ -17136,12 +17136,12 @@
         <translation>Это действие выполняется во время разрешения контекста, но совпадение правила ссылается на свойства окна, поэтому действие никогда не сработает в текущем виде.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="518"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="526"/>
         <source>Remove action</source>
         <translation>Удалить действие</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="520"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="528"/>
         <source>Remove this action</source>
         <translation>Удалить это действие</translation>
     </message>
@@ -22162,397 +22162,397 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="47"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="52"/>
         <source>Accordion Collapse</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="50"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="55"/>
         <source>Accordion Expand</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="53"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="58"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Внешний вид</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="56"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="59"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="64"/>
         <source>Badge Hide</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="62"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Badge Pulse</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="65"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Badge Show</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="68"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
         <source>Border</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Рамка</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="71"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="76"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="74"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="79"/>
         <source>Click</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Щелчок</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="77"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="82"/>
         <source>Close</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Закрыть</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="80"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cursor</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="83"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
         <source>Desktop</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Рабочий стол</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="86"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="91"/>
         <source>Dim</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Затемнение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="89"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="94"/>
         <source>Editor</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Редактор</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="92"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="97"/>
         <source>Fade</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="95"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="100"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Появление</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="98"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="103"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Исчезание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="101"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fast</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="104"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Focus</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Фокус</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="107"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
         <source>Geometry</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Геометрия</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="110"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="115"/>
         <source>Global</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Глобальные</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="113"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Hide</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="116"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Наведение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="119"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Layout Picker</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Выбор раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="122"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
         <source>Layout Switch</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="125"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
         <source>Maximize</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="128"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
         <source>Minimize</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="131"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="136"/>
         <source>Move</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="134"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="139"/>
         <source>Movement</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="137"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="142"/>
         <source>Open</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="140"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="145"/>
         <source>OSD</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="143"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="148"/>
         <source>Overlays</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Наложения</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="146"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
         <source>Panel</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="149"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="154"/>
         <source>Peek</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="152"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="157"/>
         <source>Pop</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="155"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="160"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Всплывающее окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="158"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Press</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Нажатие</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="161"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
         <source>Progress</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Прогресс</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="164"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="169"/>
         <source>Pulse</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="167"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="172"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Переупорядочивание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="170"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Scrolling</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Прокрутка</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="173"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
         <source>Shader</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="176"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="181"/>
         <source>Shell</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="179"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="184"/>
         <source>Show</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="182"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Вдвигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="185"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Выдвигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="188"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
         <source>Slow</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="191"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="196"/>
         <source>Snap Assist</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Помощник прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="194"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
         <source>Snap In</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="197"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
         <source>Snap Out</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="200"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
         <source>Snap Resize</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="203"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="208"/>
         <source>Strip</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="206"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="211"/>
         <source>Switch</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="209"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="214"/>
         <source>Tab</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="212"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="217"/>
         <source>Tab Switch</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="215"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="220"/>
         <source>Tint</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Оттенок</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="218"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="223"/>
         <source>Toggle Off</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Отключение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="221"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="226"/>
         <source>Toggle On</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Включение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="224"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="229"/>
         <source>View</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="227"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="232"/>
         <source>Widget</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="230"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
         <source>Window</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="233"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="238"/>
         <source>Window Morph</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="236"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="241"/>
         <source>Zone Highlight</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Подсветка зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="239"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="244"/>
         <source>Zone Overlay Flash</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="242"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="247"/>
         <source>Zone Selector</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Выбор зоны</translation>
@@ -22622,6 +22622,16 @@
         <source>None</source>
         <comment>no tiling algorithm is set</comment>
         <translation type="unfinished">Нет</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="68"/>
+        <source>This event is not driven per window, so the rule cannot change it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="71"/>
+        <source>Rules match windows, and this event does not belong to a window, so this action never runs. Set the animation for this event on the Animations pages instead, where it applies everywhere.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>
