@@ -96,6 +96,11 @@ QVariantList candidatesToVariantList(const PhosphorProtocol::SnapAssistCandidate
 void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                                     const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
+    static const bool traceEnabled = PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled();
+    QElapsedTimer showTimer;
+    if (traceEnabled) {
+        showTimer.start();
+    }
     // Bail paths emit dismissed only when snap-assist is NOT currently
     // visible: the emit exists so a failed show releases an idle Escape
     // grab, but when snap-assist is live on ANOTHER screen an unconditional
@@ -348,6 +353,13 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     qCInfo(lcOverlay) << "showSnapAssist: screen=" << resolvedId << "zones=" << emptyZones.size()
                       << "candidates=" << candidates.size();
+    if (traceEnabled) {
+        // Main-thread time the show handler itself holds. Thumbnail posts
+        // arriving while it runs queue behind it, so this is the floor of
+        // their D-Bus round-trip during a show.
+        qCInfo(lcSnapAssistTrace).nospace() << "show zones=" << emptyZones.size() << " candidates=" << candidates.size()
+                                            << " handler=" << showTimer.nsecsElapsed() / 1000 << "us";
+    }
 
     // snapAssistShown signal is wired in shortcuts_wiring.cpp to
     // ensureCancelOverlayShortcutRegistered() - the shell's wl_surface is
