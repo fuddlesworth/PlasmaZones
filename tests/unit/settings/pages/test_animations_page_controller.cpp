@@ -965,6 +965,23 @@ private Q_SLOTS:
         // popup/osd parents below are, not merely as an ancestor of a consumed
         // leaf.
         expect(QStringLiteral("desktop"), true);
+        // Shell family — the applet-popup legs the KWin effect installs from
+        // windowAdded / windowClosed once animationEventPathFor has routed a
+        // plasma-shell surface off the window paths, plus the two cascade
+        // ancestors the Shell page's "All Shell Surfaces" row binds. The root
+        // being supported is what makes that row able to set anything, and the
+        // leaves being supported is what stops the prune from dropping what it
+        // writes.
+        expect(QStringLiteral("shell.appletPopup.show"), true);
+        expect(QStringLiteral("shell.appletPopup.hide"), true);
+        expect(QStringLiteral("shell.appletPopup"), true);
+        expect(QStringLiteral("shell"), true);
+        // No panel legs: a panel is mapped for the session and hides by
+        // sliding, so no window-lifecycle hook ever installs one. Assignments
+        // there would be runtime-dead, which is what this half of the list is
+        // for.
+        expect(QStringLiteral("shell.panel"), false);
+        expect(QStringLiteral("shell.panel.show"), false);
 
         // Ancestors of consumed leaves — supported because the
         // resolver walks them on the way to the leaf, so a

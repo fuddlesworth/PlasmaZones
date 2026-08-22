@@ -598,6 +598,95 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("simple-page cards outside the animations-simple scope: ")
                             + outOfScope.join(QLatin1String(", "))));
     }
+
+    /// Every event-path literal a surface page spells must (a) name a real
+    /// built-in path and (b) fall inside that page's own scope.
+    ///
+    /// Both halves fail silently without this. A path that is not in
+    /// allBuiltInPaths() is refused by AnimationsPageController's writers, so the
+    /// card renders normally and every control on it no-ops — the user toggles the
+    /// override, picks a shader, drags the duration, and the card snaps back to
+    /// inherited each refresh because nothing was ever written. A path that IS
+    /// built-in but sits outside the page's scope writes fine and is then
+    /// unreachable by that page's Reset and invisible to its dirty walk.
+    ///
+    /// An explicit table rather than a directory glob, deliberately: page ids are
+    /// not derivable from filenames (AnimationsWindowMotionPage →
+    /// "animations-window-motion", AnimationsSidePanelsPage → "animations-side-panels"),
+    /// and the library pages resolve to WholeTree/ConfigOnly scopes where the
+    /// subtree assertion would be meaningless. Add a row when a surface page is
+    /// added; the floor below catches a regex that stopped matching.
+    void surfacePageCardsNameRealPathsInTheirOwnScope()
+    {
+        struct PageUnderTest
+        {
+            const char* qmlFile;
+            const char* pageId;
+            // The page's real card count, so a regex that half-matched is caught
+            // rather than passing over a truncated list.
+            int minCards;
+            // Prefix of the one path family a page is KNOWN to display without
+            // owning in its scope, or nullptr when the scope owns every card.
+            // Scoped to the family rather than the whole page, so the page's
+            // other cards stay covered.
+            const char* scopeExemptPrefix;
+        };
+        static const PageUnderTest pages[] = {
+            {"AnimationsShellPage.qml", "animations-shell", 3, nullptr},
+            {"AnimationsWindowsPage.qml", "animations-windows", 5, nullptr},
+            {"AnimationsOsdsPage.qml", "animations-osds", 4, nullptr},
+            {"AnimationsDesktopsPage.qml", "animations-desktops", 3, nullptr},
+            {"AnimationsSidePanelsPage.qml", "animations-side-panels", 5, nullptr},
+            // Widgets hosts two `cursor.*` cards as well as its own `widget.*`
+            // ones, and NO page scope names `cursor` — so those two overrides can
+            // be set here but are reached by no page's Reset and seen by no page's
+            // dirty walk, only by the whole-tree library pages. That is a real gap
+            // and it predates this table; it is recorded here rather than papered
+            // over. Exempting only the `cursor.` prefix keeps the page's twenty
+            // `widget.*` cards under the scope check, and the exemption goes away
+            // the day `cursor` gains an owner.
+            {"AnimationsWidgetsPage.qml", "animations-widgets", 22, "cursor."},
+        };
+
+        static const QRegularExpression re(QStringLiteral("\"eventPath\"\\s*:\\s*\"([^\"]+)\""));
+        const QStringList builtIn = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
+
+        QStringList problems;
+        for (const PageUnderTest& page : pages) {
+            const QString qmlPath =
+                QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/") + QLatin1String(page.qmlFile);
+            const QString src = readFile(qmlPath);
+            QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+            QStringList cardPaths;
+            auto it = re.globalMatch(src);
+            while (it.hasNext())
+                cardPaths.append(it.next().captured(1));
+
+            // Non-vacuity floor per page: a regex that stopped matching would
+            // otherwise turn every row below into a pass over an empty list.
+            QVERIFY2(cardPaths.size() >= page.minCards,
+                     qPrintable(QStringLiteral("parsed only %1 eventPath literals from %2")
+                                    .arg(cardPaths.size())
+                                    .arg(QLatin1String(page.qmlFile))));
+
+            const AnimationPageScope scope = animationPageScope(QLatin1String(page.pageId));
+            QCOMPARE(scope.kind, AnimationPageScope::EventSubtree);
+            for (const QString& path : cardPaths) {
+                if (!builtIn.contains(path)) {
+                    problems.append(QLatin1String(page.qmlFile) + QLatin1String(": ") + path
+                                    + QLatin1String(" is not a built-in path"));
+                }
+                const bool exempt = page.scopeExemptPrefix && path.startsWith(QLatin1String(page.scopeExemptPrefix));
+                if (!exempt && !animationPathInScope(path, scope)) {
+                    problems.append(QLatin1String(page.qmlFile) + QLatin1String(": ") + path
+                                    + QLatin1String(" is outside the ") + QLatin1String(page.pageId)
+                                    + QLatin1String(" scope"));
+                }
+            }
+        }
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("; "))));
+    }
 };
 
 QTEST_MAIN(TestAnimationsQmlContracts)

@@ -80,6 +80,19 @@ const QString ScrollingView = QStringLiteral("scrolling.view");
 // from a DIFFERENT window.
 const QString ScrollingTabSwitch = QStringLiteral("scrolling.tabSwitch");
 
+// shell.* — the desktop shell's own surfaces, currently the Plasma applet
+// popups (launcher, tray flyouts, a widget's expanded view). Their legs are
+// appearance legs like a window's, and the kwin-effect installs them from the
+// same windowAdded / windowClosed hooks, but they hang off their own root so
+// nothing a user chose for their WINDOWS reaches a surface plasmashell owns.
+// The shader tree makes that structural (shaderPathIsolationRoot): the whole
+// subtree resolves inside itself, so a shell surface animates only once a pack
+// is engaged on one of these nodes.
+const QString Shell = QStringLiteral("shell");
+const QString ShellAppletPopup = QStringLiteral("shell.appletPopup");
+const QString ShellAppletPopupShow = QStringLiteral("shell.appletPopup.show");
+const QString ShellAppletPopupHide = QStringLiteral("shell.appletPopup.hide");
+
 // osd.*
 const QString Osd = QStringLiteral("osd");
 const QString OsdShow = QStringLiteral("osd.show");
@@ -176,6 +189,10 @@ QStringList allBuiltInPaths()
         Scrolling,
         ScrollingView,
         ScrollingTabSwitch,
+        Shell,
+        ShellAppletPopup,
+        ShellAppletPopupShow,
+        ShellAppletPopupHide,
         Osd,
         OsdShow,
         OsdPop,
@@ -266,6 +283,7 @@ QString eventClassForPath(const QString& path)
     static const QString popupPrefix = Popup + QLatin1Char('.');
     static const QString desktopPrefix = Desktop + QLatin1Char('.');
     static const QString scrollingPrefix = Scrolling + QLatin1Char('.');
+    static const QString shellPrefix = Shell + QLatin1Char('.');
 
     // The interactive-drag leaf is its own opt-in class. A drag installs a
     // HELD transition: there is no old→new crossfade to play (iFromRect stays
@@ -294,6 +312,16 @@ QString eventClassForPath(const QString& path)
         return EventClassAppearance;
     }
     if (path == Osd || path == Popup || path.startsWith(osdPrefix) || path.startsWith(popupPrefix)) {
+        return EventClassAppearance;
+    }
+    // The shell family is appearance too, and deliberately NOT a class of its
+    // own: a shell surface is a single surface materialising or dissolving,
+    // exactly what an appearance pack draws, and it binds the same single
+    // sampler. What sets these paths apart is WHOSE surface it is, which the
+    // shader tree answers by isolating the subtree rather than by narrowing
+    // the pack vocabulary. A new class here would only make every existing
+    // appearance pack unselectable for no gain.
+    if (path == Shell || path.startsWith(shellPrefix)) {
         return EventClassAppearance;
     }
     // Desktop family — the full-screen two-texture switch contract. The
@@ -378,6 +406,12 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // that installs itself on a fresh config is the kind of thing a user
     // should choose rather than discover. Every tab pack (Tab Fade first) is
     // one pick away on the same page as the strip packs.
+    //
+    // The `shell.*` legs carry no default either, and theirs is not a
+    // judgement call: the shell subtree is isolated in the shader tree
+    // precisely so a surface plasmashell owns animates nothing until the user
+    // says otherwise, and a built-in default here would reach around that
+    // isolation and put a transition on every tray flyout of a fresh install.
     // Every other event defaults to no shader.
     return QString();
 }

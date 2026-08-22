@@ -69,7 +69,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // the chrome now consumes registry topology directly via Sidebar.qml.)
     static const QSet<QString> kAnimationsTransitionsChildren{
         QStringLiteral("animations-windows"), QStringLiteral("animations-osds"), QStringLiteral("animations-overlays"),
-        QStringLiteral("animations-desktops")};
+        QStringLiteral("animations-desktops"), QStringLiteral("animations-shell")};
     static const QSet<QString> kAnimationsMotionChildren{
         QStringLiteral("animations-window-motion"), QStringLiteral("animations-window-dragging"),
         QStringLiteral("animations-side-panels"),   QStringLiteral("animations-widgets"),
@@ -738,6 +738,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"),
         QStringLiteral("animations-desktops"),
+        QStringLiteral("animations-shell"),
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-window-motion"),
         QStringLiteral("animations-window-dragging"),

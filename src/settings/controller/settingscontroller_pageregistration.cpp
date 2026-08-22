@@ -424,6 +424,12 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("animations-desktops"), QStringLiteral("animations-transitions"),
                PhosphorI18n::tr("Desktop"), QStringLiteral("pages/animations/AnimationsDesktopsPage.qml"),
                QStringLiteral("virtual-desktops"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    // Last among Transitions' children, and the icon matches Decoration →
+    // Shell: the two pages carry the same family of foreign surfaces, one for
+    // what they wear and one for how they arrive.
+    regVirtual(QStringLiteral("animations-shell"), QStringLiteral("animations-transitions"), PhosphorI18n::tr("Shell"),
+               QStringLiteral("pages/animations/AnimationsShellPage.qml"), QStringLiteral("computer"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // First among Motion's children because the strip's view is the coarsest
     // subject here — one leg moves every window on the screen — and the rows

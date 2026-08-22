@@ -78,6 +78,22 @@ void seedAnimationEventAnchors(PhosphorControl::SearchController* search)
     // from the label.
     addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.tabSwitch"),
                PhosphorI18n::tr("Tab Switched"), {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("cross-fade")});
+    // Shell page. Keywords carry the names users actually have for these
+    // surfaces: the label says "Applet Popup", which is KWin's word for them,
+    // while what a user types is the launcher or the tray.
+    // Note "panel" is NOT among them: a PLASMA panel (the taskbar) has no leg of
+    // its own, so the term would land a user on a row that can never animate what
+    // they meant. It stays on the page keywords, where the header explains the
+    // absence. This says nothing about the in-app `panel.*` paths, which are real
+    // and belong to the Side Panels page.
+    addSetting(search, QStringLiteral("animations-shell"), QStringLiteral("shell.appletPopup.show"),
+               PhosphorI18n::tr("Applet Popup Shown"),
+               {PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("tray"),
+                PhosphorI18n::tr("plasma")});
+    addSetting(search, QStringLiteral("animations-shell"), QStringLiteral("shell.appletPopup.hide"),
+               PhosphorI18n::tr("Applet Popup Hidden"),
+               {PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("tray"),
+                PhosphorI18n::tr("plasma")});
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),
