@@ -265,8 +265,16 @@ private Q_SLOTS:
 
         QVERIFY(c.setOverride(kPrimary, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.4,0,0.2,1")}}));
 
-        QVERIFY(c.setOverrideMergedOnPaths(
-            QStringList{kPrimary}, QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}}, QVariant()));
+        // ZERO paths written, and that is the assertion rather than an
+        // inconvenience: the path already owns a curve, `fields` cannot
+        // overwrite it, so the merged object matches what is on disk and the
+        // writer correctly finds nothing to do. The count distinguishes that
+        // from a refusal (-1) and from a real write (1), which the old boolean
+        // return could not.
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary},
+                                            QVariantMap{{QStringLiteral("curve"), QStringLiteral("0.9,0,0.1,1")}},
+                                            QVariant()),
+                 0);
 
         QCOMPARE(c.rawProfile(kPrimary).value(QStringLiteral("curve")).toString(), QStringLiteral("0.4,0,0.2,1"));
     }
@@ -750,7 +758,11 @@ private Q_SLOTS:
 
         QTest::ignoreMessage(QtWarningMsg,
                              QRegularExpression(QStringLiteral("refusing while an async discard is in flight")));
-        QVERIFY(!c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 900}}, QVariant()));
+        // -1, not merely falsy: the writer now shares the family's sentinel, where
+        // -1 means the call was refused and nothing was attempted. A partial
+        // failure reports the count that did land instead, so a caller can tell
+        // "stop trying" from "some of that did not stick".
+        QCOMPARE(c.setOverrideMergedOnPaths(group(), QVariantMap{{QStringLiteral("duration"), 900}}, QVariant()), -1);
 
         QCOMPARE(toasts.count(), 1);
         QCOMPARE(touched.count(), 0);

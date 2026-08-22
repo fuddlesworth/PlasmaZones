@@ -46,7 +46,6 @@
 #include "phosphor_i18n.h"
 #include "settings/pages/animationspagecontroller.h"
 #include "helpers/AnimationsControllerFixture.h"
-#include "helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::ControllerFixture;

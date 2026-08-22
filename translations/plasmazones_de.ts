@@ -5284,7 +5284,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="491"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="547"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="553"/>
         <source>Animation duration</source>
         <translation>Animationsdauer</translation>
     </message>
@@ -14190,12 +14190,12 @@
         <translation>Animationsvorschauspur</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="382"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="391"/>
         <source>Spring · ω=%1 · ζ=%2</source>
         <translation>Feder · ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCard.qml.cpp" line="393"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="188"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="240"/>
         <source>%1 · %2 ms</source>
@@ -14244,7 +14244,7 @@
         <translation>Aktuell: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="221"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="102"/>
         <location filename=".qml-stubs/src/shared/CategoryMenuButton.qml.cpp" line="328"/>
         <source>(missing: %1)</source>
@@ -14252,185 +14252,185 @@
         <translation>(fehlt: %1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="328"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="334"/>
         <source>Spring · %1</source>
         <translation>Feder · %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="330"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="336"/>
         <source>Spring · Custom</source>
         <translation>Feder · Benutzerdefiniert</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="334"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="340"/>
         <source>%1 · %2</source>
         <comment>easing style, then direction</comment>
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="342"/>
         <source>Easing · Custom</source>
         <translation>Easing · Benutzerdefiniert</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="342"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="348"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="318"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="369"/>
         <source>ω=%1 · ζ=%2</source>
         <translation>ω=%1 · ζ=%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="352"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="358"/>
         <source>%1 ms</source>
         <translation>%1 ms</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="246"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="425"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="252"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="535"/>
         <source>Overridden for this event</source>
         <translation>Für dieses Ereignis überschrieben</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="249"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="255"/>
         <source>Following the inherited pack, with settings of its own</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="251"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="425"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="257"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="535"/>
         <source>Following the inherited value</source>
         <translation>Folgt dem geerbten Wert</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="443"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="445"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="451"/>
         <source>Revert curve to inherited</source>
         <translation>Kurve auf geerbten Wert zurücksetzen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="458"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="464"/>
         <source>Customize…</source>
         <translation>Anpassen …</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="466"/>
         <source>Customize curve for %1</source>
         <translation>Kurve für %1 anpassen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="466"/>
         <source>Customize curve</source>
         <translation>Kurve anpassen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="472"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="475"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="481"/>
         <source>Timing mode</source>
         <translation>Timing-Modus</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="476"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="482"/>
         <source>Easing</source>
         <translation>Easing</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="476"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="482"/>
         <source>Spring</source>
         <translation>Feder</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="516"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="522"/>
         <source>A spring curve is set, so the duration has no effect. Change the curve in Global animation defaults, or switch to Advanced in the sidebar to change it for this event.</source>
         <translation>Es ist eine Federkurve festgelegt, daher hat die Dauer keine Wirkung. Ändern Sie die Kurve in den globalen Animationsstandards, oder wechseln Sie in der Seitenleiste zu Erweitert, um sie für dieses Ereignis zu ändern.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="516"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="522"/>
         <source>A spring curve derives its own settle time from its parameters, so there is no duration to set. Switch the timing mode to Easing to use a duration.</source>
         <translation>Eine Federkurve leitet ihre eigene Einschwingzeit aus ihren Parametern ab, daher gibt es keine Dauer festzulegen. Wechseln Sie den Timing-Modus zu Easing, um eine Dauer zu verwenden.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="524"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="530"/>
         <source>Duration</source>
         <translation>Dauer</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="546"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="552"/>
         <source>ms</source>
         <comment>milliseconds, unit appended to a slider value</comment>
         <translation>ms</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="587"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="589"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="593"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="595"/>
         <source>Revert duration to inherited</source>
         <translation>Dauer auf geerbten Wert zurücksetzen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="633"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="639"/>
         <source>No shader for this event, and no inherited one either.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="635"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="641"/>
         <source>No shader pack. Set one below.</source>
         <translation>Kein Shader-Paket. Legen Sie unten eines fest.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="635"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="641"/>
         <source>No shader pack.</source>
         <translation>Kein Shader-Paket.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="652"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="658"/>
         <source>Revert shader to inherited</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="769"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="775"/>
         <source>Remove the shader pack</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="771"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="777"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="256"/>
         <source>Remove %1</source>
         <translation>%1 entfernen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="759"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="765"/>
         <source>Use no shader for this event</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="940"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="946"/>
         <source>Set shader pack</source>
         <translation>Shader-Paket festlegen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="948"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="954"/>
         <source>Swap this event&apos;s pack for another, or clear it</source>
         <translation>Das Paket dieses Ereignisses gegen ein anderes austauschen oder entfernen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="951"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="957"/>
         <source>No shader packs are available for this event</source>
         <translation>Für dieses Ereignis sind keine Shader-Pakete verfügbar</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="953"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="959"/>
         <source>Apply a shader pack to this event</source>
         <translation>Ein Shader-Paket auf dieses Ereignis anwenden</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="975"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="981"/>
         <source>Select a pack…</source>
         <comment>@action:button</comment>
         <translation>Ein Paket auswählen …</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="976"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="982"/>
         <source>Set the shader pack this event uses</source>
         <translation>Das von diesem Ereignis verwendete Shader-Paket festlegen</translation>
     </message>
@@ -20992,17 +20992,22 @@
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="103"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="277"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="466"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="647"/>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="678"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="288"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="477"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="658"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="689"/>
         <location filename="../src/settings/pages/animationspagecontroller_overrides.cpp" line="507"/>
         <location filename="../src/settings/pages/animationspagecontroller_shaders.cpp" line="426"/>
         <source>Cannot change this while a discard is in progress.</source>
         <translation>Dies kann nicht geändert werden, während ein Verwerfen läuft.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="383"/>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="266"/>
+        <source>Some animation settings could not be saved.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="394"/>
         <source>Some animation overrides could not be reverted.</source>
         <translation>Einige Animationsüberschreibungen konnten nicht zurückgesetzt werden.</translation>
     </message>

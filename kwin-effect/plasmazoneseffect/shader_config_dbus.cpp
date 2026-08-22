@@ -544,28 +544,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                 || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
                     && profilePath.at(overridden.size()) == QLatin1Char('.'))
                 || (isolationRoot.isEmpty() && overridden == PhosphorAnimation::ProfilePaths::Global);
-            // A PARAMS-ONLY entry (parameters engaged, effectId not) is a chain
-            // member that assigns no pack — it overlays values onto whatever an
-            // ancestor chose. Counting it as coverage attributed an empty
-            // resolve to "a pack is assigned somewhere and something else went
-            // wrong", which is the warn branch, when the quiet "no shader
-            // assigned anywhere on this cascade" branch is the accurate one.
-            //
-            // `has_value()` rather than a non-empty test, so the engaged-EMPTY
-            // "no shader here" sentinel still counts. That entry assigns no pack
-            // either, but it is a deliberate CHOICE about this cascade, and an
-            // empty resolve underneath it is explained by it. The name says
-            // pins, not assigns, because those are different questions and this
-            // is the first one.
-            //
-            // Evaluated last, so the cheap prefix tests short-circuit first:
-            // directOverride returns a ShaderProfile by value, and the loop runs
-            // over every overridden path in the tree.
-            const auto pinsTheCascade = [&profileTree](const QString& path) {
-                return profileTree.directOverride(path).effectId.has_value();
-            };
+            // has_value(): a params-only entry pins no pack (it overlays onto
+            // whatever an ancestor chose), so an empty resolve beneath it is the
+            // quiet case, not the warn one. The engaged-empty sentinel DOES pin.
+            // Tested last, being the only operand that reads the tree.
             if (isChainMember && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))
-                && pinsTheCascade(overridden)) {
+                && profileTree.directOverride(overridden).effectId.has_value()) {
                 cascadeCovered = true;
                 break;
             }

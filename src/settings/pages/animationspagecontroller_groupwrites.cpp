@@ -90,8 +90,8 @@ QStringList distinctPaths(const QStringList& paths)
 
 } // namespace
 
-bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
-                                                        const QVariant& curveFromCommit)
+int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
+                                                       const QVariant& curveFromCommit)
 {
     const QStringList paths = distinctPaths(rawPaths);
     if (m_asyncRevertInFlight) {
@@ -101,7 +101,7 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPa
         // slider just snaps back on the next refresh with no explanation.
         qCWarning(lcConfig) << "setOverrideMergedOnPaths: refusing while an async discard is in flight";
         Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
-        return false;
+        return -1;
     }
 
     // An invalid QVariant is QML's `undefined` arriving here, and it is the
@@ -253,7 +253,18 @@ bool AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPa
         Q_EMIT overrideChanged(path);
     if (wasPending != nowPending)
         Q_EMIT pendingChangesChanged();
-    return allWritten;
+
+    // A path that could not be written is a DIFFERENT outcome from a refusal,
+    // and it used to be silent: the only toast in this function is the refusal
+    // one above, so a read-only or full home directory turned every timing edit
+    // into a no-op with nothing in the UI to say why. Toasted here, and
+    // reported as the count that DID land rather than as the refusal sentinel,
+    // exactly as clearFieldOnPaths does and for the reason it documents: a
+    // caller that reads -1 as "stop trying" must not be told that by a failure
+    // it could recover from.
+    if (!allWritten)
+        Q_EMIT toastRequested(PhosphorI18n::tr("Some animation settings could not be saved."));
+    return written.size();
 }
 
 int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, const QString& field)

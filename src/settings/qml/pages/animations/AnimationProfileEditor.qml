@@ -150,6 +150,12 @@ ColumnLayout {
     /// one path (which is every consumer but the simple page) gets the right
     /// answer without opting in.
     property bool shaderPackRemovable: shaderOwnsPack
+    /// Whether naming the shown pack on the remove control is accurate, i.e.
+    /// every path the control writes holds THAT pack. False on a group whose
+    /// members hold different packs, where the row shows one name and the click
+    /// removes several. Defaults to tracking `shaderOwnsPack` so a consumer
+    /// writing exactly one path needs no opinion.
+    property bool shaderPackNameIsExact: shaderOwnsPack
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
@@ -758,14 +764,14 @@ ColumnLayout {
                     if (!root.shaderPackRemovable)
                         return i18n("Use no shader for this event");
 
-                    // Naming the pack is only honest when the group agrees.
-                    // `shaderName` comes from the PRIMARY path's resolved id
-                    // while the click clears every write path, so on a group
-                    // whose members hold different packs the named one need not
-                    // be the one removed. The divergence banner already reports
-                    // the disagreement; the button just stops claiming to know
-                    // which pack it is about.
-                    if (root.shaderOwnsPack !== root.shaderPackRemovable)
+                    // Naming the pack is only honest when every path the click
+                    // writes holds that pack. `shaderName` comes from the
+                    // PRIMARY path's resolved id while the click clears the
+                    // whole group, so where the members differ the named one
+                    // need not be the one removed. The divergence banner
+                    // already reports the disagreement; the button just stops
+                    // claiming to know which pack it is about.
+                    if (!root.shaderPackNameIsExact)
                         return i18n("Remove the shader pack");
 
                     return i18n("Remove %1", root.shaderName);

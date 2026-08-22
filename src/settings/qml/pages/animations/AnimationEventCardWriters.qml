@@ -57,15 +57,12 @@ QtObject {
     function _setOverrideMerged(profile, curveFromCommit) {
         card._committing = true;
         try {
-            // Return whether the write landed. `=== true`, NOT `>= 0`: this
-            // writer is the one that returns a BOOL where every sibling returns
-            // an int with a -1 refusal sentinel, and `false >= 0` is `true` in
-            // JavaScript. So the old comparison reported success on every
-            // refusal and on every partial failure, which went unnoticed while
-            // nothing read the result. It is read now, by the card's refusal
-            // latch, and a writer that cannot report a refusal makes that latch
-            // inert on the duration and curve drags it exists for.
-            return settingsController.animationsPage.setOverrideMergedOnPaths(card._writePaths, profile, curveFromCommit) === true;
+            // Return whether the write landed (>= 0), like every sibling writer
+            // here. -1 means the controller REFUSED and nothing was attempted,
+            // which is the one thing the card's latch should stop re-issuing; a
+            // partial failure toasts on its own and reports the count that did
+            // land, so the user can keep trying.
+            return settingsController.animationsPage.setOverrideMergedOnPaths(card._writePaths, profile, curveFromCommit) >= 0;
         } finally {
             card._committing = false;
             card._inheritRev++;

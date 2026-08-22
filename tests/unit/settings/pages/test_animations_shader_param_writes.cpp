@@ -328,9 +328,13 @@ private Q_SLOTS:
 
     // ── the group readers ────────────────────────────────────────────
 
-    /// The group accessor must agree with the per-path one it replaced, summed.
-    /// It exists for cost, not for behaviour, so the behaviour has to match.
-    void shaderOverrideDescendantCountForPaths_matchesTheSumOfThePerPathCounts()
+    /// The group accessor must agree with the per-path one it replaced. It
+    /// exists for cost, not for behaviour, so the behaviour has to match.
+    ///
+    /// The group here is DISJOINT, so a sum and a union give the same number
+    /// and this slot cannot tell them apart. The overlapping case is the slot
+    /// below, which is where the difference lives.
+    void shaderOverrideDescendantCountForPaths_agreesWithThePerPathCounts()
     {
         ControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -344,6 +348,32 @@ private Q_SLOTS:
             expected += c.shaderOverrideDescendantCount(path);
         QCOMPARE(c.shaderOverrideDescendantCountForPaths(group), expected);
         QCOMPARE(c.shaderOverrideDescendantCountForPaths(group), 2);
+    }
+
+    /// An overlapping group counts a shared descendant ONCE, because the clear
+    /// it reports for removes it once.
+    ///
+    /// A summed implementation returns 2 here and the paired clear returns 1,
+    /// and a count that disagrees with what its own button does is the whole
+    /// reason this accessor exists. The two calls are asserted against each
+    /// other rather than against a literal, so the invariant is what is pinned.
+    void shaderOverrideDescendantCountForPaths_countsASharedDescendantOnce()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        // `popup.layoutPicker.show` is a descendant of BOTH group members.
+        const QStringList overlapping{PP::Popup, PP::PopupLayoutPicker};
+        QVERIFY(c.setShaderOverride(PP::PopupLayoutPickerShow, QStringLiteral("pixelate"), {}));
+
+        // Sequenced deliberately. Putting the read and the clear in one
+        // QCOMPARE leaves their order unspecified, and the clear MUTATES: with
+        // it evaluated first the read sees an already-pruned tree and returns
+        // 0, so the assertion fails on its own side effect rather than on the
+        // behaviour.
+        const int counted = c.shaderOverrideDescendantCountForPaths(overlapping);
+        QCOMPARE(counted, 1);
+        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(overlapping), counted);
     }
 
     /// It inherits the params-only exclusion, so it cannot report a descendant
@@ -664,6 +694,47 @@ private Q_SLOTS:
         QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), {}), 2);
     }
 
+    /// The refusal gate wins over the id check when BOTH would reject.
+    ///
+    /// Pins an ORDERING, which is the shape of defect that survives a refactor
+    /// unnoticed: extracting the shared body once moved the id check ahead of
+    /// the gates, and the only visible symptom was that a user editing during a
+    /// discard got silence instead of the toast explaining why. Both orders
+    /// return -1, so nothing but the toast count and the log line distinguishes
+    /// them.
+    ///
+    /// The other half of that contract, "a null ISettings returns 0 rather than
+    /// -1 even with an invalid id", is deliberately not asserted here: every
+    /// fixture in this tree builds the controller with a real Settings, and
+    /// adding a null-settings one to pin a single ordering is more scaffolding
+    /// than the claim is worth. The gate order in applyShaderGroupWrite is what
+    /// carries it.
+    void setShaderOverrideOnPaths_refusalGateOutranksTheIdCheck()
+    {
+        SKIP_WITHOUT_BUNDLED_PACKS();
+
+        PopulatedControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+        QVERIFY2(!registry.effectIds().isEmpty(), "precondition: registry populated so the id gate is armed");
+        QVERIFY2(!registry.hasEffect(QStringLiteral("no-such-effect")),
+                 "precondition: the id below must really be unknown");
+        QVERIFY(c.setOverride(PP::Popup, QVariantMap{{QStringLiteral("duration"), 200}}));
+
+        QSignalSpy done(&c, &AnimationsPageController::discardResult);
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+        c.asyncRevertPending();
+
+        // The DISCARD warning, not the unknown-id one: reaching the id check
+        // first would log "unknown effectId" and never toast.
+        QTest::ignoreMessage(
+            QtWarningMsg,
+            QRegularExpression(QStringLiteral("setShaderOverrideOnPaths: refusing while an async discard")));
+        QCOMPARE(c.setShaderOverrideOnPaths({PP::WindowOpen}, QStringLiteral("no-such-effect"), {}), -1);
+        QVERIFY2(toasts.count() == 1, "an invalid id during a discard must still explain the discard");
+
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 5000);
+    }
+
     /// Async-refusal parity for the group setter, matching the family's
     /// per-path and descendants twins: -1, one toast, no tree write.
     void setShaderOverrideOnPaths_refusesWhileAsyncDiscardIsInFlight()
@@ -759,8 +830,7 @@ private Q_SLOTS:
         // the "inherit the pack" state, distinct from an engaged-empty one.
         const QVariantMap stored = c.rawShaderProfile(leaf);
         QCOMPARE(stored.value(QStringLiteral("parameters")).toMap().value(QStringLiteral("strength")).toDouble(), 0.7);
-        QVERIFY2(!stored.contains(QStringLiteral("effectId")),
-                 "a params-only write pinned an effectId, severing the cascade");
+        QVERIFY2(!storesEffectId(stored), "a params-only write pinned an effectId, severing the cascade");
 
         // The payload: change the pack above, and the leaf follows.
         QVERIFY(c.setShaderOverride(parent, QStringLiteral("dissolve"), {}));
@@ -793,7 +863,7 @@ private Q_SLOTS:
         // that stored an effectId the walk then failed to notice.
         const QVariantMap stored = c.rawShaderProfile(leaf);
         QVERIFY2(!stored.isEmpty(), "the params write stored nothing, so the count below proves nothing");
-        QVERIFY2(!stored.contains(QStringLiteral("effectId")),
+        QVERIFY2(!storesEffectId(stored),
                  "the params write pinned an effectId, so this is no longer the params-only case");
         QCOMPARE(c.shaderOverrideDescendantCount(parent), 0);
 

@@ -238,6 +238,15 @@ Item {
     /// controller call rather than derived, because the answer lives in the
     /// shader tree and only C++ can read the group in one pass.
     property bool _anyWritePathOwnsShaderPack: false
+    /// True when EVERY write path stores the pack the row is currently showing,
+    /// which is what makes it honest to name that pack on the remove control.
+    ///
+    /// `shaderName` comes from the primary path's RESOLVED id while the control
+    /// clears the whole group, so on a group whose members hold different packs
+    /// the named one need not be the one removed. Assigned from the same
+    /// refresh as its sibling above, for the same reason: it is a controller
+    /// round-trip and the label re-evaluates on every shader refresh.
+    property bool _allWritePathsHoldShownPack: false
     // ── Editor-owned working state (proxied via aliases) ────────────
     // The shared `AnimationProfileEditor` (declared inside the card's
     // body below) owns the timing + shader working state and the
@@ -631,6 +640,7 @@ Item {
         // shader tree is not memoised, so a per-path query would rebuild it
         // once per write path inside a refresh that runs at drag rate.
         root._anyWritePathOwnsShaderPack = settingsController.animationsPage.anyPathOwnsShaderPack(root._writePaths);
+        root._allWritePathsHoldShownPack = root.currentShaderEffectId.length > 0 && root._allWritePathsHold(root.currentShaderEffectId);
         const wasEnabled = root.overrideEnabled;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // A clear that did not come through the toggle's OFF arm — a page
@@ -832,6 +842,15 @@ Item {
         // refused tick, so this costs at most one extra toast per discard and
         // keeps the anti-repeat property that matters.
         function onPendingChangesChanged() {
+            // Deliberately just the flag, with no refresh alongside it. A card
+            // whose writes were all refused never entered the pending-snapshot
+            // map, so the discard has nothing of its to restore and its working
+            // values are the ones the user dragged, not what is on disk. That
+            // staleness corrects itself on the next edit, and it is no worse
+            // than the latched state this replaces. Calling refreshFromTree()
+            // here instead would ALSO run its close-the-editor branch on every
+            // pending-changes signal, including ones another card raised, which
+            // could fold the timing editor away under the user mid-edit.
             root._writesRefused = false;
         }
 
@@ -980,6 +999,7 @@ Item {
                 shaderOverrideStored: root._storesShaderOverride
                 shaderBlocksInherited: root._shaderBlocksInherited
                 shaderPackRemovable: root._anyWritePathOwnsShaderPack
+                shaderPackNameIsExact: root._allWritePathsHoldShownPack
                 durationOverridden: root._ownsDurationOverride
                 enableLocking: true
                 enableRandomize: true

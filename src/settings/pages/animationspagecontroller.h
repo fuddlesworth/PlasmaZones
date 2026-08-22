@@ -302,8 +302,9 @@ public:
     // one, because "every path holds this id" cannot be true of a path that
     // cannot hold anything.
     // while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
-    // which rejects it and makes the whole call report false — a caller bug
-    // surfaces instead of being silently dropped. Either way the WORK is
+    // which rejects it, so that path is absent from the returned count and
+    // toasts — a caller bug surfaces instead of being silently dropped. Either
+    // way the WORK is
     // bounded by `ProfilePaths::allBuiltInPaths()` rather than by the
     // caller's list — a repeat costs nothing and an unrecognised entry costs
     // one lookup, never a disk read or a shader-tree rebuild. The dedup
@@ -330,9 +331,18 @@ public:
     /// the curve and it travels to every path. Never decide a curve on the
     /// user's behalf by passing the resolved one here.
     ///
-    /// @return true when every path in @p rawPaths was written.
-    Q_INVOKABLE bool setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
-                                              const QVariant& curveFromCommit);
+    /// @return the number of paths written, or -1 if the call was refused
+    /// because an async discard owns the snapshot map (it toasts). Matches the
+    /// sentinel every other group writer here uses, and the distinction is
+    /// load-bearing rather than cosmetic: this used to return a plain bool that
+    /// went false for a refusal, for a caller-bug path AND for a genuine disk
+    /// failure alike. A caller that stops re-issuing a write on a refusal —
+    /// which the card does, to keep a drag from toasting per pointer move —
+    /// then also stopped on a disk failure it could have recovered from. A
+    /// partial failure now TOASTS and reports the count that did land, exactly
+    /// as clearFieldOnPaths does. -1 means only "nothing was attempted".
+    Q_INVOKABLE int setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
+                                             const QVariant& curveFromCommit);
 
     /// Remove ONE field (`"curve"` or `"duration"`) from the stored override at
     /// every path in @p rawPaths, returning that field to inheritance while the
