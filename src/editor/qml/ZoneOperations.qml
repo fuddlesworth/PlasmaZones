@@ -121,9 +121,57 @@ QtObject {
             return;
         }
 
-        Qt.callLater(function () {
-            animateAdjacentZones([zoneIdToSplit], oldGeometries, controller, zonesRepeater);
-        });
+        // Restore SYNCHRONOUSLY, not through Qt.callLater.
+        //
+        // splitZone writes the model and emits zonesChanged inside the call, so
+        // by the time it returns the Repeater has already rebuilt this zone's
+        // delegate at the halved geometry. Deferring the restore lets a frame
+        // paint in between, and it is visible: the zone snaps to half size, then
+        // jumps back to full and animates down again. Doing it here keeps the
+        // whole sequence inside one JS call stack, so nothing paints until the
+        // visual is back at the pre-split rect with the animation already armed.
+        //
+        // The delete path can afford the deferral because its adjacent zones are
+        // GROWING into space that was already blank — a frame at the new size
+        // reads as the delete having landed, not as a flicker.
+        var fresh = findZoneItemById(zoneIdToSplit, zonesRepeater);
+        if (!fresh) {
+            // The delegate has not been rebuilt yet. Fall back to the deferred
+            // path rather than dropping the animation entirely.
+            Qt.callLater(function () {
+                animateAdjacentZones([zoneIdToSplit], oldGeometries, controller, zonesRepeater);
+            });
+            return;
+        }
+
+        // The rebuilt delegate already carries the post-split geometry (its
+        // Component.onCompleted syncs from the model), so it is the target —
+        // no second model lookup, and no dependence on the two geometry modes
+        // agreeing about units.
+        var target = {
+            "x": fresh.visualX,
+            "y": fresh.visualY,
+            "width": fresh.visualWidth,
+            "height": fresh.visualHeight
+        };
+        var oldGeom = oldGeometries[zoneIdToSplit];
+        // Geometry unchanged means this is still the PRE-split delegate: the
+        // rebuild has not run yet, so there is nothing to animate from here.
+        // Defer rather than give up, which lands on the old behaviour (a frame
+        // at the new size, then the animation) instead of losing it entirely.
+        if (Math.abs(target.x - oldGeom.x) <= 1 && Math.abs(target.y - oldGeom.y) <= 1 && Math.abs(target.width - oldGeom.width) <= 1 && Math.abs(target.height - oldGeom.height) <= 1) {
+            Qt.callLater(function () {
+                animateAdjacentZones([zoneIdToSplit], oldGeometries, controller, zonesRepeater);
+            });
+            return;
+        }
+
+        fresh.isAnimatingFill = true;
+        fresh.visualX = oldGeom.x;
+        fresh.visualY = oldGeom.y;
+        fresh.visualWidth = oldGeom.width;
+        fresh.visualHeight = oldGeom.height;
+        fresh.startFillAnimation(target.x, target.y, target.width, target.height);
     }
 
     /**
