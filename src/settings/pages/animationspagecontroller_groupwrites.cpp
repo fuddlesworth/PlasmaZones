@@ -440,14 +440,21 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
     if (rawPaths.isEmpty()) {
         return false;
     }
-    const QStringList paths = distinctPaths(rawPaths);
-    using namespace PhosphorAnimationShaders;
+    // Before the dedup, not after: a no-settings call would otherwise pay for a
+    // QSet build it immediately discards.
     if (!m_settings)
         return false;
+    const QStringList paths = distinctPaths(rawPaths);
+    using namespace PhosphorAnimationShaders;
     // ONE tree read for the whole group, like divergentPathCount — the header's
     // rule is that nothing here calls `rawShaderProfile` in a loop, because each
     // call rebuilds the tree.
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
+    // Whether any member was actually compared. A group in which every path is
+    // skipped below would otherwise fall through to `return true` having tested
+    // nothing — the same vacuous true the empty-list guard above refuses,
+    // reached through a different door.
+    bool compared = false;
     for (const QString& path : paths) {
         // Gated, so an unrecognised path cannot make the caller's list the bound
         // on the work done here.
@@ -460,6 +467,7 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
         // the non-supporting member in the first place.
         if (!supportsShaderLeg(path))
             continue;
+        compared = true;
         const QVariantMap raw = tree.hasOverride(path) ? shaderProfileToMap(tree.directOverride(path)) : QVariantMap();
         const auto it = raw.constFind(JsonEffectIdKey);
         // Absent effectId means no direct override, which is never equal to a
@@ -469,7 +477,7 @@ bool AnimationsPageController::allPathsHoldShaderEffect(const QStringList& rawPa
         if (it.value().toString() != effectId)
             return false;
     }
-    return true;
+    return compared;
 }
 
 int AnimationsPageController::applyShaderGroupWrite(

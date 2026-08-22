@@ -409,6 +409,14 @@ Item {
     // a registry refresh that fires while the dialog is open could
     // silently retarget the write at a different effect's param map.
     function _writeShaderParam(effectId, paramId, value) {
+        // Refused writes are dropped WITHOUT restoring the control, and that
+        // asymmetry with `_writeAllShaderParams` below is deliberate. This path
+        // is drag-rate — a parameter slider emits per pointer move — so
+        // refreshing here would reassign `currentShaderParams` from the tree on
+        // every refused tick and drag the handle back out from under the user.
+        // A stale-looking slider for the length of a discard is the better of
+        // the two, and the drag's last value is what the first accepted write
+        // commits.
         if (!effectId || root._writesRefused)
             return;
 
@@ -443,9 +451,45 @@ Item {
     /// real (no pack resolved, nothing to write) and because a future payload
     /// that DOES carry a snapshotted id should find the comparison already
     /// here rather than have to reintroduce it.
+    /// Whether this event stores parameter values of its OWN, as opposed to
+    /// resolving an ancestor's. Distinct from `_ownsShaderParamsOnly`, which is
+    /// additionally false when this event owns its pack — here the question is
+    /// only about the parameter map.
+    function _ownsAnyShaderParams() {
+        const own = root._primaryRawShader && root._primaryRawShader.parameters;
+        return Boolean(own) && Object.keys(own).length > 0;
+    }
+
+    /// Flat value-equality over two parameter maps. Parameter values are
+    /// scalars (numbers, bools, strings, colors), so a key-wise `!==` is the
+    /// whole comparison; there is no nested structure to recurse into.
+    function _sameParamValues(a, b) {
+        const left = a || {};
+        const right = b || {};
+        const leftKeys = Object.keys(left);
+        if (leftKeys.length !== Object.keys(right).length)
+            return false;
+        for (var i = 0; i < leftKeys.length; ++i) {
+            const key = leftKeys[i];
+            if (!right.hasOwnProperty(key) || left[key] !== right[key])
+                return false;
+        }
+        return true;
+    }
+
     function _writeAllShaderParams(effectId, allParams) {
-        if (!effectId || effectId !== root.currentShaderEffectId || root._writesRefused)
+        if (!effectId || effectId !== root.currentShaderEffectId)
             return;
+
+        // Refused: same reasoning as `_writeShaderParam`, and worse here.
+        // Randomize and Reset stage their whole map onto the editor before
+        // emitting, so dropping the write silently leaves every parameter row
+        // showing a value that was never persisted. Discrete actions have no
+        // next tick to correct them either.
+        if (root._writesRefused) {
+            root.refreshShaderFromTree();
+            return;
+        }
 
         // `currentShaderParams` is deliberately NOT re-staged here. It is an
         // alias onto the editor's own `shaderParams`, and the editor assigns
@@ -716,6 +760,11 @@ Item {
     // rule to both fields in both modes. The controller stamps the `name`
     // field automatically.
     function commitDurationOverride() {
+        // Drag-rate (the slider emits per move), so a refused write is dropped
+        // without restoring the slider — refreshing per tick would pull the
+        // handle back out from under the user. Same trade as
+        // `_writeShaderParam`; `commitCurveOverride` below is discrete and does
+        // restore.
         if (root._writesRefused)
             return;
 
@@ -729,8 +778,13 @@ Item {
     }
 
     function commitCurveOverride() {
-        if (root._writesRefused)
+        // Discrete (a combo activation or the curve dialog accepting), so a
+        // refused write leaves the editor showing a curve that never reached
+        // disk with no later tick to correct it. Restore the stored state.
+        if (root._writesRefused) {
+            root.refreshFromTree();
             return;
+        }
 
         // Empty profile map: nothing but the curve travels. Each path's own
         // stored duration (or its absence) survives the merge untouched.
@@ -865,13 +919,19 @@ Item {
             // Deliberately just the flag, with no refresh alongside it. A card
             // whose writes were all refused never entered the pending-snapshot
             // map, so the discard has nothing of its to restore and its working
-            // values are the ones the user dragged, not what is on disk. That
-            // staleness corrects itself on the next edit, and it is no worse
-            // than the latched state this replaces. Refreshing here instead
-            // would also be defensible — its close-the-editor branch only fires
-            // when THIS card's own override really went away — but it would put
-            // a full timing refresh on a signal every card receives, for a
-            // property that is one bool.
+            // values are the ones the user dragged, not what is on disk.
+            //
+            // That residue is now drag-rate only: the discrete refusal paths
+            // (`_writeAllShaderParams`, `commitCurveOverride`) restore
+            // themselves, and the two continuous ones deliberately do not,
+            // because refreshing per tick would drag the control back out from
+            // under the user. What is left is a slider still showing the value
+            // the user dragged to. It does NOT correct itself on the next edit
+            // — the next accepted write commits that value — which is the
+            // reasonable outcome for a drag the user meant, so it is left
+            // alone. Refreshing here instead would also be defensible, but it
+            // would put a full timing refresh on a signal every card receives,
+            // for a property that is one bool.
             root._writesRefused = false;
         }
 
@@ -1117,8 +1177,21 @@ Item {
                     // equal to nothing, sentinel included. So the write went
                     // ahead and `setShaderOverrideOnPaths` rebuilt the profile
                     // from the id alone.
-                    const promoting = sid.length > 0 && sid === root.currentShaderEffectId;
-                    root._setShaderOverrideOnAll(sid, promoting ? (root.currentShaderParams || ({})) : ({}));
+                    //
+                    // What is carried is what this event STORES, never
+                    // `currentShaderParams`. That one is the RESOLVED map, so
+                    // on an event that owns nothing it holds the ancestor's
+                    // values, and carrying it would pin a frozen copy of them
+                    // onto an event that had tuned nothing — severing the same
+                    // cascade this handler exists to preserve. Reading the
+                    // stored map instead answers both cases with one test:
+                    // empty means there is nothing of this event's own to
+                    // keep, so an empty map goes down and
+                    // `setShaderOverrideOnPaths` leaves `parameters` unset,
+                    // which keeps the ancestor's values resolving.
+                    const ownParams = (root._primaryRawShader && root._primaryRawShader.parameters) || ({});
+                    const keepParams = sid.length > 0 && sid === root.currentShaderEffectId && Object.keys(ownParams).length > 0;
+                    root._setShaderOverrideOnAll(sid, keepParams ? ownParams : ({}));
                 }
                 // Drop this event's own shader choice so it follows its
                 // ancestors again. The opposite of the None sentinel above,
@@ -1148,6 +1221,29 @@ Item {
                     // Same batch path as randomize — one
                     // setShaderParametersOnPaths carrying every param at its
                     // default.
+                    //
+                    // Except when the reset would change nothing a user can
+                    // see. On an event that owns no parameters of its own,
+                    // whose ancestors left theirs at the pack defaults too,
+                    // writing those defaults creates a params-only override
+                    // that renders identically and silently stops the event
+                    // following later parameter edits from its ancestor. There
+                    // is nothing to reset, so nothing is written.
+                    //
+                    // Deliberately here and NOT in `_writeAllShaderParams`:
+                    // randomize shares that writer, and on an inheriting event
+                    // creating ownership is exactly what randomize is for. A
+                    // guard in the shared writer would make it a silent no-op.
+                    //
+                    // The refresh is not optional. The editor assigns the
+                    // default map onto its own `shaderParams` (aliased onto
+                    // this card's `currentShaderParams`) BEFORE emitting, so
+                    // returning without it would leave the parameter rows
+                    // showing values that no longer describe anything stored.
+                    if (!root._ownsAnyShaderParams() && root._sameParamValues(defaults, root.currentShaderParams)) {
+                        root.refreshShaderFromTree();
+                        return;
+                    }
                     root._writeAllShaderParams(root.currentShaderEffectId, defaults);
                 }
             }

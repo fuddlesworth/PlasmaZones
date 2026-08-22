@@ -233,8 +233,28 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     const OverrideFileWrite result = writeOverrideFileOnly(path, profileJson);
     if (result == OverrideFileWrite::Failed)
         return false;
-    if (result == OverrideFileWrite::Unchanged)
+    if (result == OverrideFileWrite::Unchanged) {
+        // Nothing on disk moved, but a snapshot staged by an EARLIER edit to
+        // this same file can still be stranded here. An outside writer that
+        // restores the pre-edit bytes makes the next identical write compare
+        // equal, and that first edit's snapshot is then never released: the
+        // page reports pending changes with nothing on screen differing from
+        // disk, and no later edit clears it. The batched writer drops it for
+        // exactly this case and the single-path wrapper has to as well.
+        //
+        // The drop is content-gated, so it can only release a snapshot whose
+        // file still matches it — one that another path or a pending discard
+        // still needs has moved on disk and is declined.
+        //
+        // Sampled AFTER the drop, and gated on `!dropped` because the drop's
+        // default policy already emits for itself. No `overrideChanged` and no
+        // cache invalidation: disk did not change, so the memo is still honest
+        // and there is nothing for a re-read to see.
+        const bool dropped = dropFileSnapshotIfUnchanged(profileFilePath(path));
+        if (!dropped && wasPending != hasPendingChanges())
+            Q_EMIT pendingChangesChanged();
         return true;
+    }
 
     // Disk changed under the cache. Must happen before any signal below, since
     // the QML handlers wired to `overrideChanged` re-read through
@@ -373,15 +393,43 @@ bool AnimationsPageController::clearOverride(const QString& path)
     }
     // Capture dirty state AFTER the cheap validity / existence guards so an
     // invalid path or no-op clear doesn't pay for a hasPendingChanges() walk.
-    // Mirrors setOverride() ordering above so a future refactor doesn't see two
-    // divergent capture-point shapes.
+    //
+    // This deliberately does NOT match setOverride(), which captures as its
+    // first statement. The two differ because their gates sit in different
+    // places: setOverride's validity and in-flight checks live inside
+    // writeOverrideFileOnly, so there is nothing for it to gate the capture
+    // behind, while this function performs its own up front and can.
     if (!hasOverride(path))
         return false;
     const bool wasPending = hasPendingChanges();
-    // Absent here means the file went away between that check and this call.
-    // The caller's intent is satisfied and nothing was done, so it reports the
-    // same "nothing to clear" as the guard above rather than a failure.
+    const OverrideFileRemoval removal = removeOverrideFile(path);
+    // Absent means the file went away between the hasOverride() check a few
+    // lines up and this call — it existed a moment ago, so it vanished
+    // underneath us. The caller's intent is satisfied and nothing was deleted
+    // here, so this still reports "nothing to clear" rather than success.
     //
+    // It does owe a rescan, though, and for the same reason clearFieldOnPaths'
+    // Absent arm cites: the profile registry may still hold the vanished
+    // file's entry, and removeOverrideFile invalidates the disk memo only on
+    // its Removed arm. Without the refresh, resolvedProfile would keep serving
+    // the deleted file's cached contents to a page whose view of this path has
+    // genuinely changed.
+    //
+    // Deliberately NOT shared with the Failed arm below. A failed removal
+    // leaves the file in place, so nothing about the path changed and both a
+    // rescan and an overrideChanged there would assert something untrue —
+    // which is why clearFieldOnPaths does neither on Failed either.
+    if (removal == OverrideFileRemoval::Absent) {
+        // Same ordering rule as the Removed arm: rescan first, then sample,
+        // because a rescan fans signals out synchronously and a listener that
+        // mutates would otherwise be measured against a stale read.
+        refreshProfileStore();
+        const bool nowPending = hasPendingChanges();
+        Q_EMIT overrideChanged(path);
+        if (wasPending != nowPending)
+            Q_EMIT pendingChangesChanged();
+        return false;
+    }
     // A FAILED removal can still have moved the dirty state: the snapshot is
     // staged before the delete is attempted, and if an external writer touched
     // the file in between, the deferred drop finds disk no longer matching and
@@ -394,7 +442,7 @@ bool AnimationsPageController::clearOverride(const QString& path)
     // removal also failing. There is no seam in the public surface to
     // interleave that, and adding one purely for the test would be a worse
     // trade than saying plainly that this branch rests on inspection.
-    if (removeOverrideFile(path) != OverrideFileRemoval::Removed) {
+    if (removal != OverrideFileRemoval::Removed) {
         if (wasPending != hasPendingChanges())
             Q_EMIT pendingChangesChanged();
         return false;
