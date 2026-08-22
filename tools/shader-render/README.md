@@ -8,7 +8,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 Headless offscreen renderer for PlasmaZones shaders. Reproducible
 shader previews without a compositor, display, or screen-capture
 tool. Used by the documentation site at
-[phosphor-works.github.io/plasmazones/overlays/](https://phosphor-works.github.io/plasmazones/overlays/)
+[phosphor-works.github.io/plasmazones/shaders/](https://phosphor-works.github.io/plasmazones/shaders/)
 and anyone else who needs a stable image of a built-in shader.
 
 ## What it does

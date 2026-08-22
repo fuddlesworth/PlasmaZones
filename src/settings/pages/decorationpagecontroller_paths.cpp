@@ -11,20 +11,21 @@
 
 #include <PhosphorSurface/DecorationSupportedPaths.h>
 
-#include <QLatin1Char>
-
 namespace PlasmaZones {
 
 QStringList DecorationPageController::parentChain(const QString& path) const
 {
     // Self + ancestors, deepest first, terminating at (but excluding) the
     // empty baseline. e.g. "window.tiled" -> ["window.tiled", "window"].
+    // Walk with decorationParentPath rather than re-inlining the dot split: that
+    // function is the SSOT the decoration tree's resolve() and its supported-path
+    // walk both use, and a third hand-rolled copy here is how the breadcrumb ends
+    // up disagreeing with what actually resolves.
     QStringList chain;
     QString cur = path;
     while (!cur.isEmpty()) {
         chain.append(cur);
-        const int dot = cur.lastIndexOf(QLatin1Char('.'));
-        cur = (dot < 0) ? QString() : cur.left(dot);
+        cur = PhosphorSurfaceShaders::decorationParentPath(cur);
     }
     return chain;
 }

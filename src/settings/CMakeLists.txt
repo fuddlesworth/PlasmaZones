@@ -404,6 +404,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/rules/ActionListEditor.qml
         qml/pages/rules/ActionRow.qml
         qml/pages/rules/ActionParamEditors.qml
+        qml/pages/animations/InertAnimationEventChip.qml
         qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
@@ -460,6 +461,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsOsdsPage.qml
         qml/pages/animations/AnimationsOverlaysPage.qml
         qml/pages/animations/AnimationsDesktopsPage.qml
+        qml/pages/animations/AnimationsShellPage.qml
         qml/pages/animations/AnimationsScrollingPage.qml
         qml/pages/animations/AnimationsEditorPage.qml
         qml/pages/animations/AnimationsSidePanelsPage.qml

@@ -201,6 +201,22 @@ QStringList ActionRegistry::typesWithTag(QLatin1StringView tag) const
     return result;
 }
 
+QString ActionRegistry::paramKeyOfKind(const QString& type, QLatin1StringView kind) const
+{
+    const auto it = m_descriptors.constFind(type);
+    if (it == m_descriptors.constEnd()) {
+        return {};
+    }
+    // Compared against QLatin1StringView directly, the same non-allocating
+    // shape hasTag above uses.
+    for (const ParamSchema& param : it->params) {
+        if (param.kind == kind) {
+            return param.key;
+        }
+    }
+    return {};
+}
+
 void ActionRegistry::registerBuiltins()
 {
     // Split across three TUs for file-size; the registration order (engine
@@ -210,6 +226,25 @@ void ActionRegistry::registerBuiltins()
     registerBuiltinsEngine();
     registerBuiltinsAppearance();
     registerBuiltinsIndicators();
+}
+
+bool ruleHasLiveEffectAction(const QList<RuleAction>& actions,
+                             const std::function<bool(const QString& event)>& eventIsLive)
+{
+    const ActionRegistry& registry = ActionRegistry::instance();
+    for (const RuleAction& action : actions) {
+        if (!registry.hasTag(action.type, Tag::Effect)) {
+            continue;
+        }
+        const QString eventKey = registry.paramKeyOfKind(action.type, ParamKind::AnimationEvent);
+        if (eventKey.isEmpty() || !eventIsLive) {
+            return true;
+        }
+        if (eventIsLive(action.params.value(eventKey).toString())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace PhosphorRules

@@ -1008,7 +1008,11 @@ if(BUILD_TESTING)
     endforeach()
 endif()
 
-# Standalone settings app (no KDE Frameworks required)
+# Standalone settings app: independent of KDE System Settings, so it runs
+# outside a Plasma session. It is NOT framework-free — src/settings/CMakeLists.txt
+# does find_package(KF6Kirigami REQUIRED) and links KF6::Kirigami, and this
+# add_subdirectory is unconditional, so Kirigami is a hard configure-time
+# dependency of the portable USE_KDE_FRAMEWORKS=OFF build too.
 add_subdirectory(settings)
 
 # Separate precompiled headers for executables (different PIC/PIE settings than shared lib)

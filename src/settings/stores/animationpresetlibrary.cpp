@@ -232,6 +232,14 @@ bool AnimationPresetLibrary::removeUserPreset(const QString& name)
             // deleted here (the original bug).
             if (knownPathSet.contains(info.completeBaseName()))
                 continue;
+            // The knownPathSet check alone is not the whole guard, and
+            // userPresets() carries this second half for the same reason: an
+            // ORPHAN override (a path from a taxonomy this build no longer
+            // recognises) is not in knownPathSet, so it would fall through and
+            // be deleted on a name match. A preset name never contains a dot,
+            // so a dotted stem is an override file whatever the taxonomy says.
+            if (info.completeBaseName().contains(QLatin1Char('.')))
+                continue;
             // Same boundary as userPresets(): hand-editable dir, GUI thread.
             if (!info.isFile() || info.size() > kMaxPresetFileBytes)
                 continue;

@@ -9,24 +9,33 @@
   <project_license>GPL-3.0-or-later</project_license>
 
   <name>PlasmaZones Settings</name>
-  <summary>Configure window zone snapping and autotiling</summary>
+  <summary>Configure window snapping, tiling and scrolling</summary>
 
   <description>
     <p>
       The PlasmaZones Settings app is the standalone configuration
-      surface for the PlasmaZones window-tiling system on KDE Plasma.
-      Most options also appear inside System Settings (via the KCM); the
+      surface for the PlasmaZones window placement system on KDE Plasma.
+      PlasmaZones gives every screen one of three placement modes, chosen
+      per desktop and activity.
+      Snapping drops windows into zones you draw, tiling places them
+      automatically with a scripted algorithm, and scrolling arranges
+      them as columns on an endless strip.
+    </p>
+    <p>
+      Most options also appear inside System Settings via the KCM. The
       standalone app is the place to live-tune animations and shaders
       with previews, manage per-app rules, and review the daemon's
       runtime state.
     </p>
     <p>What it configures:</p>
     <ul>
-      <li>Snap behaviour (modifiers, drag delays, zone span, overlay timing)</li>
-      <li>Autotile algorithms and per-layout defaults</li>
+      <li>Snapping behavior (modifiers, drag delays, zone span, overlay timing)</li>
+      <li>Tiling algorithms and their per-screen defaults</li>
+      <li>Scrolling columns, tabs, tab indicators, and scrolling templates</li>
+      <li>Which mode each monitor, desktop, and activity uses</li>
       <li>Animations, shader effects, and per-event motion profiles</li>
-      <li>Visibility filters (per-screen, per-desktop, per-activity)</li>
-      <li>Per-application zone-snap rules</li>
+      <li>Window decoration packs and zone overlay appearance</li>
+      <li>Per-application window rules</li>
       <li>Keyboard shortcuts and on-screen-display feedback</li>
     </ul>
   </description>

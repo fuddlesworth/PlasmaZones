@@ -187,7 +187,7 @@ Item {
         enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
-                editorController.splitZone(editorWindow.selectedZoneId, true);
+                editorWindow._zoneOps.splitWithShrinkAnimation(editorWindow.selectedZoneId, true, editorController, editorWindow._zonesRepeater);
         }
     }
 
@@ -200,7 +200,7 @@ Item {
         enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
-                editorController.splitZone(editorWindow.selectedZoneId, false);
+                editorWindow._zoneOps.splitWithShrinkAnimation(editorWindow.selectedZoneId, false, editorController, editorWindow._zonesRepeater);
         }
     }
 

@@ -186,9 +186,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // holdAddedGrab=true: take KWin::WindowAddedGrabRole so KWin's stock
     // window-open built-ins (fade / scale / slide / glide) skip this window;
     // without it KWin's stock fade-in renders concurrently with our shader,
-    // producing the visible multi-copy ghost trail. tryBeginShaderForEvent
-    // takes the grab only after shouldAnimateWindow passes, so it is never held
-    // for a window we don't animate.
+    // producing the visible multi-copy ghost trail. beginShaderTransition takes the
+    // grab only once a pack has actually resolved and installed, with symmetric
+    // rollback if it does not, so it is never held for a window we don't animate.
+    // Note the gate is NOT shouldAnimateWindow for every leg: a plasma-shell surface
+    // skips that filter entirely and is admitted by animationEventPathFor naming it
+    // a `shell.*` leg instead.
     //
     // Runs BEFORE applyRuleOpenFullscreen below, so the animation filter sees
     // the window's pre-flip fullscreen state. Deliberate: the transition must
@@ -499,14 +502,52 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // must not inherit a stale snapshot.
     m_ruleWindowLayerSnapshots.remove(closedWindowId);
 
+    // Does this window keep painting after this slot returns, so that its
+    // decoration has to ride the close out rather than vanish at frame 1?
+    //
+    // Two ways it can, and OUR close transition is only one of them. The other
+    // is a FOREIGN close animation: any other effect may reference the window
+    // in its own windowClosed handler (that is what the signal documents the
+    // handler for), and KWin ships several that do it to animate a window
+    // out — including the slide the Plasma panel's popups play on dismissal.
+    // The corpse is then composited for the whole of that animation with our
+    // decoration entry already gone. That is the case a decorated Plasma
+    // applet popup hits whenever it has no shader of its own: shouldDecorateWindow
+    // admits the panel / applet-popup kinds, while a transition reaches such a
+    // surface ONLY through the two `shell.*` legs animationEventPathFor names, and
+    // those legs are unset until the user engages a pack on the Shell page (the
+    // subtree is isolated, so nothing cascades in to engage them). With none
+    // engaged — the default — the decoration is torn down here and the popup slides
+    // away bare. An app window with animations disabled (or excluded from them) hits
+    // it the same way. BOTH terms below are therefore live for a shell surface: the
+    // decoration term carries the un-animated case, the transition term the animated
+    // one. Do not drop either as dead.
+    //
+    // We cannot ask KWin who else holds a grab — the refcount is not exposed,
+    // and the other effect's handler may not even have run yet. So the answer
+    // is the one fact we own: this window IS decorated, therefore keep the
+    // decoration, the multipass composite and the frozen id mapping alive and
+    // let the windowDeleted backstop (lifecycle_wiring.cpp) reap them. That
+    // signal means "not referenced any more", so with no foreign grab it
+    // follows immediately and this costs one signal of latency; with one, the
+    // decoration lives exactly as long as the window paints.
+    //
+    // The paint side already supports this — drawWindow presents EVERY
+    // decorated window through its rest composite precisely so a window
+    // without a live transition can carry its decoration through a close
+    // animation, the fold serves the frozen capture (a corpse produces no
+    // client damage to invalidate it), and the present blit modulates by
+    // KWin's live data.opacity(), which is the foreign animation's own fade.
+    const bool ridesCloseAnimation = m_shaderManager.hasTransition(w) || m_windowDecorations.contains(closedWindowId);
+
     // Drop the window's border entry and release its border-shader redirect —
-    // UNLESS a close transition was just installed above: renderSurfaceChain
-    // re-evaluates the entry per frame and composites the decoration UNDER the
-    // close animation (the border rides the closing window out instead of
-    // vanishing at frame 1). endShaderTransition removes the entry on
-    // teardown, and the windowDeleted handler is the backstop for a window
-    // destroyed mid-animation.
-    if (!m_shaderManager.hasTransition(w)) {
+    // UNLESS the decoration has to ride the close out (see above):
+    // renderSurfaceChain re-evaluates the entry per frame and composites the
+    // decoration UNDER the close animation (the border rides the closing
+    // window out instead of vanishing at frame 1). endShaderTransition removes
+    // the entry on teardown, and the windowDeleted handler is the backstop for
+    // a window destroyed mid-animation.
+    if (!ridesCloseAnimation) {
         // Pass the window pointer: the id no longer resolves via
         // findWindowById at this point, and the GL release must run (see
         // removeWindowDecoration) or the redirect paints opaque black.
@@ -555,7 +596,11 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // frozen mapping for the animation's lifetime; the windowDeleted backstop
     // (lifecycle_wiring.cpp) is the re-scrub — windowDeleted always follows a
     // close-grabbed window, so the mapping cannot outlive the animation.
-    if (!m_shaderManager.hasTransition(w)) {
+    //
+    // Same for a decoration riding a FOREIGN close animation: its entries are
+    // keyed by this frozen id too, and every close-frame fold lookup re-derives
+    // the key from the now-Deleted window.
+    if (!ridesCloseAnimation) {
         m_idCaches.windowIdCache.remove(w);
         m_idCaches.windowIdReverse.remove(closedWindowId);
     }

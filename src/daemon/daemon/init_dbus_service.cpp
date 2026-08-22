@@ -5,9 +5,9 @@
 // Daemon — D-Bus service and object registration
 //
 // Split out of init_engines.cpp, which holds the engine wiring proper. Bus
-// registration is its own concern: it runs before the event loop, owns the
-// bounded synchronous retry, and wires the zone-detection adaptor's
-// highlight feedback into the overlay.
+// registration is its own concern: it runs before the event loop, confirms the
+// well-known name main() already claimed, registers the daemon object, and
+// wires the zone-detection adaptor's highlight feedback into the overlay.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -21,73 +21,47 @@
 
 #include <QDBusConnection>
 #include <QDBusError>
-#include <QThread>
 
 namespace PlasmaZones {
 
 bool Daemon::registerDBusService()
 {
-    // Register D-Bus service and object with error handling and retry logic
+    // Register D-Bus service and object with error handling
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
         qCCritical(lcDaemon) << "Session D-Bus: cannot connect, daemon cannot function";
         return false;
     }
 
-    // Retry D-Bus service registration with exponential backoff.
-    // Synchronous retry is required here because init() runs before QGuiApplication::exec(),
-    // so QTimer-based async approaches won't fire. Delays are kept short (300ms total max).
-    constexpr int maxRetries = 3;
-    constexpr int baseDelayMs = 100; // backoff sleeps 100ms then 200ms
-    // Worst-case blocking: 100 + 200 = 300 ms on the GUI thread. The third
-    // attempt does not sleep — the `attempt < maxRetries - 1` gate below skips
-    // the final (would-be 400ms) delay and returns instead.
-    // init() runs before QGuiApplication::exec(), so QTimer-based async
-    // approaches don't fire — synchronous sleep is the only retry path
-    // available here. The retry is bounded by `maxRetries`, and a bus
-    // disconnect during the wait would render every subsequent retry
-    // pointless (lastError type stays ServiceUnknown but the actual
-    // problem is connection-level).
-    bool serviceRegistered = false;
-    for (int attempt = 0; attempt < maxRetries; ++attempt) {
-        if (!bus.isConnected()) {
-            qCCritical(lcDaemon) << "D-Bus bus connection lost mid-retry — aborting service registration";
-            return false;
-        }
-        if (bus.registerService(QString(PhosphorProtocol::Service::Name))) {
-            serviceRegistered = true;
-            break;
-        }
-
-        QDBusError error = bus.lastError();
-        if (error.type() == QDBusError::ServiceUnknown || error.type() == QDBusError::NoReply) {
-            // Transient error - retry with exponential backoff
-            if (attempt < maxRetries - 1) {
-                const int delayMs = baseDelayMs * (1 << attempt);
-                qCWarning(lcDaemon) << "D-Bus service registration: failed (attempt" << (attempt + 1) << "/"
-                                    << maxRetries << ")," << error.message() << "retrying in" << delayMs << "ms";
-                QThread::msleep(delayMs);
-                continue;
-            }
-        }
-
-        // Non-retryable error or max retries reached. registerService reports
-        // an already-owned name as a plain false with NO error set, so the
-        // generic line below would print an empty message and type 0 for by
-        // far the most common cause — another daemon instance is running.
-        // Name it.
+    // Claim the well-known name. In this process the claim has ALREADY been made:
+    // main() registers the name as its single-instance gate, before constructing
+    // the Daemon, because that is the only place a duplicate start can exit 0
+    // cheaply (exiting non-zero there would put systemd's Restart=on-failure into
+    // a loop on every duplicate autostart). registerService on a name the same
+    // connection already owns returns true, so this call is the confirmation step,
+    // not a second claim.
+    //
+    // It is kept rather than assumed because init() must not register its object
+    // against a name this process does not hold, and because Daemon::stop()
+    // releases the name (lifecycle.cpp) — so any future re-init would need the
+    // claim to happen here.
+    //
+    // There is deliberately no retry loop. An earlier version backed off over
+    // 300 ms and classified ServiceUnknown/NoReply as transient, but none of that
+    // is reachable: main() has already completed a successful round trip to the
+    // bus, so by the time init() runs the bus is up and the name is ours. A false
+    // here means the ordering above changed, which is a programming error and
+    // wants a clear message, not a sleep.
+    if (!bus.registerService(QString(PhosphorProtocol::Service::Name))) {
+        const QDBusError error = bus.lastError();
         if (error.type() == QDBusError::NoError) {
             qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
-                                 << "— the name is already owned, most likely by another running PlasmaZones daemon";
-            return false;
+                                 << "— the name is owned by another connection. main() claims it before"
+                                 << "constructing the Daemon, so reaching this means that gate was bypassed.";
+        } else {
+            qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
+                                 << "error=" << error.message() << "type=" << error.type();
         }
-        qCCritical(lcDaemon) << "Failed to register D-Bus service=" << PhosphorProtocol::Service::Name
-                             << "error=" << error.message() << "type=" << error.type();
-        return false;
-    }
-
-    if (!serviceRegistered) {
-        qCCritical(lcDaemon) << "Failed to register D-Bus service after" << maxRetries << "attempts";
         return false;
     }
 

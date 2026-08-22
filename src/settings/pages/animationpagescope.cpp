@@ -26,6 +26,7 @@ AnimationPageScope animationPageScope(const QString& page)
         {QStringLiteral("animations-osds"), {{QStringLiteral("osd")}, {}}},
         {QStringLiteral("animations-overlays"), {{QStringLiteral("popup")}, {}}},
         {QStringLiteral("animations-desktops"), {{QStringLiteral("desktop")}, {}}},
+        {QStringLiteral("animations-shell"), {{QStringLiteral("shell")}, {}}},
         {QStringLiteral("animations-side-panels"), {{QStringLiteral("panel")}, {}}},
         {QStringLiteral("animations-widgets"), {{QStringLiteral("widget")}, {}}},
         {QStringLiteral("animations-editor"), {{QStringLiteral("editor")}, {}}},

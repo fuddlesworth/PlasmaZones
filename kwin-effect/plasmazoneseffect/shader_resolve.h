@@ -277,4 +277,24 @@ std::optional<bool> resolveOpenFullscreen(const PhosphorRules::ResolvedActions& 
  */
 std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& resolved);
 
+/// True when @p rule carries at least one appearance action that can actually
+/// take effect on a window.
+///
+/// The animation window-filter force-animates a window past the user's min-size
+/// and exclusion settings when a rule matches it, on the reasoning that
+/// authoring a matching rule is the opt-in signal. That reasoning needs the
+/// rule to be able to DO something. An animation override names an event, and
+/// rule slots are looked up by exact event path with no parent cascade (see
+/// shaderSlotFor and friends), so an override pinned to an event the compositor
+/// resolves windowless is never consulted and the rule signals nothing.
+///
+/// "Live" is asked through the action descriptor rather than against a list of
+/// animation action type ids, which would drift the day a fourth event-scoped
+/// action is registered. An action declaring no `animationEvent` param is not
+/// event-scoped at all (a border, an opacity, a layer) and is always live. An
+/// EMPTY event is unset rather than windowless and stays live; an event this
+/// build does not know names no leg any resolver asks for, so it is inert
+/// exactly like a windowless one.
+bool ruleCarriesLiveEffectAction(const PhosphorRules::Rule& rule);
+
 } // namespace PlasmaZones

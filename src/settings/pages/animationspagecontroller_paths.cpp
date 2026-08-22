@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // AnimationsPageController path-discovery helpers — small Q_INVOKABLE readers
-// (`sectionForPath`, `eventLabel`, `parentChain`) and the translated
-// segment-label table (`segmentLabel`) that turn event-profile paths into UI
-// taxonomy. Same class as animationspagecontroller.cpp, separate TU.
+// (`eventPathAcceptsWindowRules`, `sectionForPath`, `eventLabel`,
+// `parentChain`) and the translated segment-label table (`segmentLabel`) that
+// turn event-profile paths into UI taxonomy. Same class as
+// animationspagecontroller.cpp, separate TU.
 
 #include "animationspagecontroller.h"
 #include "animations_controller_detail.h"
@@ -17,6 +18,11 @@
 #include <QLatin1String>
 
 namespace PlasmaZones {
+
+bool AnimationsPageController::eventPathAcceptsWindowRules(const QString& path) const
+{
+    return PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(path);
+}
 
 QString AnimationsPageController::sectionForPath(const QString& path) const
 {
@@ -43,6 +49,14 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     // the title-cased form humanizeSegment would produce, so the two agree for
     // a translator-less run; a segment outside this table (a plugin-added path)
     // falls back to that mechanical form rather than to the raw token.
+    //
+    // PATH SEGMENTS ONLY. This table once also carried the event-CLASS tokens
+    // (fade, geometry, strip, tab, window-morph), which no caller can reach:
+    // the two are eventLabel (a path's last segment) and eventSections (a
+    // section key from sectionForPath), and neither ever yields a class token.
+    // They were shipped to translators as strings that render nowhere. The
+    // class tokens the user does see come from ShaderBrowserPage's own
+    // _typeCatalog, which spells them differently on purpose.
     if (segment == QLatin1String("accordionCollapse")) {
         return PhosphorI18n::tr("Accordion Collapse", "animation event or section");
     }
@@ -51,6 +65,9 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     }
     if (segment == QLatin1String("appearance")) {
         return PhosphorI18n::tr("Appearance", "animation event or section");
+    }
+    if (segment == QLatin1String("appletPopup")) {
+        return PhosphorI18n::tr("Applet Popup", "animation event or section");
     }
     if (segment == QLatin1String("badgeHide")) {
         return PhosphorI18n::tr("Badge Hide", "animation event or section");
@@ -85,9 +102,6 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     if (segment == QLatin1String("editor")) {
         return PhosphorI18n::tr("Editor", "animation event or section");
     }
-    if (segment == QLatin1String("fade")) {
-        return PhosphorI18n::tr("Fade", "animation event or section");
-    }
     if (segment == QLatin1String("fadeIn")) {
         return PhosphorI18n::tr("Fade In", "animation event or section");
     }
@@ -99,9 +113,6 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     }
     if (segment == QLatin1String("focus")) {
         return PhosphorI18n::tr("Focus", "animation event or section");
-    }
-    if (segment == QLatin1String("geometry")) {
-        return PhosphorI18n::tr("Geometry", "animation event or section");
     }
     if (segment == QLatin1String("global")) {
         return PhosphorI18n::tr("Global", "animation event or section");
@@ -166,8 +177,8 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     if (segment == QLatin1String("scrolling")) {
         return PhosphorI18n::tr("Scrolling", "animation event or section");
     }
-    if (segment == QLatin1String("shader")) {
-        return PhosphorI18n::tr("Shader", "animation event or section");
+    if (segment == QLatin1String("shell")) {
+        return PhosphorI18n::tr("Shell", "animation event or section");
     }
     if (segment == QLatin1String("show")) {
         return PhosphorI18n::tr("Show", "animation event or section");
@@ -193,14 +204,8 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     if (segment == QLatin1String("snapResize")) {
         return PhosphorI18n::tr("Snap Resize", "animation event or section");
     }
-    if (segment == QLatin1String("strip")) {
-        return PhosphorI18n::tr("Strip", "animation event or section");
-    }
     if (segment == QLatin1String("switch")) {
         return PhosphorI18n::tr("Switch", "animation event or section");
-    }
-    if (segment == QLatin1String("tab")) {
-        return PhosphorI18n::tr("Tab", "animation event or section");
     }
     if (segment == QLatin1String("tabSwitch")) {
         return PhosphorI18n::tr("Tab Switch", "animation event or section");
@@ -222,9 +227,6 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     }
     if (segment == QLatin1String("window")) {
         return PhosphorI18n::tr("Window", "animation event or section");
-    }
-    if (segment == QLatin1String("window-morph")) {
-        return PhosphorI18n::tr("Window Morph", "animation event or section");
     }
     if (segment == QLatin1String("zoneHighlight")) {
         return PhosphorI18n::tr("Zone Highlight", "animation event or section");

@@ -526,9 +526,26 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // the window (the close-animation overshoot). Live geometry accessors on a
     // ref-held Deleted window are already exercised every close frame by
     // paintWindow's anchor-uniform block, so reading them here is the same
-    // safety class. Bail only for a deleted window with NO live transition
-    // (nothing of ours paints it).
-    if (!window || (window->isDeleted() && !m_shaderManager.findTransition(window))) {
+    // safety class. Bail only for a deleted window NOTHING of ours paints:
+    // neither a live transition nor a decoration riding a foreign close
+    // animation (see slotWindowClosed). The padded-decoration rewrite below is
+    // the reason the second term is here — a decorated corpse presents through
+    // a canvas larger than its redirect texture exactly like a live one, and
+    // the natural quad would clip the margin band off its close animation.
+    //
+    // The kept decoration is looked up through the FROZEN id cache rather than
+    // getWindowId: that resolver re-derives and re-inserts for a cache miss,
+    // and re-populating the id maps from a dying window is exactly what the
+    // close path's scrub (and buildWindowMap's skip) exist to prevent. A window
+    // whose decoration was kept still has its mapping — slotWindowClosed keeps
+    // the two together — so a miss here is a corpse we are not painting.
+    // A cache MISS yields a default-constructed QString, which must not be allowed
+    // to match an entry: an empty key is not a window, and treating it as one would
+    // admit a corpse whose id then re-derives from the dying window below.
+    const QString frozenWindowId = window ? m_idCaches.windowIdCache.value(window) : QString();
+    if (!window
+        || (window->isDeleted() && !m_shaderManager.findTransition(window)
+            && (frozenWindowId.isEmpty() || !m_windowDecorations.contains(frozenWindowId)))) {
         return;
     }
     // Only surface-extent transitions deform the quad list. Anchor-extent
@@ -548,7 +565,10 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // no live transition: a transition owns the shader slot (shaderApplied
     // false) and its own quad handling wins.
     if (!st && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
-        const auto bit = m_windowDecorations.find(getWindowId(window));
+        // The FROZEN id again, not getWindowId: same reason the guard above gives,
+        // and this is a path the guard deliberately admits a corpse onto. One
+        // spelling of the invariant, not two.
+        const auto bit = m_windowDecorations.find(frozenWindowId);
         if (bit != m_windowDecorations.end() && bit->shaderApplied) {
             QRectF textureGeo = window->expandedGeometry();
             if (textureGeo.isEmpty()) {
@@ -572,7 +592,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
             // which is a different question than "what scale is this texture's grid" the
             // moment a window crosses outputs between the fold and the present.
             qreal presentScale = 0.0;
-            if (const auto psIt = m_surfaceMultipass.find(getWindowId(window)); psIt != m_surfaceMultipass.end()) {
+            if (const auto psIt = m_surfaceMultipass.find(frozenWindowId); psIt != m_surfaceMultipass.end()) {
                 if (psIt->second.canvasGeo.isValid()) {
                     padded = psIt->second.canvasGeo;
                     haveCanvas = true;
@@ -686,7 +706,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // the layer is absent, where CLAMP smears the feathered-transparent
     // margin edge — invisible.)
     if (st && !st->surfaceExtent && !quads.isEmpty() && !m_windowDecorations.isEmpty()) {
-        const auto bit = m_windowDecorations.find(getWindowId(window));
+        const auto bit = m_windowDecorations.find(frozenWindowId);
         if (bit != m_windowDecorations.end() && bit->outerPadding > 0) {
             QRectF textureGeo = window->expandedGeometry();
             if (textureGeo.isEmpty()) {
@@ -830,7 +850,7 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
         // resolves into the composite's margin. With no decoration the
         // canvas equals the frame and this reduces to the old behaviour.
         QRectF gridRect = frameRect;
-        if (const auto lsIt = m_surfaceMultipass.find(getWindowId(window));
+        if (const auto lsIt = m_surfaceMultipass.find(frozenWindowId);
             lsIt != m_surfaceMultipass.end() && lsIt->second.canvasGeo.isValid() && !lsIt->second.canvasGeo.isEmpty()) {
             gridRect = lsIt->second.canvasGeo;
         }

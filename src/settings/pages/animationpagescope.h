@@ -13,8 +13,8 @@ namespace PlasmaZones {
 /// The per-page scope of an animation leaf. Every animation leaf shares the
 /// single AnimationsPageController staging domain AND the single
 /// ShaderProfileTree key, but Reset/Discard/dirty are NOT whole-tree: each
-/// surface leaf (windows/osds/overlays/desktops/motion/dragging/panels/
-/// widgets/editor) owns one event-path root subtree, General owns only the
+/// surface leaf owns one event-path root subtree (the table in the .cpp is the
+/// list of them, and is the only place that list should live), General owns only the
 /// config keys, and the presets / motion sets / shaders library leaves act on the whole
 /// editable tree. Scoping keeps a Reset on one surface from wiping the
 /// others (mirrors the decoration domain — see decorationpagescope.h).

@@ -782,19 +782,25 @@ void PlasmaZonesEffect::updateAllDecorations()
     // close ever reaching us. These are genuine teardowns, so they release the GL
     // working set and the surface state.
     //
-    // Entries riding a live shader transition are skipped, exactly as the old bulk
-    // clear skipped them. The close path deliberately keeps a closing window's
-    // decoration + multipass state alive so the chain can composite under the close
-    // animation, and this reconcile runs within milliseconds of every close (the
+    // Entries riding a CLOSE ANIMATION are skipped, exactly as the old bulk clear
+    // skipped the transition half of them. The close path deliberately keeps a closing
+    // window's decoration + multipass state alive so the chain can composite under the
+    // close animation, and this reconcile runs within milliseconds of every close (the
     // focus shift alone triggers it). The frozen reverse mapping resolves the deleted
     // window; endShaderTransition's teardown or the windowDeleted backstop erases the
     // entry when the animation is done.
+    //
+    // isDeleted covers the second half of that keep: a decoration riding a FOREIGN
+    // close animation (KWin's fade, sliding-popups on a Plasma applet popup) has no
+    // transition of ours to test for. The loop above already skipped every deleted
+    // window, so without this the sweep would undo slotWindowClosed's keep on the
+    // first focus change — which lands in the same millisecond as the close.
     for (const QString& wid : previouslyDecorated) {
         if (revisited.contains(wid)) {
             continue;
         }
         KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(wid);
-        if (w && m_shaderManager.findTransition(w)) {
+        if (w && (w->isDeleted() || m_shaderManager.findTransition(w))) {
             continue;
         }
         removeWindowDecoration(wid, w);
