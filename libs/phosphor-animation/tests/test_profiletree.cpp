@@ -145,6 +145,29 @@ private Q_SLOTS:
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::ShellAppletPopupHide).isEmpty());
     }
 
+    // Segment-boundary probes for the REMAINING sub-tree prefixes.
+    //
+    // eventClassForPath matches five more sub-trees by `startsWith`, and each
+    // prefix carries a trailing '.' for the same reason the scrolling and shell
+    // ones do: without it a sibling root that merely shares the opening letters
+    // is swept into the class. Only those two were probed, so dropping the dot
+    // from any of these five left the whole file green. One probe each closes
+    // that.
+    void testEventClassPrefixesAreSegmentAware()
+    {
+        QVERIFY(PP::eventClassForPath(QStringLiteral("desktopx")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("desktopx.switch")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("osdx")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("osdx.show")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("popupx")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("popupx.cheatsheet.show")).isEmpty());
+        // The two window sub-trees, whose roots are themselves dotted paths.
+        QVERIFY(PP::eventClassForPath(QStringLiteral("window.movementx")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("window.movementx.maximize")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("window.appearancex")).isEmpty());
+        QVERIFY(PP::eventClassForPath(QStringLiteral("window.appearancex.open")).isEmpty());
+    }
+
     void testAllBuiltInPathsNonEmpty()
     {
         const QStringList paths = PP::allBuiltInPaths();
@@ -152,13 +175,104 @@ private Q_SLOTS:
         QVERIFY(paths.contains(PP::Global));
         QVERIFY(paths.contains(PP::WindowOpen));
         QVERIFY(paths.contains(PP::EditorSnapIn));
-        // Membership is the motion tree's own filter: a path missing here is
-        // silently dropped from every persisted override, so a page can look
-        // complete while nothing it writes survives a restart.
+        // Membership is the taxonomy every UI and validity check reads. It is
+        // NOT a persistence filter — ProfileTree::setOverride and ::fromJson
+        // reject only an empty path — so a path missing here is not dropped on
+        // save, it is unreachable from the UI (and refused by
+        // AnimationsPageController::isValidEventPath) and inert at resolve time.
         QVERIFY(paths.contains(PP::Shell));
         QVERIFY(paths.contains(PP::ShellAppletPopup));
         QVERIFY(paths.contains(PP::ShellAppletPopupShow));
         QVERIFY(paths.contains(PP::ShellAppletPopupHide));
+    }
+
+    /// The per-window set is EXACTLY these ten, and the compositor's own
+    /// routing reads the same predicate.
+    ///
+    /// Pinned as an exact set rather than as spot checks on purpose. The list
+    /// decides two things at once — whether the effect resolves an event
+    /// windowless, and whether the rule editor offers it — so a taxonomy
+    /// addition that silently defaulted either way would either hand a new
+    /// event a rule tier it cannot use or hide one that works. Failing here
+    /// forces the author to make the call.
+    void testEventPathResolvesPerWindowIsExactlyTheTenLiveLegs()
+    {
+        const QStringList expected{
+            PP::WindowOpen, PP::WindowClose,  PP::WindowMinimize, PP::WindowFocus,        PP::WindowMaximize,
+            PP::WindowMove, PP::WindowSnapIn, PP::WindowSnapOut,  PP::WindowLayoutSwitch, PP::ScrollingTabSwitch,
+        };
+
+        QStringList actual;
+        for (const QString& path : PP::allBuiltInPaths()) {
+            if (PP::eventPathResolvesPerWindow(path))
+                actual.append(path);
+        }
+        actual.sort();
+
+        QStringList wanted = expected;
+        wanted.sort();
+        QCOMPARE(actual, wanted);
+
+        // The OTHER half of the pin, and the load-bearing one. The comparison
+        // above catches a path wrongly ADDED to kPerWindowPaths, but not the
+        // dangerous direction: a NEW taxonomy path that nobody adds leaves
+        // `actual` untouched and this test green, while the compositor silently
+        // resolves it windowless and drops both its rule tier and its window
+        // filter (see the fail-open note on eventPathResolvesPerWindow). Pinning
+        // the taxonomy's size means any addition fails one of the two, which is
+        // what forces the author to decide which side the new path belongs on.
+        // Bump this deliberately, together with that decision.
+        QCOMPARE(PP::allBuiltInPaths().size(), qsizetype(76));
+
+        // The near misses that make the boundary a real decision rather than a
+        // family rule: tabSwitch is per-window while its own sibling is not,
+        // and the category nodes above the live leaves are not either, because
+        // the compositor only ever resolves leaves.
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::ScrollingView));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::Scrolling));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::Window));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::WindowAppearance));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::WindowMovement));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::Global));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::DesktopSwitch));
+        QVERIFY(!PP::eventPathResolvesPerWindow(PP::ShellAppletPopupShow));
+        QVERIFY(!PP::eventPathResolvesPerWindow(QString()));
+        QVERIFY(!PP::eventPathResolvesPerWindow(QStringLiteral("window.appearance.openx")));
+    }
+
+    /// allBuiltInPaths() is documented as being "in taxonomy order", and the
+    /// settings UI depends on that: AnimationsPageController::eventSections
+    /// derives both the section order and the row order within a section from
+    /// first appearance in this list. Nothing enforced it, so a reordering
+    /// silently reshuffled the Animations pages with every test green.
+    ///
+    /// Pinned as the SECTION sequence rather than all 76 paths, because the
+    /// section order is the part the UI actually reads and the part a reader
+    /// can check at a glance. Reordering two leaves inside one family is
+    /// harmless; moving a family is not.
+    void testAllBuiltInPathsIsInTaxonomyOrder()
+    {
+        QStringList sections;
+        for (const QString& path : PP::allBuiltInPaths()) {
+            const int dot = path.indexOf(QLatin1Char('.'));
+            const QString root = dot < 0 ? path : path.left(dot);
+            if (sections.isEmpty() || sections.last() != root)
+                sections.append(root);
+        }
+
+        // Each root appears exactly once, i.e. the list is grouped by family
+        // rather than interleaved. Without this a family split in two would
+        // still satisfy the sequence compare below.
+        QStringList unique = sections;
+        unique.removeDuplicates();
+        QCOMPARE(sections, unique);
+
+        const QStringList expected{
+            QStringLiteral("global"),    QStringLiteral("window"), QStringLiteral("desktop"), QStringLiteral("editor"),
+            QStringLiteral("scrolling"), QStringLiteral("shell"),  QStringLiteral("osd"),     QStringLiteral("popup"),
+            QStringLiteral("panel"),     QStringLiteral("cursor"), QStringLiteral("widget"),
+        };
+        QCOMPARE(sections, expected);
     }
 
     // Pin the post-rename taxonomy: every new path constant from the
@@ -622,6 +736,7 @@ private Q_SLOTS:
     {
         ProfileTree tree;
         Profile p;
+        p.duration = 400.0;
         tree.setOverride(PP::Window, p);
         tree.setOverride(PP::Editor, p);
         tree.setOverride(PP::Osd, p);
@@ -629,6 +744,11 @@ private Q_SLOTS:
         Profile baseline;
         baseline.duration = 123.0;
         tree.setBaseline(baseline);
+
+        // Assert the PRE-condition too, or this slot goes vacuous the day
+        // setOverride grows any reason to refuse: an empty list would then
+        // satisfy the post-condition without clearAllOverrides doing anything.
+        QCOMPARE(tree.overriddenPaths().size(), qsizetype(3));
 
         tree.clearAllOverrides();
         QVERIFY(tree.overriddenPaths().isEmpty());
@@ -668,6 +788,11 @@ private Q_SLOTS:
     {
         ProfileTree tree;
         Profile p;
+        // Engaged, so the empty-path guard is the ONLY thing that can produce
+        // an empty override list here. With a default-constructed Profile a
+        // future "don't store a fully-unset profile" rule would satisfy the
+        // assertion for a reason this slot does not name.
+        p.duration = 400.0;
         tree.setOverride(QString(), p);
         QVERIFY(tree.overriddenPaths().isEmpty());
     }

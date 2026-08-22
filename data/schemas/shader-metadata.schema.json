@@ -20,7 +20,7 @@
         },
         "presets": {
             "type": "object",
-            "description": "Named parameter presets. Each value is a map of parameter id to value; image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
+            "description": "Named parameter presets. Each value is a map of parameter id to value. Image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
             "additionalProperties": { "type": "object" }
         },
         "multipass": { "type": "boolean" },
@@ -59,7 +59,7 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 31,
-                    "description": "Explicit UBO lane. 31 is the scalar-pool ceiling; the color pool tops out at 15 and the image pool at 3, which the pack validator lints per type."
+                    "description": "Explicit UBO lane. 31 is the scalar-pool ceiling, and the color pool tops out at 15 with the image pool at 3, which the pack validator lints per type."
                 }
             }
         }

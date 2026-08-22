@@ -86,6 +86,7 @@ Item {
             actionCount: _rule.actionCount
             isComposite: _rule.isComposite
             validationIssueCount: _rule.validationIssueCount
+            inertAnimationActionCount: _rule.inertAnimationActionCount
             priority: _rule.priority
             managed: _rule.managed === true
             sectionLabel: root.showSectionBadge ? (_rule.sectionLabel || "") : ""

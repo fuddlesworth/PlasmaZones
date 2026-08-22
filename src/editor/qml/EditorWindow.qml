@@ -47,6 +47,9 @@ Window {
         return editorWindow._editorController.gaps.hasOuterGapOverride ? editorWindow._editorController.gaps.outerGap : editorWindow._editorController.gaps.globalOuterGap;
     }
     property var _zonesRepeater: null
+    /// The shared zone-operation helpers. Exposed because EditorShortcuts is a
+    /// separate file, so `zoneOps`'s id does not reach it.
+    readonly property alias _zoneOps: zoneOps
     // Base of the zone stacking range inside drawingArea. Each zone sits at
     // zoneBaseZ + its zOrder, and ZoneManager keeps zOrder a dense 0..count-1
     // permutation matching the zone's index in the model, so the top zone sits
@@ -307,12 +310,12 @@ Window {
         onSplitHorizontalRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
-                Qt.callLater(editorWindow._editorController.splitZone, id, true);
+                Qt.callLater(zoneOps.splitWithShrinkAnimation, id, true, editorWindow._editorController, editorWindow._zonesRepeater);
         }
         onSplitVerticalRequested: {
             let id = zoneId;
             if (editorWindow._editorController && id)
-                Qt.callLater(editorWindow._editorController.splitZone, id, false);
+                Qt.callLater(zoneOps.splitWithShrinkAnimation, id, false, editorWindow._editorController, editorWindow._zonesRepeater);
         }
         onDuplicateRequested: {
             let id = zoneId;
@@ -568,11 +571,11 @@ Window {
                         }
                         onSplitHorizontalRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.splitZone(modelData.id, true);
+                                zoneOps.splitWithShrinkAnimation(modelData.id, true, editorWindow._editorController, editorWindow._zonesRepeater);
                         }
                         onSplitVerticalRequested: {
                             if (editorWindow._editorController && modelData && modelData.id)
-                                editorWindow._editorController.splitZone(modelData.id, false);
+                                zoneOps.splitWithShrinkAnimation(modelData.id, false, editorWindow._editorController, editorWindow._zonesRepeater);
                         }
                         onExpandToFillWithCoords: function (mouseX, mouseY) {
                             if (editorWindow._editorController && modelData && modelData.id)

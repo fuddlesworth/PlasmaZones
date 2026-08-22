@@ -612,6 +612,13 @@ ColumnLayout {
                     animationsController: root.appSettings ? root.appSettings.animationsController : null
                 }
 
+                // Same shared component as the editor's action row, so a saved
+                // rule naming a windowless event is flagged in the summary too.
+                InertAnimationEventChip {
+                    action: actionDelegate._action
+                    animationsController: root.appSettings ? root.appSettings.animationsController : null
+                }
+
                 Item {
                     Layout.fillWidth: true
                 }

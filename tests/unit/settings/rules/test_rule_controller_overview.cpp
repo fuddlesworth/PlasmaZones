@@ -16,7 +16,9 @@
  * against locally-staged rules.
  */
 
+#include <QFile>
 #include <QJSEngine>
+#include <QRegularExpression>
 #include <QTest>
 #include <QUuid>
 
@@ -48,6 +50,7 @@ private Q_SLOTS:
     void monitorOverviewReportsLock();
     void monitorOverviewLockPriorityResolution();
     void curveLabelResolverBridgesQmlNaming();
+    void rulesSnapshotFeedsEveryRuleRowRequiredProperty();
 };
 
 void TestRuleControllerOverview::monitorOverviewSummarises()
@@ -676,6 +679,95 @@ void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()
     QCOMPARE(summary(), QStringLiteral("Curve: Standard (Cubic)"));
     controller.setCurveLabelResolver(QJSValue());
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+}
+
+void TestRuleControllerOverview::rulesSnapshotFeedsEveryRuleRowRequiredProperty()
+{
+    // RuleRow binds against rulesSnapshot(), NOT against the model's roles, and
+    // the snapshot is assembled key by key in rulecontroller_views.cpp. Adding a
+    // model role plus a `required property` on the row is therefore NOT enough:
+    // miss the snapshot line and every row is handed `undefined` for a required
+    // int, which is a per-row runtime type error and an invisible feature.
+    // Testing the model alone cannot see that, which is exactly how it shipped
+    // once. This scrapes the QML and checks the real payload, the only place the
+    // two halves meet.
+    const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/rules/RuleRow.qml");
+    QFile file(qmlPath);
+    QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(QStringLiteral("could not read ") + qmlPath));
+    const QString src = QString::fromUtf8(file.readAll());
+
+    // Scrape only the ROOT object's declarations. RuleRow carries an inline
+    // Component for its expanded body, and a required property declared in
+    // there is fed by the row itself rather than by the snapshot — attributing
+    // one to the payload would fail this test with a message pointing at the
+    // wrong file.
+    const int inlineComponent = src.indexOf(QStringLiteral("Component {"));
+    const QString rootScope = inlineComponent < 0 ? src : src.left(inlineComponent);
+
+    // The type group is deliberately wider than \w+: a declaration such as
+    // `required property list<string> x` or a qualified module type would
+    // otherwise be skipped silently, which is the exact failure this test
+    // exists to catch.
+    static const QRegularExpression re(QStringLiteral(R"(required\s+property\s+[\w.<>]+\s+(\w+))"));
+    QStringList required;
+    auto it = re.globalMatch(rootScope);
+    while (it.hasNext()) {
+        required.append(it.next().captured(1));
+    }
+    // Exact, not a floor. A floor with slack still passes when drift costs one
+    // declaration, which is the drift most likely to happen. Bump this together
+    // with a deliberate change to RuleRow's required set.
+    QCOMPARE(required.size(), qsizetype(11));
+
+    // Page-fed properties that are NOT currently `required`, so the scrape does
+    // not see them today. Listed anyway: promoting one to `required` should not
+    // fail this test, because the page supplies it rather than the row payload.
+    static const QStringList kFromPage{
+        QStringLiteral("controller"),
+        QStringLiteral("matchFieldOptions"),
+        QStringLiteral("actionTypeOptions"),
+        QStringLiteral("appSettings"),
+    };
+
+    // Staged the same way every other test here stages one, through the
+    // controller's own authoring API. The action names a windowless event, so
+    // the row's inert count must come back as 1.
+    RuleController controller;
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("animation"));
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("overrideAnimationTiming")},
+                                 {QStringLiteral("event"), QStringLiteral("desktop.switch")},
+                                 {QStringLiteral("durationMs"), 200}}};
+    QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+
+    const QVariantList snapshot = controller.rulesSnapshot();
+    QCOMPARE(snapshot.size(), 1);
+    const QVariantMap entry = snapshot.first().toMap();
+
+    QStringList missing;
+    for (const QString& name : std::as_const(required)) {
+        if (kFromPage.contains(name)) {
+            continue;
+        }
+        // `ruleName` / `ruleEnabled` are the row's names for the payload's
+        // `name` / `enabled`, renamed there to avoid shadowing the delegate's
+        // own properties.
+        QString key = name;
+        if (name == QLatin1String("ruleName")) {
+            key = QStringLiteral("name");
+        } else if (name == QLatin1String("ruleEnabled")) {
+            key = QStringLiteral("enabled");
+        }
+        if (!entry.contains(key)) {
+            missing.append(name + QStringLiteral(" (looked for key '") + key + QStringLiteral("')"));
+        }
+    }
+    QVERIFY2(missing.isEmpty(),
+             qPrintable(QStringLiteral("RuleRow requires properties rulesSnapshot() does not provide: ")
+                        + missing.join(QStringLiteral(", "))));
+
+    // And the one this test was written for: present AND carrying a real value.
+    QCOMPARE(entry.value(QStringLiteral("inertAnimationActionCount")).toInt(), 1);
 }
 
 QTEST_MAIN(TestRuleControllerOverview)

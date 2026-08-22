@@ -318,6 +318,19 @@ public:
     /// All registered type ids whose descriptor carries @p tag.
     QStringList typesWithTag(QLatin1StringView tag) const;
 
+    /// The wire param key whose schema `kind` is @p kind for @p type, or an
+    /// empty string when @p type declares no such param (including an
+    /// unregistered type).
+    ///
+    /// Lets a consumer ask a STRUCTURAL question about an action — "is this one
+    /// scoped to an animation event?" — without maintaining its own list of
+    /// type ids. A consumer that hardcodes such a list drifts silently the day
+    /// a fourth action of the same shape is registered; this reads the same
+    /// descriptor the editor renders from, so it cannot.
+    ///
+    /// The first match wins. No descriptor declares two params of one kind.
+    QString paramKeyOfKind(const QString& type, QLatin1StringView kind) const;
+
 private:
     ActionRegistry();
     void registerBuiltins();
@@ -333,5 +346,30 @@ private:
 
     QHash<QString, ActionDescriptor> m_descriptors;
 };
+
+/// True when @p actions carry at least one `Tag::Effect` action that can
+/// actually take effect, delegating the event verdict to @p eventIsLive.
+///
+/// Splits one question in two so each half sits in the layer that can answer
+/// it. The action walk is rule semantics and lives here: which actions are
+/// appearance actions, which of those are scoped to an animation event, and
+/// which param carries it — all read from the descriptor rather than from a
+/// list of type ids that would drift the day a fourth event-scoped action is
+/// registered. Whether a given event path can be driven per window is animation
+/// taxonomy, which this library does not know, so the caller supplies it.
+///
+/// An action declaring no `animationEvent` param is not event-scoped at all (a
+/// border, an opacity, a layer) and is live without consulting @p eventIsLive.
+/// A null @p eventIsLive treats every event-scoped action as live, which is the
+/// pre-narrowing behaviour.
+///
+/// The KWin window filter uses this to stop force-animating a window past the
+/// user's own size and exclusion settings on behalf of a rule that could not
+/// have changed anything.
+/// Takes the action list rather than a Rule: this header defines RuleAction and
+/// is included BY Rule.h, so the higher-level type is not visible here, and the
+/// walk needs nothing else from a rule anyway.
+PHOSPHORRULES_EXPORT bool ruleHasLiveEffectAction(const QList<RuleAction>& actions,
+                                                  const std::function<bool(const QString& event)>& eventIsLive);
 
 } // namespace PhosphorRules

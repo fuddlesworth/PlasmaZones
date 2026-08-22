@@ -90,6 +90,17 @@ inline constexpr QLatin1StringView TargetDesktop{"targetDesktop"};
 inline constexpr QLatin1StringView Chain{"chain"};
 } // namespace ActionParam
 
+// Param-KIND vocabulary — the schema hint that tells the editor which widget to
+// render, and tells a consumer what SHAPE a param is without knowing the action
+// type. Only the kinds a consumer reads structurally are named here; the rest
+// are spelled in their descriptors, which is where the editor reads them.
+namespace ParamKind {
+/// A param whose value is an animation event path (`window.appearance.open`).
+/// Read by the KWin effect's window filter to tell an appearance action that
+/// can fire from one pinned to an event no rule can drive.
+inline constexpr QLatin1StringView AnimationEvent{"animationEvent"};
+} // namespace ParamKind
+
 /// Upper bound for a `SnapToZone` zone ordinal (each `ActionParam::Zones` entry).
 /// No real layout has anywhere near this many zones (the snapToZone1..9 shortcuts
 /// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
