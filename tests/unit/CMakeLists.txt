@@ -1546,6 +1546,26 @@ target_link_libraries(test_animations_shader_overrides
 target_compile_definitions(test_animations_shader_overrides PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
 
+# Params-only shader writer + the group readers that answer what a path owns.
+# Split from test_animations_shader_overrides rather than added to it: that
+# file sits at 1110 lines against the 1150 hard ceiling, and this is a coherent
+# slice (pack-versus-parameters) on its own.
+add_executable(test_animations_shader_param_writes
+    settings/pages/test_animations_shader_param_writes.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_shader_param_writes
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_shader_param_writes PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animations_shader_param_writes COMMAND test_animations_shader_param_writes)
+
 # Decoration page (per-surface DecorationProfileTree editor): reader /
 # mutator coverage for DecorationPageController — chain resolution,
 # override engage/clear, per-pack parameter merge/prune, subtree ops and

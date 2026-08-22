@@ -132,16 +132,29 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 /// paired clear action would silently wipe a setting the user made on the
 /// Window Dragging page.
 ///
-/// PARAMS-ONLY overrides are excluded for the same reason in a different
-/// shape: an override whose `effectId` is not engaged inherits the
-/// ancestor's pack and merely overlays parameter values onto it, so it
-/// rides the ancestor's choice rather than shadowing it — change the pack
-/// above and the descendant follows. Only an ENGAGED effectId pins a pack
-/// at the descendant and makes it stop following, which is exactly what
-/// "shadows this parent" means to a user. Note an engaged effectId counts
-/// even when it currently equals what the ancestor resolves: the two are
-/// the same pack today and independent tomorrow, and it is that pin the
-/// warning exists to surface.
+/// PARAMS-ONLY overrides are excluded, but for a narrower reason than the
+/// leaf-isolated ones above, and the difference matters. An override whose
+/// `effectId` is not engaged still inherits the ancestor's PACK, so change
+/// the pack above and the descendant follows. Only an ENGAGED effectId
+/// pins a pack at the descendant and makes it stop following, which is
+/// what "shadows this parent" means to a user reading the warning. Note an
+/// engaged effectId counts even when it currently equals what the ancestor
+/// resolves: the two are the same pack today and independent tomorrow, and
+/// it is that pin the warning exists to surface.
+///
+/// It does NOT follow that a params-only descendant shadows nothing. On the
+/// PARAMETER axis it shadows completely: ShaderProfile::overlay REPLACES
+/// the whole parameter map rather than merging keys (pinned by
+/// libs/phosphor-animation/tests/test_shaderprofiletree.cpp,
+/// testResolveLeafFillsFromCategoryThenBaseline), so a descendant that
+/// stores parameters freezes every value at that leaf and stops following
+/// the ancestor's parameter edits. That is deliberately not surfaced here,
+/// because this walk drives a warning whose one action is a destructive
+/// clear: counting the parameter axis would put the ancestor back in the
+/// business of offering to delete a tweak the user just made on the
+/// descendant, which is the bug this exclusion exists to fix. The
+/// descendant's own card is where that state is disclosed, via the shader
+/// row's ownership caption (AnimationProfileEditor.shaderOwnership).
 inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                     const QString& path)
 {

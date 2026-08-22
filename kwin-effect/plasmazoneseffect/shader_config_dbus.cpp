@@ -544,7 +544,16 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                 || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
                     && profilePath.at(overridden.size()) == QLatin1Char('.'))
                 || (isolationRoot.isEmpty() && overridden == PhosphorAnimation::ProfilePaths::Global);
-            if (isChainMember && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))) {
+            // A PARAMS-ONLY entry (parameters engaged, effectId not) is a chain
+            // member that assigns no pack — it overlays values onto whatever an
+            // ancestor chose. Counting it as coverage attributed an empty
+            // resolve to "a pack is assigned somewhere and something else went
+            // wrong", which is the warn branch, when the quiet "no shader
+            // assigned anywhere on this cascade" branch is the accurate one.
+            // Same rule the settings-side shadowing walk applies, for the same
+            // reason.
+            const bool assignsAPack = profileTree.directOverride(overridden).effectId.has_value();
+            if (isChainMember && assignsAPack && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))) {
                 cascadeCovered = true;
                 break;
             }

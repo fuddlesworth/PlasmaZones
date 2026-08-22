@@ -18,10 +18,13 @@ import QtQuick
  * What is left here is genuinely the card's: while its own write is in flight,
  * the card must ignore the signals that write emits (`_committing` /
  * `_committingShader`), and afterwards it must refresh once. Neither means
- * anything C++-side. Every function below is therefore the same three lines —
+ * anything C++-side. Every WRITER below is therefore the same three lines —
  * latch, one controller call, unlatch and refresh — and each still exists
  * separately so `mirrorPaths` cannot be bypassed by a future call site reaching
- * a per-path mutator directly.
+ * a per-path mutator directly. The read-only group queries at the end of the
+ * file (`_anyWritePathSupportsShaderLeg`, `_allWritePathsHold`,
+ * `_refreshMirrorDivergence`) carry neither latch nor refresh, because none of
+ * them moves anything for a signal to report.
  *
  * The try/finally is not decoration. QML has no RAII, and a throw inside a
  * write (a Q_INVOKABLE argument conversion, or `settingsController` resolving
@@ -109,8 +112,11 @@ QtObject {
     // timing refresh is what re-derives the card's Override toggle, which
     // reports either axis.
     /// Set the shader override on every write path that can host a shader leg.
-    /// Reached from the param sliders, so this runs at drag rate — the
-    /// controller applies the whole group to one tree read and one write.
+    /// Reached from the PICKER, not from the param sliders: choosing a pack is
+    /// the one action that should stamp an id. The sliders go through
+    /// `_setShaderParamsOnAll` below, which is what leaves an inheriting
+    /// event's pack alone. The controller still applies the whole group to one
+    /// tree read and one write.
     ///
     /// False when the controller returned -1: an async discard owns the tree
     /// and it toasted the reason.

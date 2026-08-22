@@ -269,7 +269,7 @@ AnimationsPageController::writeOverrideFileOnly(const QString& path, const QVari
     // editor controls on `discarding` — only Main.qml's Apply/Discard buttons
     // are — so this is the sole guard, not defence-in-depth behind a UI one.
     if (m_asyncRevertInFlight) {
-        qCWarning(lcConfig) << "setOverride: refusing write while async discard is in flight; path=" << path;
+        qCWarning(lcConfig) << "writeOverrideFileOnly: refusing write while async discard is in flight; path=" << path;
         return OverrideFileWrite::Failed;
     }
 
@@ -279,7 +279,7 @@ AnimationsPageController::writeOverrideFileOnly(const QString& path, const QVari
         // animation edit into a silent no-op: the group writer folds the
         // false into allWritten with no toast of its own, so the slider
         // snaps back with nothing in the journal.
-        qCWarning(lcConfig) << "setOverride: cannot create profiles directory" << dir;
+        qCWarning(lcConfig) << "writeOverrideFileOnly: cannot create profiles directory" << dir;
         return OverrideFileWrite::Failed;
     }
     const QString filePath = profileFilePath(path);
@@ -303,7 +303,8 @@ AnimationsPageController::writeOverrideFileOnly(const QString& path, const QVari
     // Snapshot before touching disk, and bail if the pre-edit content could not
     // be captured: an unrecoverable revert is worse than a failed write.
     if (!snapshotFileIfFirst(filePath)) {
-        qCWarning(lcConfig) << "setOverride: refusing to write" << filePath << "without a recoverable snapshot";
+        qCWarning(lcConfig) << "writeOverrideFileOnly: refusing to write" << filePath
+                            << "without a recoverable snapshot";
         return OverrideFileWrite::Failed;
     }
 
