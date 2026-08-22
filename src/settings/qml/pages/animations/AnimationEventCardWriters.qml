@@ -18,13 +18,19 @@ import QtQuick
  * What is left here is genuinely the card's: while its own write is in flight,
  * the card must ignore the signals that write emits (`_committing` /
  * `_committingShader`), and afterwards it must refresh once. Neither means
- * anything C++-side. Every WRITER below is therefore the same three lines —
- * latch, one controller call, unlatch and refresh — and each still exists
- * separately so `mirrorPaths` cannot be bypassed by a future call site reaching
- * a per-path mutator directly. The read-only group queries at the end of the
- * file (`_anyWritePathSupportsShaderLeg`, `_allWritePathsHold`,
- * `_refreshMirrorDivergence`) carry neither latch nor refresh, because none of
- * them moves anything for a signal to report.
+ * anything C++-side. Every WRITER below is therefore the same shape — latch,
+ * one controller call, unlatch and refresh — and each still exists separately
+ * so `mirrorPaths` cannot be bypassed by a future call site reaching a per-path
+ * mutator directly. The shape is not identical across all of them: the timing
+ * writers refresh once and bump `_inheritRev`, while the shader writers refresh
+ * BOTH axes, because a shader write can change what the timing side inherits.
+ *
+ * The queries at the end of the file carry neither latch nor refresh, because
+ * none of them moves anything in the STORE for a signal to report.
+ * `_anyWritePathSupportsShaderLeg` and `_allWritePathsHold` are pure reads.
+ * `_refreshMirrorDivergence` is not — it assigns the card's `_mirrorsDiverged`
+ * and `_divergentPathCount` — but what it writes is view state the card owns,
+ * so it needs no latch either.
  *
  * The try/finally is not decoration. QML has no RAII, and a throw inside a
  * write (a Q_INVOKABLE argument conversion, or `settingsController` resolving
@@ -185,8 +191,11 @@ QtObject {
         }
     }
 
-    // ── Read-only group queries ─────────────────────────────────────
-    // No latch and no refresh: these write nothing.
+    // ── Group queries ───────────────────────────────────────────────
+    // No latch and no refresh: none of these moves anything in the STORE. The
+    // first two are pure reads; `_refreshMirrorDivergence` at the end assigns
+    // two of the card's own view properties, which is why the group is not
+    // called read-only.
     /// True when ANY write path takes a shader leg. Gating a group mutation on
     /// the primary alone would skip a mirror that does support one, whose
     /// shader override would then survive the toggle and show as a divergence

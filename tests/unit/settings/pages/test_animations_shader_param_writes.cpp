@@ -23,9 +23,10 @@
  *     written, a path with no shader leg is skipped rather than failed,
  *     repeats are deduplicated, an identical rewrite costs no signal, and an
  *     async discard refuses the whole call with -1 and one toast
- *   - shaderOverrideDescendantCountForPaths sums the same "shadowing
+ *   - shaderOverrideDescendantCountForPaths UNIONS the same "shadowing
  *     descendant" definition the descendant clear uses, so a parent card
- *     cannot report a count its button would not act on
+ *     cannot report a count its button would not act on, and a descendant
+ *     shared by two paths in the group is counted once rather than twice
  *   - anyPathOwnsShaderPack answers "is there a pack here to remove", counting
  *     neither the engaged-empty sentinel nor a params-only entry
  *
@@ -459,6 +460,9 @@ private Q_SLOTS:
         QVERIFY(c.anyPathOwnsShaderPack({PP::WindowOpen, PP::WindowClose}));
     }
 
+    /// An empty group owns nothing. Stated rather than assumed, because the
+    /// reader's loop would otherwise fall through to its "found none" return by
+    /// accident rather than by contract.
     void anyPathOwnsShaderPack_isFalseForAnEmptyList()
     {
         ControllerFixture fx;
@@ -505,9 +509,6 @@ private Q_SLOTS:
                  2);
     }
 
-    /// A path that cannot host a shader leg is SKIPPED, not attempted. The
-    /// count reflects that, and the supporting sibling in the same group is
-    /// still written — a group mixing the two must not be all-or-nothing.
     /// The shader-leg taxonomy itself, which two assertions inside the group
     /// writer's skip slot used to pin as a side effect. Given its own slot
     /// because a taxonomy regression should fail a slot named for the
@@ -525,6 +526,9 @@ private Q_SLOTS:
         QVERIFY(c.supportsShaderLeg(PP::Scrolling));
     }
 
+    /// A path that cannot host a shader leg is SKIPPED, not attempted. The
+    /// count reflects that, and the supporting sibling in the same group is
+    /// still written — a group mixing the two must not be all-or-nothing.
     void setShaderOverrideOnPaths_skipsPathsWithNoShaderLeg()
     {
         ControllerFixture fx;

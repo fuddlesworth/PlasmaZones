@@ -403,108 +403,44 @@ Item {
         return chain.slice(1).join(" ← ");
     }
 
-    // `effectId` is explicit so callers can snapshot it at user-action
-    // time (e.g. when the color dialog opens) rather than reading
-    // `root.currentShaderEffectId` at write time. Without that snapshot,
-    // a registry refresh that fires while the dialog is open could
-    // silently retarget the write at a different effect's param map.
-    function _writeShaderParam(effectId, paramId, value) {
-        // Refused writes are dropped WITHOUT restoring the control, and that
-        // asymmetry with `_writeAllShaderParams` below is deliberate. This path
-        // is drag-rate — a parameter slider emits per pointer move — so
-        // refreshing here would reassign `currentShaderParams` from the tree on
-        // every refused tick and drag the handle back out from under the user.
-        // A stale-looking slider for the length of a discard is the better of
-        // the two, and the drag's last value is what the first accepted write
-        // commits.
-        if (!effectId || root._writesRefused)
-            return;
-
-        // Bail if the user navigated to a different effect while the
-        // dialog (color picker / etc.) was open. The write below carries no
-        // effect id, so a late accept can no longer retarget the event at the
-        // OLD pack — what it would do instead is land a parameter authored for
-        // that pack in the map of the one now showing, where the id means
-        // something else or nothing at all. Better to drop the late accept than
-        // to write it into state the user explicitly changed.
-        if (effectId !== root.currentShaderEffectId)
-            return;
-
-        var next = Object.assign({}, root.currentShaderParams || {});
-        next[paramId] = value;
-        root.currentShaderParams = next;
-        // Params-only: never restate the pack. `effectId` above is the RESOLVED
-        // id, so on a leaf that inherits its pack, writing it would pin that
-        // pack here and sever the cascade. It is still read for the stale-effect
-        // guard above, which is the only thing it is good for on this path.
-        root._noteWriteResult(root._setShaderParamsOnAll(next));
+    // ── Shader read / parameter writes ──────────────────────────────
+    // The bodies live in AnimationEventCardShaderIo, for the same size reason
+    // the group writers live in AnimationEventCardWriters. These forwarders
+    // keep every `root._foo(...)` call site reading exactly as before, the
+    // QML-contract scrape included. `arguments` forwarding rather than named
+    // parameters so a signature change needs no edit here.
+    function _writeShaderParam() {
+        return shaderIo._writeShaderParam.apply(shaderIo, arguments);
     }
-
-    /// Batch write — randomize and reset roll N values that should land as one
-    /// `setShaderParametersOnPaths` round-trip rather than N of them.
-    ///
-    /// The `effectId` check here is a non-empty test in practice, NOT the
-    /// stale-effect guard `_writeShaderParam` carries. Both call sites pass
-    /// `root.currentShaderEffectId` itself and the editor computes and re-emits
-    /// the map synchronously in the same handler, so there is no asynchronous
-    /// gap for the id to go stale across. It is kept because the empty case is
-    /// real (no pack resolved, nothing to write) and because a future payload
-    /// that DOES carry a snapshotted id should find the comparison already
-    /// here rather than have to reintroduce it.
-    /// Whether this event stores parameter values of its OWN, as opposed to
-    /// resolving an ancestor's. Distinct from `_ownsShaderParamsOnly`, which is
-    /// additionally false when this event owns its pack — here the question is
-    /// only about the parameter map.
+    function _writeAllShaderParams() {
+        return shaderIo._writeAllShaderParams.apply(shaderIo, arguments);
+    }
     function _ownsAnyShaderParams() {
-        const own = root._primaryRawShader && root._primaryRawShader.parameters;
-        return Boolean(own) && Object.keys(own).length > 0;
+        return shaderIo._ownsAnyShaderParams.apply(shaderIo, arguments);
+    }
+    function _sameParamValues() {
+        return shaderIo._sameParamValues.apply(shaderIo, arguments);
+    }
+    function refreshShaderFromTree() {
+        return shaderIo.refreshShaderFromTree.apply(shaderIo, arguments);
     }
 
-    /// Flat value-equality over two parameter maps. Parameter values are
-    /// scalars (numbers, bools, strings, colors), so a key-wise `!==` is the
-    /// whole comparison; there is no nested structure to recurse into.
-    function _sameParamValues(a, b) {
-        const left = a || {};
-        const right = b || {};
-        const leftKeys = Object.keys(left);
-        if (leftKeys.length !== Object.keys(right).length)
-            return false;
-        for (var i = 0; i < leftKeys.length; ++i) {
-            const key = leftKeys[i];
-            if (!right.hasOwnProperty(key) || left[key] !== right[key])
-                return false;
-        }
-        return true;
-    }
+    // Never read by name — the forwarders above go through the `shaderIo` id.
+    // The property exists to give the object an owner so it lives as long as
+    // the card, exactly like `_writers` below.
+    readonly property AnimationEventCardShaderIo _shaderIo: AnimationEventCardShaderIo {
+        id: shaderIo
 
-    function _writeAllShaderParams(effectId, allParams) {
-        if (!effectId || effectId !== root.currentShaderEffectId)
-            return;
-
-        // Refused: same reasoning as `_writeShaderParam`, and worse here.
-        // Randomize and Reset stage their whole map onto the editor before
-        // emitting, so dropping the write silently leaves every parameter row
-        // showing a value that was never persisted. Discrete actions have no
-        // next tick to correct them either.
-        if (root._writesRefused) {
-            root.refreshShaderFromTree();
-            return;
-        }
-
-        // `currentShaderParams` is deliberately NOT re-staged here. It is an
-        // alias onto the editor's own `shaderParams`, and the editor assigns
-        // the rolled or default map to that property before emitting, so
-        // assigning it again would be writing the value it already holds.
-        // Params-only, for the reason _writeShaderParam gives.
-        root._noteWriteResult(root._setShaderParamsOnAll(allParams));
+        card: root
     }
 
     // ── Group writers ───────────────────────────────────────────────
-    // The bodies live in AnimationEventCardWriters so this file stays under the
-    // size ceiling. These forwarders keep every `root._foo(...)` call site —
-    // handlers, bindings and the QML-contract scrape — reading exactly as
-    // before. `arguments` forwarding rather than named parameters so a
-    // signature change needs no edit here.
+    // The bodies live in AnimationEventCardWriters, one of the two siblings
+    // this card is split across to stay under the project's size ceiling (the
+    // other is AnimationEventCardShaderIo above). These forwarders keep every
+    // `root._foo(...)` call site — handlers, bindings and the QML-contract
+    // scrape — reading exactly as before. `arguments` forwarding rather than
+    // named parameters so a signature change needs no edit here.
     function _setShaderOverrideOnAll() {
         return writers._setShaderOverrideOnAll.apply(writers, arguments);
     }
@@ -544,68 +480,6 @@ Item {
         id: writers
 
         card: root
-    }
-
-    function refreshShaderFromTree() {
-        var resolved = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
-        var nextEffectId = (resolved && resolved.effectId) ? resolved.effectId : "";
-        // Stale-lock clear on effect switch — same-named ids in
-        // different shaders are unrelated.
-        if (nextEffectId !== root.currentShaderEffectId)
-            root.lockedShaderParams = ({});
-
-        root.currentShaderEffectId = nextEffectId;
-        root.currentShaderParams = (resolved && resolved.parameters) ? resolved.parameters : ({});
-        // Computed HERE, not in refreshFromTree, because it reads the id
-        // assigned on the line above. Component.onCompleted runs refreshFromTree
-        // FIRST and this second, so computing it there would evaluate it against
-        // an empty id on the card's first frame and never revisit it — a card
-        // that owns a pack would render the group-ambiguous remove label until
-        // something unrelated triggered another timing refresh.
-        // Gated, because `_allWritePathsHold` rebuilds the whole shader tree —
-        // the same non-cheap read this function's comment below warns about,
-        // and this runs at drag rate for every visible card. Its only consumer
-        // is the remove control's label, which is unreachable unless some write
-        // path owns a pack, so the common case (an event inheriting, or with no
-        // pack at all) skips it entirely. `_anyWritePathOwnsShaderPack` is
-        // assigned by refreshFromTree, and every caller that moves the shader
-        // tree runs this function BEFORE that one, so the value read here is
-        // the previous refresh's. That is deliberate and safe: it only gates a
-        // label, the two flags converge on the very next refresh, and being one
-        // refresh stale can at worst cost one extra query or defer the exact
-        // pack name by a frame — never show a wrong name, because the false
-        // branch is the CONSERVATIVE label.
-        root._allWritePathsHoldShownPack = nextEffectId.length > 0 && root._anyWritePathOwnsShaderPack && root._allWritePathsHold(nextEffectId);
-        // Recompute deeper-override count on every shader-tree update —
-        // the warning banner below depends on it. Only meaningful for
-        // parent-node cards but we always refresh so the binding stays
-        // consistent.
-        //
-        // Summed across every write path to match
-        // _clearShaderOverrideDescendantsOnAll, whose button clears the
-        // mirrors' descendants too. No card today is both a parent node and
-        // mirrored, so the mirror legs never contribute in the current config.
-        // The sum is kept so a future mirrored parent card reports what the
-        // button would actually remove.
-        //
-        // ONE controller call, not one per path. The per-path Q_INVOKABLE is
-        // NOT cheap: it rebuilds the whole shader tree every time (a settings
-        // read, a JSON parse and a prune walk, because `rawShaderProfile` is
-        // not memoised), so looping it here paid that cost once per write path
-        // inside a function that runs at drag rate for every visible card.
-        // That is the read-in-a-loop shape the controller's own Group-writes
-        // block calls out.
-        root._shadowingChildrenCount = settingsController.animationsPage.shaderOverrideDescendantCountForPaths(root._writePaths);
-        // Divergence is deliberately NOT recomputed here. refreshFromTree owns
-        // it, and every call site of this function calls refreshFromTree
-        // alongside it (the three shader group writers' finally blocks and
-        // onShaderProfileChanged call it immediately after; Component.onCompleted
-        // runs refreshFromTree FIRST and this function second, which is
-        // equally fine because refreshFromTree recomputes the divergence
-        // itself from live reads, so the order between the two is moot).
-        //
-        // A future caller that runs this ALONE must call refreshFromTree too
-        // or the banner goes stale.
     }
 
     /// Seeds the working controls (timing mode, curve, duration) from an
