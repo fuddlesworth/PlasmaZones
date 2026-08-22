@@ -50,6 +50,16 @@ ShaderProfile ShaderProfileTree::resolve(const QString& path) const
         while (!chain.isEmpty() && chain.constFirst() != isolationRoot) {
             chain.removeFirst();
         }
+        // The trim assumes the root is an ANCESTOR of the path, which holds for
+        // every predicate whose membership test is "the root, or the root plus a
+        // dot" — the only shape there is today. A root that ever answers for a path outside
+        // its own chain would empty the list here and silently apply nothing, not
+        // even the direct override at the path. Fail closed to the path itself
+        // rather than to no shader at all, so the leaf still resolves what the
+        // user explicitly put on it.
+        if (chain.isEmpty()) {
+            chain.append(path);
+        }
     }
 
     for (const QString& step : chain) {
@@ -188,14 +198,22 @@ bool shaderPathResolvesInIsolation(const QString& path)
     // a dead transition that pins full-output repaints for the whole drag.
     //
     // The tab leaf is here for the drag leaf's reason in a different shape: its
-    // ONLY ancestor is `scrolling`, which carries the strip class, so every
-    // pack it could ever inherit is provably wrong for it. Inheriting one is
-    // worse than inheriting nothing, because the applicability gate refuses it
-    // at install time and the leaf ends up animating nothing while the settings
-    // UI shows an inherited "current shader" that never runs. Only a direct
-    // override at the leaf applies; timing inheritance is unaffected (that
-    // lives in the motion ProfileTree, where the scrolling root's curve and
-    // duration ARE meaningful for both children).
+    // class is OPT-IN rather than universal-permissive (a pack must declare
+    // `appliesTo: ["tab"]` to be offered), so every pack a picker offers on an
+    // ancestor for that ancestor's OWN sake is refused here. All three levels are
+    // above it — parentPath("scrolling") is `global`, not empty, and the baseline
+    // sits above that — so "its only ancestor is the strip-classed root" would be
+    // the wrong reason as well as the wrong count. The one pack that survives the
+    // gate is a HYBRID declaring `tab` beside the ancestor's class
+    // (`["tab","appearance"]` on `global`, `["tab","strip"]` on `scrolling`), so
+    // this predicate is a policy choice for that case and a structural refusal for
+    // every other: a hybrid engaged for window appearance must not silently start
+    // driving tab swaps. Inheriting one is worse than inheriting nothing, because
+    // shaderEffectAppliesToEventPath refuses it when the transition BEGINS (not at
+    // install) and the leaf then animates nothing. Only a direct override at the
+    // leaf applies; timing inheritance is unaffected (that lives in the motion
+    // ProfileTree, where the scrolling root's curve and duration ARE meaningful
+    // for both children).
     return path == PhosphorAnimation::ProfilePaths::WindowMove
         || path == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch;
 }

@@ -642,9 +642,10 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     // toplevel) and portal dialogs are rejected here for the same reason
     // shouldHandleWindow() and shouldDecorateWindow() reject them: animating
     // our own UI redirects it through OffscreenEffect and makes the overlay
-    // that is drawing the animation itself animate. shouldAnimateWindow is
-    // the ONLY filter on the tryBeginShaderForEvent path (window_lifecycle),
-    // so omitting them here is not covered elsewhere.
+    // that is drawing the animation itself animate. For a window-family leg
+    // shouldAnimateWindow is the ONLY filter on the tryBeginShaderForEvent path
+    // (window_lifecycle), so omitting them here is not covered elsewhere. The
+    // `shell.*` legs are the deliberate exception and are described next.
     //
     // The plasma-shell reject STAYS, and it stays blanket, even though a shell
     // surface can now animate on its own `shell.*` leg. That leg does not come

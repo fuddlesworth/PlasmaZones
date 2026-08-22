@@ -52,6 +52,9 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     if (segment == QLatin1String("appearance")) {
         return PhosphorI18n::tr("Appearance", "animation event or section");
     }
+    if (segment == QLatin1String("appletPopup")) {
+        return PhosphorI18n::tr("Applet Popup", "animation event or section");
+    }
     if (segment == QLatin1String("badgeHide")) {
         return PhosphorI18n::tr("Badge Hide", "animation event or section");
     }
@@ -168,6 +171,9 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     }
     if (segment == QLatin1String("shader")) {
         return PhosphorI18n::tr("Shader", "animation event or section");
+    }
+    if (segment == QLatin1String("shell")) {
+        return PhosphorI18n::tr("Shell", "animation event or section");
     }
     if (segment == QLatin1String("show")) {
         return PhosphorI18n::tr("Show", "animation event or section");

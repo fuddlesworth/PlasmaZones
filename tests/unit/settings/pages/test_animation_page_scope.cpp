@@ -108,6 +108,33 @@ private Q_SLOTS:
         QCOMPARE(osds.include, QStringList{QStringLiteral("osd")});
     }
 
+    void shellOwnsItsSubtreeAndNothingElse()
+    {
+        // Pinned because the failure is silent and total: with no entry in the
+        // table, animationPageScope falls through to the WholeTree branch, and a
+        // Reset on the Shell page would then clear every animation override in
+        // the tree rather than the three rows the page shows.
+        const AnimationPageScope shell = animationPageScope(QStringLiteral("animations-shell"));
+        QCOMPARE(shell.kind, AnimationPageScope::EventSubtree);
+        QCOMPARE(shell.include, QStringList{QStringLiteral("shell")});
+        QVERIFY(shell.exclude.isEmpty());
+
+        // The cascade parent the page's "All Shell Surfaces" row writes to, and
+        // both legs, are in scope — so Reset reaches what the page can set.
+        QVERIFY(animationPathInScope(QStringLiteral("shell"), shell));
+        QVERIFY(animationPathInScope(QStringLiteral("shell.appletPopup"), shell));
+        QVERIFY(animationPathInScope(QStringLiteral("shell.appletPopup.show"), shell));
+        QVERIFY(animationPathInScope(QStringLiteral("shell.appletPopup.hide"), shell));
+
+        // And nothing outside it. `global` matters most: the shell shader subtree
+        // is isolated from that node, so a Shell Reset reaching it would clear a
+        // pack the page never had any part in.
+        for (const char* path :
+             {"global", "window.appearance.open", "panel.slideIn", "osd.show", "shellfish", "shellfish.show"}) {
+            QVERIFY2(!animationPathInScope(QLatin1String(path), shell), path);
+        }
+    }
+
     void scrollingOwnsItsRootDespiteShowingNoCardForIt()
     {
         // The one page whose scope is WIDER than the rows it displays.

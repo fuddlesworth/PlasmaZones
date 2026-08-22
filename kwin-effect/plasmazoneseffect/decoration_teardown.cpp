@@ -232,6 +232,15 @@ void PlasmaZonesEffect::clearAllDecorations()
     // by slotWindowClosed) resolves the deleted window here; the skipped
     // entry is erased by endShaderTransition's teardown or the windowDeleted
     // backstop.
+    //
+    // The keep here is deliberately NARROWER than updateAllDecorations' sweep,
+    // which also skips a merely-deleted window (its `w->isDeleted() ||` term) so a
+    // decoration can ride out a FOREIGN close animation. That is not mirrored here
+    // on purpose: this runs on daemon loss / effect unload, which does not wait for
+    // anyone's animation to finish. The cost is cosmetic and bounded — a popup
+    // dismissed at the instant the daemon dies loses its decoration for the tail of
+    // its slide — and nothing leaks, because resolveDecorationTarget falls back to
+    // the frozen reverse mapping, so releaseDecorationGl still runs on the corpse.
     const QStringList ids = m_windowDecorations.keys();
     for (const QString& windowId : ids) {
         if (KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(windowId)) {

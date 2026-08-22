@@ -18,7 +18,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Plasma shell animation events")
-    headerText: i18n("Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. These never take what you set for your own windows, so they stay still until you pick a shader here.")
+    headerText: i18n("Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. \"All Shell Surfaces\" is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.")
     eventModel: [
         {
             "eventPath": "shell",

@@ -346,7 +346,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     //    class, title, PID — none of which meaningfully describes plasmashell's
     //    own surfaces, so a broad rule must not silently retarget a pack the
     //    user engaged on the Shell page.
-    const bool shellSurfaceLeg = profilePath != requestedPath;
+    // Ask the resolver's own predicate rather than inferring shell-ness from the
+    // fact that the path got rewritten. The two agree today — animationEventPathFor
+    // rewrites for nothing but a shell leg — but that is a property of a function in
+    // another TU, and this flag gates the rule tier. Inferring it means the day
+    // animationEventPathFor learns any other remap, the rule tier silently re-opens
+    // on these surfaces while the comment above still claims it is closed.
+    const bool shellSurfaceLeg = !PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath).isEmpty();
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
     // app / class) AND lets a Rule carrying any appearance/animation
@@ -379,8 +385,15 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // built into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
     //
-    // A shell leg resolves WINDOWLESS instead: an empty query matches no rule
-    // and an empty id keys no per-window cache, which is the same shape the
+    // A shell leg resolves WINDOWLESS instead. What closes the rule tier is that
+    // BOTH resolvers short-circuit on !query.hasWindow() before any evaluator walk
+    // (resolveAnimationShaderProfile in shader_resolve.cpp, and the rule overlay in
+    // resolveEventMotionProfile below), so no rule is consulted and no cache slot is
+    // consumed. Do NOT reduce that to "an empty query matches no rule" and move the
+    // gate: an empty query is not inert on its own, because MatchExpression treats an
+    // empty All{} as the always-true catch-all and a None{...} whose children all
+    // miss — which every window-property leaf does on an empty query — as TRUE. This
+    // is the same shape the
     // desktop legs use for an event whose subject is not an application window
     // (see the DesktopPeek resolve in lifecycle_wiring.cpp). The real window id
     // is still used everywhere else below — this pair is the rule tier's input,
@@ -459,20 +472,37 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // carry no effectId). Gating on the whole rule set restored the
         // warning for any border/opacity/layer rule — the exact population
         // the demotion exists to silence.
-        const bool shaderAssigningRules = m_shaderManager.hasAnimationShaderRules();
+        // ...and not for a shell leg even then: the rule tier was skipped for it
+        // above (empty query, empty window id), so no rule of any kind can be the
+        // reason this resolve came back empty.
+        const bool shaderAssigningRules = !shellSurfaceLeg && m_shaderManager.hasAnimationShaderRules();
         bool cascadeCovered = false;
         // The by-value QStringList is built ONCE and reused by both the loop
         // and the warn diagnostic below — the pre-change code paid it twice
         // (once for the range-for, once for .size() in the warn branch).
         const QStringList overriddenPaths = profileTree.overriddenPaths();
+        // An ISOLATED path does not have the chain this loop assumes. resolve()
+        // trims everything above the isolation root away, so for a shell leg an
+        // override at `global` — or anywhere else outside the subtree — is not part
+        // of the cascade at all and cannot be why the resolve came back empty.
+        // Empty for every ordinary path, which leaves their behaviour untouched.
+        const QString isolationRoot = PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath);
+        const auto insideIsolatedSubtree = [&isolationRoot](const QString& path) {
+            return path == isolationRoot
+                || (path.size() > isolationRoot.size() && path.startsWith(isolationRoot)
+                    && path.at(isolationRoot.size()) == QLatin1Char('.'));
+        };
         for (const QString& overridden : overriddenPaths) {
             // The literal "global" root is a genuine chain member of every
-            // path (parentPath terminates every cascade at Global), so an
-            // override stored there covers this resolve too. Ancestry is a
-            // prefix-plus-dot test rather than a per-entry concatenation.
-            if (overridden == PhosphorAnimation::ProfilePaths::Global || profilePath == overridden
+            // NON-isolated path (parentPath terminates every such cascade at
+            // Global), so an override stored there covers this resolve too.
+            // Ancestry is a prefix-plus-dot test rather than a per-entry
+            // concatenation.
+            const bool isChainMember = profilePath == overridden
                 || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
-                    && profilePath.at(overridden.size()) == QLatin1Char('.'))) {
+                    && profilePath.at(overridden.size()) == QLatin1Char('.'))
+                || (isolationRoot.isEmpty() && overridden == PhosphorAnimation::ProfilePaths::Global);
+            if (isChainMember && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))) {
                 cascadeCovered = true;
                 break;
             }

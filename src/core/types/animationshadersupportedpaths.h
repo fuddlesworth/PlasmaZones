@@ -208,8 +208,16 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 /// layer means an affected config can never SERVE a stale entry (the read prunes
 /// it), though the entry itself lingers in the file until an unrelated edit
 /// forces a write — the write-side compare happens after pruning on both
-/// sides, so a prune-only delta is not itself a reason to write. And a
-/// fresh write coming from a Q_INVOKABLE that bypasses the UI gate
+/// sides, so a prune-only delta is not itself a reason to write. Note what that
+/// second half means for a path REMOVED from the SSOT rather than never added:
+/// the user's override survives only until the next write, which ERASES it. That
+/// is the intended trade (a stale entry that shadows a live one is the worse
+/// failure), but it is sharpest for the `shell` subtree, which is baseline- and
+/// global-isolated and carries no built-in default, so an erased override there
+/// falls back to no shader at all rather than to an inherited one. Downgrading to
+/// a build without these paths therefore loses an engaged shell pack silently.
+///
+/// And a fresh write coming from a Q_INVOKABLE that bypasses the UI gate
 /// (e.g. a future scripting hook) still cannot stamp unsupported-path
 /// entries onto disk.
 inline PhosphorAnimationShaders::ShaderProfileTree

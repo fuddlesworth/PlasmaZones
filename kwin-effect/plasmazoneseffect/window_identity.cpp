@@ -366,9 +366,14 @@ PlasmaZonesEffect::ShellSurfaceKind PlasmaZonesEffect::shellSurfaceKindFor(KWin:
         return ShellSurfaceKind::Panel;
     }
     // NET::AppletPopup — the launcher, tray flyouts, any widget's expanded
-    // view. KWin gives this its own type, so no class disambiguation is needed
-    // or wanted: the type is Plasma-specific by construction and, unlike the
-    // dock case, there is no third-party surface that could claim it. Measured
+    // view. KWin gives this its own NON-STANDARD type, and in practice only
+    // plasmashell sets it, so no class disambiguation is done here. Note what that
+    // costs, because the animation path now leans on this arm harder than the
+    // decoration path did: a shell leg SKIPS the window filter in
+    // tryBeginShaderForEvent, so anything reaching this arm bypasses the user's
+    // animation exclusions. The type is settable rather than compositor-private, so
+    // if that ever needs closing, the fix is the Panel arm's ownership test
+    // (&& isPlasmaShellSurface(w->windowClass())), not a change here. Measured
     // live: an applet popup sets NONE of KWin's generic predicates (not
     // isPopupWindow, isMenu, isDialog, isDock, isSpecialWindow aside), which
     // is why it needs an explicit arm here rather than falling out of one of
@@ -383,8 +388,8 @@ QString PlasmaZonesEffect::animationEventPathFor(KWin::EffectWindow* w, const QS
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
     // The overwhelmingly common answer, and the cheapest: an application
-    // window animates on the path its caller named. One window-type read
-    // stands between every animated event and that answer, so the switch below
+    // window animates on the path its caller named. Two window-type reads
+    // stand between every animated event and that answer, so the switch below
     // is written to fall through to it rather than to be consulted first.
     switch (shellSurfaceKindFor(w)) {
     case ShellSurfaceKind::AppletPopup:

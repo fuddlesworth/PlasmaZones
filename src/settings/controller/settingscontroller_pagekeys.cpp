@@ -62,10 +62,10 @@ bool SettingsController::isLibraryPage(const QString& page) const
 
 // Every animation leaf shares the single AnimationsPageController staging domain
 // AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT
-// whole-tree: each surface leaf (windows/osds/overlays/desktops/motion/dragging/
-// panels/widgets/editor, plus the condensed animations-simple page, which takes
-// the same branch across several roots) owns one event-path subtree (see
-// animationPageScope), the general leaf owns only the config keys, and the
+// whole-tree: each surface leaf owns one event-path subtree (see
+// animationPageScope, which is the list — do not maintain a second copy of it
+// here), plus the condensed animations-simple page, which takes the same branch
+// across several roots. The general leaf owns only the config keys, and the
 // presets/sets/shaders library leaves act on the whole editable tree. Scoping keeps a Reset on one surface from
 // wiping the others (mirrors the decoration domain below).
 bool isAnimationPage(const QString& page)

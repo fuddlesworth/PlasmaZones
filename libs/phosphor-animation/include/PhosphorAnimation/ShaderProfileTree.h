@@ -27,16 +27,44 @@ namespace PhosphorAnimationShaders {
  *   1. `"window.appearance.open"`  (leaf override)
  *   2. `"window.appearance"`       (appearance contract group — the "All Appearance" node)
  *   3. `"window"`                  (category — the all-windows node)
- *   4. `"global"`                  (baseline)
- *   5. library default             (empty ShaderProfile — no effect)
+ *   4. `"global"`                  (the assignable root node — a real chain member
+ *                                   a user can store an override on)
+ *   5. the tree baseline           (setBaseline(), NOT the same thing as 4)
+ *   6. library default             (empty ShaderProfile — no effect)
+ *
+ * Steps 4 and 5 are two independent levels and cutting one does not cut the
+ * other. That distinction is load-bearing for both exceptions below: an
+ * isolation that drops only the baseline still lets whatever the user assigned
+ * on the `global` node cascade in.
  *
  * At each step, engaged optionals replace the accumulator. Unset fields
  * pass through.
  *
- * EXCEPTION: the interactive-drag leaf (`window.movement.move`) takes no
- * inherited shader — resolve() reads only its direct override. Ancestor
- * picks are single-surface crossfade packs by construction and cannot
- * drive the held drag transition (see EventClassMove in ProfilePaths.h).
+ * EXCEPTION 1, a leaf that inherits NOTHING: the interactive-drag leaf
+ * (`window.movement.move`) and the tab-switch leaf (`scrolling.tabSwitch`)
+ * take no inherited shader — resolve() reads only their direct override. The two
+ * are in the predicate for different reasons. The drag leaf's ancestor picks are
+ * single-surface crossfade packs by construction and cannot drive the held drag
+ * transition (see EventClassMove in ProfilePaths.h). The tab leaf's class is
+ * OPT-IN rather than universal-permissive — a pack must declare
+ * `appliesTo: ["tab"]` to be offered (see EventClassTab in ProfilePaths.h) — so
+ * every pack a picker offers on an ancestor FOR THAT ANCESTOR'S OWN SAKE is
+ * refused here. Note the leaf has three levels above it, not one:
+ * parentPath("scrolling") is `global`, not empty, and the baseline sits above
+ * that. The one pack that would survive the gate is a HYBRID declaring `tab`
+ * beside the ancestor's class (`["tab","appearance"]` is assignable on `global`,
+ * `["tab","strip"]` on `scrolling`), so isolating the leaf is a policy choice for
+ * that case rather than a proof: a hybrid the user engaged for window appearance
+ * must not silently start driving tab swaps. For everything else the refusal is
+ * structural, and it happens when the transition BEGINS
+ * (shaderEffectAppliesToEventPath), not at install.
+ * Predicate: shaderPathResolvesInIsolation().
+ *
+ * EXCEPTION 2, a SUBTREE that inherits normally within itself while nothing
+ * above it reaches in: today the `shell` root. Inheritance between the root and
+ * its legs works as usual, so a pack on the root cascades to them, but resolve()
+ * substitutes an empty baseline AND trims the chain back to the root, closing
+ * steps 4 and 5 together. Predicate: shaderPathIsolationRoot().
  *
  * ## Thread safety
  *
@@ -95,9 +123,10 @@ private:
 /// True when @p path resolves its shader in ISOLATION: ShaderProfileTree::
 /// resolve reads only the direct override at the path, so no ancestor or
 /// baseline shader ever applies there — and, symmetrically, an override AT
-/// the path can never shadow an ancestor's shader. Today this is exactly
-/// the interactive-drag leaf (ProfilePaths::WindowMove); see the walk-up
-/// inheritance EXCEPTION note above. Exposed so shadowing-aware consumers
+/// the path can never shadow an ancestor's shader. Two members today, the
+/// interactive-drag leaf (ProfilePaths::WindowMove) and the tab-switch leaf
+/// (ProfilePaths::ScrollingTabSwitch); see EXCEPTION 1 in the walk-up
+/// inheritance note above. Exposed so shadowing-aware consumers
 /// (e.g. the settings "shadowing children" banner walk) share the
 /// resolver's definition instead of re-deriving it from a path prefix.
 PHOSPHORANIMATION_EXPORT bool shaderPathResolvesInIsolation(const QString& path);
@@ -116,8 +145,16 @@ PHOSPHORANIMATION_EXPORT bool shaderPathResolvesInIsolation(const QString& path)
 /// isolates its own `shell` subtree the same way and for the same reason (see
 /// PhosphorSurface's decorationPathIsBaselineIsolated).
 ///
-/// Shared with shadowing-aware consumers for the reason the predicate above is:
-/// a second copy of "where does inheritance start" drifts from the resolver.
+/// Exported for the same reason the predicate above is: a second copy of "where
+/// does inheritance start" drifts from the resolver. Consumed by resolve() and by
+/// the kwin-effect's event resolution (shader_config_dbus.cpp), which gates THREE
+/// things on it: the window-filtering call (shouldAnimateWindow is SKIPPED for an
+/// isolated path — it would reject every plasmashell surface outright on its
+/// structural clause, and its Animations.WindowFiltering knobs and
+/// ExcludeAnimations rules are all authored about application windows), the
+/// rule tier (resolved windowless), and the cascade-coverage
+/// diagnostic. Anything reasoning about what a `shell.*` path inherits should call
+/// this rather than re-derive it from a path prefix.
 PHOSPHORANIMATION_EXPORT QString shaderPathIsolationRoot(const QString& path);
 
 /// Resolve @p path against @p tree, applying the built-in per-event default

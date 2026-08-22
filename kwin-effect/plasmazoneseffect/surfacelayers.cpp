@@ -128,6 +128,32 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         return nullptr;
     }
     const QString windowId = getWindowId(w);
+    // CLOSING (deleted) windows: NEVER capture — same decision renderSurfaceChain
+    // takes above, and BOTH entry points need it. That one guards the TRANSITION
+    // path; this one guards the rest path, and the rest path is the one a corpse
+    // actually reaches. slotWindowClosed keeps the decoration entry alive whenever
+    // the window is decorated, not only when it carries a transition of ours, so a
+    // window riding a FOREIGN close animation (a Plasma applet popup's slide, or any
+    // window closing with our animations off) arrives here with findTransition(w)
+    // null — which is exactly what routes it past paint_pipeline's transition branch
+    // into this function. Re-drawing a corpse (effects->drawWindow plus the setShader
+    // redirect swap) is the UB class the teardown paths avoid, and once the client
+    // buffer is released it composites an opaque/empty padded canvas that flashes the
+    // whole expanded box.
+    //
+    // Returning the frozen composite is not a fallback, it is the intended frame: it
+    // is the last ALIVE fold's output, and drawWindow binds it and modulates by
+    // KWin's live data.opacity(), which is the foreign animation's own fade.
+    if (w->isDeleted()) {
+        const auto sIt = m_surfaceMultipass.find(windowId);
+        if (sIt != m_surfaceMultipass.end()) {
+            KWin::GLTexture* const frozen = sIt->second.compositeTex[sIt->second.finalSlot].get();
+            if (frozen) {
+                return frozen;
+            }
+        }
+        return nullptr;
+    }
     const auto found = m_windowDecorations.constFind(windowId);
     if (found == m_windowDecorations.constEnd()) {
         return nullptr;

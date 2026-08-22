@@ -13,6 +13,10 @@ namespace PhosphorAnimation {
 /// Dot-path constants for well-known animation events.
 /// ProfileTree::resolve() walks segments right-to-left for inheritance.
 /// Plugins add paths freely (e.g. "widget.toast.slideIn") without library changes.
+/// That is a property of the MOTION tree only. The SHADER tree admits just the
+/// paths registered in shaderConsumedLeafEventPaths() and their ancestors:
+/// pruneShaderProfileTreeToSupportedPaths runs on both read and write, so a shader
+/// override on any other path is dropped rather than kept.
 ///
 /// Naming convention (apply to new paths):
 ///   show / hide                 — ephemeral surfaces (osd, popup, badge)
@@ -104,6 +108,13 @@ PHOSPHORANIMATION_EXPORT extern const QString ScrollingTabSwitch;
 // an unconfigured shell surface animates exactly as it did before the root
 // existed. Show / hide rather than open / close: these are ephemeral
 // surfaces, the same family the osd and popup roots name that way.
+//
+// The isolation is the SHADER tree's alone. ProfileTree has no isolation arm, so
+// these legs take their duration and curve from the ordinary walk, `global`
+// included — deliberately, since the timing is inert until a pack is engaged and a
+// user who sets one duration for everything means it. Anything describing this
+// subtree to a user must scope the claim to the shader, or it is wrong about
+// timing.
 PHOSPHORANIMATION_EXPORT extern const QString Shell;
 PHOSPHORANIMATION_EXPORT extern const QString ShellAppletPopup;
 PHOSPHORANIMATION_EXPORT extern const QString ShellAppletPopupShow;
@@ -227,6 +238,28 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 // (The coverage chips in AnimationsMotionSetsPage.qml / DecorationSetsPage.qml
 // key on the path ROOT segment, not on class tokens — a new class needs a
 // case there only if it also introduces a new path root.)
+//
+// Adding a path ROOT? A different list, and longer than it looks. The `shell`
+// root needed every one of these:
+//   1. `allBuiltInPaths()` below — the motion tree's persistence filter. A path
+//      missing here is silently dropped on save.
+//   2. `eventClassForPath` — an unclassified root reads as the ambiguous-row
+//      fallback in the pack pickers.
+//   3. `shaderConsumedLeafEventPaths` (animationshadersupportedpaths.h) — the
+//      shader tree's admission list, per the note at the top of this file.
+//   4. An isolation decision: ordinary inheritance, a leaf in
+//      `shaderPathResolvesInIsolation`, or a subtree in
+//      `shaderPathIsolationRoot`. Deciding nothing means ordinary, which for a
+//      foreign surface is usually wrong.
+//   5. `segmentLabel` (animationspagecontroller_paths.cpp) — every segment of the
+//      built-in taxonomy is translated there; a miss ships untranslated English
+//      through the mechanical humanizeSegment fallback.
+//   6. The coverage-chip `case` in BOTH AnimationsMotionSetsPage.qml and
+//      DecorationSetsPage.qml, per the parenthetical above.
+//   7. A settings page plus its registration, topology, page scope and search
+//      catalogue entries.
+//   8. `animationPageScope` — without an entry the page falls through to the
+//      whole-tree branch and its Reset wipes every animation override there is.
 
 /// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
 /// that carries an old and new rect.
@@ -289,10 +322,16 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassStrip;
 /// declare `appliesTo: ["tab"]` to be offered.
 ///
 /// Like `move`, the tab leaf takes NO inherited shader from its ancestors
-/// (shaderPathResolvesInIsolation / ShaderProfileTree::resolve): its only
-/// ancestor is the strip-classed `scrolling` root, so everything it could
-/// inherit is provably wrong for it. Only a direct override at the leaf
-/// applies; motion (curve/duration) inheritance is unaffected.
+/// (shaderPathResolvesInIsolation / ShaderProfileTree::resolve). The reason is the
+/// opt-in class stated just above, not the ancestors' classes: because a pack must
+/// declare `appliesTo: ["tab"]`, every pack offered on an ancestor for that
+/// ancestor's own sake is refused here. It has three levels above it —
+/// parentPath("scrolling") is `global`, not empty, and the baseline sits above
+/// that. A HYBRID declaring `tab` beside the ancestor's class does survive the
+/// gate, so the isolation is a policy choice for that case: a pack engaged for
+/// window appearance must not start driving tab swaps unasked. Only a direct
+/// override at the leaf applies; motion (curve/duration) inheritance is
+/// unaffected.
 ///
 /// A tab-ONLY pack is compositor-only by `shaderEffectIsCompositorOnly`'s
 /// appearance rule, which is what lets it include `old_content.glsl`
@@ -315,7 +354,9 @@ PHOSPHORANIMATION_EXPORT QStringList allEventClassTokens();
 /// no single class (a mixed ancestor like `window`, or a path outside the
 /// classified families — editor / panel / widget / cursor / shader / global).
 /// Resolution is leaf-aware: the OSD and popup roots and all their descendants
-/// are `appearance`; the window leaves split by motion-vs-lifecycle; the
+/// are `appearance`, and so are the `shell` root and every `shell.*` leaf (what
+/// sets that family apart is whose surface it is, which the isolation answers,
+/// not the pack vocabulary); the window leaves split by motion-vs-lifecycle; the
 /// `window.movement.move` leaf is `move` (held interactive drag) while the
 /// rest of the movement sub-tree is `geometry`; the `desktop` root and every
 /// `desktop.*` leaf are `desktop`; the `scrolling` root and `scrolling.view`

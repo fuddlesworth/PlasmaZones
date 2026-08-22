@@ -203,10 +203,20 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("desktop"), PhosphorI18n::tr("virtual desktop"),
                              PhosphorI18n::tr("workspace"), PhosphorI18n::tr("switch"), PhosphorI18n::tr("peek"),
                              PhosphorI18n::tr("show desktop")});
+    // "panel" stays at PAGE level on purpose, even though this page has no panel
+    // row and cannot gain one. Someone searching it means their Plasma panel, and
+    // this page's header is the one place in the app that answers them (it says
+    // why a panel has no events). The other holder of the term,
+    // animations-side-panels, is about the settings app's OWN side surfaces (the
+    // nav rail, the editor's property drawer) and was explicitly renamed to
+    // disambiguate itself from system panels, so landing there answers nothing.
+    // It is kept off the two applet-popup ROWS below, which is the half that
+    // would have deep-linked into a row that cannot do the thing.
+    // "tray" and "kickoff" are the bare words users actually type.
     search->setPageKeywords(QStringLiteral("animations-shell"),
                             {PhosphorI18n::tr("shell"), PhosphorI18n::tr("plasma"), PhosphorI18n::tr("panel"),
-                             PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("applet"),
-                             PhosphorI18n::tr("popup")});
+                             PhosphorI18n::tr("launcher"), PhosphorI18n::tr("kickoff"), PhosphorI18n::tr("system tray"),
+                             PhosphorI18n::tr("tray"), PhosphorI18n::tr("applet"), PhosphorI18n::tr("popup")});
     search->setPageKeywords(QStringLiteral("animations-scrolling"),
                             {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column"),
                              PhosphorI18n::tr("animation"), PhosphorI18n::tr("shader"), PhosphorI18n::tr("blur"),

@@ -516,8 +516,19 @@ private Q_SLOTS:
         QVERIFY(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId().isEmpty());
         QVERIFY(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId().isEmpty());
         // And nothing about the isolation leaks onto the window family, which
-        // still inherits both.
+        // still inherits both. Both halves need their own tree: on the tree above
+        // the `global` node shadows the baseline, so that assertion alone observes
+        // only the node and would still pass if the baseline had been cut for
+        // everyone.
         QCOMPARE(tree.resolve(PP::WindowOpen).effectiveEffectId(), QStringLiteral("slide"));
+
+        ShaderProfileTree baselineOnly;
+        baselineOnly.setBaseline(baseline);
+        QCOMPARE(baselineOnly.resolve(PP::WindowOpen).effectiveEffectId(), QStringLiteral("dissolve"));
+        // The same tree also pins the baseline-drop edit on its own, with no
+        // `global` node present for the chain trim to be doing the work instead.
+        QVERIFY(baselineOnly.resolve(PP::Shell).effectiveEffectId().isEmpty());
+        QVERIFY(baselineOnly.resolve(PP::ShellAppletPopupShow).effectiveEffectId().isEmpty());
     }
 
     void testShellRootCascadesWithinItsOwnSubtree()

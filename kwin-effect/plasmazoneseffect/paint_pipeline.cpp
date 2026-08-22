@@ -1557,7 +1557,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // this function: the lambda is handed `backIt.key()`, which is the same
         // string, and a shadowing name made that look like a coincidence to be
         // checked rather than the identity it is.
-        const auto chainBackdropScale = [this](const WindowDecoration& deco, const QString& decoWindowId) -> qreal {
+        const auto chainBackdropScale = [this, w](const WindowDecoration& deco, const QString& decoWindowId) -> qreal {
             std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
             qreal scale = 0.0;
             for (const QString& packId : deco.chain) {
@@ -1566,7 +1566,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     pk = &cacheIt->second;
                 } else {
                     if (!profile) {
-                        profile = m_decorationTree.resolve(resolveSurfacePathFor(decoWindowId));
+                        // Pass the window: the id-only overload re-derives through
+                        // findWindowByIdExact, which is a wasted lookup when the
+                        // caller already holds the very window it would find. Same
+                        // form the surfacelayers.cpp sibling uses.
+                        profile = m_decorationTree.resolve(resolveSurfacePathFor(decoWindowId, w));
                     }
                     pk = compiledPack(packId, *profile);
                 }
