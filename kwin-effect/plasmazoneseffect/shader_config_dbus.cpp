@@ -111,8 +111,10 @@ QStringList validatedShaderSearchPaths(const QJsonArray& arr)
         }
         // The RAW components, not QDir::cleanPath's: cleanPath collapses `..`
         // away, so testing its output would pass every traversal through.
-        // Rejecting the raw form keeps the registered root exactly what the
-        // daemon named.
+        // Rejecting the raw form is what makes the check meaningful — note the
+        // loader normalises the path with cleanPath before registering it, so
+        // what ends up registered is the normalised form, not the exact string
+        // the daemon named.
         if (path.split(QLatin1Char('/')).contains(QLatin1String(".."))) {
             qCWarning(lcEffect) << "loadShaderRegistryFromDbus: rejecting search path with a traversal component"
                                 << path;
@@ -204,8 +206,11 @@ const QSet<PhosphorRules::Field>& activeLayoutField()
 /// The caller's slices are already filtered to real candidates for their
 /// respective rule sets, so a removal here is always a rule the effect
 /// would otherwise have bound.
+/// @p outActiveLayoutWithheld is REQUIRED, deliberately: every caller ORs its
+/// slice's contribution into one marker, and a defaulted-away out-param is how
+/// a future fourth slice would silently drop its own.
 QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> rules, bool activeLayoutsSeeded,
-                                                    bool* outActiveLayoutWithheld = nullptr)
+                                                    bool* outActiveLayoutWithheld)
 {
     const QSet<PhosphorRules::Field>& fields = effectNeverStampedFields(activeLayoutsSeeded);
     rules.removeIf([&fields, activeLayoutsSeeded, outActiveLayoutWithheld](const PhosphorRules::Rule& rule) {
@@ -243,9 +248,9 @@ QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> r
 /// `arraySink` runs when it is a top-level JSON array. Pass a
 /// no-op (empty std::function) for the shape the caller doesn't
 /// expect — a payload of the wrong shape logs and is dropped.
-inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
-                                std::function<void(const QJsonObject&)> objectSink,
-                                std::function<void(const QJsonArray&)> arraySink)
+void dispatchJsonSetting(QLatin1String name, const QVariant& v,
+                         const std::function<void(const QJsonObject&)>& objectSink,
+                         const std::function<void(const QJsonArray&)>& arraySink)
 {
     // Same two-stage bound the getAllRules path applies, for the same reason
     // and against the same cap: these payloads cross D-Bus too, and what the
@@ -279,7 +284,13 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
             : objectSink                                 ? "object"
             : arraySink                                  ? "array"
                                                          : "(no shape — caller wired neither sink)";
-        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON" << expected;
+        // The variant's TYPE too. A payload that was never a string at all
+        // converts to an empty QString, parses to a null document, and lands
+        // here reading as though the daemon had sent JSON of the wrong shape —
+        // which points a reader at the sinks when the real fault is upstream,
+        // in what was put on the wire.
+        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON" << expected
+                            << "(variant type" << v.metaType().name() << ", " << utf8.size() << "bytes)";
     }
 }
 
@@ -473,16 +484,21 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // rule wins per-slot, with engaged-empty effectId still blocking the tree
     // fallthrough and durationMs <= 0 still meaning "inherit".
     //
-    // Clamp the resolved duration to the upstream `durationMs` floor: if
-    // the cascade collapses to <= 0 (corrupt persisted rule, missing
-    // motion-tree node feeding baseDurationMs), the QTimer::singleShot
-    // below would fire on the next event-loop tick and tear down the
-    // just-installed transition before its first paint. The input
-    // `durationMs` was already clamped by the daemon-bringup loader to
-    // [MinAnimationDurationMs, MaxAnimationDurationMs], and the
-    // `durationMs <= 0` guard at the top of `tryBeginShaderForEvent`
-    // rejects non-positive inputs, so `durationMs` here is a safe
-    // positive floor.
+    // Structural backstop, NOT the guarantee. A duration that collapsed to
+    // <= 0 would make the QTimer::singleShot below fire on the next event-loop
+    // tick and tear down the just-installed transition before its first paint.
+    // What actually prevents that is the clamp inside resolveEventMotionProfile,
+    // which bounds an engaged duration into [MinAnimationDurationMs,
+    // MaxAnimationDurationMs] and falls back to Profile's own default when the
+    // duration is disengaged — so `baseDurationMs` is already positive on every
+    // path and the branch below is unreachable today.
+    //
+    // It is kept because the fallback it names is genuinely safe (`durationMs`
+    // is itself clamped by the daemon-bringup loader, and the `durationMs <= 0`
+    // guard at the top of `tryBeginShaderForEvent` rejects non-positive
+    // inputs), so the cost is a dead comparison. Do not read it as the reason
+    // the invariant holds, and do not remove the clamp in
+    // resolveEventMotionProfile on the strength of it.
     const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
                                                                      profileTree, ruleWindowId, query, profilePath);
     const auto& profile = resolved.profile;
@@ -610,6 +626,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (profilePath == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch) {
         if (auto* live = m_shaderManager.findTransition(window)) {
             const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
+            // No `.shader` null-sentinel operand here, unlike the same-pointer
+            // test further down. It would be inert: beginShaderTransition
+            // refuses to install when the cached entry carries a null shader,
+            // so a LIVE transition can never point at the sentinel in the first
+            // place. The other site guards a different question, where the
+            // entry it compares against need not have been installed from.
             if (cacheIt != m_shaderManager.m_shaderCache.end() && live->cached == &cacheIt->second) {
                 endShaderTransition(window);
             }
@@ -812,6 +834,28 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             // chain the marker sits stale-FALSE; the exhaustion arm below
             // re-arms it so the NEXT seeding edge re-drives instead of
             // trusting a fetch that never landed.
+            //
+            // Deliberately an UNOWNED singleShot rather than a member QTimer,
+            // so nothing can cancel it. A member would let a fresh external
+            // trigger, or the daemon-loss handler, stop a chain in flight — and
+            // every cancel path skips the exhaustion arm below, which is the
+            // only thing that re-arms the marker. Cancel-by-fresh-trigger would
+            // heal itself, because that fetch's success path recomputes the
+            // marker wholesale and each of its early returns re-arms it. Cancel
+            // by DAEMON LOSS would not: no fetch completes, no arm runs, and
+            // the marker sits stale-FALSE while the withheld rules are out of
+            // every evaluator. Anyone making this cancellable has to set
+            // m_activeLayoutRulesWithheld = true on that edge, and has to
+            // rewrite the comment in lifecycle_wiring_daemon.cpp that says the
+            // retry is deliberately allowed to run against a not-yet-ready
+            // daemon at bring-up.
+            //
+            // What the uncancellable form costs is bounded and benign: a stale
+            // chain can dispatch one redundant getAllRules after a fresh
+            // trigger already succeeded, and the generation guard above
+            // discards its reply. Against a dead daemon it burns the remaining
+            // budget over a few seconds and then re-arms the marker, which is
+            // the safe polarity.
             if (m_ruleFetchRetriesLeft > 0) {
                 --m_ruleFetchRetriesLeft;
                 QTimer::singleShot(kRuleFetchRetryDelayMs, this, [this] {
@@ -1288,6 +1332,29 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                                 /*objectSink=*/{}, [this](const QJsonArray& arr) {
                                     const QStringList paths = validatedShaderSearchPaths(arr);
                                     if (!paths.isEmpty()) {
+                                        // ADD-only, and there is no remove: the registry
+                                        // exposes addSearchPath / addSearchPaths /
+                                        // setUserPath / refresh and nothing that
+                                        // unregisters a root. A root the daemon stops
+                                        // publishing therefore stays registered, with its
+                                        // watcher, until the session ends — its packs stay
+                                        // resolvable and keep appearing in the pickers.
+                                        // Accepted rather than fixed here: retracting a
+                                        // root needs a "replace the published set" verb on
+                                        // the loader, which is a library arm, and the
+                                        // daemon does not retract one today.
+                                        //
+                                        // This also runs SYNCHRONOUSLY on the compositor
+                                        // thread: a batched register scans the new roots
+                                        // and fires the registry signals inline, and the
+                                        // effect's effectsChanged handler then ends every
+                                        // live transition and clears the shader caches
+                                        // before this returns. Harmless at bring-up, where
+                                        // there is nothing live to tear down, and a no-op
+                                        // on every later publish of an unchanged list
+                                        // because the loader returns without scanning when
+                                        // every path is already registered. Only a
+                                        // mid-session publish of a NEW root pays for it.
                                         m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
                                         // paths.size() is the REQUESTED count, pre-dedupe:
                                         // addSearchPaths silently drops already-registered
