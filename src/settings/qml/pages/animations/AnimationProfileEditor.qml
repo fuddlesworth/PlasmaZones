@@ -99,6 +99,16 @@ ColumnLayout {
     property bool curveOverridden: false
     /// Same, for the duration field.
     property bool durationOverridden: false
+    /// Same, for the shader slot: true when this event owns a DIRECT pack
+    /// choice, false when the pack shown is inherited from an ancestor.
+    ///
+    /// Worth the third property rather than inferring it from
+    /// `shaderEffectId.length`, because that id is the RESOLVED one and an
+    /// inherited pack renders through it identically to an owned one. Without
+    /// this the row gave the shader axis no ownership cue at all while the two
+    /// timing fields either side of it both had one, and the remove button
+    /// claimed to remove a pack this event did not have.
+    property bool shaderOverridden: false
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
     /// equivalent) so the picker stays reactive without this editor
@@ -571,15 +581,37 @@ ColumnLayout {
                     color: Kirigami.Theme.disabledTextColor
                     elide: Text.ElideRight
                 }
+
+                // The ownership cue the two timing fields either side of this
+                // row already carry. Same wording, so the three read as one
+                // set rather than as two conventions.
+                Label {
+                    Layout.fillWidth: true
+                    visible: root.showOverrideStatus
+                    text: root.shaderOverridden ? i18n("Overridden for this event") : i18n("Following the inherited value")
+                    color: Kirigami.Theme.disabledTextColor
+                    elide: Text.ElideRight
+                }
             }
 
             // Clearing the slot, in the same position a decoration pack row
             // carries its remove button. Routes through the same activation
             // signal the picker's None entry uses.
+            //
+            // The label tracks what the click actually DOES, which differs by
+            // ownership and used to be described as "Remove" either way. On an
+            // owned pack it removes that pack. On an INHERITED one there is
+            // nothing here to remove: the write stores the engaged-empty
+            // sentinel, which blocks the inheritance rather than clearing
+            // anything, and the card afterwards reads as no shader. Saying
+            // "Remove <pack>" for that was telling the user they were undoing
+            // a choice they never made here.
             ToolButton {
                 icon.name: "edit-delete-remove"
                 display: ToolButton.IconOnly
-                Accessible.name: i18n("Remove %1", root.shaderName)
+                Accessible.name: root.shaderOverridden ? i18n("Remove %1", root.shaderName) : i18n("Use no shader for this event")
+                ToolTip.visible: hovered
+                ToolTip.text: Accessible.name
                 onClicked: {
                     root.shaderEffectActivated("");
                     root.shaderSectionExpanded = false;

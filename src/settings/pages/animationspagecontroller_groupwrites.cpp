@@ -445,6 +445,63 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
     return written;
 }
 
+int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters)
+{
+    const QStringList paths = distinctPaths(rawPaths);
+    using namespace PhosphorAnimationShaders;
+    if (!m_settings)
+        return 0;
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "setShaderParametersOnPaths: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+        return -1;
+    }
+    // No acceptableShaderEffectId check, and none is missing: this call carries
+    // no id at all. The stored one is reused verbatim, and it was validated by
+    // whichever write put it there.
+
+    // One read, every path applied, one write — the reasons the sibling setter
+    // gives apply with more force here, because this is the drag-rate path.
+    ShaderProfileTree tree = m_settings->shaderProfileTree();
+    int written = 0;
+    int mutated = 0;
+    for (const QString& path : paths) {
+        if (!isValidEventPath(path) || !supportsShaderLeg(path))
+            continue;
+        // START FROM THE STORED PROFILE, which is what keeps `effectId` as it
+        // was. Default-constructing here would leave it unengaged even for a
+        // path that owns a pack, silently dropping that pack back to inherited
+        // the first time a slider moved.
+        ShaderProfile profile = tree.hasOverride(path) ? tree.directOverride(path) : ShaderProfile{};
+        if (parameters.isEmpty())
+            profile.parameters.reset();
+        else
+            profile.parameters = parameters;
+        // A params-only write that leaves NOTHING engaged is a clear, not an
+        // override: storing an empty profile would put a no-op entry in the
+        // tree that the parent card then has to reason about, and that reads to
+        // the pruner and the diff as a real override.
+        if (!profile.effectId.has_value() && !profile.parameters.has_value()) {
+            if (tree.hasOverride(path)) {
+                tree.clearOverride(path);
+                ++mutated;
+            }
+            ++written;
+            continue;
+        }
+        if (tree.hasOverride(path) && tree.directOverride(path) == profile) {
+            ++written;
+            continue;
+        }
+        tree.setOverride(path, profile);
+        ++written;
+        ++mutated;
+    }
+    if (mutated > 0)
+        m_settings->setShaderProfileTree(tree);
+    return written;
+}
+
 int AnimationsPageController::clearShaderOverrideOnPaths(const QStringList& rawPaths)
 {
     const QStringList paths = distinctPaths(rawPaths);

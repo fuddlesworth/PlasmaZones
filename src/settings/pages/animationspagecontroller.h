@@ -356,6 +356,22 @@ public:
     Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& rawPaths, const QString& effectId,
                                              const QVariantMap& parameters);
 
+    /// Set @p parameters on every shader-capable path in @p rawPaths WITHOUT
+    /// touching which pack each path uses.
+    ///
+    /// The distinction from setShaderOverrideOnPaths is the whole point, and it
+    /// is what a parameter slider needs. That writer stamps `effectId`
+    /// unconditionally, so tweaking one slider on a leaf that INHERITS its pack
+    /// pinned the inherited id as a direct override: the leaf stopped following
+    /// its parent, and the parent's card immediately raised a "descendant
+    /// shadows this parent" warning whose clear action deleted the tweak the
+    /// user had just made. Here `effectId` is left exactly as stored — engaged
+    /// where the path owns a pack, unengaged where it inherits one — so a
+    /// params-only override rides the cascade instead of severing it.
+    /// @return the number of paths written, or -1 if the call was refused
+    /// because an async discard owns the tree (it toasts).
+    Q_INVOKABLE int setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters);
+
     /// Clear the shader override on every path in @p rawPaths, returning the event
     /// to inheritance. Distinct from writing the engaged-empty sentinel, which
     /// is an explicit "None" that BLOCKS inheritance.

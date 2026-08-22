@@ -155,6 +155,11 @@ Item {
     /// curve counts only as a non-empty string.
     readonly property bool _ownsDurationOverride: root._primaryRaw.duration !== undefined
     readonly property bool _ownsCurveOverride: typeof root._primaryRaw.curve === "string" && root._primaryRaw.curve.length > 0
+    /// Whether this event DIRECTLY owns its shader pack, as opposed to showing
+    /// one inherited from an ancestor. Set from the same raw-profile read that
+    /// derives the Override toggle, because the id the editor renders is the
+    /// RESOLVED one and cannot answer this on its own.
+    property bool _ownsShaderOverride: false
     // ── Editor-owned working state (proxied via aliases) ────────────
     // The shared `AnimationProfileEditor` (declared inside the card's
     // body below) owns the timing + shader working state and the
@@ -331,7 +336,11 @@ Item {
         var next = Object.assign({}, root.currentShaderParams || {});
         next[paramId] = value;
         root.currentShaderParams = next;
-        root._setShaderOverrideOnAll(effectId, next);
+        // Params-only: never restate the pack. `effectId` above is the RESOLVED
+        // id, so on a leaf that inherits its pack, writing it would pin that
+        // pack here and sever the cascade. It is still read for the stale-effect
+        // guard above, which is the only thing it is good for on this path.
+        root._setShaderParamsOnAll(next);
     }
 
     /// Batch write — randomize rolls N values that should land as one
@@ -342,7 +351,8 @@ Item {
             return;
 
         root.currentShaderParams = allParams;
-        root._setShaderOverrideOnAll(effectId, allParams);
+        // Params-only, for the reason _writeShaderParam gives.
+        root._setShaderParamsOnAll(allParams);
     }
 
     // ── Group writers ───────────────────────────────────────────────
@@ -353,6 +363,10 @@ Item {
     // signature change needs no edit here.
     function _setShaderOverrideOnAll() {
         return writers._setShaderOverrideOnAll.apply(writers, arguments);
+    }
+
+    function _setShaderParamsOnAll() {
+        return writers._setShaderParamsOnAll.apply(writers, arguments);
     }
     function _setOverrideMerged() {
         return writers._setOverrideMerged.apply(writers, arguments);
@@ -506,6 +520,11 @@ Item {
         var hasShaderEffect = Boolean(rawShader && typeof rawShader.effectId === "string" && rawShader.effectId.length > 0);
         var hasShaderParams = Boolean(rawShader && rawShader.parameters && Object.keys(rawShader.parameters).length > 0);
         var hasShader = hasShaderEffect || hasShaderParams;
+        // Feeds the editor's ownership caption and its remove-button label.
+        // Deliberately the same predicate as hasShaderEffect: an engaged-EMPTY
+        // effectId is the explicit "no shader here" sentinel, not a pack this
+        // event owns, so the row correctly reads as not-overridden for it.
+        root._ownsShaderOverride = hasShaderEffect;
         const wasEnabled = root.overrideEnabled;
         root.overrideEnabled = Boolean(hasRaw) || hasShader;
         // A clear that did not come through the toggle's OFF arm — a page
@@ -812,6 +831,7 @@ Item {
                 simpleTiming: root.simpleTiming
                 showOverrideStatus: true
                 curveOverridden: root._ownsCurveOverride
+                shaderOverridden: root._ownsShaderOverride
                 durationOverridden: root._ownsDurationOverride
                 enableLocking: true
                 enableRandomize: true

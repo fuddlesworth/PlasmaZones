@@ -1039,6 +1039,71 @@ private Q_SLOTS:
         QCOMPARE(c.setShaderOverrideOnPaths(group, QStringLiteral("pixelate"), params), 2);
         QCOMPARE(dirtied.count(), 0);
     }
+
+    /// A parameter tweak on a leaf that INHERITS its pack must not pin that
+    /// pack at the leaf.
+    ///
+    /// The pin is invisible at the moment it happens — the leaf resolves the
+    /// same pack either way — and only shows up later, when the parent's pack
+    /// changes and the leaf silently does not follow. So the payload of this
+    /// test is the last two lines, not the effectId assertion.
+    void setShaderParametersOnPaths_onAnInheritingLeafDoesNotPinTheParentsPack()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString parent = QStringLiteral("window.appearance");
+        const QString leaf = QStringLiteral("window.appearance.open");
+
+        QVERIFY(c.setShaderOverride(parent, QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.resolvedShaderProfile(leaf).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("pixelate"));
+
+        QVariantMap params;
+        params.insert(QStringLiteral("strength"), 0.7);
+        QCOMPARE(c.setShaderParametersOnPaths({leaf}, params), 1);
+
+        // The params landed, and NO effectId key was stored: an absent key is
+        // the "inherit the pack" state, distinct from an engaged-empty one.
+        const QVariantMap stored = c.rawShaderProfile(leaf);
+        QCOMPARE(stored.value(QStringLiteral("parameters")).toMap().value(QStringLiteral("strength")).toDouble(), 0.7);
+        QVERIFY2(!stored.contains(QStringLiteral("effectId")),
+                 "a params-only write pinned an effectId, severing the cascade");
+
+        // The payload: change the pack above, and the leaf follows.
+        QVERIFY(c.setShaderOverride(parent, QStringLiteral("dissolve"), {}));
+        QCOMPARE(c.resolvedShaderProfile(leaf).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("dissolve"));
+    }
+
+    /// A params-only descendant does not "shadow" its parent, so the parent's
+    /// card must not offer to clear it.
+    ///
+    /// Pinned because the warning it drives carries a one-click destructive
+    /// action: counting a params-only child meant the parent offered to delete
+    /// a parameter tweak the user had just made on the child.
+    void shaderOverrideDescendantCount_ignoresAParamsOnlyDescendant()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString parent = QStringLiteral("window.appearance");
+        const QString leaf = QStringLiteral("window.appearance.open");
+
+        QVERIFY(c.setShaderOverride(parent, QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.shaderOverrideDescendantCount(parent), 0);
+
+        QVariantMap params;
+        params.insert(QStringLiteral("strength"), 0.7);
+        QCOMPARE(c.setShaderParametersOnPaths({leaf}, params), 1);
+        QCOMPARE(c.shaderOverrideDescendantCount(parent), 0);
+
+        // An ENGAGED effectId at the leaf does shadow, even when it names the
+        // same pack the parent currently resolves: the two are one pack today
+        // and independent tomorrow, and that pin is what the warning is for.
+        QVERIFY(c.setShaderOverride(leaf, QStringLiteral("pixelate"), {}));
+        QCOMPARE(c.shaderOverrideDescendantCount(parent), 1);
+    }
 };
 
 QTEST_MAIN(TestAnimationsShaderOverrides)

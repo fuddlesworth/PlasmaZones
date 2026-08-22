@@ -131,6 +131,17 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 /// false "shadowing children" warning on the ancestor card, and the
 /// paired clear action would silently wipe a setting the user made on the
 /// Window Dragging page.
+///
+/// PARAMS-ONLY overrides are excluded for the same reason in a different
+/// shape: an override whose `effectId` is not engaged inherits the
+/// ancestor's pack and merely overlays parameter values onto it, so it
+/// rides the ancestor's choice rather than shadowing it — change the pack
+/// above and the descendant follows. Only an ENGAGED effectId pins a pack
+/// at the descendant and makes it stop following, which is exactly what
+/// "shadows this parent" means to a user. Note an engaged effectId counts
+/// even when it currently equals what the ancestor resolves: the two are
+/// the same pack today and independent tomorrow, and it is that pin the
+/// warning exists to surface.
 inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                     const QString& path)
 {
@@ -140,8 +151,11 @@ inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShade
     const QString prefix = path + QLatin1Char('.');
     const QStringList paths = tree.overriddenPaths();
     for (const QString& p : paths) {
-        if (p.startsWith(prefix) && !PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
-            out.append(p);
+        if (!p.startsWith(prefix) || PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
+            continue;
+        if (!tree.directOverride(p).effectId.has_value())
+            continue;
+        out.append(p);
     }
     return out;
 }

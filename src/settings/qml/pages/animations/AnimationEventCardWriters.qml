@@ -125,6 +125,27 @@ QtObject {
         }
     }
 
+    /// Set the shader PARAMETERS on every write path, leaving each path's pack
+    /// exactly as stored.
+    ///
+    /// The param sliders use this rather than the setter above, and the
+    /// difference matters on a leaf that inherits its pack: the setter stamps
+    /// the id it is handed, which for an inheriting leaf is the id it inherited,
+    /// so one slider nudge used to pin the parent's pack as a direct override.
+    /// The leaf then stopped following the parent, and the parent's card raised
+    /// a "descendant shadows this parent" warning whose clear action deleted the
+    /// tweak that had just been made.
+    function _setShaderParamsOnAll(params) {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.setShaderParametersOnPaths(card._writePaths, params) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     /// Clear the shader override on every write path, returning the event to
     /// inheritance. Distinct from writing the engaged-empty sentinel, which is
     /// an explicit "None" that BLOCKS inheritance — that is the picker's job,
