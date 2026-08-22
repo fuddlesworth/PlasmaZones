@@ -11,6 +11,7 @@
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <PhosphorCompositor/SnapAssistFilter.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 
@@ -121,6 +122,19 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 if (!m_capture) {
                     m_capture = new SnapAssistThumbnailCapture(this);
                 }
+                // Size the capture to what the largest empty zone will draw
+                // for this many candidates on this output, instead of a
+                // fixed box. Zones are logical px; the output scale turns the
+                // card's logical icon size into the device px the texture
+                // needs to be sharp.
+                int zoneMinAxis = 0;
+                for (const auto& z : emptyZones) {
+                    zoneMinAxis = std::max(zoneMinAxis, std::min(z.width, z.height));
+                }
+                const KWin::LogicalOutput* output = m_effect->outputForScreenId(screenId);
+                const double outputScale = output ? output->scale() : 1.0;
+                const int boxPx = PhosphorProtocol::Service::snapAssistThumbnailBoxPx(
+                    zoneMinAxis, int(candidates.size()), outputScale);
                 QVector<SnapAssistThumbnailCapture::Candidate> captureList;
                 captureList.reserve(candidates.size());
                 for (const auto& c : candidates) {
@@ -133,7 +147,7 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                     }
                     captureList.append({id});
                 }
-                m_capture->captureCandidates(captureList);
+                m_capture->captureCandidates(captureList, QSize(boxPx, boxPx));
 
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     m_effect, PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"),

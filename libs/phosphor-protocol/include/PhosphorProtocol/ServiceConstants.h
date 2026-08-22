@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QLatin1String>
 #include <QtGlobal>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorProtocol::Service {
 
@@ -367,6 +370,45 @@ inline constexpr int SnapAssistThumbnailCacheCapacity = 24;
 // handle as recently-posted, which would otherwise re-capture on every show.
 inline constexpr int SnapAssistThumbnailMaxDimension = 1024;
 
+// How big the snap-assist card actually draws a thumbnail, in logical
+// pixels, as a function of the zone it sits in and how many candidates
+// share it. This is the C++ twin of the sizing bindings in
+// src/ui/SnapAssistContent.qml (candidateFlow.iconSize: cardScaleBase,
+// iconSizeRatio, minIconSize) and MUST be kept in step with them. The
+// effect captures at this size times the output scale rather than at a
+// fixed 256, so a burst of candidates ships small buffers and a lone
+// candidate in a big zone on a HiDPI output is not upscaled. Drift between
+// the two only costs sharpness or bytes, never correctness, and the
+// headroom factor absorbs the rounding.
+inline constexpr double SnapAssistCardScaleBase = 0.35;
+inline constexpr double SnapAssistIconSizeRatio = 0.6;
+inline constexpr int SnapAssistMinIconLogicalPx = 16; // Kirigami.Units.iconSizes.small
+inline constexpr double SnapAssistThumbnailHeadroom = 1.25;
+
+inline int snapAssistThumbnailBoxPx(int zoneMinAxisLogicalPx, int candidateCount, double outputScale)
+{
+    const double cardScale = SnapAssistCardScaleBase / std::max(1.0, std::sqrt(double(std::max(1, candidateCount))));
+    const double iconLogical =
+        std::max(double(SnapAssistMinIconLogicalPx),
+                 double(std::max(0, zoneMinAxisLogicalPx)) * cardScale * SnapAssistIconSizeRatio);
+    const double devicePx = iconLogical * std::max(1.0, outputScale) * SnapAssistThumbnailHeadroom;
+    return std::clamp(int(std::ceil(devicePx)), SnapAssistMinIconLogicalPx, SnapAssistThumbnailMaxDimension);
+}
+
+// One rule for every boolean environment switch in this header: set to any
+// value other than "0" enables, "0" or unset disables. Value-checked rather
+// than presence-checked so an explicit opt-out is honoured, and not parsed as
+// an integer so the presence-style spellings the switches have always been
+// documented with ("=1", "=true", "=yes") keep working. "=0" is the only
+// opt-out; anything else set is an opt-in.
+inline bool envSwitchEnabled(const char* name)
+{
+    if (!qEnvironmentVariableIsSet(name)) {
+        return false;
+    }
+    return qgetenv(name).trimmed() != "0";
+}
+
 // Single accessor for the experimental zero-copy thumbnail gate. Read in
 // FOUR places with different lifetimes (the effect's capture ctor, the
 // daemon's D-Bus slot, the daemon's Vulkan device-extension wiring, and the
@@ -375,7 +417,20 @@ inline constexpr int SnapAssistThumbnailMaxDimension = 1024;
 // process-constant, so callers may cache the result freely.
 inline bool snapAssistDmabufThumbnailsEnabled()
 {
-    return qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
+    return envSwitchEnabled("PLASMAZONES_DMABUF_THUMBNAILS");
+}
+
+// Diagnostic switch for the snap-assist thumbnail pipeline. When set, both
+// the kwin-effect capture side and the daemon receive side log one line per
+// thumbnail with the fitted size, per-stage timings (render, readback,
+// convert, D-Bus round-trip, cache insert, QML fetch) and byte counts, under
+// the *.snapassist.trace logging categories. Read-only instrumentation: it
+// changes nothing about what is captured or how. Shared here for the same
+// reason as the dma-buf gate above, so both processes agree on the spelling,
+// and it follows the same "=0 disables" rule.
+inline bool snapAssistThumbnailTraceEnabled()
+{
+    return envSwitchEnabled("PLASMAZONES_THUMBNAIL_TRACE");
 }
 
 } // namespace PhosphorProtocol::Service

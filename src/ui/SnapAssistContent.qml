@@ -49,7 +49,10 @@ Item {
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
     property int borderRadius: Kirigami.Units.gridUnit
-    // Layout constants
+    // Layout constants. cardScaleBase, iconSizeRatio and minIconSize have a
+    // C++ twin in PhosphorProtocol/ServiceConstants.h
+    // (snapAssistThumbnailBoxPx): the kwin-effect sizes its captures from
+    // them, so change both together.
     readonly property real cardScaleBase: 0.35
     readonly property real cardWidthMultiplier: 2.2
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 6

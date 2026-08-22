@@ -3,12 +3,22 @@
 
 #include "snapassistthumbnailprovider.h"
 #include "thumbnailurlutil.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <QElapsedTimer>
+#include <QLoggingCategory>
+
+// Info-level by default so PLASMAZONES_THUMBNAIL_TRACE alone surfaces the
+// lines; every emit is additionally gated on m_traceEnabled so the category
+// stays silent without the env var. Mirrors the kwin-effect's
+// kwin.effect.plasmazones.snapassist.trace category.
+Q_LOGGING_CATEGORY(lcSnapAssistTrace, "plasmazones.daemon.snapassist.trace", QtInfoMsg)
 
 namespace PlasmaZones {
 
 SnapAssistThumbnailProvider::SnapAssistThumbnailProvider()
     : QQuickImageProvider(QQuickImageProvider::Image)
     , m_cache(CacheMaxBytes)
+    , m_traceEnabled(PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled())
 {
 }
 
@@ -20,6 +30,10 @@ QImage SnapAssistThumbnailProvider::requestImage(const QString& id, QSize* size,
     // hand-builds an `image://plasmazones-snapassist/{uuid}/N` URL still
     // resolves to the same cache slot.
     const QString handle = ThumbnailUrl::normaliseHandle(id.section(QLatin1Char('/'), 0, 0));
+    QElapsedTimer fetchTimer;
+    if (m_traceEnabled) {
+        fetchTimer.start();
+    }
 
     QImage out;
     {
@@ -43,9 +57,19 @@ QImage SnapAssistThumbnailProvider::requestImage(const QString& id, QSize* size,
     if (size) {
         *size = out.size();
     }
-    if (requestedSize.isValid() && requestedSize.width() > 0 && requestedSize.height() > 0
-        && (out.width() > requestedSize.width() || out.height() > requestedSize.height())) {
-        return out.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const bool downscale = requestedSize.isValid() && requestedSize.width() > 0 && requestedSize.height() > 0
+        && (out.width() > requestedSize.width() || out.height() > requestedSize.height());
+    if (downscale) {
+        out = out.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+    if (m_traceEnabled) {
+        // requestImage runs on QML's image-loader thread, so this is the
+        // off-main cost; the GPU upload that follows is QQuickPixmap's.
+        qCInfo(lcSnapAssistTrace).nospace()
+            << "fetch " << handle << " stored=" << out.width() << "x" << out.height()
+            << " requested=" << requestedSize.width() << "x" << requestedSize.height()
+            << " scaled=" << (downscale ? "yes" : "no") << " bytes=" << out.sizeInBytes()
+            << " fetch=" << fetchTimer.nsecsElapsed() / 1000 << "us";
     }
     return out;
 }
@@ -85,6 +109,10 @@ QString SnapAssistThumbnailProvider::insert(const QString& compositorHandle, QIm
     // accepted=true that latches an unservable handle in its dedup window.
     if (!m_cache.insert(key, entry, cost)) {
         return QString();
+    }
+    if (m_traceEnabled) {
+        qCInfo(lcSnapAssistTrace).nospace() << "insert " << key << " cost=" << cost << "B cache=" << m_cache.totalCost()
+                                            << "/" << CacheMaxBytes << "B entries=" << m_cache.count();
     }
     return url;
 }

@@ -36,6 +36,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusUnixFileDescriptor>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QPoint>
@@ -43,6 +44,10 @@
 #include <QVariant>
 
 Q_LOGGING_CATEGORY(lcSnapAssistCapture, "kwin.effect.plasmazones.snapassist.capture", QtWarningMsg)
+// Info-level by default so PLASMAZONES_THUMBNAIL_TRACE alone surfaces the
+// lines; every emit is additionally gated on m_traceEnabled so the category
+// stays silent without the env var.
+Q_LOGGING_CATEGORY(lcSnapAssistTrace, "kwin.effect.plasmazones.snapassist.trace", QtInfoMsg)
 
 namespace PlasmaZones {
 
@@ -129,7 +134,12 @@ bool isFullyTransparent(const QImage& image)
 SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
     : QObject(parent)
     , m_dmabufEnabled(PhosphorProtocol::Service::snapAssistDmabufThumbnailsEnabled())
+    , m_traceEnabled(PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled())
 {
+    if (m_traceEnabled) {
+        qCInfo(lcSnapAssistTrace) << "PLASMAZONES_THUMBNAIL_TRACE set — per-capture stage timings enabled, path:"
+                                  << (m_dmabufEnabled ? "dma-buf" : "pixels");
+    }
     if (m_dmabufEnabled) {
         qCInfo(lcSnapAssistCapture) << "PLASMAZONES_DMABUF_THUMBNAILS set — snap-assist thumbnails will be exported "
                                        "as dma-bufs (experimental zero-copy path).";
@@ -140,18 +150,12 @@ SnapAssistThumbnailCapture::~SnapAssistThumbnailCapture()
 {
     // ~GLTexture issues glDeleteTextures, which needs a current GL context —
     // the default destructor ran with no context current, silently leaking
-    // the pooled dma-buf textures (and the flip scratch) on effect unload.
-    // Make the compositor context current for the teardown. When that fails
-    // (compositor already torn down) there is no explicit fallback: the
-    // members fall through to ordinary destruction below, and the driver
-    // reclaims their storage when the context itself dies.
-    const bool anyGl = m_flipScratch || std::any_of(m_texturePool.begin(), m_texturePool.end(), [](const auto& t) {
-                           return t != nullptr;
-                       });
-    if (anyGl && KWin::effects && KWin::effects->makeOpenGLContextCurrent()) {
-        for (auto& slot : m_texturePool) {
-            slot.reset();
-        }
+    // the flip scratch on effect unload. Make the compositor context current
+    // for the teardown. When that fails (compositor already torn down) there
+    // is no explicit fallback: the member falls through to ordinary
+    // destruction below, and the driver reclaims its storage when the
+    // context itself dies.
+    if (m_flipScratch && KWin::effects && KWin::effects->makeOpenGLContextCurrent()) {
         m_flipScratch.reset();
         KWin::effects->doneOpenGLContextCurrent();
     }
@@ -192,7 +196,7 @@ void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& can
             continue;
         }
         seen.insert(c.internalId);
-        if (wasRecentlyPosted(c.internalId)) {
+        if (wasRecentlyPosted(c.internalId, maxSize)) {
             // Promote: the handle is being "used" via the skip-recapture
             // decision, mirroring the daemon's QCache promote-on-access.
             // Without this, a frequently re-snapped window FIFOs out of
@@ -222,7 +226,7 @@ void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& can
     // captureCandidates landing before the timer delivers would observe
     // m_busy == false, post its own kick, and fork TWO concurrent capture
     // chains, breaking the one-render-at-a-time throttle this class exists
-    // to provide (and double-advancing the dma-buf texture pool).
+    // to provide.
     // processNext's own redundant m_busy = true stays harmless.
     m_busy = true;
     QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
@@ -261,24 +265,34 @@ void SnapAssistThumbnailCapture::rearmDmabufPath()
     m_dmabufConsecutiveFailures = 0;
 }
 
-bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle) const
+static int boxMajorAxis(QSize box)
 {
-    return m_recentlyPostedSet.contains(handle);
+    return std::max(box.width(), box.height());
 }
 
-void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
+bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle, QSize box) const
 {
-    if (m_recentlyPostedSet.contains(handle)) {
+    const auto it = m_recentlyPostedSet.constFind(handle);
+    return it != m_recentlyPostedSet.constEnd() && it.value() >= boxMajorAxis(box);
+}
+
+void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle, QSize box)
+{
+    const auto it = m_recentlyPostedSet.find(handle);
+    if (it != m_recentlyPostedSet.end()) {
         // Re-mark: bump to MRU so a re-posted handle (which the daemon
         // also just promoted via QCache::insert) stays at the head of
         // the order queue. The previous "leave queue position alone"
         // behaviour drifted re-posted handles out of the dedup window
         // in first-post order even though the daemon would never evict
-        // them, causing wasted re-captures.
+        // them, causing wasted re-captures. The daemon holds the latest
+        // post, which is at least this box when the re-capture was
+        // triggered by a larger show, so keep the larger value.
+        it.value() = std::max(it.value(), boxMajorAxis(box));
         bumpRecency(handle);
         return;
     }
-    m_recentlyPostedSet.insert(handle);
+    m_recentlyPostedSet.insert(handle, boxMajorAxis(box));
     m_recentlyPostedOrder.enqueue(handle);
     while (m_recentlyPostedOrder.size() > RecentPostedCapacity) {
         const QUuid evicted = m_recentlyPostedOrder.dequeue();
@@ -322,7 +336,7 @@ QSize SnapAssistThumbnailCapture::fittedThumbnailSize(const KWin::RectF& wg, QSi
     return fitted;
 }
 
-QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize box) const
+QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize box, TraceSample* trace) const
 {
     if (!w || box.isEmpty() || !KWin::effects) {
         return {};
@@ -340,6 +354,10 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
     if (fbSize.isEmpty()) {
         return {};
     }
+    if (trace) {
+        trace->fitted = fbSize;
+    }
+    QElapsedTimer stage;
 
     // drawWindow() and the GLFramebuffer path issue raw GL, so the compositor
     // EGL context must be current. We run timer-driven, outside a paint pass, so
@@ -378,6 +396,7 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                 KWin::RenderViewport viewport(wg, scale, renderTarget, QPoint());
 
                 KWin::GLFramebuffer::pushFramebuffer(&fbo);
+                stage.start();
                 glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
                 glClear(GL_COLOR_BUFFER_BIT);
 
@@ -404,10 +423,17 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
                                               | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
                                           KWin::Region::infinite(), data);
                 KWin::GLFramebuffer::popFramebuffer();
+                if (trace) {
+                    trace->renderUs = stage.nsecsElapsed() / 1000;
+                    stage.start();
+                }
 
                 // toImage() yields Format_RGBA8888_Premultiplied; GL's framebuffer
                 // origin is bottom-left, so flip to a top-down QImage.
                 result = texture->toImage().flipped(Qt::Vertical);
+                if (trace) {
+                    trace->readbackUs = stage.nsecsElapsed() / 1000;
+                }
             }
         }
         // texture (and the GL state guard) are destroyed HERE, while the GL
@@ -422,11 +448,18 @@ QImage SnapAssistThumbnailCapture::grabWindowImage(KWin::EffectWindow* w, QSize 
     // Ship plain (straight-alpha) ARGB32 so the raw bytes match the daemon's
     // storage format and semi-transparent edges aren't darkened by an
     // unintended premultiplied composite at the image-provider boundary.
-    return result.convertToFormat(QImage::Format_ARGB32);
+    stage.start();
+    QImage converted = result.convertToFormat(QImage::Format_ARGB32);
+    if (trace) {
+        trace->convertUs = stage.nsecsElapsed() / 1000;
+    }
+    return converted;
 }
 
-KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box,
-                                                                         bool* candidateNotRenderable)
+std::unique_ptr<KWin::GLTexture> SnapAssistThumbnailCapture::renderWindowToExportTexture(KWin::EffectWindow* w,
+                                                                                         QSize box,
+                                                                                         bool* candidateNotRenderable,
+                                                                                         TraceSample* trace)
 {
     if (candidateNotRenderable) {
         *candidateNotRenderable = false;
@@ -458,13 +491,13 @@ KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::E
 
     // Framebuffer blits need GL 3.0 / ARB_framebuffer_object; without them
     // the flip below would silently not write and the export would ship the
-    // slot's previous (or uninitialised) content. Fail the render (as a
+    // export texture's cleared (or uninitialised) content. Fail the render (as a
     // CAPABILITY failure, so the session fallback counts it and the pixel
     // path takes over) — same gate the sibling capture site in
     // desktoptransitioncapture.cpp uses.
     const KWin::EglContext* const glContext = KWin::EglContext::currentContext();
     if (!glContext || !glContext->supportsBlits()) {
-        qCDebug(lcSnapAssistCapture) << "renderWindowToPooledTexture: framebuffer blits unsupported";
+        qCDebug(lcSnapAssistCapture) << "renderWindowToExportTexture: framebuffer blits unsupported";
         return nullptr;
     }
 
@@ -480,7 +513,7 @@ KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::E
     glDisable(GL_SCISSOR_TEST);
 
     // The window is rendered into a throwaway scratch texture first, then
-    // blit-flipped into the pooled slot: GL's framebuffer origin is
+    // blit-flipped into the export texture: GL's framebuffer origin is
     // bottom-left, and unlike the raw-pixel path (which flips CPU-side via
     // QImage::flipped) the dma-buf consumer samples the texture memory
     // directly — without this flip every zero-copy thumbnail displays
@@ -493,32 +526,23 @@ KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::E
         return nullptr;
     }
 
-    // Round-robin a small pool of persistent textures: the exported dma-buf
-    // aliases the slot's texture. The pool does NOT guarantee the daemon has
-    // imported a buffer before its slot is re-rendered — the daemon's copy
-    // runs lazily on its scene-graph thread when QML first loads the URL, a
-    // point in time the effect cannot observe. What the pool provides is a
-    // best-effort CONTENT-STABILITY margin: a slot is only re-rendered after
-    // TexturePoolSize further successful exports, which in practice outlasts
-    // the daemon's reveal + first-frame copy. With more simultaneous
-    // candidates than pool slots the margin can be outrun (the imported copy
-    // then shows the newer slot content); making it a hard guarantee needs a
-    // copy-completion ack from the daemon, which this experimental path does
-    // not have. Buffer LIFETIME is a separate property and is already safe:
-    // the exported fd keeps the underlying buffer alive independently of the
-    // GLTexture (see exportTextureToDmabuf).
-    std::unique_ptr<KWin::GLTexture>& slot = m_texturePool[m_poolNext];
-    if (!slot || slot->size() != fbSize) {
-        slot = KWin::GLTexture::allocate(GL_RGBA8, fbSize);
-    }
-    if (!slot) {
+    // A fresh texture per export. The exported fd keeps the underlying
+    // buffer alive independently of the GLTexture (see exportTextureToDmabuf),
+    // so the caller frees this texture as soon as the export is done and the
+    // daemon becomes the buffer's only owner. Nothing the effect renders
+    // later can touch it, which is what lets the daemon sample the import
+    // directly rather than copy it out of a shared slot before it is reused.
+    // The earlier round-robin pool could only offer a best-effort margin
+    // here, and candidates are uncapped, so a burst larger than the pool
+    // overwrote a slot the daemon had not copied yet.
+    std::unique_ptr<KWin::GLTexture> texture = KWin::GLTexture::allocate(GL_RGBA8, fbSize);
+    if (!texture) {
         return nullptr;
     }
-    KWin::GLTexture* texture = slot.get();
 
     KWin::GLFramebuffer scratchFbo(m_flipScratch.get());
-    KWin::GLFramebuffer slotFbo(texture);
-    if (!scratchFbo.valid() || !slotFbo.valid()) {
+    KWin::GLFramebuffer exportFbo(texture.get());
+    if (!scratchFbo.valid() || !exportFbo.valid()) {
         // Incomplete FBO: the render would be dropped by the driver and a
         // cleared (or stale) buffer exported in its place.
         return nullptr;
@@ -536,30 +560,34 @@ KWin::GLTexture* SnapAssistThumbnailCapture::renderWindowToPooledTexture(KWin::E
     // keep-decorations reason.
     KWin::ItemEffect keepRenderable(w->windowItem());
     KWin::WindowPaintData data;
+    QElapsedTimer stage;
+    stage.start();
     KWin::effects->drawWindow(renderTarget, viewport, w,
                               KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT,
                               KWin::Region::infinite(), data);
 
     KWin::GLFramebuffer::popFramebuffer();
 
-    // Clear the pooled slot BEFORE the blit: allocate() leaves the texture's
-    // content undefined, and exporting a slot the blit failed to write would
-    // ship uninitialised VRAM (or a reused slot's previous window) to the
-    // daemon as a thumbnail.
-    KWin::GLFramebuffer::pushFramebuffer(&slotFbo);
+    // Clear the export texture BEFORE the blit: allocate() leaves its content
+    // undefined, and exporting a texture the blit failed to write would ship
+    // uninitialised VRAM to the daemon as a thumbnail.
+    KWin::GLFramebuffer::pushFramebuffer(&exportFbo);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     KWin::GLFramebuffer::popFramebuffer();
 
-    // Blit-flip scratch → pooled slot (source = the pushed framebuffer).
+    // Blit-flip scratch → export texture (source = the pushed framebuffer).
     const KWin::Rect fullRect(0, 0, fbSize.width(), fbSize.height());
     KWin::GLFramebuffer::pushFramebuffer(&scratchFbo);
-    slotFbo.blitFromFramebuffer(fullRect, fullRect, GL_NEAREST, /*flipX=*/false, /*flipY=*/true);
+    exportFbo.blitFromFramebuffer(fullRect, fullRect, GL_NEAREST, /*flipX=*/false, /*flipY=*/true);
     KWin::GLFramebuffer::popFramebuffer();
+    if (trace) {
+        // Render + clear + flip-blit, as submitted. The export that follows
+        // is timed separately by the caller.
+        trace->fitted = fbSize;
+        trace->renderUs = stage.nsecsElapsed() / 1000;
+    }
 
-    // NOTE: m_poolNext is advanced by the caller only after a SUCCESSFUL
-    // export — a failed export (or a retry) re-renders into the same slot
-    // rather than burning the pool's content-stability margin.
     return texture;
 }
 
@@ -570,8 +598,149 @@ void SnapAssistThumbnailCapture::processNext()
         return;
     }
     m_busy = true;
+    if (m_dmabufEnabled) {
+        // Drain the whole queue into one batch: the settle delay and the GL
+        // context window are paid once for every candidate queued so far.
+        QVector<Pending> batch;
+        batch.reserve(m_queue.size());
+        while (!m_queue.isEmpty()) {
+            batch.append(m_queue.dequeue());
+        }
+        attemptDmabufBatch(batch, RENDER_SETTLE_MS, /*retriesLeft=*/1, m_queueGeneration);
+        return;
+    }
     Pending p = m_queue.dequeue();
     attemptCapture(p, RENDER_SETTLE_MS, /*retriesLeft=*/1, m_queueGeneration);
+}
+
+void SnapAssistThumbnailCapture::attemptDmabufBatch(const QVector<Pending>& batch, int delayMs, int retriesLeft,
+                                                    int generation)
+{
+    QTimer::singleShot(delayMs, this, [this, batch, retriesLeft, generation]() {
+        // Same generation contract as attemptCapture: a replaced queue makes
+        // this batch stale, and the kick must still run or the new queue
+        // stalls until the next captureCandidates.
+        if (generation != m_queueGeneration) {
+            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+            return;
+        }
+        // The session may have fallen back to pixels between the timer being
+        // armed and firing (a rejection reply landing in between). Hand the
+        // batch back to the queue; processNext re-dispatches it down the
+        // pixel path one candidate at a time.
+        if (!m_dmabufEnabled) {
+            for (const Pending& p : batch) {
+                m_queue.enqueue(p);
+            }
+            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+            return;
+        }
+
+        // Zero-copy path: render each window into its own export texture and
+        // export it as a dma-buf. The render and the EGL export must share one
+        // context-current window — renderWindowToExportTexture assumes the
+        // context is already current and exportTextureToDmabuf reads it via
+        // eglGetCurrentContext — so currency is managed here, once, around
+        // the whole batch.
+        //
+        // NOTE the dma-buf path deliberately has NO transparent-content gate
+        // (the pixel path's isFullyTransparent test): probing the exported
+        // buffer would need exactly the GPU readback the zero-copy path
+        // exists to avoid. The not-yet-renderable window the pixel gate
+        // defends against is instead handled at the source — the ItemEffect
+        // renderability reference held during the draw plus the
+        // settle-delay/retry — so a fully transparent export is expected to
+        // be rare, and it degrades to one blank thumbnail rather than a
+        // wrong one.
+        struct Ready
+        {
+            Pending p;
+            DmabufExport exported;
+            TraceSample trace;
+        };
+        QVector<Ready> ready;
+        QVector<Pending> retry;
+        const bool haveContext = KWin::effects && KWin::effects->makeOpenGLContextCurrent();
+        for (const Pending& p : batch) {
+            // Resolve the EffectWindow fresh each attempt: the candidate may
+            // have closed between queueing and firing. A closed window is NOT
+            // a capture-capability signal — feeding it to onDmabufRejected
+            // used to count toward the permanent dma-buf fallback. Drop it.
+            KWin::EffectWindow* w = KWin::effects ? KWin::effects->findWindow(p.internalId) : nullptr;
+            if (!w) {
+                qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
+                                             << "window closed before capture — dropping candidate";
+                continue;
+            }
+            TraceSample trace;
+            TraceSample* const tracePtr = m_traceEnabled ? &trace : nullptr;
+            bool candidateNotRenderable = false;
+            DmabufExport exported;
+            if (haveContext) {
+                // The texture is destroyed at the end of this iteration, with
+                // the context still current; the exported fd owns the buffer
+                // from here on.
+                const std::unique_ptr<KWin::GLTexture> texture =
+                    renderWindowToExportTexture(w, p.maxSize, &candidateNotRenderable, tracePtr);
+                if (texture) {
+                    QElapsedTimer exportTimer;
+                    exportTimer.start();
+                    exported = exportTextureToDmabuf(texture.get());
+                    trace.exportUs = exportTimer.nsecsElapsed() / 1000;
+                }
+            }
+            if (exported.ok) {
+                ready.append({p, exported, trace});
+                continue;
+            }
+            if (retriesLeft > 0) {
+                retry.append(p);
+                continue;
+            }
+            if (haveContext && candidateNotRenderable) {
+                // Nothing renderable for THIS candidate (degenerate geometry,
+                // sliver fit below the minimum axis) — not a dma-buf
+                // capability signal. Counting it used to let a single
+                // extreme-aspect window trip the threshold and disable the
+                // zero-copy path for the whole session. Drop the candidate;
+                // snap-assist shows its icon.
+                qCDebug(lcSnapAssistCapture)
+                    << "captureCandidates:" << p.internalId.toString() << "not renderable — dropping candidate";
+                continue;
+            }
+            qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
+                                         << "dma-buf capture failed after retry";
+            // Count CAPABILITY/EXPORT failures toward the session fallback:
+            // export failures, no GL context, and render-side capability or
+            // resource failures (no blit support, allocation failure,
+            // incomplete FBO — anything the render reported without flagging
+            // the candidate itself). onDmabufRejected re-enqueues p — via
+            // dma-buf below the threshold, via pixels once the fallback
+            // trips; the trailing kick below picks it up.
+            onDmabufRejected(p);
+        }
+        if (haveContext) {
+            KWin::effects->doneOpenGLContextCurrent();
+        }
+        // Post after the context is released: the posts are async D-Bus calls
+        // and need no GL.
+        for (const Ready& r : ready) {
+            postThumbnailDmabuf(r.p, r.exported, generation, r.trace);
+        }
+        if (!retry.isEmpty()) {
+            // This retry batch is the chain's continuation; it kicks
+            // processNext itself when it completes.
+            attemptDmabufBatch(retry, RENDER_RETRY_MS, retriesLeft - 1, generation);
+            return;
+        }
+        // Advance the queue now — the dma-buf posts are async; we do not wait
+        // for their replies. The reply lambda has its own guarded kick
+        // (latching m_busy, only when idle) solely to drain a candidate that
+        // onDmabufRejected re-enqueued after the queue had already emptied.
+        // processNext is idempotent on an empty queue, so the two kick sites
+        // never double-dispatch real work.
+        QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+    });
 }
 
 void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, int retriesLeft, int generation)
@@ -600,80 +769,9 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             return;
         }
 
-        if (m_dmabufEnabled) {
-            // Zero-copy path: render the window into a pooled FBO texture and
-            // export it as a dma-buf. The render and the EGL export must share
-            // one context-current window — renderWindowToPooledTexture assumes
-            // the context is already current and exportTextureToDmabuf reads it
-            // via eglGetCurrentContext — so currency is managed here, around
-            // both.
-            //
-            // NOTE the dma-buf path deliberately has NO transparent-content
-            // gate (the pixel path's isFullyTransparent test): probing the
-            // exported buffer would need exactly the GPU readback the
-            // zero-copy path exists to avoid. The not-yet-renderable window
-            // the pixel gate defends against is instead handled at the
-            // source — the ItemEffect renderability reference held during
-            // the draw plus the settle-delay/retry — so a fully transparent
-            // export is expected to be rare, and it degrades to one blank
-            // thumbnail rather than a wrong one.
-            KWin::GLTexture* texture = nullptr;
-            bool candidateNotRenderable = false;
-            DmabufExport exported;
-            const bool haveContext = KWin::effects->makeOpenGLContextCurrent();
-            if (haveContext) {
-                texture = renderWindowToPooledTexture(w, p.maxSize, &candidateNotRenderable);
-                if (texture) {
-                    exported = exportTextureToDmabuf(texture);
-                    if (exported.ok) {
-                        // Consume the pool slot only on a successful export —
-                        // see the pool comment in renderWindowToPooledTexture.
-                        m_poolNext = (m_poolNext + 1) % TexturePoolSize;
-                    }
-                }
-                KWin::effects->doneOpenGLContextCurrent();
-            }
-            if (!exported.ok && retriesLeft > 0) {
-                attemptCapture(p, RENDER_RETRY_MS, retriesLeft - 1, generation);
-                return;
-            }
-            if (exported.ok) {
-                postThumbnailDmabuf(p, exported, generation);
-            } else if (haveContext && candidateNotRenderable) {
-                // Nothing renderable for THIS candidate (degenerate geometry,
-                // sliver fit below the minimum axis) — not a dma-buf
-                // capability signal. Counting it used to let a single
-                // extreme-aspect window trip the threshold and disable the
-                // zero-copy path for the whole session. Drop the candidate;
-                // snap-assist shows its icon.
-                qCDebug(lcSnapAssistCapture)
-                    << "captureCandidates:" << p.internalId.toString() << "not renderable — dropping candidate";
-            } else {
-                qCDebug(lcSnapAssistCapture)
-                    << "captureCandidates:" << p.internalId.toString() << "dma-buf capture failed after retry";
-                // Count CAPABILITY/EXPORT failures toward the session
-                // fallback: export failures, no GL context, and render-side
-                // capability or resource failures (no blit support,
-                // allocation failure, incomplete FBO — anything the render
-                // reported without flagging the candidate itself). Routing
-                // those to the count-free drop above let a blit-less driver
-                // drop every candidate forever with the fallback never
-                // engaging. onDmabufRejected re-enqueues p — via dma-buf
-                // below the threshold, via pixels once the fallback trips;
-                // the trailing kick below picks it up.
-                onDmabufRejected(p);
-            }
-            // Advance the queue now — the dma-buf post (if any) is async; we do
-            // not wait for its reply to start the next capture. The reply lambda
-            // has its own guarded kick (latching m_busy, only when idle) solely
-            // to drain a candidate that onDmabufRejected re-enqueued after the
-            // queue had already emptied. processNext is idempotent on an empty
-            // queue, so the two kick sites never double-dispatch real work.
-            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
-            return;
-        }
-
-        const QImage image = grabWindowImage(w, p.maxSize);
+        TraceSample trace;
+        TraceSample* const tracePtr = m_traceEnabled ? &trace : nullptr;
+        const QImage image = grabWindowImage(w, p.maxSize, tracePtr);
         // isNull() alone cannot detect the failure this retry exists for: a
         // window with no renderable frame yet draws NOTHING into the cleared
         // FBO, and the readback is a valid, fully transparent image. Posting
@@ -692,7 +790,7 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             // callback inside @ref postThumbnail — see that function for
             // why "we sent it" isn't strong enough to claim the daemon
             // holds the entry.
-            postThumbnail(p.internalId, image);
+            postThumbnail(p, image, trace);
         } else {
             qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
                                          << "produced empty image after retry";
@@ -701,8 +799,10 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
     });
 }
 
-void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QImage& image)
+void SnapAssistThumbnailCapture::postThumbnail(const Pending& p, const QImage& image, TraceSample trace)
 {
+    const QUuid internalId = p.internalId;
+    const QSize box = p.maxSize;
     // Image is already Format_ARGB32 by the caller. Pack tight (no row
     // padding) so the daemon can reconstruct via QImage(uchar*, w, h,
     // bytesPerLine=w*4, Format_ARGB32) without having to communicate the
@@ -713,6 +813,8 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     const int width = image.width();
     const int height = image.height();
     const qsizetype rowBytes = qsizetype(width) * 4;
+    QElapsedTimer packTimer;
+    packTimer.start();
     QByteArray pixels;
     pixels.resize(rowBytes * height);
     char* dst = pixels.data();
@@ -728,6 +830,10 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setSnapAssistThumbnail"));
     msg << internalId.toString() << width << height << pixels;
+    trace.packUs = packTimer.nsecsElapsed() / 1000;
+    trace.payloadBytes = pixels.size();
+    QElapsedTimer roundTrip;
+    roundTrip.start();
 
     // Bound watcher accumulation if the daemon's main thread wedges. The
     // post is genuinely async — `SnapAssistThumbnailPostTimeoutMs` is
@@ -752,11 +858,20 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     // dimension/byte-count mismatch, post-shutdown engine teardown) —
     // treating those as success would mark the handle in the dedup
     // window, skip the next capture, and strand snap-assist on icons
-    // until the FIFO rolls past.
+    // until the LRU window rolls past.
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                     [this, internalId](QDBusPendingCallWatcher* w) {
+                     [this, internalId, box, trace, roundTrip](QDBusPendingCallWatcher* w) {
                          w->deleteLater();
                          QDBusPendingReply<bool> reply = *w;
+                         if (m_traceEnabled) {
+                             qCInfo(lcSnapAssistTrace).nospace()
+                                 << "pixels " << internalId.toString() << " fitted=" << trace.fitted.width() << "x"
+                                 << trace.fitted.height() << " render=" << trace.renderUs
+                                 << "us readback=" << trace.readbackUs << "us convert=" << trace.convertUs
+                                 << "us pack=" << trace.packUs << "us payload=" << trace.payloadBytes
+                                 << "B dbus=" << roundTrip.nsecsElapsed() / 1000 << "us result="
+                                 << (reply.isError() ? "error" : (reply.value() ? "accepted" : "rejected"));
+                         }
                          if (reply.isError()) {
                              qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnail D-Bus call failed for"
                                                           << internalId.toString() << ":" << reply.error().message();
@@ -768,7 +883,7 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
                                  << "— leaving handle out of recently-posted set so the next snap-assist re-captures.";
                              return;
                          }
-                         markRecentlyPosted(internalId);
+                         markRecentlyPosted(internalId, box);
                      });
 }
 
@@ -863,7 +978,7 @@ SnapAssistThumbnailCapture::DmabufExport SnapAssistThumbnailCapture::exportTextu
     // can't produce one, fail the export — the capability fallback then switches
     // the session to the raw-pixel path.
     //
-    // Ordering: renderWindowToPooledTexture (issued earlier this call) renders
+    // Ordering: renderWindowToExportTexture (issued earlier this call) renders
     // into this texture on the current GL context's command stream. eglCreateSync
     // with EGL_SYNC_NATIVE_FENCE_ANDROID inserts the fence into that same
     // stream AFTER those render commands, then glFlush() flushes the stream to
@@ -894,15 +1009,14 @@ SnapAssistThumbnailCapture::DmabufExport SnapAssistThumbnailCapture::exportTextu
     return result;
 }
 
-void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation)
+void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation,
+                                                     TraceSample trace)
 {
-    // The exported dma-buf aliases the pooled FBO texture, so it ships with a
-    // render-completion fence (exported.fenceFd): the daemon waits on it before
-    // sampling, which makes repeated/live capture correct rather than relying on
-    // D-Bus round-trip latency outrunning the GPU. The texture pool
-    // (renderWindowToPooledTexture) gives the daemon's copy-on-import a
-    // best-effort margin before a slot is reused — see the pool comment there
-    // for what that margin does and does not guarantee.
+    // The exported dma-buf aliases an export texture the effect has already
+    // dropped, so the daemon is its only owner from here; it ships with a
+    // render-completion fence (exported.fenceFd) that the daemon waits on
+    // before sampling, which makes the capture correct rather than relying on
+    // D-Bus round-trip latency outrunning the GPU.
     const QString compositorHandle = p.internalId.toString();
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
@@ -914,6 +1028,8 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
         << static_cast<qulonglong>(exported.modifier) << static_cast<uint>(exported.stride)
         << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd))
         << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fenceFd));
+    QElapsedTimer roundTrip;
+    roundTrip.start();
 
     QDBusPendingCall pending =
         QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
@@ -930,9 +1046,17 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
     // path. On transport error the handle is simply left unmarked, so the
     // next snap-assist re-captures (mirroring the raw-pixel path).
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                     [this, p, generation](QDBusPendingCallWatcher* w) {
+                     [this, p, generation, trace, roundTrip](QDBusPendingCallWatcher* w) {
                          w->deleteLater();
                          QDBusPendingReply<bool> reply = *w;
+                         if (m_traceEnabled) {
+                             qCInfo(lcSnapAssistTrace).nospace()
+                                 << "dmabuf " << p.internalId.toString() << " fitted=" << trace.fitted.width() << "x"
+                                 << trace.fitted.height() << " render=" << trace.renderUs
+                                 << "us export=" << trace.exportUs << "us dbus=" << roundTrip.nsecsElapsed() / 1000
+                                 << "us result="
+                                 << (reply.isError() ? "error" : (reply.value() ? "accepted" : "rejected"));
+                         }
                          if (reply.isError()) {
                              qCDebug(lcSnapAssistCapture) << "setWindowThumbnailDmabuf D-Bus call failed for"
                                                           << p.internalId.toString() << ":" << reply.error().message();
@@ -953,7 +1077,7 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
                              }
                          } else {
                              m_dmabufConsecutiveFailures = 0;
-                             markRecentlyPosted(p.internalId);
+                             markRecentlyPosted(p.internalId, p.maxSize);
                          }
                          // onDmabufRejected may have re-enqueued p; if no capture is in
                          // flight, kick the queue so it isn't left stranded. Latch m_busy
@@ -986,10 +1110,9 @@ void SnapAssistThumbnailCapture::countDmabufFailure()
            "raw-pixel thumbnails for the rest of this session.";
     m_dmabufEnabled = false;
     m_dmabufConsecutiveFailures = 0;
-    // The mode flip is picked up by the next attemptCapture, which routes
-    // through the raw-pixel grabWindowImage path. The texture pool simply goes
-    // unused from here (freed at destruction) — the pixel path allocates its
-    // own throwaway texture per capture.
+    // The mode flip is picked up by the next processNext, which routes
+    // through the raw-pixel grabWindowImage path; an already-armed dma-buf
+    // batch hands its candidates back to the queue when it sees the flip.
 }
 
 void SnapAssistThumbnailCapture::onDmabufRejected(const Pending& p)
