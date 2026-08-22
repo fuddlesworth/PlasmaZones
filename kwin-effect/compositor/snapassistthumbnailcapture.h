@@ -6,6 +6,7 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <QObject>
+#include <QHash>
 #include <QQueue>
 #include <QSet>
 #include <QSize>
@@ -199,7 +200,7 @@ private:
                                                                  bool* candidateNotRenderable,
                                                                  TraceSample* trace = nullptr);
 
-    void postThumbnail(const QUuid& internalId, const QImage& image, TraceSample trace);
+    void postThumbnail(const Pending& p, const QImage& image, TraceSample trace);
     /// @p generation is the queue generation the capture ran under; the
     /// rejection reply honours it the same way attemptCapture's timer lambda
     /// does — a stale rejection still counts toward the capability fallback
@@ -253,19 +254,25 @@ private:
     /// capture failure (icon fallback) rather than shipping a sliver.
     static QSize fittedThumbnailSize(const KWin::RectF& wg, QSize box, qreal* scaleOut);
 
-    /// Mark @p handle as posted to the daemon, evicting the least-recently-
-    /// used entry if the bookkeeping is at capacity. Called from the D-Bus
-    /// pending-call success path inside @ref postThumbnail so failed sends
-    /// leave the handle un-tracked and the next snap-assist invocation
-    /// retries. Re-marking an already-tracked handle bumps it to the
-    /// most-recently-used end (mirrors the daemon's QCache promote-on-insert).
-    void markRecentlyPosted(const QUuid& handle);
+    /// Mark @p handle as posted to the daemon at capture box @p box,
+    /// evicting the least-recently-used entry if the bookkeeping is at
+    /// capacity. Called from the D-Bus pending-call success path inside
+    /// @ref postThumbnail so failed sends leave the handle un-tracked and
+    /// the next snap-assist invocation retries. Re-marking an
+    /// already-tracked handle bumps it to the most-recently-used end
+    /// (mirrors the daemon's QCache promote-on-insert) and keeps the
+    /// larger of the two boxes.
+    void markRecentlyPosted(const QUuid& handle, QSize box);
 
-    /// True when @p handle was recently posted to the daemon and is
-    /// (probably) still resident in the daemon's bounded LRU cache.
-    /// Mirrors the daemon's @c SnapAssistThumbnailProvider::CacheCapacity
-    /// so this side stays in sync with the daemon's eviction window.
-    bool wasRecentlyPosted(const QUuid& handle) const;
+    /// True when @p handle was recently posted to the daemon at a box at
+    /// least as large as @p box and is (probably) still resident in the
+    /// daemon's bounded LRU cache. Mirrors the daemon's
+    /// @c SnapAssistThumbnailProvider::CacheCapacity so this side stays in
+    /// sync with the daemon's eviction window. The box comparison is what
+    /// keeps a thumbnail captured small for a crowded show from being
+    /// served upscaled when a later show draws it large: that show
+    /// re-captures instead of skipping.
+    bool wasRecentlyPosted(const QUuid& handle, QSize box) const;
 
     /// Move @p handle to the most-recently-used end of the order queue.
     /// Called from the @ref captureCandidates skip-recapture path AND the
@@ -333,9 +340,10 @@ private:
     /// generation they were queued under and no-op (queue-advance only) when
     /// it no longer matches — see attemptCapture.
     int m_queueGeneration = 0;
-    /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
-    /// O(1) oldest-first eviction via the queue. Kept strictly in sync.
-    QSet<QUuid> m_recentlyPostedSet;
+    /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership plus the
+    /// posted box's major axis via the hash, O(1) oldest-first eviction via
+    /// the queue. Kept strictly in sync.
+    QHash<QUuid, int> m_recentlyPostedSet;
     QQueue<QUuid> m_recentlyPostedOrder;
     bool m_busy = false;
 };

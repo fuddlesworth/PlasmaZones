@@ -196,7 +196,7 @@ void SnapAssistThumbnailCapture::captureCandidates(const QVector<Candidate>& can
             continue;
         }
         seen.insert(c.internalId);
-        if (wasRecentlyPosted(c.internalId)) {
+        if (wasRecentlyPosted(c.internalId, maxSize)) {
             // Promote: the handle is being "used" via the skip-recapture
             // decision, mirroring the daemon's QCache promote-on-access.
             // Without this, a frequently re-snapped window FIFOs out of
@@ -265,24 +265,34 @@ void SnapAssistThumbnailCapture::rearmDmabufPath()
     m_dmabufConsecutiveFailures = 0;
 }
 
-bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle) const
+static int boxMajorAxis(QSize box)
 {
-    return m_recentlyPostedSet.contains(handle);
+    return std::max(box.width(), box.height());
 }
 
-void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle)
+bool SnapAssistThumbnailCapture::wasRecentlyPosted(const QUuid& handle, QSize box) const
 {
-    if (m_recentlyPostedSet.contains(handle)) {
+    const auto it = m_recentlyPostedSet.constFind(handle);
+    return it != m_recentlyPostedSet.constEnd() && it.value() >= boxMajorAxis(box);
+}
+
+void SnapAssistThumbnailCapture::markRecentlyPosted(const QUuid& handle, QSize box)
+{
+    const auto it = m_recentlyPostedSet.find(handle);
+    if (it != m_recentlyPostedSet.end()) {
         // Re-mark: bump to MRU so a re-posted handle (which the daemon
         // also just promoted via QCache::insert) stays at the head of
         // the order queue. The previous "leave queue position alone"
         // behaviour drifted re-posted handles out of the dedup window
         // in first-post order even though the daemon would never evict
-        // them, causing wasted re-captures.
+        // them, causing wasted re-captures. The daemon holds the latest
+        // post, which is at least this box when the re-capture was
+        // triggered by a larger show, so keep the larger value.
+        it.value() = std::max(it.value(), boxMajorAxis(box));
         bumpRecency(handle);
         return;
     }
-    m_recentlyPostedSet.insert(handle);
+    m_recentlyPostedSet.insert(handle, boxMajorAxis(box));
     m_recentlyPostedOrder.enqueue(handle);
     while (m_recentlyPostedOrder.size() > RecentPostedCapacity) {
         const QUuid evicted = m_recentlyPostedOrder.dequeue();
@@ -780,7 +790,7 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
             // callback inside @ref postThumbnail — see that function for
             // why "we sent it" isn't strong enough to claim the daemon
             // holds the entry.
-            postThumbnail(p.internalId, image, trace);
+            postThumbnail(p, image, trace);
         } else {
             qCDebug(lcSnapAssistCapture) << "captureCandidates:" << p.internalId.toString()
                                          << "produced empty image after retry";
@@ -789,8 +799,10 @@ void SnapAssistThumbnailCapture::attemptCapture(const Pending& p, int delayMs, i
     });
 }
 
-void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QImage& image, TraceSample trace)
+void SnapAssistThumbnailCapture::postThumbnail(const Pending& p, const QImage& image, TraceSample trace)
 {
+    const QUuid internalId = p.internalId;
+    const QSize box = p.maxSize;
     // Image is already Format_ARGB32 by the caller. Pack tight (no row
     // padding) so the daemon can reconstruct via QImage(uchar*, w, h,
     // bytesPerLine=w*4, Format_ARGB32) without having to communicate the
@@ -848,7 +860,7 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
     // window, skip the next capture, and strand snap-assist on icons
     // until the FIFO rolls past.
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                     [this, internalId, trace, roundTrip](QDBusPendingCallWatcher* w) {
+                     [this, internalId, box, trace, roundTrip](QDBusPendingCallWatcher* w) {
                          w->deleteLater();
                          QDBusPendingReply<bool> reply = *w;
                          if (m_traceEnabled) {
@@ -871,7 +883,7 @@ void SnapAssistThumbnailCapture::postThumbnail(const QUuid& internalId, const QI
                                  << "— leaving handle out of recently-posted set so the next snap-assist re-captures.";
                              return;
                          }
-                         markRecentlyPosted(internalId);
+                         markRecentlyPosted(internalId, box);
                      });
 }
 
@@ -1065,7 +1077,7 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
                              }
                          } else {
                              m_dmabufConsecutiveFailures = 0;
-                             markRecentlyPosted(p.internalId);
+                             markRecentlyPosted(p.internalId, p.maxSize);
                          }
                          // onDmabufRejected may have re-enqueued p; if no capture is in
                          // flight, kick the queue so it isn't left stranded. Latch m_busy

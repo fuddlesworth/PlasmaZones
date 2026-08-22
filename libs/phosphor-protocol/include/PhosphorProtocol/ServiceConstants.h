@@ -5,6 +5,8 @@
 
 #include <QLatin1String>
 #include <QtGlobal>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorProtocol::Service {
 
@@ -366,6 +368,31 @@ inline constexpr int SnapAssistThumbnailCacheCapacity = 24;
 // the daemon is guaranteed to refuse — an oversize refusal never marks the
 // handle as recently-posted, which would otherwise re-capture on every show.
 inline constexpr int SnapAssistThumbnailMaxDimension = 1024;
+
+// How big the snap-assist card actually draws a thumbnail, in logical
+// pixels, as a function of the zone it sits in and how many candidates
+// share it. This is the C++ twin of the sizing bindings in
+// src/ui/SnapAssistContent.qml (candidateFlow.iconSize: cardScaleBase,
+// iconSizeRatio, minIconSize) and MUST be kept in step with them. The
+// effect captures at this size times the output scale rather than at a
+// fixed 256, so a burst of candidates ships small buffers and a lone
+// candidate in a big zone on a HiDPI output is not upscaled. Drift between
+// the two only costs sharpness or bytes, never correctness, and the
+// headroom factor absorbs the rounding.
+inline constexpr double SnapAssistCardScaleBase = 0.35;
+inline constexpr double SnapAssistIconSizeRatio = 0.6;
+inline constexpr int SnapAssistMinIconLogicalPx = 16; // Kirigami.Units.iconSizes.small
+inline constexpr double SnapAssistThumbnailHeadroom = 1.25;
+
+inline int snapAssistThumbnailBoxPx(int zoneMinAxisLogicalPx, int candidateCount, double outputScale)
+{
+    const double cardScale = SnapAssistCardScaleBase / std::max(1.0, std::sqrt(double(std::max(1, candidateCount))));
+    const double iconLogical =
+        std::max(double(SnapAssistMinIconLogicalPx),
+                 double(std::max(0, zoneMinAxisLogicalPx)) * cardScale * SnapAssistIconSizeRatio);
+    const double devicePx = iconLogical * std::max(1.0, outputScale) * SnapAssistThumbnailHeadroom;
+    return std::clamp(int(std::ceil(devicePx)), SnapAssistMinIconLogicalPx, SnapAssistThumbnailMaxDimension);
+}
 
 // Single accessor for the experimental zero-copy thumbnail gate. Read in
 // FOUR places with different lifetimes (the effect's capture ctor, the
