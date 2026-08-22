@@ -578,9 +578,15 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
     using namespace PhosphorAnimationShaders;
     // Stamps the id unconditionally and does NOT preserve stored parameters:
     // picking a pack is a switch, and the previous pack's parameter ids mean
-    // nothing to the new one. The caller that merely PROMOTES the pack already
-    // showing (same id, inherited becoming owned) passes the current parameters
-    // in rather than relying on this to keep them.
+    // nothing to the new one.
+    //
+    // A caller that merely PROMOTES the pack already showing (same id,
+    // inherited becoming owned) passes parameters in rather than relying on
+    // this to keep them — and passes its OWN stored ones, or an empty map when
+    // it has none. Empty is not a lossy shortcut there: the builder below
+    // leaves `parameters` unengaged for an empty map, and overlay only replaces
+    // an engaged field, so the promoted event keeps resolving whatever its
+    // ancestors give it.
     // The SAME boundary check the per-path `setShaderOverride` performs, and not
     // optional: this is the only path QML uses, so skipping it left the id that
     // reaches the persisted tree entirely unvalidated. Passed as a preflight

@@ -320,6 +320,10 @@ private Q_SLOTS:
         // count, which is the assertion this slot exists for.
         QStringList wrong;
         for (int i = 0; i < 3; ++i) {
+            // Pinned, like every other failure slot in this file: mkpath under
+            // a regular file is what makes each write fail, and the log line is
+            // the only thing that says WHY the page went quiet.
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("cannot create profiles directory")));
             const int written = c.setOverrideMergedOnPaths(QStringList{kPrimary}, fields, QVariant());
             if (written != 0)
                 wrong.append(QStringLiteral("tick %1 returned %2, expected 0").arg(i).arg(written));
@@ -496,7 +500,15 @@ private Q_SLOTS:
     /// diverge from itself.
     void aGroupWithNoMirrorsNeverDiverges()
     {
+        // Isolated like every other slot in this file even though an empty
+        // mirror list short-circuits before any file is touched: the file's own
+        // rule is that a controller is never built pointing at the developer's
+        // real profiles, and an exception to it is one refactor away from
+        // reading them.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
         AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
         QCOMPARE(c.divergentPathCount(kPrimary, QStringList{}, /*compareCurve=*/true), 0);
     }
 
@@ -567,7 +579,12 @@ private Q_SLOTS:
     /// toggle-off and show as a divergence no control could clear.
     void anyPathSupportsShaderLegAnswersForTheWholeGroup()
     {
+        // Pure taxonomy, so nothing here reads a file — isolated anyway, for
+        // the reason the slot above gives.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
         AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
 
         // Both window.appearance legs take a shader leg.
         QVERIFY(c.anyPathSupportsShaderLeg(group()));
@@ -587,7 +604,12 @@ private Q_SLOTS:
     /// tree does not contain.
     void allPathsHoldShaderEffectIsFalseWithoutSettings()
     {
+        // No ISettings is the point of the slot; the tmpdir keeps the file's
+        // isolation rule intact regardless.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
         AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
         QVERIFY(!c.allPathsHoldShaderEffect(group(), QStringLiteral("dissolve")));
         // The engaged-empty "None" sentinel is a stored value too, so an absent
         // override is not equal to it either.

@@ -151,11 +151,16 @@ QtObject {
         // pack at all) skips it entirely. `_anyWritePathOwnsShaderPack` is
         // assigned by refreshFromTree, and every caller that moves the shader
         // tree runs this function BEFORE that one, so the value read here is
-        // the previous refresh's. That is deliberate and safe: it only gates a
-        // label, the two flags converge on the very next refresh, and being one
-        // refresh stale can at worst cost one extra query or defer the exact
-        // pack name by a frame — never show a wrong name, because the false
-        // branch is the CONSERVATIVE label.
+        // the previous refresh's. That is deliberate and safe, but be precise
+        // about how long it lasts: the two flags converge on the next SHADER
+        // WRITE, not on the next refresh of any kind. Every shader writer runs
+        // this function before the timing one, and the broadcast that write
+        // emits is swallowed by the card's own commit latch, so nothing
+        // recomputes in between. After adopting or promoting a pack the remove
+        // control therefore reads "Remove the shader pack" rather than naming
+        // it, until the next shader-tree edit. It only ever shows the
+        // CONSERVATIVE label, never a wrong name, which is why it is left
+        // alone rather than paid for with another tree read on the drag path.
         card._allWritePathsHoldShownPack = nextEffectId.length > 0 && card._anyWritePathOwnsShaderPack && card._allWritePathsHold(nextEffectId);
         // Recompute deeper-override count on every shader-tree update —
         // the warning banner below depends on it. Only meaningful for

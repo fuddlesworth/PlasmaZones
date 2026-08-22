@@ -591,6 +591,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                 if (!isolationRoot.isEmpty() && step == isolationRoot) {
                     break;
                 }
+                // The tree's BASELINE is not visited, and cannot be: it is not
+                // a path, so there is nothing for parentPath to reach. resolve()
+                // does seed from it, so a baseline pinning a real pack would be
+                // cascade coverage this walk misses. Unreachable today —
+                // nothing in the app calls setBaseline on the shader tree, and
+                // no writer emits a baseline into the JSON — and an
+                // engaged-EMPTY baseline is the quiet case either way. A
+                // baseline writer would have to add a test for it here.
             }
         }
         if (!cascadeCovered) {
