@@ -88,6 +88,8 @@ QVariantList RuleController::rulesSnapshot() const
         // by-id lookup, so the snapshot stays O(n).
         entry[QStringLiteral("screenIds")] = m_model.data(idx, RuleModel::ScreenIdsRole);
         entry[QStringLiteral("validationIssueCount")] = m_model.data(idx, RuleModel::ValidationIssueCountRole);
+        entry[QStringLiteral("inertAnimationActionCount")] =
+            m_model.data(idx, RuleModel::InertAnimationActionCountRole);
         entry[QStringLiteral("managed")] = m_model.data(idx, RuleModel::ManagedRole);
         out.append(entry);
     }

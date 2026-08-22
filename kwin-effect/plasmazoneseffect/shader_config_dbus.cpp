@@ -69,7 +69,10 @@ constexpr int kRuleFetchRetryDelayMs = 1000;
 /// minute after a wedged daemon.
 constexpr int kRuleFetchTimeoutMs = 5000;
 
-/// Hard cap on the getAllRules payload before it reaches QJsonDocument::fromJson.
+/// Hard cap on a D-Bus JSON payload before it reaches QJsonDocument::fromJson.
+/// Applied to getAllRules at its own call site, and to every setting that goes
+/// through `dispatchJsonSetting` (the shader profile, the motion profile tree
+/// and the shader registry), so no JSON crossing this boundary is unbounded.
 /// The receive-side QString allocation is bounded by libdbus's own
 /// message-size limit, not by this cap — what it genuinely bounds is the
 /// JSON parse (and, via the call site's pre-check on the QString length,
@@ -244,7 +247,25 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
                                 std::function<void(const QJsonObject&)> objectSink,
                                 std::function<void(const QJsonArray&)> arraySink)
 {
-    const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+    // Same two-stage bound the getAllRules path applies, for the same reason
+    // and against the same cap: these payloads cross D-Bus too, and what the
+    // cap genuinely bounds is the UTF-8 conversion copy and then the JSON
+    // parse. Checking the QString length first keeps a hostile or mis-built
+    // payload from being converted at all; UTF-8 can inflate up to 3x, so the
+    // byte-exact check still runs afterwards.
+    const QString text = v.toString();
+    if (text.size() > kRuleFetchMaxPayloadBytes) {
+        qCWarning(lcEffect) << "Refusing to convert" << name << "— payload of" << text.size()
+                            << "UTF-16 units exceeds the" << kRuleFetchMaxPayloadBytes << "byte cap";
+        return;
+    }
+    const QByteArray utf8 = text.toUtf8();
+    if (utf8.size() > kRuleFetchMaxPayloadBytes) {
+        qCWarning(lcEffect) << "Refusing to parse" << name << "— payload of" << utf8.size() << "bytes exceeds the"
+                            << kRuleFetchMaxPayloadBytes << "byte cap";
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(utf8);
     if (doc.isObject() && objectSink) {
         objectSink(doc.object());
     } else if (doc.isArray() && arraySink) {
@@ -404,9 +425,25 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // event whose subject is not an application window (see the DesktopPeek resolve
     // in lifecycle_wiring.cpp). This pair is the rule tier's INPUT only; the
     // transition's own identity downstream is the EffectWindow*, not an id string.
+    //
+    // A config with NO animation rules collapses to the same empty pair, and for
+    // the same observable result rather than as an optimisation on faith: with an
+    // empty set, resolveAnimationShaderProfile's evaluator walk finds no slot and
+    // falls through to `tree.resolve(eventPath)`, which is exactly what its
+    // !hasWindow() short-circuit returns, and resolveEventMotionProfile already
+    // gates its rule overlay on `!animationRuleSet().isEmpty()`. Without this the
+    // common case (no rules configured) pays a full ~30-accessor ruleQuery walk,
+    // an evaluator resolve and a per-window cache insert on every window open,
+    // close, focus, minimize, maximize and move, and discards all three.
+    //
+    // This must NOT be folded into the window-filter gate above. That gate stays
+    // on `windowlessLeg` alone: skipping shouldAnimateWindow here would ignore
+    // the user's Animations.WindowFiltering exclusions for every window whenever
+    // they happen to have no rules, which is the opposite of what they asked for.
+    const bool skipRuleTier = windowlessLeg || m_shaderManager.animationRuleSet().isEmpty();
     const PhosphorRules::WindowQuery query =
-        windowlessLeg ? PhosphorRules::WindowQuery{} : (sharedQuery ? *sharedQuery : ruleQuery(window));
-    const QString ruleWindowId = windowlessLeg ? QString() : getWindowId(window);
+        skipRuleTier ? PhosphorRules::WindowQuery{} : (sharedQuery ? *sharedQuery : ruleQuery(window));
+    const QString ruleWindowId = skipRuleTier ? QString() : getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event motion profile (curve + duration) in ONE walk, via the shared
     // SSOT: global animator profile → category "All" → per-node motion-tree

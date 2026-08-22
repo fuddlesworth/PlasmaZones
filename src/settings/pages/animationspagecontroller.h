@@ -711,13 +711,6 @@ public:
     /// gates on an actual flip so a no-op refresh is free.
     void refreshDirtyState();
 
-    /// Flip-gated emitter for stockSuppressedEventsChanged: recomputes the
-    /// list and emits only when it actually changed. All three gate inputs
-    /// (registry rescan, tree assignment, animations master toggle) route
-    /// through here so tree edits that cannot affect the suppression set
-    /// stop re-running the conflict-chip bindings.
-    void maybeEmitStockSuppressedEventsChanged();
-
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
@@ -764,6 +757,13 @@ public:
     bool asyncRevertInFlight() const;
 
 private:
+    /// Flip-gated emitter for stockSuppressedEventsChanged: recomputes the
+    /// list and emits only when it actually changed. All three gate inputs
+    /// (registry rescan, tree assignment, animations master toggle) route
+    /// through here so tree edits that cannot affect the suppression set
+    /// stop re-running the conflict-chip bindings.
+    void maybeEmitStockSuppressedEventsChanged();
+
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;
     QString profileFilePath(const QString& path) const;

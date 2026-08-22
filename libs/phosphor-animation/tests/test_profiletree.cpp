@@ -240,6 +240,41 @@ private Q_SLOTS:
         QVERIFY(!PP::eventPathResolvesPerWindow(QStringLiteral("window.appearance.openx")));
     }
 
+    /// allBuiltInPaths() is documented as being "in taxonomy order", and the
+    /// settings UI depends on that: AnimationsPageController::eventSections
+    /// derives both the section order and the row order within a section from
+    /// first appearance in this list. Nothing enforced it, so a reordering
+    /// silently reshuffled the Animations pages with every test green.
+    ///
+    /// Pinned as the SECTION sequence rather than all 80 paths, because the
+    /// section order is the part the UI actually reads and the part a reader
+    /// can check at a glance. Reordering two leaves inside one family is
+    /// harmless; moving a family is not.
+    void testAllBuiltInPathsIsInTaxonomyOrder()
+    {
+        QStringList sections;
+        for (const QString& path : PP::allBuiltInPaths()) {
+            const int dot = path.indexOf(QLatin1Char('.'));
+            const QString root = dot < 0 ? path : path.left(dot);
+            if (sections.isEmpty() || sections.last() != root)
+                sections.append(root);
+        }
+
+        // Each root appears exactly once, i.e. the list is grouped by family
+        // rather than interleaved. Without this a family split in two would
+        // still satisfy the sequence compare below.
+        QStringList unique = sections;
+        unique.removeDuplicates();
+        QCOMPARE(sections, unique);
+
+        const QStringList expected{
+            QStringLiteral("global"),    QStringLiteral("window"), QStringLiteral("desktop"), QStringLiteral("editor"),
+            QStringLiteral("scrolling"), QStringLiteral("shell"),  QStringLiteral("osd"),     QStringLiteral("popup"),
+            QStringLiteral("panel"),     QStringLiteral("cursor"), QStringLiteral("shader"),  QStringLiteral("widget"),
+        };
+        QCOMPARE(sections, expected);
+    }
+
     // Pin the post-rename taxonomy: every new path constant from the
     // zone.* → window.* / editor.* / widget.* split must appear in
     // allBuiltInPaths(), and no legacy zone.* string may slip back in.

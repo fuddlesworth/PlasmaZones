@@ -1727,6 +1727,9 @@ target_link_libraries(test_rule_controller_overview
         PhosphorControl::PhosphorControl
         plasmazones_core
 )
+# rulesSnapshotFeedsEveryRuleRowRequiredProperty scrapes RuleRow.qml from the
+# source tree to check the snapshot carries every property the row requires.
+target_compile_definitions(test_rule_controller_overview PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_rule_controller_overview COMMAND test_rule_controller_overview)
 
 # Vocabulary half of the controller suite (engine-mode picker tokens, input
