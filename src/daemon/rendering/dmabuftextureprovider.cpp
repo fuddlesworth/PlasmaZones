@@ -184,24 +184,19 @@ ImportedImage importDmabuf(VkDevice device, VkPhysicalDevice physDev, QVulkanIns
     imageInfo.arrayLayers = 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = haveModifier ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : VK_IMAGE_TILING_LINEAR;
-    // TRANSFER_SRC is mandatory: the imported image is consumed only as the
-    // source of a GPU->GPU copy into our owned sampled texture (see
-    // DmabufQsgTexture::commitTextureOperations, which records copyTexture(dst,
-    // src) with src declared UsedAsTransferSource). createFrom() adopts this
-    // VkImage as-is — it does NOT recreate it — so the RHI's transfer-source
-    // intent is only honoured if the underlying image was created with
-    // TRANSFER_SRC usage. Without it the copy reads an image never created for
-    // transfer use: undefined behaviour that, on the NVIDIA release driver,
-    // yields a blank texture with no validation error. SAMPLED is retained for
-    // any backend path that samples the wrapper directly.
+    // SAMPLED is what the scene graph needs: the imported image IS the
+    // displayed texture (DmabufQsgTexture samples it directly; the producer
+    // never writes the buffer again once exported). TRANSFER_SRC is kept so
+    // a CPU-side consumer added later (grabToImage, a debugging readback)
+    // can copy out of it without recreating the import with new usage.
     imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     // initialLayout is UNDEFINED, yet createFrom() (below) declares the image's
     // current layout to the RHI as SHADER_READ_ONLY_OPTIMAL — deliberately, not
-    // UNDEFINED. QRhi issues a layout transition before using src as a copy
-    // source, and a transition *from* UNDEFINED may discard contents, which
-    // would lose the imported thumbnail; declaring a defined source layout keeps
-    // that transition content-preserving. Strict cross-driver correctness would
+    // UNDEFINED. QRhi issues a layout transition before sampling, and a
+    // transition *from* UNDEFINED may discard contents, which would lose the
+    // imported thumbnail; declaring a defined source layout keeps that
+    // transition content-preserving. Strict cross-driver correctness would
     // additionally acquire the image from VK_QUEUE_FAMILY_FOREIGN_EXT (the
     // producer's queue) with an ownership + layout barrier. That foreign-queue
     // acquire is omitted here as a documented portability constraint: it is
@@ -330,23 +325,16 @@ ImportedImage importDmabuf(VkDevice device, VkPhysicalDevice physDev, QVulkanIns
 class DmabufQsgTexture : public QSGTexture
 {
 public:
-    // @p src wraps the imported dma-buf (a transfer source aliasing the
-    // producer buffer); @p dst is our OWN sampled texture. On the first frame
-    // we copy src -> dst, then Qt only ever samples dst. This decouples the
-    // displayed texture from the producer buffer: each candidate gets an
-    // independent copy (so snap-assist can show many distinct thumbnails at
-    // once). NOTE the decoupling holds only once the recorded copy has
-    // actually EXECUTED, and the producer's pool round-robin gives that a
-    // bounded margin (TexturePoolSize further exports), not a guarantee — a
-    // burst with more candidates than producer pool slots can overwrite a
-    // slot before this texture's first frame runs the copy, in which case
-    // dst captures the newer slot content. Making that airtight needs a
-    // copy-completion ack back to the producer, which the experimental
-    // protocol does not carry. src is read only during the one copy, so a
-    // LATER producer overwrite (after the copy ran) is harmless.
-    DmabufQsgTexture(QRhiTexture* src, QRhiTexture* dst, std::function<void()> releaseImport, QSize size, bool hasAlpha)
-        : m_src(src)
-        , m_dst(dst)
+    // @p texture wraps the imported dma-buf and is sampled directly. The
+    // producer renders each thumbnail into its own buffer and drops its
+    // handle right after the export, so this import is the buffer's only
+    // owner and nothing ever writes it again: there is no producer reuse to
+    // decouple from, hence no owned copy and no copy-in-flight window. The
+    // fence gate upstream (OverlayService + DmabufFenceWaiter) guarantees
+    // the render had completed before QML could load the URL that created
+    // this texture.
+    DmabufQsgTexture(QRhiTexture* texture, std::function<void()> releaseImport, QSize size, bool hasAlpha)
+        : m_texture(texture)
         , m_releaseImport(std::move(releaseImport))
         , m_size(size)
         , m_hasAlpha(hasAlpha)
@@ -355,22 +343,23 @@ public:
 
     ~DmabufQsgTexture() override
     {
-        delete m_dst; // owned copy
-        delete m_src; // wrapper over the imported native texture (does not own it)
+        delete m_texture; // wrapper over the imported native texture (does not own it)
         if (m_releaseImport) {
             // Frees the backend import resources on the render thread: the
             // Vulkan VkImage/VkDeviceMemory, or the GL texture + EGLImage.
+            // With the producer's handle already gone this is what frees the
+            // buffer itself.
             m_releaseImport();
         }
     }
 
     qint64 comparisonKey() const override
     {
-        return static_cast<qint64>(reinterpret_cast<quintptr>(m_dst));
+        return static_cast<qint64>(reinterpret_cast<quintptr>(m_texture));
     }
     QRhiTexture* rhiTexture() const override
     {
-        return m_dst;
+        return m_texture;
     }
     QSize textureSize() const override
     {
@@ -385,37 +374,11 @@ public:
         return false;
     }
 
-    void commitTextureOperations(QRhi* rhi, QRhiResourceUpdateBatch* resourceUpdates) override
-    {
-        Q_UNUSED(rhi)
-        // One-shot latch, and deliberately so. The latch records "copy
-        // RECORDED", not "copy executed" — Qt discarding the very batch
-        // that carried the copy (aborted frame, swapchain out-of-date)
-        // leaves dst blank permanently, and that residual is not
-        // observable from here. It is also not repairable from here:
-        // re-copying on a later commit would sample the producer's
-        // possibly-recycled pool slot live (wrong content beats blank),
-        // and after a device loss both wrapped textures belong to the dead
-        // QRhi anyway, so a re-record would touch invalid resources. The
-        // scene graph rebuilds textures from the provider on
-        // re-initialisation, which is the real recovery path.
-        if (m_copied || !m_src || !m_dst || !resourceUpdates) {
-            return;
-        }
-        // Record the GPU->GPU copy of the imported dma-buf into our owned
-        // texture, in Qt's own frame/batch (no nested QRhi frame, no CPU
-        // readback). After this executes the producer buffer is no longer read.
-        resourceUpdates->copyTexture(m_dst, m_src);
-        m_copied = true;
-    }
-
 private:
-    QRhiTexture* m_src = nullptr;
-    QRhiTexture* m_dst = nullptr;
+    QRhiTexture* m_texture = nullptr;
     std::function<void()> m_releaseImport;
     QSize m_size;
     bool m_hasAlpha = true;
-    bool m_copied = false;
 };
 
 // ── Texture factory: owns the dup'd fd; imports on the render thread ─────────
@@ -487,8 +450,8 @@ public:
         }
 
         // Import the dma-buf into a native texture per RHI backend, capturing a
-        // backend-specific release into the QSGTexture. The rest (copy src->dst,
-        // QSGTexture wrap) is backend-agnostic. The Vulkan importer lives
+        // backend-specific release into the QSGTexture. The rest (the RHI
+        // wrapper, QSGTexture wrap) is backend-agnostic. The Vulkan importer lives
         // inline in this TU deliberately — unlike the GL importer
         // (dmabufglimport.cpp), which is split out because epoxy's EGL/GL
         // headers cannot coexist with Qt's RHI headers, Vulkan headers have
@@ -542,46 +505,36 @@ public:
         }
 
         const QSize size(m_desc.width, m_desc.height);
-        // src: wraps the imported native texture as a transfer source (aliases
-        // the producer buffer, read only during the one-time copy below).
-        QRhiTexture* src = rhi->newTexture(fmt.rhiFormat, size, 1, QRhiTexture::UsedAsTransferSource);
-        if (!src) {
-            qCWarning(lcOverlay) << "dmabuf import: source wrapper texture creation failed (RHI format"
-                                 << int(fmt.rhiFormat) << "fourcc 0x" << QString::number(m_desc.fourcc, 16) << ")";
+        // Wrap the imported native texture for sampling. It aliases the
+        // producer's buffer, which the producer has already released its own
+        // handle to, so sampling it directly is safe for the texture's whole
+        // lifetime and there is no second, owned texture per thumbnail.
+        QRhiTexture* texture = rhi->newTexture(fmt.rhiFormat, size, 1, {});
+        if (!texture) {
+            qCWarning(lcOverlay) << "dmabuf import: wrapper texture creation failed (RHI format" << int(fmt.rhiFormat)
+                                 << "fourcc 0x" << QString::number(m_desc.fourcc, 16) << ")";
             release();
             return nullptr;
         }
         QRhiTexture::NativeTexture native;
         native.object = nativeObject;
         native.layout = nativeLayout;
-        if (!src->createFrom(native)) {
+        if (!texture->createFrom(native)) {
             qCWarning(lcOverlay) << "dmabuf import: QRhiTexture::createFrom failed";
-            delete src;
-            release();
-            return nullptr;
-        }
-        // dst: our OWN sampled texture; DmabufQsgTexture copies src -> dst on
-        // the first frame, after which the producer buffer can be reused.
-        QRhiTexture* dst = rhi->newTexture(fmt.rhiFormat, size, 1, {});
-        if (!dst || !dst->create()) {
-            qCWarning(lcOverlay) << "dmabuf import: owned destination texture creation failed (RHI format"
-                                 << int(fmt.rhiFormat) << "fourcc 0x" << QString::number(m_desc.fourcc, 16) << ")";
-            delete dst;
-            delete src;
+            delete texture;
             release();
             return nullptr;
         }
         qCDebug(lcOverlay) << "dmabuf import: created GPU thumbnail texture" << size << "fourcc=0x"
                            << QString::number(m_desc.fourcc, 16) << "backend=" << int(api);
         if (traceEnabled) {
-            // Runs on the scene-graph render thread: the synchronous part of
-            // the import (native image + two RHI textures). The src->dst copy
-            // is recorded into the next frame and is not included.
+            // Runs on the scene-graph render thread: the whole import (native
+            // image + RHI wrapper). Nothing further is deferred to a frame.
             qCInfo(lcSnapAssistTrace).nospace()
                 << "import " << size.width() << "x" << size.height() << " backend=" << int(api)
                 << " import=" << importTimer.nsecsElapsed() / 1000 << "us";
         }
-        return new DmabufQsgTexture(src, dst, std::move(release), size, fmt.hasAlpha);
+        return new DmabufQsgTexture(texture, std::move(release), size, fmt.hasAlpha);
     }
 
 private:

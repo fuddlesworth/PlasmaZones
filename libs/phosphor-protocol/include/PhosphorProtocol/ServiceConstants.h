@@ -375,7 +375,9 @@ inline constexpr int SnapAssistThumbnailMaxDimension = 1024;
 // process-constant, so callers may cache the result freely.
 inline bool snapAssistDmabufThumbnailsEnabled()
 {
-    return qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
+    // Value-checked, not presence-checked: "=0" disables. The presence check
+    // this replaced turned a user's explicit opt-out into an opt-in.
+    return qEnvironmentVariableIntValue("PLASMAZONES_DMABUF_THUMBNAILS") != 0;
 }
 
 // Diagnostic switch for the snap-assist thumbnail pipeline. When set, both
