@@ -5,6 +5,8 @@
 #include "dmabufglimport.h"
 #include "thumbnailurlutil.h"
 #include "core/platform/logging.h"
+#include <PhosphorProtocol/ServiceConstants.h>
+#include <QElapsedTimer>
 
 #include <vulkan/vulkan.h>
 
@@ -16,6 +18,10 @@
 #include <QSGTexture>
 #include <QVulkanDeviceFunctions>
 #include <QVulkanInstance>
+
+// Shared with snapassistthumbnailprovider.cpp (defined there); the dma-buf
+// path's daemon-side cost is the lazy import below, not a cache insert.
+Q_DECLARE_LOGGING_CATEGORY(lcSnapAssistTrace)
 
 #include <functional>
 #include <unistd.h>
@@ -469,6 +475,11 @@ public:
             qCWarning(lcOverlay) << "dmabuf import: window has no renderer interface / RHI yet";
             return nullptr;
         }
+        static const bool traceEnabled = PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled();
+        QElapsedTimer importTimer;
+        if (traceEnabled) {
+            importTimer.start();
+        }
         const FormatMapping fmt = mapDrmFormat(m_desc.fourcc);
         if (!fmt.ok) {
             qCWarning(lcOverlay) << "dmabuf import: unsupported DRM format 0x" << QString::number(m_desc.fourcc, 16);
@@ -562,6 +573,14 @@ public:
         }
         qCDebug(lcOverlay) << "dmabuf import: created GPU thumbnail texture" << size << "fourcc=0x"
                            << QString::number(m_desc.fourcc, 16) << "backend=" << int(api);
+        if (traceEnabled) {
+            // Runs on the scene-graph render thread: the synchronous part of
+            // the import (native image + two RHI textures). The src->dst copy
+            // is recorded into the next frame and is not included.
+            qCInfo(lcSnapAssistTrace).nospace()
+                << "import " << size.width() << "x" << size.height() << " backend=" << int(api)
+                << " import=" << importTimer.nsecsElapsed() / 1000 << "us";
+        }
         return new DmabufQsgTexture(src, dst, std::move(release), size, fmt.hasAlpha);
     }
 
