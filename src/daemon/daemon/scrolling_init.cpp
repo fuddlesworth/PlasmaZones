@@ -193,6 +193,9 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollMoveToFloatRequested, boolVerb([](Scroll* s, const QString& id, bool floating) {
         floating ? s->moveFocusedToFloating(id) : s->moveFocusedToTiling(id);
     }));
+    wire(&ShortcutManager::scrollViewRequested, intVerb([](Scroll* s, const QString& id, int percent) {
+        s->scrollViewByPercent(percent, id);
+    }));
 }
 
 } // namespace PlasmaZones

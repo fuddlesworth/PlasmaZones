@@ -478,6 +478,29 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMoveToFloatRequested(false);
      }},
+    // Page variants carry a literal 100: one viewport is one viewport, and
+    // a percent setting with a single meaningful value would be a setting
+    // for nothing.
+    {kIdScrollViewBack, &ConfigDefaults::scrollingViewBackShortcut, &Settings::scrollingViewBackShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Scroll View Back"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollViewRequested(-sm->scrollViewScrollStepPercent());
+     }},
+    {kIdScrollViewForward, &ConfigDefaults::scrollingViewForwardShortcut, &Settings::scrollingViewForwardShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Scroll View Forward"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollViewRequested(sm->scrollViewScrollStepPercent());
+     }},
+    {kIdScrollViewPageBack, &ConfigDefaults::scrollingViewPageBackShortcut, &Settings::scrollingViewPageBackShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Scroll View Back a Page"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollViewRequested(-100);
+     }},
+    {kIdScrollViewPageForward, &ConfigDefaults::scrollingViewPageForwardShortcut,
+     &Settings::scrollingViewPageForwardShortcut, QT_TRANSLATE_NOOP("plasmazones", "Scroll View Forward a Page"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollViewRequested(100);
+     }},
 
     // ─── Cheatsheet ────────────────────────────────────────────────────────
     {kIdToggleCheatsheet, &ConfigDefaults::toggleCheatsheetShortcut, &Settings::toggleCheatsheetShortcut,
@@ -576,6 +599,11 @@ int ShortcutManager::scrollWindowHeightStepPercent() const
 {
     return m_settings ? m_settings->scrollingWindowHeightStepPercent()
                       : ConfigDefaults::scrollingWindowHeightStepPercent();
+}
+
+int ShortcutManager::scrollViewScrollStepPercent() const
+{
+    return m_settings ? m_settings->scrollingViewScrollStepPercent() : ConfigDefaults::scrollingViewScrollStepPercent();
 }
 
 void ShortcutManager::registerShortcuts()

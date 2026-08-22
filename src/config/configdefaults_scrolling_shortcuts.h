@@ -227,6 +227,29 @@ public:
     {
         return QString();
     }
+    static QString scrollingViewBackShortcut()
+    {
+        // Y is the last free letter in the Meta+Alt pool (see the banner's
+        // externally-owned table and the sibling accessors). Back and
+        // forward are the letter+Shift pair per the family's convention;
+        // "back" is toward the strip's start, whichever way the strip runs.
+        return QStringLiteral("Meta+Alt+Y");
+    }
+    static QString scrollingViewForwardShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+Y");
+    }
+    static QString scrollingViewPageBackShortcut()
+    {
+        // Unbound like the edge-stop focus pair above, and for the same
+        // reason: a whole-viewport pan is a variant of the bound step pair
+        // that nothing defaults to, and the pool has no letters left.
+        return QString();
+    }
+    static QString scrollingViewPageForwardShortcut()
+    {
+        return QString();
+    }
 };
 
 } // namespace PlasmaZones

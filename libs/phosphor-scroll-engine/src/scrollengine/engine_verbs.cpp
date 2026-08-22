@@ -169,6 +169,40 @@ void ScrollEngine::centerVisibleColumns(const QString& screenId)
     P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center", false, QStringLiteral("span"));
 }
 
+void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
+{
+    // Resolved by hand rather than through P_SCROLL_VERB: the pixel delta
+    // needs params BEFORE the op expression runs, and the macro only brings
+    // params into scope for the expression itself.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("scroll"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    // Against the MAIN extent, so a percent means the same thing on either
+    // axis and "100" is exactly one viewport, which is what the page variant
+    // asks for. Rounded, then refused if it collapses to nothing: a 1% step
+    // on a tiny work area must not read as a press that did nothing for no
+    // reason the OSD can name.
+    const int deltaPx = qRound(percent / 100.0 * params.axis.mainSize(params.workArea));
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
+    if (changed) {
+        // focusAfter=false for the same reason the sizing verbs pass it: a pan
+        // moves geometry and nothing else, and must not yank focus off a
+        // floating window.
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    // The active window is unchanged either way — that is the verb's whole
+    // point — so the target slot carries it back unchanged on success too.
+    Q_EMIT navigationFeedback(changed, QStringLiteral("scroll"),
+                              changed ? Detail::physicalTokenForMain(deltaPx > 0 ? 1 : -1, params.axis)
+                                      : QStringLiteral("no_target"),
+                              sourceWindow, changed ? sourceWindow : QString(), screen);
+}
+
 void ScrollEngine::focusWindowTop(const QString& screenId)
 {
     // CROSS-axis ends: the stack runs top-to-bottom on a horizontal strip and

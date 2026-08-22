@@ -33,7 +33,7 @@ Item {
     // "rotate", "move", "span", "focus", "swap", "push", "restore", "float",
     // "snap", "cycle", "focus_master", "swap_master", "master_ratio",
     // "master_count", "retile", "resnap", "resize", "tabbed", "fullscreen",
-    // "consume", "expel", "center", "snap_assist", "snap_all", "swap_vs",
+    // "consume", "expel", "center", "scroll", "snap_assist", "snap_all", "swap_vs",
     // "rotate_vs", "layout" ("layout" is failure-only by producer contract;
     // see failureMessage).
     property string action: ""
@@ -375,6 +375,12 @@ Item {
             // collapse onto one no_target token at the producer, so the
             // copy stays count-neutral.
             return i18n("Already centered");
+        } else if (action === "scroll") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            // The pan is pinned at the strip's end in the pressed direction.
+            return i18n("Already at the end of the strip");
         } else if (action === "retile") {
             return i18n("Could not refresh the layout");
         } else if (action === "focus_master") {
@@ -541,6 +547,11 @@ Item {
                 return i18n("Visible columns centered");
 
             return i18n("Column centered");
+        } else if (action === "scroll") {
+            // The reason is the travel direction, same as the focus arm, so
+            // the arrow points the way the view moved.
+            const scrollArrow = directionArrow(reason);
+            return glyphed(scrollArrow, i18nc("@info:status the strip view was scrolled without moving focus", "Scrolled"));
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
             return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));

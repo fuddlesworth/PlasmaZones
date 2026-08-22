@@ -103,6 +103,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Width adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("width")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHeightStep"),
                PhosphorI18n::tr("Height adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("height")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingViewScrollStep"),
+               PhosphorI18n::tr("View scroll step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("view")});
     // The shared Strip direction card's pair, mirrored here because the
     // simple page hosts the same card (anchors resolve per hosting page id).
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("stripDirection"),

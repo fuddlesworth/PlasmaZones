@@ -442,6 +442,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
+        {CD::viewScrollStepPercentKey(),
+         CD::scrollingViewScrollStepPercent(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
     };
 
     // ─── Edge auto-scroll (Scrolling.Behavior.DragScroll) ────────────────
@@ -581,6 +586,10 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::focusColumnRightOrFirstKey(), CD::scrollingFocusColumnRightOrFirstShortcut(), QMetaType::QString},
         {CD::moveToFloatingKey(), CD::scrollingMoveToFloatingShortcut(), QMetaType::QString},
         {CD::moveToTilingKey(), CD::scrollingMoveToTilingShortcut(), QMetaType::QString},
+        {CD::viewBackKey(), CD::scrollingViewBackShortcut(), QMetaType::QString},
+        {CD::viewForwardKey(), CD::scrollingViewForwardShortcut(), QMetaType::QString},
+        {CD::viewPageBackKey(), CD::scrollingViewPageBackShortcut(), QMetaType::QString},
+        {CD::viewPageForwardKey(), CD::scrollingViewPageForwardShortcut(), QMetaType::QString},
     };
 }
 

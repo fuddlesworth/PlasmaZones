@@ -59,6 +59,7 @@ public:
     /// of a ternary per call site.
     int scrollColumnWidthStepPercent() const;
     int scrollWindowHeightStepPercent() const;
+    int scrollViewScrollStepPercent() const;
 
 public Q_SLOTS:
     void registerShortcuts();
@@ -267,6 +268,11 @@ Q_SIGNALS:
     void scrollFocusColumnWrapRequested(int delta);
     /// true = move the focused window to the float layer, false = re-tile it.
     void scrollMoveToFloatRequested(bool floating);
+    /// Pan the strip view WITHOUT moving focus, by a signed PERCENT of the
+    /// work area's extent along the strip: the step pair carries the
+    /// user-tunable scrollingViewScrollStepPercent, the page pair a whole
+    /// viewport (100). Negative is toward the strip's start.
+    void scrollViewRequested(int deltaPercent);
 
 private:
     struct Entry

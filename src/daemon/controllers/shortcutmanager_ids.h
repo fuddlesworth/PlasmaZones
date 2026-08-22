@@ -100,6 +100,10 @@ inline constexpr auto kIdScrollFocusColumnLeftOrLast = "scroll_focus_column_left
 inline constexpr auto kIdScrollFocusColumnRightOrFirst = "scroll_focus_column_right_or_first";
 inline constexpr auto kIdScrollMoveToFloating = "scroll_move_to_floating";
 inline constexpr auto kIdScrollMoveToTiling = "scroll_move_to_tiling";
+inline constexpr auto kIdScrollViewBack = "scroll_view_back";
+inline constexpr auto kIdScrollViewForward = "scroll_view_forward";
+inline constexpr auto kIdScrollViewPageBack = "scroll_view_page_back";
+inline constexpr auto kIdScrollViewPageForward = "scroll_view_page_forward";
 
 // The indexed slot families are prefix-keyed rather than enumerated above.
 // Exported so the id builders below and the cheatsheet catalog's

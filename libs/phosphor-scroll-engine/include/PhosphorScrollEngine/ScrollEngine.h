@@ -240,6 +240,17 @@ public:
     void resetWindowHeights(const QString& screenId);
     /// Center the span of fully visible columns (niri center-visible-columns).
     void centerVisibleColumns(const QString& screenId);
+    /// Scroll the view along the strip by @p percent of the work area's MAIN
+    /// extent WITHOUT changing focus (Karousel scroll-left/right and its page
+    /// variants; niri has no equivalent). Positive is forward along the strip,
+    /// negative is back, clamped at both ends, and the view stays where it
+    /// lands: the strip's centering policy hands the view over to the pan
+    /// until the next focus change or centering verb takes it back (see
+    /// ScrollStrip's View detachment section). A percent that rounds to fewer
+    /// than one pixel, or a pan already pinned at the end it is asked to move
+    /// toward, reports no_target. Takes a percent rather than pixels because
+    /// the work area is resolved here and nowhere the shortcut layer can see.
+    void scrollViewByPercent(qreal percent, const QString& screenId);
     /// First/last non-minimized tile of the active column (niri
     /// focus-window-top/bottom).
     void focusWindowTop(const QString& screenId);

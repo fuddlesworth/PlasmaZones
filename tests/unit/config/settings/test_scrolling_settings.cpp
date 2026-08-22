@@ -232,15 +232,21 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightShortcut(), QStringLiteral("Meta+Alt+H"));
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+H"));
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
+        // The no-focus view pan, on the pool's last free letter.
+        QCOMPARE(ConfigDefaults::scrollingViewBackShortcut(), QStringLiteral("Meta+Alt+Y"));
+        QCOMPARE(ConfigDefaults::scrollingViewForwardShortcut(), QStringLiteral("Meta+Alt+Shift+Y"));
 
         // Ships unbound, per the same docs: the edge-stop/wrap focus
-        // variants and the one-way float verbs.
+        // variants, the one-way float verbs, and the whole-viewport pan
+        // variants of the bound step pair.
         QVERIFY(ConfigDefaults::scrollingFocusColumnLeftShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingFocusColumnRightShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingMoveToFloatingShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingMoveToTilingShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingViewPageBackShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingViewPageForwardShortcut().isEmpty());
     }
 
     /// The scrolling enums fall back to their DEFAULT on out-of-range input
@@ -684,6 +690,13 @@ private Q_SLOTS:
         QCOMPARE(widthStep->validator(0).toInt(), ConfigDefaults::scrollingStepPercentMin());
         QCOMPARE(widthStep->validator(999).toInt(), ConfigDefaults::scrollingStepPercentMax());
         QCOMPARE(widthStep->defaultValue.toInt(), ConfigDefaults::scrollingColumnWidthStepPercent());
+        // The view-scroll step shares the sizing pair's range but not its
+        // default, so the default is checked against its OWN accessor.
+        const auto* viewStep = findKey(schema, group, ConfigDefaults::viewScrollStepPercentKey());
+        QVERIFY(viewStep && viewStep->validator);
+        QCOMPARE(viewStep->validator(0).toInt(), ConfigDefaults::scrollingStepPercentMin());
+        QCOMPARE(viewStep->validator(999).toInt(), ConfigDefaults::scrollingStepPercentMax());
+        QCOMPARE(viewStep->defaultValue.toInt(), ConfigDefaults::scrollingViewScrollStepPercent());
 
         const auto* heightStep = findKey(schema, group, ConfigDefaults::windowHeightStepPercentKey());
         QVERIFY(heightStep && heightStep->validator);

@@ -923,6 +923,16 @@ public:
     {
         return 10;
     }
+    /// Percent of the work area's extent along the strip one scroll-view
+    /// shortcut press pans the view by, focus unchanged. Shares the sizing
+    /// pair's [min, max] range. Larger than the sizing steps' 10 because the
+    /// subject is the whole viewport rather than one column: at 10 a press
+    /// moves a tenth of a screen, which reads as a nudge, where a quarter
+    /// reveals a meaningful slice of the next column without skipping it.
+    static constexpr int scrollingViewScrollStepPercent()
+    {
+        return 25;
+    }
     static constexpr int scrollingStepPercentMin()
     {
         return 1;
@@ -1043,6 +1053,11 @@ static_assert(ConfigDefaultsScrolling::scrollingWindowHeightStepPercent()
                   && ConfigDefaultsScrolling::scrollingWindowHeightStepPercent()
                       <= ConfigDefaultsScrolling::scrollingStepPercentMax(),
               "ConfigDefaults::scrollingWindowHeightStepPercent() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingViewScrollStepPercent()
+                      >= ConfigDefaultsScrolling::scrollingStepPercentMin()
+                  && ConfigDefaultsScrolling::scrollingViewScrollStepPercent()
+                      <= ConfigDefaultsScrolling::scrollingStepPercentMax(),
+              "ConfigDefaults::scrollingViewScrollStepPercent() outside the declared [min, max] range");
 // Tab-indicator family: the same closed-set and [min, max] guards the rest of
 // the file carries, so a default edited out of its own declared range fails
 // the build instead of being silently snapped by the schema on first read.
