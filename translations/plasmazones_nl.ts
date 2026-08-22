@@ -7835,7 +7835,8 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="115"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="121"/>
-        <source>Scroll columns with the mouse wheel</source>
+        <source>Scroll the strip with the mouse wheel</source>
+        <oldsource>Scroll columns with the mouse wheel</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -19423,7 +19424,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="139"/>
-        <source>Scrolling down focuses the previous column instead of the next one.</source>
+        <source>Scrolling down moves toward the start of the strip instead of the end, for both wheel shortcuts.</source>
+        <oldsource>Scrolling down focuses the previous column instead of the next one.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -19542,7 +19544,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="162"/>
-        <source>How far the scroll view shortcuts move the strip per press without changing focus, as a share of the screen along the strip</source>
+        <source>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the screen along the strip. The keyboard scroll shortcuts use the same step.</source>
+        <oldsource>How far the scroll view shortcuts move the strip per press without changing focus, as a share of the screen along the strip</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -20497,8 +20500,8 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="117"/>
-        <source>Hold Meta and scroll to move column focus along the strip. When this is off, the compositor keeps the Meta+wheel shortcut.</source>
-        <oldsource>Hold Meta or Meta+Alt and scroll to move column focus along the strip. When this is off, the compositor keeps those wheel shortcuts.</oldsource>
+        <source>Hold Meta and scroll to move column focus along the strip, or Meta+Shift and scroll to move the view without changing focus. When this is off, the compositor keeps both wheel shortcuts.</source>
+        <oldsource>Hold Meta and scroll to move column focus along the strip. When this is off, the compositor keeps the Meta+wheel shortcut.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>

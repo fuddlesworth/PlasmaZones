@@ -159,7 +159,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("View scroll step")
             searchAnchor: "scrollingViewScrollStep"
-            description: i18n("How far the scroll view shortcuts move the strip per press without changing focus, as a share of the screen along the strip")
+            description: i18n("How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the screen along the strip. The keyboard scroll shortcuts use the same step.")
 
             SettingsSlider {
                 accessibleName: i18n("View scroll step")

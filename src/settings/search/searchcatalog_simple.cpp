@@ -130,7 +130,7 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusEnabled"),
-               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
+               PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusInverted"),
                PhosphorI18n::tr("Invert wheel direction"), {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel")});

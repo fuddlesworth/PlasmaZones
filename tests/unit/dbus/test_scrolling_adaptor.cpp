@@ -455,6 +455,51 @@ private Q_SLOTS:
         QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|b"));
     }
 
+    // scrollView, the wheel's view twin: focusColumn's gate plus the step
+    // provider, one configured step per call, and focus untouched — which
+    // is the whole verb, so it is asserted on the model rather than inferred
+    // from the absence of an activation.
+    void testScrollView_gatesOnProviderAndPansOneStep()
+    {
+        // Three over-wide columns overflow the viewport so there is somewhere
+        // to pan; the last opened holds focus and the view sits at the END.
+        for (const char* id : {"app|a", "app|b", "app|c"}) {
+            m_engine->windowOpened(QString::fromLatin1(id), QStringLiteral("DP-1"), 0, 0);
+            m_engine->windowFocused(QString::fromLatin1(id), QStringLiteral("DP-1"));
+            m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeProportion(0.55), QStringLiteral("DP-1"));
+        }
+        auto* state = static_cast<PhosphorScrollEngine::ScrollState*>(m_engine->stateForScreen(QStringLiteral("DP-1")));
+        QVERIFY(state);
+        const int anchorBefore = state->strip().viewAnchor();
+        QSignalSpy feedback(m_engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+        // No provider installed: a silent no-op, not a pan by an invented
+        // distance. Every gate below is asserted on the ANCHOR, since the
+        // refusals must leave the persisted view exactly where it was.
+        m_adaptor->scrollView(QStringLiteral("DP-1"), -1);
+        QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+        QCOMPARE(feedback.count(), 0);
+
+        m_adaptor->setViewScrollStepProvider([]() {
+            return 25;
+        });
+        m_adaptor->scrollView(QStringLiteral("HDMI-2"), -1); // not ours
+        m_adaptor->scrollView(QString(), -1); // no screen at all
+        m_adaptor->scrollView(QStringLiteral("DP-1"), 0); // not a direction
+        m_adaptor->scrollView(QStringLiteral("DP-1"), 2); // not a direction either
+        QCOMPARE(state->strip().viewAnchor(), anchorBefore);
+        QCOMPARE(feedback.count(), 0);
+
+        // Positive control: one call, one step of 25% of the fixture's 1200px
+        // work-area width (a backward pan GROWS the active-relative anchor),
+        // focus still on app|c, and the verb reported itself.
+        m_adaptor->scrollView(QStringLiteral("DP-1"), -1);
+        QCOMPARE(state->strip().viewAnchor(), anchorBefore + qRound(0.25 * 1200));
+        QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+        QCOMPARE(feedback.count(), 1);
+        QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("scroll"));
+    }
+
     // The absolute setters: focusColumn's ownership gate, silent range
     // refusal against the ConfigDefaults bounds, and the intent each form
     // actually writes (width proportion exact, width/height px Fixed, height

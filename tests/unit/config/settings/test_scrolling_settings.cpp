@@ -232,9 +232,11 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightShortcut(), QStringLiteral("Meta+Alt+H"));
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+H"));
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
-        // The no-focus view pan, on the pool's last free letter.
-        QCOMPARE(ConfigDefaults::scrollingViewBackShortcut(), QStringLiteral("Meta+Alt+Y"));
-        QCOMPARE(ConfigDefaults::scrollingViewForwardShortcut(), QStringLiteral("Meta+Alt+Shift+Y"));
+        // The no-focus PAGE pan, on the pool's last free letter. The step
+        // pan is the wheel's (Meta+Shift+wheel, an effect-side axis
+        // shortcut), so its keyboard copy ships unbound below.
+        QCOMPARE(ConfigDefaults::scrollingViewPageBackShortcut(), QStringLiteral("Meta+Alt+Y"));
+        QCOMPARE(ConfigDefaults::scrollingViewPageForwardShortcut(), QStringLiteral("Meta+Alt+Shift+Y"));
         // The two width re-flows ride Shift twins of existing letters: Retile's
         // T (outside the Meta+Alt family) and grow-into-empty-space's E.
         QCOMPARE(ConfigDefaults::scrollingEqualizeColumnWidthsShortcut(), QStringLiteral("Meta+Ctrl+Shift+T"));
@@ -250,8 +252,8 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingMoveToFloatingShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingMoveToTilingShortcut().isEmpty());
-        QVERIFY(ConfigDefaults::scrollingViewPageBackShortcut().isEmpty());
-        QVERIFY(ConfigDefaults::scrollingViewPageForwardShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingViewBackShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingViewForwardShortcut().isEmpty());
     }
 
     /// The scrolling enums fall back to their DEFAULT on out-of-range input

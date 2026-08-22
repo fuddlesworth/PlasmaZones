@@ -11,6 +11,8 @@
 #include <QStringList>
 #include <QVariantMap>
 
+#include <functional>
+
 namespace PhosphorScrollEngine {
 class ScrollEngine;
 }
@@ -127,6 +129,14 @@ public:
     /// contract as the sibling adaptors' clearEngine).
     void clearEngine();
 
+    /// Install the reader scrollView uses for its step, as a PERCENT of the
+    /// work area along the strip. A provider rather than a Settings pointer
+    /// so this library never names the app's settings type: the daemon binds
+    /// it to the same accessor the keyboard step pair reads, which is what
+    /// keeps a wheel notch and a keypress the same distance. Unset, scrollView
+    /// is a silent no-op.
+    void setViewScrollStepProvider(std::function<int()> provider);
+
 public Q_SLOTS:
     /**
      * @brief Focus the adjacent column on a scrolling screen
@@ -157,6 +167,24 @@ public Q_SLOTS:
      *              next one; any other value is ignored
      */
     void focusColumn(const QString& screenId, int delta);
+
+    /**
+     * @brief Scroll the view one step along the strip without moving focus
+     *
+     * The pointer-gesture twin of focusColumn: the KWin effect's
+     * Meta+Shift+wheel axis shortcut calls this once per notch with the
+     * cursor's screen. One step is the view scroll step setting, read
+     * through the provider the daemon installs with setViewScrollStepProvider
+     * so the wheel and the keyboard step pair walk the same distance. Same
+     * silent wire-boundary policy as focusColumn; a notch at the strip's
+     * end is a no-op that never crosses to another output.
+     *
+     * @param screenId Screen whose strip should move (the cursor's screen);
+     *                 an empty string is ignored
+     * @param delta -1 scrolls toward the strip's start, +1 toward its end;
+     *              any other value is ignored
+     */
+    void scrollView(const QString& screenId, int delta);
 
     /**
      * @brief Absolute width/height intents for the focused column and window
@@ -335,6 +363,8 @@ Q_SIGNALS:
 
 private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
+    /// scrollView's step reader (setViewScrollStepProvider).
+    std::function<int()> m_viewScrollStep;
     /// Last set broadcast on the bus (the change gate's memory; the engine
     /// re-emits identical sets on desktop switches for the tiling channel).
     QStringList m_lastBroadcastScreens;

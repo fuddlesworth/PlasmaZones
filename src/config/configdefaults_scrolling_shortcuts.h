@@ -229,26 +229,32 @@ public:
     }
     static QString scrollingViewBackShortcut()
     {
-        // Y is the last free letter in the Meta+Alt pool (see the banner's
-        // externally-owned table and the sibling accessors). Back and
-        // forward are the letter+Shift pair per the family's convention;
-        // "back" is toward the strip's start, whichever way the strip runs.
-        return QStringLiteral("Meta+Alt+Y");
+        // Unbound by default: the STEP pan is the wheel's job. Meta+Shift+
+        // wheel mirrors Meta+wheel (focus a column per notch) with one step
+        // of view per notch, registered by the KWin effect as an axis
+        // shortcut, so a keyboard copy is for anyone without a wheel in hand
+        // and spends no letter from the pool. Same unbound-entry mechanics
+        // as the edge-stop focus pair above.
+        return QString();
     }
     static QString scrollingViewForwardShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+Y");
+        return QString();
     }
     static QString scrollingViewPageBackShortcut()
     {
-        // Unbound like the edge-stop focus pair above, and for the same
-        // reason: a whole-viewport pan is a variant of the bound step pair
-        // that nothing defaults to, and the pool has no letters left.
-        return QString();
+        // The PAGE pan is the keyboard's job, the way PgUp/PgDn page where
+        // the wheel scrolls lines: a keypress is one deliberate act and can
+        // carry a whole viewport, where a wheel notch is one of a stream and
+        // would overshoot. Y is the last free letter in the Meta+Alt pool
+        // (see the banner's externally-owned table); back and forward are
+        // the letter+Shift pair per the family's convention, and "back" is
+        // toward the strip's start whichever way the strip runs.
+        return QStringLiteral("Meta+Alt+Y");
     }
     static QString scrollingViewPageForwardShortcut()
     {
-        return QString();
+        return QStringLiteral("Meta+Alt+Shift+Y");
     }
     static QString scrollingEqualizeColumnWidthsShortcut()
     {

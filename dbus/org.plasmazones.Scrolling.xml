@@ -26,6 +26,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="scrollView">
+            <annotation name="org.gtk.GDBus.DocString" value="Scroll the view along a scrolling screen's strip by one configured step WITHOUT moving focus. Called by the KWin effect's Meta+Shift+wheel axis shortcut with the cursor's screen, one call per wheel notch, the pointer-gesture twin of focusColumn. The view stays where the scroll leaves it until the next focus change or centering verb, and a notch at the strip's end is a silent no-op that never crosses to another output, unlike focusColumn. Same silent ownership gate as focusColumn: an empty screenId, a screen the scrolling engine does not own, and any delta other than -1 or +1 are ignored."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move (the cursor's screen). An empty string is ignored."/>
+            </arg>
+            <arg name="delta" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="-1 scrolls the view one step toward the strip's start, +1 one step toward its end. The step is the Scrolling view scroll step setting. Any other value is ignored."/>
+            </arg>
+        </method>
+
         <method name="setColumnWidthProportion">
             <annotation name="org.gtk.GDBus.DocString" value="Set the focused column's width to a fraction of the work area (niri set-column-width with an absolute value; the shortcut surface carries no value argument, so the absolute setters live here). Same silent ownership gate as focusColumn, and the value is refused silently outside the proportion range the settings UI enforces (0.05 to 1.0). A value equal to the current intent answers with a no-target OSD rather than acting, like the step verbs, and a successful call also raises the navigation OSD — every one of the four setters reports through it when that setting is on, so a scripted caller should expect on-screen feedback per call."/>
             <arg name="screenId" type="s" direction="in">

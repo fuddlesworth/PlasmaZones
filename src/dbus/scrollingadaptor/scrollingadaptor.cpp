@@ -182,6 +182,26 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     m_engine->focusColumnByDelta(delta, screenId);
 }
 
+void ScrollingAdaptor::setViewScrollStepProvider(std::function<int()> provider)
+{
+    m_viewScrollStep = std::move(provider);
+}
+
+void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
+{
+    // focusColumn's wire-boundary gate, plus the provider: without a step
+    // there is no distance to move, and a silent no-op beats inventing one.
+    if (!m_engine || !m_viewScrollStep || screenId.isEmpty() || (delta != -1 && delta != 1)) {
+        return;
+    }
+    if (!m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    // Signed percent: the engine resolves the direction against the screen's
+    // own axis, the same reason focusColumn hands down a bare delta.
+    m_engine->scrollViewByPercent(delta * m_viewScrollStep(), screenId);
+}
+
 void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
 {
     // Wire-boundary validation in focusColumn's terms: the screen gate keeps
