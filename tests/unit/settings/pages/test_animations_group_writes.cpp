@@ -913,6 +913,167 @@ private Q_SLOTS:
         AnimationsPageController c(nullptr, &settings);
         QVERIFY(!c.allPathsHoldShaderEffect(QStringList{}, QStringLiteral("pixelate")));
     }
+
+    /// A field outside the allowlist never reaches DISK.
+    ///
+    /// Asserted against the file rather than through `rawProfile`, and that is
+    /// the whole point: `rawProfile` sanitises on read, so it drops an unknown
+    /// key whether or not the writer did. A slot phrased against it would pass
+    /// with the allowlist deleted, which is exactly the shape this audit went
+    /// looking for. What the guard actually prevents is a stray key landing in
+    /// the user's profile file and staying there until some later write happens
+    /// to rewrite the object.
+    void anUnknownFieldNeverReachesDisk()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("unknown profile field")));
+        QCOMPARE(c.setOverrideMergedOnPaths(
+                     QStringList{kPrimary},
+                     QVariantMap{{QStringLiteral("bogusKey"), 1}, {QStringLiteral("duration"), 900}}, QVariant()),
+                 1);
+
+        QFile onDisk(tmp.path() + QLatin1Char('/') + kPrimary + QStringLiteral(".json"));
+        QVERIFY2(onDisk.open(QIODevice::ReadOnly), "the accepted field did not produce a profile file");
+        const QJsonObject obj = QJsonDocument::fromJson(onDisk.readAll()).object();
+        QVERIFY2(!obj.contains(QStringLiteral("bogusKey")), "an unknown field was written to the profile file");
+        QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 900);
+    }
+
+    /// A non-string curve is treated as "the user did not touch the curve",
+    /// not stringified into one.
+    ///
+    /// Without the type check the QVariant is converted anyway, so a numeric 5
+    /// becomes the curve "5" — an engaged curve nobody chose, pinned onto every
+    /// path in the group and stopping each from inheriting.
+    void aNonStringCurveIsTreatedAsUntouched()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("non-string curve")));
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 700}},
+                                            QVariant(5)),
+                 1);
+
+        QFile onDisk(tmp.path() + QLatin1Char('/') + kPrimary + QStringLiteral(".json"));
+        QVERIFY(onDisk.open(QIODevice::ReadOnly));
+        const QJsonObject obj = QJsonDocument::fromJson(onDisk.readAll()).object();
+        QCOMPARE(obj.value(QStringLiteral("duration")).toInt(), 700);
+        QVERIFY2(!obj.contains(QStringLiteral("curve")), "a non-string curve was stringified into an engaged curve");
+    }
+
+    /// An Unchanged write releases a snapshot stranded by an earlier edit, and
+    /// reports the dirty flip even though it wrote nothing.
+    ///
+    /// The scenario is the one the writer's own comment describes: an outside
+    /// writer restores the pre-edit bytes, so the next identical write compares
+    /// equal and the first edit's snapshot would otherwise never be released —
+    /// leaving the page reporting pending changes that no further edit can
+    /// clear. The restore is byte-exact because the file is written here the
+    /// same way `writeOverrideFileOnly` writes it.
+    void anUnchangedRewriteReleasesAStrandedSnapshot()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        const QString filePath = tmp.path() + QLatin1Char('/') + kPrimary + QStringLiteral(".json");
+        QJsonObject seed;
+        seed.insert(QStringLiteral("duration"), 600);
+        seed.insert(QStringLiteral("name"), kPrimary);
+        const QByteArray seedBytes = QJsonDocument(seed).toJson(QJsonDocument::Indented);
+        {
+            QFile f(filePath);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(f.write(seedBytes) == seedBytes.size());
+        }
+
+        // Edit it, which snapshots the seed bytes.
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 900}},
+                                            QVariant()),
+                 1);
+        QVERIFY(c.hasPendingChanges());
+
+        // An outside writer puts the seed back, byte for byte.
+        {
+            QFile f(filePath);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            QVERIFY(f.write(seedBytes) == seedBytes.size());
+        }
+
+        QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
+        // Identical to what is on disk now, so nothing is written and the count
+        // is 0 — which is a SUCCESS under this writer's convention, not a
+        // refusal.
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 600}},
+                                            QVariant()),
+                 0);
+        QVERIFY2(!c.hasPendingChanges(), "the stranded snapshot was never released");
+        QCOMPARE(dirtied.count(), 1);
+    }
+
+    /// The failure toast latch RESETS once a write lands, so a second failure
+    /// later in the same session is announced rather than swallowed.
+    ///
+    /// The once-per-session half is pinned above. This is the half that makes
+    /// the latch honest: a user who fixes the disk and hits a later failure has
+    /// to be told. Driven by taking the directory's write permission away and
+    /// giving it back, because the blocker-file technique the sibling uses
+    /// cannot be undone once the directory has been created.
+    void theFailureToastLatchResetsAfterAWriteLands()
+    {
+        if (::geteuid() == 0) {
+            QSKIP("running as root — directory mode bits are ignored, so the write cannot be made to fail");
+        }
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        AnimationsPageController c;
+        c.setUserProfilesDirOverride(tmp.path());
+
+        QFile dirAsFile(tmp.path());
+        const auto restorePerms = qScopeGuard([&dirAsFile]() {
+            dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        });
+        const auto block = [&dirAsFile]() {
+            return dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+        };
+        const auto unblock = [&dirAsFile]() {
+            return dirAsFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        };
+
+        QSignalSpy toasts(&c, &AnimationsPageController::toastRequested);
+
+        // No ignoreMessage: a read-only directory that already EXISTS fails at
+        // the QSaveFile open, which logs nothing at all. That silence is the
+        // reason the toast has to exist, and it is why this slot asserts on the
+        // toast rather than on the journal.
+        QVERIFY(block());
+        for (int i = 0; i < 2; ++i) {
+            c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 600 + i}},
+                                       QVariant());
+        }
+        QCOMPARE(toasts.count(), 1);
+
+        // One write that lands clears the latch.
+        QVERIFY(unblock());
+        QCOMPARE(c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 800}},
+                                            QVariant()),
+                 1);
+
+        // A later failure must be announced again rather than swallowed.
+        QVERIFY(block());
+        c.setOverrideMergedOnPaths(QStringList{kPrimary}, QVariantMap{{QStringLiteral("duration"), 950}}, QVariant());
+        QVERIFY2(toasts.count() == 2,
+                 qPrintable(QStringLiteral("expected a second toast after a successful write reset the latch, got %1")
+                                .arg(toasts.count())));
+    }
 };
 
 QTEST_MAIN(TestAnimationsGroupWrites)

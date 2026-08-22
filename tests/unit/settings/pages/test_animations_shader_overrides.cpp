@@ -187,7 +187,7 @@ private Q_SLOTS:
     /// succeeds.
     void setShaderOverride_rejectsUnknownEffectIdWithPopulatedRegistry()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -218,7 +218,7 @@ private Q_SLOTS:
     /// hasEffect is false for every id.
     void resolvedShaderProfile_blanksInapplicablePersistedEffect()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -303,7 +303,7 @@ private Q_SLOTS:
     /// appearance-leg case above.
     void resolvedShaderProfile_blanksStaleGeometryPackOnMoveLeaf()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -329,7 +329,7 @@ private Q_SLOTS:
     /// crossfade leg does not offer the move pack.
     void availableShaderEffectsForPath_moveLeafOffersOnlyDragShaders()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -352,7 +352,7 @@ private Q_SLOTS:
     /// every other class out, and strip packs absent everywhere else.
     void availableShaderEffectsForPath_stripLeafOffersOnlyStripShaders()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -375,7 +375,12 @@ private Q_SLOTS:
         // The non-emptiness check is load-bearing, not defensive noise: every
         // assertion here is a NEGATIVE one, so a regression that made the
         // picker return nothing at all for these paths would satisfy the lot.
-        for (const QString& path : {PP::WindowSnapIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch}) {
+        // ScrollingTabSwitch included for the same reason its twin below
+        // includes the strip leaf: the two scrolling legs share a subtree, so
+        // the pack that must not leak between them is the interesting case, not
+        // the unrelated window ones.
+        for (const QString& path :
+             {PP::WindowSnapIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch, PP::ScrollingTabSwitch}) {
             const QStringList ids = pickerIdsFor(c, path);
             QVERIFY2(!ids.isEmpty(), qPrintable(QStringLiteral("picker offered nothing at all on ") + path));
             QVERIFY2(!ids.contains(QStringLiteral("strip-motion-blur")),
@@ -391,7 +396,7 @@ private Q_SLOTS:
     /// blanks rather than arming the pass with an incompatible pack.
     void resolvedShaderProfile_stripLeafBlanksAnIncompatibleOverride()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -424,7 +429,7 @@ private Q_SLOTS:
     /// and the branded pair), and tab packs stay out of every other picker.
     void availableShaderEffectsForPath_tabLeafOffersOnlyTabShaders()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -585,6 +590,79 @@ private Q_SLOTS:
         QVERIFY2(storesEffectId(c.rawShaderProfile(path)), "the sentinel was cleared rather than left engaged-empty");
         QCOMPARE(c.rawShaderProfile(path).value(QStringLiteral("effectId")).toString(), QString());
         QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
+    }
+
+    /// Parameters passed ALONGSIDE an empty effectId ride on the sentinel.
+    ///
+    /// The two slots above pass an empty map and assert `parameters` is absent,
+    /// which pins only the half where there was nothing to attach. The writer
+    /// documents the other half as a contract — a caller wanting the values gone
+    /// passes an empty map — and nothing held it, so dropping the attach arm
+    /// left the whole suite green.
+    void setShaderOverride_sentinelCarriesParametersWhenGiven()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString path = PP::Popup;
+        QVERIFY(c.setShaderOverride(path, QString(), QVariantMap{{QStringLiteral("strength"), 0.7}}));
+
+        const QVariantMap stored = c.rawShaderProfile(path);
+        QVERIFY2(storesEffectId(stored), "the sentinel was not stored");
+        QCOMPARE(stored.value(QStringLiteral("effectId")).toString(), QString());
+        QVERIFY2(stored.contains(QStringLiteral("parameters")), "parameters handed to the sentinel write were dropped");
+        QCOMPARE(stored.value(QStringLiteral("parameters")).toMap().value(QStringLiteral("strength")).toDouble(), 0.7);
+
+        // And the documented way to clear them: an empty map strips the
+        // parameters while leaving the sentinel engaged.
+        QVERIFY(c.setShaderOverride(path, QString(), {}));
+        QVERIFY(storesEffectId(c.rawShaderProfile(path)));
+        QVERIFY(!c.rawShaderProfile(path).contains(QStringLiteral("parameters")));
+    }
+
+    /// The SINGULAR writer REFUSES a path that cannot host a shader leg, which
+    /// is a different contract from the group writer's silent skip.
+    ///
+    /// Worth its own slot because the two are easy to conflate: the group form
+    /// counts 0 and says nothing, this one returns false and warns. Without the
+    /// refusal a stale entry lands on a path the daemon never reads, where it
+    /// shadows the user's intended parent override through the resolver's
+    /// deeper-leaf-wins overlay.
+    void setShaderOverride_refusesAPathWithNoShaderLeg()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        QVERIFY(!c.supportsShaderLeg(PP::EditorSnapIn));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("is not in shaderSupportedEventPaths")));
+        QVERIFY2(!c.setShaderOverride(PP::EditorSnapIn, QStringLiteral("pixelate"), {}),
+                 "a path with no shader leg was accepted");
+        QVERIFY2(c.rawShaderProfile(PP::EditorSnapIn).isEmpty(), "a refused write still touched the tree");
+    }
+
+    /// The illegal-id gate, which on an EMPTY registry is the only gate there
+    /// is: the membership check that follows it is disabled when the registry
+    /// knows no effects, so without this arm a path separator or an
+    /// arbitrarily long string would be persisted into the shader tree.
+    void setShaderOverride_rejectsAnIllegalEffectId()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        // Empty registry, so the membership arm cannot be what refuses these.
+        QVERIFY(c.availableShaderEffects().isEmpty());
+
+        const QStringList illegal{QStringLiteral("../../etc/passwd"), QStringLiteral(".."), QStringLiteral("a/b"),
+                                  QStringLiteral("a\\b"), QString(300, QLatin1Char('x'))};
+        QStringList accepted;
+        for (const QString& id : illegal) {
+            QTest::ignoreMessage(QtWarningMsg,
+                                 QRegularExpression(QStringLiteral("rejecting effectId with illegal length")));
+            if (c.setShaderOverride(PP::Popup, id, {}))
+                accepted.append(id);
+        }
+        QVERIFY2(accepted.isEmpty(), qPrintable(QStringLiteral("accepted: ") + accepted.join(QLatin1String(", "))));
+        QVERIFY2(c.rawShaderProfile(PP::Popup).isEmpty(), "a rejected id still reached the tree");
     }
 
     // The descendant-coverage tests below each construct a fresh

@@ -720,22 +720,38 @@ int AnimationsPageController::clearShaderOverrideDescendantsOnPaths(const QStrin
         Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
         return -1;
     }
-    int cleared = 0;
+    if (!m_settings)
+        return 0;
+    // ONE tree read, one write back, one broadcast — the same contract every
+    // other group entry point in this file keeps. Looping the per-path
+    // Q_INVOKABLE instead cost a full tree rebuild, a settings write and a
+    // path-agnostic broadcast PER PATH, and applied the group non-atomically,
+    // so a card could observe a half-cleared group. It also made the refusal
+    // sentinel dishonest: a refusal arriving mid-loop returned -1, meaning
+    // "nothing was attempted", after earlier paths had already been persisted.
+    // Refusing up front, above, is now the only way -1 leaves this function.
+    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    // Unioned, not summed, matching shaderOverrideDescendantCountForPaths: two
+    // paths in one group can share a descendant, and clearing it once must not
+    // be reported twice.
+    QSet<QString> toClear;
     for (const QString& path : paths) {
-        // Gated so an unrecognised path cannot cost a tree rebuild apiece; the
-        // header's bound claim rests on this.
+        // Gated so an unrecognised path cannot make the caller's list the bound
+        // on the work done here; the header's bound claim rests on this.
         if (!isValidEventPath(path))
             continue;
-        const int n = clearShaderOverrideDescendants(path);
-        // Never summed in. A -1 folded into the total would be
-        // indistinguishable from a smaller successful clear, and the caller
-        // needs to tell a refusal from a no-op to decide whether to close its
-        // editor.
-        if (n < 0)
-            return -1;
-        cleared += n;
+        const QStringList descendants = collectShaderOverrideDescendants(tree, path);
+        for (const QString& descendant : descendants)
+            toClear.insert(descendant);
     }
-    return cleared;
+    if (toClear.isEmpty())
+        return 0;
+    for (const QString& path : toClear)
+        tree.clearOverride(path);
+    m_settings->setShaderProfileTree(tree);
+    // pendingChangesChanged arrives through the shaderProfileTreeChanged
+    // handler, as it does for every other writer here.
+    return static_cast<int>(toClear.size());
 }
 
 // Measures STORED state, while the card renders RESOLVED state, and the two

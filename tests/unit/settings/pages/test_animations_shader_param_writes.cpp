@@ -540,6 +540,79 @@ private Q_SLOTS:
         QCOMPARE(c.rawShaderProfile(supported).value(QStringLiteral("effectId")).toString(),
                  QStringLiteral("pixelate"));
         QVERIFY(c.rawShaderProfile(unsupported).isEmpty());
+
+        // The other half of the same contract, and the reason the reader SKIPS
+        // rather than fails: a mixed group must report true immediately after
+        // the write that just succeeded on it. Turning that skip into a
+        // `return false` leaves every other assertion in this slot passing.
+        QVERIFY2(c.allPathsHoldShaderEffect(QStringList{supported, unsupported}, QStringLiteral("pixelate")),
+                 "a mixed group did not hold the pack the group write had just stored");
+    }
+
+    /// EVERY path, not merely the first: a group whose members hold DIFFERENT
+    /// packs does not hold either of them.
+    ///
+    /// This is the case the remove button's label was re-pointed at — it names
+    /// a pack only when every path the click writes carries that pack — so a
+    /// reader that answered from `paths.first()` would put one member's pack on
+    /// a button that clears several.
+    void allPathsHoldShaderEffect_isFalseWhenMembersHoldDifferentPacks()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString primary = PP::WindowOpen;
+        const QString mirror = PP::WindowClose;
+        QVERIFY(c.setShaderOverride(primary, QStringLiteral("pixelate"), {}));
+        QVERIFY(c.setShaderOverride(mirror, QStringLiteral("dissolve"), {}));
+
+        const QStringList mixed{primary, mirror};
+        QVERIFY2(!c.allPathsHoldShaderEffect(mixed, QStringLiteral("pixelate")),
+                 "a group whose mirror holds a different pack reported holding the primary's");
+        QVERIFY2(!c.allPathsHoldShaderEffect(mixed, QStringLiteral("dissolve")),
+                 "the same, with the arguments the other way round");
+        // Both DO own a pack, which is the separate question the remove
+        // button's visibility keys on — so the two readers really are
+        // answering different things and one cannot stand in for the other.
+        QVERIFY(c.anyPathOwnsShaderPack(mixed));
+    }
+
+    /// A non-empty group in which every member is skipped has compared nothing,
+    /// so it reports false rather than a vacuous true.
+    void allPathsHoldShaderEffect_isFalseWhenEveryPathIsSkipped()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        QVERIFY(!c.supportsShaderLeg(PP::EditorSnapIn));
+        QVERIFY2(!c.allPathsHoldShaderEffect(QStringList{PP::EditorSnapIn}, QStringLiteral("pixelate")),
+                 "a group of only non-shader-leg paths reported holding a pack it never compared");
+    }
+
+    /// The group readers refuse an unrecognised path rather than treating it as
+    /// a path that happens to store nothing.
+    void groupReadersRejectAnInvalidPath()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        const QString bogus = QStringLiteral("not.a.real.event");
+        QVERIFY(c.setShaderOverride(PP::WindowOpen, QStringLiteral("pixelate"), {}));
+
+        QVERIFY2(!c.allPathsHoldShaderEffect(QStringList{PP::WindowOpen, bogus}, QStringLiteral("pixelate")),
+                 "an invalid path was treated as holding the pack");
+        QVERIFY2(!c.anyPathOwnsShaderPack(QStringList{bogus}), "an invalid path reported owning a pack");
+        QCOMPARE(c.shaderOverrideDescendantCountForPaths(QStringList{bogus}), 0);
+        QCOMPARE(c.clearShaderOverrideOnPaths(QStringList{bogus}), 0);
+        QVERIFY2(!c.anyPathSupportsShaderLeg(QStringList{bogus}), "an invalid path reported a shader leg");
+
+        // And the whole family answers 0 / false with no ISettings at all,
+        // which is the other arm none of them had covered.
+        AnimationsPageController noSettings;
+        QVERIFY(!noSettings.allPathsHoldShaderEffect(QStringList{PP::WindowOpen}, QStringLiteral("pixelate")));
+        QVERIFY(!noSettings.anyPathOwnsShaderPack(QStringList{PP::WindowOpen}));
+        QCOMPARE(noSettings.shaderOverrideDescendantCountForPaths(QStringList{PP::WindowOpen}), 0);
+        QCOMPARE(noSettings.clearShaderOverrideOnPaths(QStringList{PP::WindowOpen}), 0);
     }
 
     /// Clearing returns the group to inheritance and reports how many paths
@@ -596,19 +669,41 @@ private Q_SLOTS:
         QVERIFY(c.rawShaderProfile(PP::PopupLayoutPickerShow).isEmpty());
         QVERIFY(c.rawShaderProfile(PP::PopupZoneSelectorShow).isEmpty());
 
-        // The emit contract, which this slot did not record either way. The
-        // wrapper calls the singular clear once per path and the singular
-        // writes the tree per call, so a two-parent group emits per parent —
-        // it does NOT have the batch-once property its singular counterpart
-        // goes out of its way to pin. Written down rather than left implicit,
-        // because the next person to batch this needs to know which of the two
-        // shapes is the current one.
+        // The emit contract: ONE settings write for the whole group, however
+        // many parents it names, which is the property every other group entry
+        // point in the controller keeps.
+        //
+        // This slot used to assert 2 here and said so deliberately, because the
+        // wrapper called the singular clear once per path and the singular
+        // wrote the tree per call. That shape also applied the group
+        // non-atomically and made the refusal sentinel dishonest, since a -1
+        // arriving mid-loop claimed nothing had been attempted after earlier
+        // paths were already persisted. The wrapper now unions the descendants
+        // across the group against one tree read and writes back once, so this
+        // is the count that must hold.
         QSignalSpy dirtied(&c, &AnimationsPageController::pendingChangesChanged);
         QVERIFY(c.setShaderOverride(PP::PopupLayoutPickerShow, QStringLiteral("pixelate"), {}));
         QVERIFY(c.setShaderOverride(PP::WindowOpen, QStringLiteral("pixelate"), {}));
         dirtied.clear();
         QCOMPARE(c.clearShaderOverrideDescendantsOnPaths({PP::Popup, PP::WindowAppearance}), 2);
-        QCOMPARE(dirtied.count(), 2);
+        QCOMPARE(dirtied.count(), 1);
+    }
+
+    /// A descendant shared by two paths in one group is cleared once and
+    /// counted once. The union is what makes that true; a summing wrapper
+    /// would report it twice while clearing it once, so the count and the tree
+    /// would disagree.
+    void clearShaderOverrideDescendantsOnPaths_countsASharedDescendantOnce()
+    {
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        QVERIFY(c.setShaderOverride(PP::PopupLayoutPickerShow, QStringLiteral("pixelate"), {}));
+
+        // Both listed paths are ancestors of the SAME descendant: `popup` is a
+        // prefix of `popup.layoutPicker`, which is a prefix of the leaf.
+        QCOMPARE(c.clearShaderOverrideDescendantsOnPaths(QStringList{PP::Popup, PP::PopupLayoutPicker}), 1);
+        QVERIFY(c.rawShaderProfile(PP::PopupLayoutPickerShow).isEmpty());
     }
 
     /// The wrapper refuses as a WHOLE while an async discard owns the tree:
@@ -677,7 +772,7 @@ private Q_SLOTS:
     /// left the suite green while a typo'd id flowed into the persisted tree.
     void setShaderOverrideOnPaths_rejectsUnknownEffectIdWithPopulatedRegistry()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
@@ -711,7 +806,7 @@ private Q_SLOTS:
     /// carries it.
     void setShaderOverrideOnPaths_refusalGateOutranksTheIdCheck()
     {
-        SKIP_WITHOUT_BUNDLED_PACKS();
+        PZ_SKIP_WITHOUT_BUNDLED_PACKS();
 
         PopulatedControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;

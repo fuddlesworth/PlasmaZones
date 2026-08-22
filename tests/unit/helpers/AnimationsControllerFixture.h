@@ -58,6 +58,11 @@ struct ControllerFixture
 /// half-built fixture.
 struct PopulatedControllerFixture
 {
+    /// REQUIRES `P_SOURCE_DIR` to be defined by the including target. Every
+    /// target that compiles a TU including this header has to carry
+    /// `target_compile_definitions(... P_SOURCE_DIR="${CMAKE_SOURCE_DIR}")`;
+    /// without it this is a bare preprocessor error rather than anything that
+    /// points at the cause.
     static QString dataDir()
     {
         return QStringLiteral(P_SOURCE_DIR "/data/animations");
@@ -124,7 +129,7 @@ inline QStringList pickerIdsFor(const AnimationsPageController& c, const QString
 
 /// Guards a slot that needs the bundled packs. A macro because QSKIP has to
 /// expand in the slot's own body to return from it.
-#define SKIP_WITHOUT_BUNDLED_PACKS()                                                                                   \
+#define PZ_SKIP_WITHOUT_BUNDLED_PACKS()                                                                                \
     do {                                                                                                               \
         if (!PlasmaZones::TestHelpers::PopulatedControllerFixture::dataAvailable())                                    \
             QSKIP("data/animations not found — running outside source tree");                                          \
