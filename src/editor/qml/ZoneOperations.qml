@@ -63,6 +63,70 @@ QtObject {
     }
 
     /**
+     * @brief Split a zone, animating the original as it gives up its half
+     * @param zoneIdToSplit The ID of the zone to split
+     * @param horizontal True to split horizontally, false for vertically
+     * @param controller The EditorController instance
+     * @param zonesRepeater The zones Repeater instance
+     *
+     * The mirror of deleteWithFillAnimation. ZoneManager::splitZone shrinks the
+     * ORIGINAL zone in place (same id, one dimension halved) and creates a new
+     * zone for the other half, so the original is a zone giving space up — the
+     * `editor.snapOut` leg, which the fill animator selects by direction.
+     * Without this the original jumped to half size in one frame while the
+     * delete path, which is the same operation in reverse, animated.
+     *
+     * Only the original is animated. The new half has no previous geometry to
+     * travel from, so animating it would mean inventing a start rect.
+     */
+    function splitWithShrinkAnimation(zoneIdToSplit, horizontal, controller, zonesRepeater) {
+        if (!controller || !zoneIdToSplit) {
+            return;
+        }
+
+        var item = findZoneItemById(zoneIdToSplit, zonesRepeater);
+        if (!item) {
+            // No item to animate (the repeater may not have realised it yet).
+            // The split itself must still happen.
+            controller.splitZone(zoneIdToSplit, horizontal);
+            return;
+        }
+
+        // Abort any fill still in flight BEFORE reading the geometry, the same
+        // reason ZoneDragHandler does it: a running fill writes visualX/Y/W/H
+        // every frame, so capturing mid-flight would start the shrink from an
+        // interpolated rect rather than from the zone as the user sees it.
+        item.stopFillAnimation();
+
+        var oldGeometries = {};
+        oldGeometries[zoneIdToSplit] = {
+            "x": item.visualX,
+            "y": item.visualY,
+            "width": item.visualWidth,
+            "height": item.visualHeight
+        };
+        // Latch this item for the case where the delegate SURVIVES the split.
+        // It usually does not: `zones` is a QVariantList, so the two
+        // zonesChanged emissions inside splitZone regenerate the Repeater's
+        // delegates and destroy this one. animateAdjacentZones re-finds the
+        // (possibly new) item and re-latches it before touching geometry, which
+        // is what actually covers the regenerate case.
+        item.isAnimatingFill = true;
+
+        var newZoneId = controller.splitZone(zoneIdToSplit, horizontal);
+        if (!newZoneId) {
+            // Refused (the halves would be under the minimum size). Nothing
+            // moved, so release the latch rather than leaving the zone frozen.
+            item.isAnimatingFill = false;
+            return;
+        }
+
+        Qt.callLater(function () {
+            animateAdjacentZones([zoneIdToSplit], oldGeometries, controller, zonesRepeater);
+        });
+    }
+
+    /**
      * @brief Find zone item by ID from Repeater
      */
     function findZoneItemById(zoneId, zonesRepeater) {
@@ -89,6 +153,10 @@ QtObject {
 
             // Find the item in repeater by ID (may have been recreated)
             var item = findZoneItemById(targetId, zonesRepeater);
+            // A miss cannot strand a latched item: this IS the repeater lookup,
+            // so "alive but not findable" is not a reachable state. Either the
+            // delegate survived and is found here, or it was destroyed and took
+            // the latch with it.
             if (!item)
                 continue;
 

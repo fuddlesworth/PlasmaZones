@@ -57,8 +57,6 @@ ShaderSetsPage {
             return i18nc("@label motion event group", "Widgets");
         case "cursor":
             return i18nc("@label motion event group", "Cursor");
-        case "shader":
-            return i18nc("@label motion event group", "Shader");
         default:
             return token;
         }

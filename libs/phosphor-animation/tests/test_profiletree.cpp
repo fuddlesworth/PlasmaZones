@@ -222,7 +222,7 @@ private Q_SLOTS:
         // the taxonomy's size means any addition fails one of the two, which is
         // what forces the author to decide which side the new path belongs on.
         // Bump this deliberately, together with that decision.
-        QCOMPARE(PP::allBuiltInPaths().size(), qsizetype(80));
+        QCOMPARE(PP::allBuiltInPaths().size(), qsizetype(76));
 
         // The near misses that make the boundary a real decision rather than a
         // family rule: tabSwitch is per-window while its own sibling is not,
@@ -246,7 +246,7 @@ private Q_SLOTS:
     /// first appearance in this list. Nothing enforced it, so a reordering
     /// silently reshuffled the Animations pages with every test green.
     ///
-    /// Pinned as the SECTION sequence rather than all 80 paths, because the
+    /// Pinned as the SECTION sequence rather than all 76 paths, because the
     /// section order is the part the UI actually reads and the part a reader
     /// can check at a glance. Reordering two leaves inside one family is
     /// harmless; moving a family is not.
@@ -270,7 +270,7 @@ private Q_SLOTS:
         const QStringList expected{
             QStringLiteral("global"),    QStringLiteral("window"), QStringLiteral("desktop"), QStringLiteral("editor"),
             QStringLiteral("scrolling"), QStringLiteral("shell"),  QStringLiteral("osd"),     QStringLiteral("popup"),
-            QStringLiteral("panel"),     QStringLiteral("cursor"), QStringLiteral("shader"),  QStringLiteral("widget"),
+            QStringLiteral("panel"),     QStringLiteral("cursor"), QStringLiteral("widget"),
         };
         QCOMPARE(sections, expected);
     }

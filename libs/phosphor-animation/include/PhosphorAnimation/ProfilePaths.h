@@ -79,6 +79,13 @@ PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;
 // window snapping — window-snap animations are KWin's
 // compositor-level domain. These paths only fire inside the
 // Phosphor layout editor.
+//
+// snapIn and snapOut are the two DIRECTIONS of one animator
+// (ZoneFillAnimation.qml), picked by whether the zone is taking space or
+// giving it up: snapIn on the fill preview and on a neighbour absorbing a
+// deleted zone, snapOut on the original half when a zone is split. They are
+// not two animators, so a caller that changes geometry gets the right leg by
+// direction rather than by naming one.
 PHOSPHORANIMATION_EXPORT extern const QString Editor;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;
@@ -154,12 +161,6 @@ PHOSPHORANIMATION_EXPORT extern const QString PanelFadeOut;
 PHOSPHORANIMATION_EXPORT extern const QString Cursor;
 PHOSPHORANIMATION_EXPORT extern const QString CursorHover;
 PHOSPHORANIMATION_EXPORT extern const QString CursorClick;
-
-// shader.*
-PHOSPHORANIMATION_EXPORT extern const QString Shader;
-PHOSPHORANIMATION_EXPORT extern const QString ShaderOpen;
-PHOSPHORANIMATION_EXPORT extern const QString ShaderClose;
-PHOSPHORANIMATION_EXPORT extern const QString ShaderSwitch;
 
 // widget.* — per-archetype paths so library defaults preserve original motion.
 PHOSPHORANIMATION_EXPORT extern const QString Widget;

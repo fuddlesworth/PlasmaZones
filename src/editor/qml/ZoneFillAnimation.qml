@@ -27,6 +27,15 @@ Item {
     // Store zone center for consistent algorithm usage
     property real fillCenterX: 0.5
     property real fillCenterY: 0.5
+    /// Which motion profile the four legs below run on.
+    ///
+    /// The editor taxonomy carries BOTH directions of this animation:
+    /// `editor.snapIn` for a zone taking space (the fill preview) and
+    /// `editor.snapOut` for one giving it up. Set imperatively by each entry
+    /// point BEFORE `start()`, rather than bound to a comparison, so the leg
+    /// that runs is decided by the operation rather than by whatever the
+    /// geometry happened to be when a binding last re-evaluated.
+    property string motionProfile: "editor.snapIn"
 
     // Start fill animation from current geometry to target
     function startFillAnimation(newTargetX, newTargetY, newTargetWidth, newTargetHeight) {
@@ -39,6 +48,11 @@ Item {
         targetY = newTargetY;
         targetWidth = newTargetWidth;
         targetHeight = newTargetHeight;
+        // A generic old-to-new animator, so the direction is whatever the
+        // caller asked for: a zone losing area is giving space up, which is
+        // the snap-out leg. Compared by area rather than per-axis because a
+        // split shrinks exactly one dimension while a fill grows both.
+        motionProfile = (newTargetWidth * newTargetHeight) < (zoneRoot.visualWidth * zoneRoot.visualHeight) ? "editor.snapOut" : "editor.snapIn";
         fillAnimation.start();
     }
 
@@ -82,6 +96,9 @@ Item {
         if (region && region.width !== undefined && region.width > 0) {
             zoneRoot.isAnimatingFill = true;
             externalAnimation = false;
+            // Always the taking-space direction: calculateFillRegion only ever
+            // returns a region at least as large as the zone it expands.
+            motionProfile = "editor.snapIn";
             targetX = region.x * canvasWidth;
             targetY = region.y * canvasHeight;
             targetWidth = region.width * canvasWidth;
@@ -110,28 +127,28 @@ Item {
             target: zoneRoot
             properties: "visualX"
             to: fillAnimator.targetX
-            profile: "editor.snapIn"
+            profile: fillAnimator.motionProfile
         }
 
         PhosphorMotionAnimation {
             target: zoneRoot
             properties: "visualY"
             to: fillAnimator.targetY
-            profile: "editor.snapIn"
+            profile: fillAnimator.motionProfile
         }
 
         PhosphorMotionAnimation {
             target: zoneRoot
             properties: "visualWidth"
             to: fillAnimator.targetWidth
-            profile: "editor.snapIn"
+            profile: fillAnimator.motionProfile
         }
 
         PhosphorMotionAnimation {
             target: zoneRoot
             properties: "visualHeight"
             to: fillAnimator.targetHeight
-            profile: "editor.snapIn"
+            profile: fillAnimator.motionProfile
         }
     }
 }

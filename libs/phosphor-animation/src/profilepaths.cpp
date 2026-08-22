@@ -132,12 +132,6 @@ const QString Cursor = QStringLiteral("cursor");
 const QString CursorHover = QStringLiteral("cursor.hover");
 const QString CursorClick = QStringLiteral("cursor.click");
 
-// shader.*
-const QString Shader = QStringLiteral("shader");
-const QString ShaderOpen = QStringLiteral("shader.open");
-const QString ShaderClose = QStringLiteral("shader.close");
-const QString ShaderSwitch = QStringLiteral("shader.switch");
-
 // widget.*
 const QString Widget = QStringLiteral("widget");
 const QString WidgetHover = QStringLiteral("widget.hover");
@@ -224,10 +218,6 @@ QStringList allBuiltInPaths()
         Cursor,
         CursorHover,
         CursorClick,
-        Shader,
-        ShaderOpen,
-        ShaderClose,
-        ShaderSwitch,
         Widget,
         WidgetHover,
         WidgetPress,

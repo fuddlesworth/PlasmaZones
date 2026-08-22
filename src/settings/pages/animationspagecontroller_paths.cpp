@@ -177,9 +177,6 @@ QString AnimationsPageController::segmentLabel(const QString& segment)
     if (segment == QLatin1String("scrolling")) {
         return PhosphorI18n::tr("Scrolling", "animation event or section");
     }
-    if (segment == QLatin1String("shader")) {
-        return PhosphorI18n::tr("Shader", "animation event or section");
-    }
     if (segment == QLatin1String("shell")) {
         return PhosphorI18n::tr("Shell", "animation event or section");
     }
