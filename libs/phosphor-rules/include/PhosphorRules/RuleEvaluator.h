@@ -211,6 +211,28 @@ public:
     /// Same concurrency constraints as `hasAnyMatch` (regex leaves).
     bool hasMatchTargetingFields(const WindowQuery& query, const QSet<Field>& fields) const;
 
+    /// True if at least one enabled rule matches @p query AND passes @p admit.
+    ///
+    /// `hasAnyMatch` with a structural admission test on the rule itself, the
+    /// same shape @ref resolveFiltered takes. The ORDER differs from that one on
+    /// purpose: this matches first and admits second, so a caller pays the
+    /// admission cost only for rules that already matched, whereas
+    /// resolveFiltered admits first (its predicate is the cheap structural
+    /// filter there). Both are equivalent for a pure predicate; one with side
+    /// effects would observe a different set of rules from the two.
+    ///
+    /// Exists because "some rule matches this window" is not always the
+    /// question a caller means. The animation window-filter force-animates a
+    /// window when the user has authored a matching rule, on the reasoning that
+    /// authoring one is the opt-in signal — but a rule whose every appearance
+    /// action is inert (an animation override on an event the compositor
+    /// resolves windowless, which no rule can drive) signals nothing, and
+    /// letting it through overrode the user's own size and exclusion filters
+    /// for a rule that could not have any effect.
+    ///
+    /// Same concurrency constraints as `hasAnyMatch` (regex leaves).
+    bool hasAnyMatchFiltered(const WindowQuery& query, const std::function<bool(const Rule&)>& admit) const;
+
     /// The single highest-priority **enabled** rule that matches @p query and
     /// passes the optional @p filter, or nullptr if none qualifies.
     ///

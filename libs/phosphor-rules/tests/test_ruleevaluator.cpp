@@ -428,6 +428,72 @@ private Q_SLOTS:
         QVERIFY(!eval.hasAnyMatch(other));
     }
 
+    // ── hasAnyMatchFiltered ──
+
+    /// The admit predicate gates the RESULT, not the match.
+    ///
+    /// The KWin window filter force-animates a window whose rule matches, on
+    /// the reasoning that authoring a matching rule is the opt-in signal. A
+    /// rule whose every appearance action is inert signals nothing, so the
+    /// filter needs "matches AND is worth honouring" rather than plain
+    /// "matches" — otherwise it overrides the user's own size and exclusion
+    /// settings on behalf of a rule that cannot change anything.
+    void testHasAnyMatchFiltered()
+    {
+        RuleSet set;
+        set.addRule(
+            makeRule(QStringLiteral("konsole"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("konsole")),
+                     {floatAction()}));
+        RuleEvaluator eval(set);
+
+        // Matches and is admitted.
+        QVERIFY(eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule&) {
+            return true;
+        }));
+        // Matches but is refused — the whole point of the overload.
+        QVERIFY(!eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule&) {
+            return false;
+        }));
+
+        // Does not match, so admission is never consulted.
+        WindowQuery other;
+        other.windowClass = QStringLiteral("firefox");
+        other.screenId = QStringLiteral("DP-2");
+        bool admitCalled = false;
+        QVERIFY(!eval.hasAnyMatchFiltered(other, [&admitCalled](const Rule&) {
+            admitCalled = true;
+            return true;
+        }));
+        QVERIFY2(!admitCalled, "admit ran for a rule that did not match — the match must gate the predicate");
+
+        // A null predicate degrades to plain hasAnyMatch rather than refusing
+        // everything, so a caller with nothing to filter on is not surprised.
+        QVERIFY(eval.hasAnyMatchFiltered(konsoleQuery(), nullptr));
+    }
+
+    /// A refused rule must not mask an admitted one later in the set.
+    void testHasAnyMatchFilteredScansPastARefusedRule()
+    {
+        RuleSet set;
+        set.addRule(
+            makeRule(QStringLiteral("refused"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("konsole")),
+                     {floatAction()}));
+        set.addRule(
+            makeRule(QStringLiteral("admitted"), 200,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("konsole")),
+                     {floatAction()}));
+        RuleEvaluator eval(set);
+
+        QVERIFY(eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule& r) {
+            return r.name == QLatin1String("admitted");
+        }));
+        QVERIFY(!eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule& r) {
+            return r.name == QLatin1String("neither");
+        }));
+    }
+
     // ── hasMatchTargetingFields ──
 
     void testHasMatchTargetingFields()

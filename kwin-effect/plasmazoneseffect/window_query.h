@@ -31,7 +31,7 @@ bool windowIsTransient(KWin::EffectWindow* w);
 /// Build a per-window PhosphorRules::WindowQuery from a live KWin window,
 /// populating every window-side field declared on `WindowQuery` so user-
 /// authored rules can match on any of them. The unified shape means a rule
-/// that passes the rule-override gate (hasAnyMatch) also resolves its slot
+/// that passes the rule-override gate (hasAnyMatchFiltered) also resolves its slot
 /// in the per-event animation cascade.
 ///
 /// Engagement contract (which fields get filled):
