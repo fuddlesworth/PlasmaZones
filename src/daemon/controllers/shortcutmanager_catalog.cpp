@@ -389,14 +389,6 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "it never floats."));
         // "Back" and "forward" rather than left/right: the strip can run
         // either way, and these read correctly on a vertical one too.
-        add(kIdScrollViewBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
-            QT_TRANSLATE_NOOP("plasmazones",
-                              "Scrolls the view toward the start of the strip by the configured step. "
-                              "Focus stays where it is."));
-        add(kIdScrollViewForward, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
-            QT_TRANSLATE_NOOP("plasmazones",
-                              "Scrolls the view toward the end of the strip by the configured step. "
-                              "Focus stays where it is."));
         add(kIdScrollViewPageBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
                               "Scrolls the view toward the start of the strip by a whole screen. "

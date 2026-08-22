@@ -1207,10 +1207,10 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
-    // The wheel's view step reads the SAME accessor the keyboard step pair
-    // reads (ShortcutManager's narrow getter over Settings), so a notch and
-    // a keypress walk the same distance. m_shortcutManager is ctor-owned and
-    // never reset, so the capture outlives every adaptor this pass creates.
+    // The wheel's view step reads ShortcutManager's narrow getter over
+    // Settings, where the other step percents live. m_shortcutManager is
+    // ctor-owned and never reset, so the capture outlives every adaptor this
+    // pass creates.
     m_scrollingAdaptor->setViewScrollStepProvider([this]() {
         return m_shortcutManager->scrollViewScrollStepPercent();
     });

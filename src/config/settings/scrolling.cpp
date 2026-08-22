@@ -757,11 +757,6 @@ P_STORE_SET_STRING(setScrollingMoveToFloatingShortcut, shortcutsScrollingGroup, 
 P_STORE_GET(QString, scrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey, QString)
 P_STORE_SET_STRING(setScrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey,
                    scrollingMoveToTilingShortcutChanged)
-P_STORE_GET(QString, scrollingViewBackShortcut, shortcutsScrollingGroup, viewBackKey, QString)
-P_STORE_SET_STRING(setScrollingViewBackShortcut, shortcutsScrollingGroup, viewBackKey, scrollingViewBackShortcutChanged)
-P_STORE_GET(QString, scrollingViewForwardShortcut, shortcutsScrollingGroup, viewForwardKey, QString)
-P_STORE_SET_STRING(setScrollingViewForwardShortcut, shortcutsScrollingGroup, viewForwardKey,
-                   scrollingViewForwardShortcutChanged)
 P_STORE_GET(QString, scrollingViewPageBackShortcut, shortcutsScrollingGroup, viewPageBackKey, QString)
 P_STORE_SET_STRING(setScrollingViewPageBackShortcut, shortcutsScrollingGroup, viewPageBackKey,
                    scrollingViewPageBackShortcutChanged)

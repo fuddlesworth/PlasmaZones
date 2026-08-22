@@ -59,6 +59,10 @@ public:
     /// of a ternary per call site.
     int scrollColumnWidthStepPercent() const;
     int scrollWindowHeightStepPercent() const;
+    /// Unlike its two siblings this one has no fire lambda behind it: the
+    /// view STEP is the wheel's, and the ScrollingAdaptor reads it through
+    /// the provider the daemon binds to this getter. It lives here with the
+    /// other two so every step percent has one home and one null defence.
     int scrollViewScrollStepPercent() const;
 
 public Q_SLOTS:
@@ -269,9 +273,10 @@ Q_SIGNALS:
     /// true = move the focused window to the float layer, false = re-tile it.
     void scrollMoveToFloatRequested(bool floating);
     /// Pan the strip view WITHOUT moving focus, by a signed PERCENT of the
-    /// work area's extent along the strip: the step pair carries the
-    /// user-tunable scrollingViewScrollStepPercent, the page pair a whole
-    /// viewport (100). Negative is toward the strip's start.
+    /// work area's extent along the strip. The page pair carries a whole
+    /// viewport (100); negative is toward the strip's start. The step-sized
+    /// pan has no keyboard row (it is the wheel's), so no emitter carries
+    /// the step percent.
     void scrollViewRequested(int deltaPercent);
     void scrollEqualizeColumnWidthsRequested();
     void scrollMinimizeColumnWidthRequested();

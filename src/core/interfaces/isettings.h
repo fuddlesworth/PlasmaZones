@@ -1067,8 +1067,6 @@ Q_SIGNALS:
     void scrollingFocusColumnRightOrFirstShortcutChanged();
     void scrollingMoveToFloatingShortcutChanged();
     void scrollingMoveToTilingShortcutChanged();
-    void scrollingViewBackShortcutChanged();
-    void scrollingViewForwardShortcutChanged();
     void scrollingViewPageBackShortcutChanged();
     void scrollingViewPageForwardShortcutChanged();
     void scrollingEqualizeColumnWidthsShortcutChanged();

@@ -724,9 +724,6 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingMoveToFloatingShortcut)
         REGISTER_CONCRETE_STRING("scrollingMoveToTilingShortcut", scrollingMoveToTilingShortcut,
                                  setScrollingMoveToTilingShortcut)
-        REGISTER_CONCRETE_STRING("scrollingViewBackShortcut", scrollingViewBackShortcut, setScrollingViewBackShortcut)
-        REGISTER_CONCRETE_STRING("scrollingViewForwardShortcut", scrollingViewForwardShortcut,
-                                 setScrollingViewForwardShortcut)
         REGISTER_CONCRETE_STRING("scrollingViewPageBackShortcut", scrollingViewPageBackShortcut,
                                  setScrollingViewPageBackShortcut)
         REGISTER_CONCRETE_STRING("scrollingViewPageForwardShortcut", scrollingViewPageForwardShortcut,

@@ -132,9 +132,8 @@ public:
     /// Install the reader scrollView uses for its step, as a PERCENT of the
     /// work area along the strip. A provider rather than a Settings pointer
     /// so this library never names the app's settings type: the daemon binds
-    /// it to the same accessor the keyboard step pair reads, which is what
-    /// keeps a wheel notch and a keypress the same distance. Unset, scrollView
-    /// is a silent no-op.
+    /// it to ShortcutManager's step getter, where the other step percents
+    /// live. Unset, scrollView is a silent no-op.
     void setViewScrollStepProvider(std::function<int()> provider);
 
 public Q_SLOTS:
@@ -174,10 +173,11 @@ public Q_SLOTS:
      * The pointer-gesture twin of focusColumn: the KWin effect's
      * Meta+Shift+wheel axis shortcut calls this once per notch with the
      * cursor's screen. One step is the view scroll step setting, read
-     * through the provider the daemon installs with setViewScrollStepProvider
-     * so the wheel and the keyboard step pair walk the same distance. Same
-     * silent wire-boundary policy as focusColumn; a notch at the strip's
-     * end is a no-op that never crosses to another output.
+     * through the provider the daemon installs with setViewScrollStepProvider.
+     * The keyboard's pan is the PAGE (a whole viewport, on its own shortcut
+     * pair); the step has no keyboard row, for the same reason focusColumn
+     * has none. Same silent wire-boundary policy as focusColumn; a notch at
+     * the strip's end is a no-op that never crosses to another output.
      *
      * @param screenId Screen whose strip should move (the cursor's screen);
      *                 an empty string is ignored

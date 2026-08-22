@@ -63,8 +63,6 @@ public:
     P_CONFIG_KEY(focusColumnRightOrFirstKey, "FocusColumnRightOrFirst")
     P_CONFIG_KEY(moveToFloatingKey, "MoveToFloating")
     P_CONFIG_KEY(moveToTilingKey, "MoveToTiling")
-    P_CONFIG_KEY(viewBackKey, "ViewBack")
-    P_CONFIG_KEY(viewForwardKey, "ViewForward")
     P_CONFIG_KEY(viewPageBackKey, "ViewPageBack")
     P_CONFIG_KEY(viewPageForwardKey, "ViewPageForward")
     P_CONFIG_KEY(equalizeColumnWidthsKey, "EqualizeColumnWidths")

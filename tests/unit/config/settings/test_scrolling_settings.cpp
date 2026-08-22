@@ -234,7 +234,7 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
         // The no-focus PAGE pan, on the pool's last free letter. The step
         // pan is the wheel's (Meta+Shift+wheel, an effect-side axis
-        // shortcut), so its keyboard copy ships unbound below.
+        // shortcut) and has no keyboard row at all.
         QCOMPARE(ConfigDefaults::scrollingViewPageBackShortcut(), QStringLiteral("Meta+Alt+Y"));
         QCOMPARE(ConfigDefaults::scrollingViewPageForwardShortcut(), QStringLiteral("Meta+Alt+Shift+Y"));
         // The two width re-flows ride Shift twins of existing letters: Retile's
@@ -244,16 +244,13 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
 
         // Ships unbound, per the same docs: the edge-stop/wrap focus
-        // variants, the one-way float verbs, and the whole-viewport pan
-        // variants of the bound step pair.
+        // variants and the one-way float verbs.
         QVERIFY(ConfigDefaults::scrollingFocusColumnLeftShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingFocusColumnRightShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingMoveToFloatingShortcut().isEmpty());
         QVERIFY(ConfigDefaults::scrollingMoveToTilingShortcut().isEmpty());
-        QVERIFY(ConfigDefaults::scrollingViewBackShortcut().isEmpty());
-        QVERIFY(ConfigDefaults::scrollingViewForwardShortcut().isEmpty());
     }
 
     /// The scrolling enums fall back to their DEFAULT on out-of-range input

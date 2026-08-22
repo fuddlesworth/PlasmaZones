@@ -478,19 +478,12 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMoveToFloatRequested(false);
      }},
-    // Page variants carry a literal 100: one viewport is one viewport, and
-    // a percent setting with a single meaningful value would be a setting
-    // for nothing.
-    {kIdScrollViewBack, &ConfigDefaults::scrollingViewBackShortcut, &Settings::scrollingViewBackShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Scroll View Back"),
-     [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollViewRequested(-sm->scrollViewScrollStepPercent());
-     }},
-    {kIdScrollViewForward, &ConfigDefaults::scrollingViewForwardShortcut, &Settings::scrollingViewForwardShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Scroll View Forward"),
-     [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollViewRequested(sm->scrollViewScrollStepPercent());
-     }},
+    // A literal 100: one viewport is one viewport, and a percent setting with
+    // a single meaningful value would be a setting for nothing. The STEP pan
+    // has no keyboard row — it is the wheel's (Meta+Shift+wheel, registered
+    // by the KWin effect and reading the view scroll step through the
+    // ScrollingAdaptor's provider), for the same reason Meta+wheel's column
+    // focus has no keyboard twin.
     {kIdScrollViewPageBack, &ConfigDefaults::scrollingViewPageBackShortcut, &Settings::scrollingViewPageBackShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Scroll View Back a Page"),
      [](ShortcutManager* sm) {

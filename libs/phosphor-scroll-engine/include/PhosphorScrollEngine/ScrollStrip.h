@@ -418,8 +418,9 @@ public:
     /// and can stop. A move DETACHES the view from the centering policy (see
     /// the class doc); a refusal leaves the latch as it found it. This is the
     /// only mutator that moves the view without a focus, structure or policy
-    /// change behind it; the drag-insert edge auto-scroll and the keyboard
-    /// view-scroll verbs are its callers.
+    /// change behind it; the drag-insert edge auto-scroll and the engine's
+    /// view-scroll verb (behind the wheel and the keyboard page pair) are its
+    /// callers.
     bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────

@@ -227,29 +227,20 @@ public:
     {
         return QString();
     }
-    static QString scrollingViewBackShortcut()
-    {
-        // Unbound by default: the STEP pan is the wheel's job. Meta+Shift+
-        // wheel mirrors Meta+wheel (focus a column per notch) with one step
-        // of view per notch, registered by the KWin effect as an axis
-        // shortcut, so a keyboard copy is for anyone without a wheel in hand
-        // and spends no letter from the pool. Same unbound-entry mechanics
-        // as the edge-stop focus pair above.
-        return QString();
-    }
-    static QString scrollingViewForwardShortcut()
-    {
-        return QString();
-    }
     static QString scrollingViewPageBackShortcut()
     {
-        // The PAGE pan is the keyboard's job, the way PgUp/PgDn page where
-        // the wheel scrolls lines: a keypress is one deliberate act and can
-        // carry a whole viewport, where a wheel notch is one of a stream and
-        // would overshoot. Y is the last free letter in the Meta+Alt pool
-        // (see the banner's externally-owned table); back and forward are
-        // the letter+Shift pair per the family's convention, and "back" is
-        // toward the strip's start whichever way the strip runs.
+        // The view pan splits by input: the STEP is the wheel's (Meta+Shift+
+        // wheel, an effect-side axis shortcut mirroring Meta+wheel's column
+        // focus), and the PAGE is the keyboard's, the way PgUp/PgDn page
+        // where the wheel scrolls lines. A keypress is one deliberate act
+        // and can carry a whole viewport; a wheel notch is one of a stream
+        // and would overshoot. No keyboard step pair, for the same reason
+        // Meta+wheel's column focus has none: the wheel is a different input
+        // with a different feel, not a duplicate of the keys. Y is the last
+        // free letter in the Meta+Alt pool (see the banner's externally-owned
+        // table); back and forward are the letter+Shift pair per the
+        // family's convention, and "back" is toward the strip's start
+        // whichever way the strip runs.
         return QStringLiteral("Meta+Alt+Y");
     }
     static QString scrollingViewPageForwardShortcut()

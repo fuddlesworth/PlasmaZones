@@ -648,10 +648,6 @@ public:
                    setScrollingMoveToFloatingShortcut NOTIFY scrollingMoveToFloatingShortcutChanged)
     Q_PROPERTY(QString scrollingMoveToTilingShortcut READ scrollingMoveToTilingShortcut WRITE
                    setScrollingMoveToTilingShortcut NOTIFY scrollingMoveToTilingShortcutChanged)
-    Q_PROPERTY(QString scrollingViewBackShortcut READ scrollingViewBackShortcut WRITE setScrollingViewBackShortcut
-                   NOTIFY scrollingViewBackShortcutChanged)
-    Q_PROPERTY(QString scrollingViewForwardShortcut READ scrollingViewForwardShortcut WRITE
-                   setScrollingViewForwardShortcut NOTIFY scrollingViewForwardShortcutChanged)
     Q_PROPERTY(QString scrollingViewPageBackShortcut READ scrollingViewPageBackShortcut WRITE
                    setScrollingViewPageBackShortcut NOTIFY scrollingViewPageBackShortcutChanged)
     Q_PROPERTY(QString scrollingViewPageForwardShortcut READ scrollingViewPageForwardShortcut WRITE
@@ -1566,10 +1562,6 @@ public:
     void setScrollingMoveToFloatingShortcut(const QString& shortcut);
     QString scrollingMoveToTilingShortcut() const;
     void setScrollingMoveToTilingShortcut(const QString& shortcut);
-    QString scrollingViewBackShortcut() const;
-    void setScrollingViewBackShortcut(const QString& shortcut);
-    QString scrollingViewForwardShortcut() const;
-    void setScrollingViewForwardShortcut(const QString& shortcut);
     QString scrollingViewPageBackShortcut() const;
     void setScrollingViewPageBackShortcut(const QString& shortcut);
     QString scrollingViewPageForwardShortcut() const;
