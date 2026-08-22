@@ -146,15 +146,18 @@ ColumnLayout {
     /// property gave a group whose members disagree a label derived from one of
     /// them and an action applied to every one.
     ///
-    /// Defaults to tracking `shaderOwnsPack`, so a consumer that writes exactly
-    /// one path (which is every consumer but the simple page) gets the right
-    /// answer without opting in.
+    /// Defaults to tracking `shaderOwnsPack`, which states the single-path
+    /// contract for a consumer that writes exactly one path. No such consumer
+    /// exists today — AnimationEventCard always sets this explicitly, and
+    /// GlobalTimingDefaultsCard turns the shader leg off entirely — so the
+    /// default is documentation of the contract rather than a live code path.
     property bool shaderPackRemovable: shaderOwnsPack
     /// Whether naming the shown pack on the remove control is accurate, i.e.
     /// every path the control writes holds THAT pack. False on a group whose
     /// members hold different packs, where the row shows one name and the click
-    /// removes several. Defaults to tracking `shaderOwnsPack` so a consumer
-    /// writing exactly one path needs no opinion.
+    /// removes several. Defaults to tracking `shaderOwnsPack` for the same
+    /// single-path contract as the property above, and with the same caveat
+    /// that no consumer relies on the default today.
     property bool shaderPackNameIsExact: shaderOwnsPack
     /// Picker model — the consumer hands in
     /// `availableShaderEffects()` (or a registry-tick-bound
@@ -379,8 +382,6 @@ ColumnLayout {
             spacing: Kirigami.Units.largeSpacing
 
             CurveThumbnail {
-                id: curveThumbnail
-
                 implicitWidth: Kirigami.Units.gridUnit * 6
                 implicitHeight: Kirigami.Units.gridUnit * 4
                 curve: root.easingCurve
@@ -737,6 +738,32 @@ ColumnLayout {
                 }
             }
 
+            // The params-only escape hatch, and the only one that reaches this
+            // state. An event that inherits its pack but owns every parameter
+            // value renders this row (a pack resolves, so the empty-state row
+            // above with its revert link is hidden), yet it owns no pack — so
+            // the remove button beside this takes its sentinel arm and would
+            // BLOCK the inherited pack rather than let the event go back to
+            // following it. Without this the caption could say the event has
+            // settings of its own while nothing on the row undid that, and the
+            // only way out was the card's Override toggle, which also discards
+            // every timing override in the write group.
+            //
+            // Cannot collide with the empty-state link: that row is gated on
+            // `shaderEffectId.length === 0` and this one renders only when a
+            // pack resolves, so the two are mutually exclusive by construction.
+            // Same string as that link deliberately — it is the same action.
+            Kirigami.LinkButton {
+                // Matching its twin above: never squeezed, and small enough not
+                // to out-size the pack name it sits beside.
+                Layout.minimumWidth: implicitWidth
+                visible: root.showOverrideStatus && root.shaderOverrideStored && !root.shaderPackRemovable
+                text: i18n("Revert shader to inherited")
+                font: Kirigami.Theme.smallFont
+                Accessible.name: text
+                onClicked: root.shaderRevertRequested()
+            }
+
             // Removing the event's own pack, in the same position a decoration
             // pack row carries its remove button.
             //
@@ -849,7 +876,11 @@ ColumnLayout {
         Behavior on opacity {
             PhosphorMotionAnimation {
                 profile: shaderExpansionClip.effectiveExpanded ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: Kirigami.Units.veryShortDuration * 2
+                // Same duration as the height Behavior above, so the fade and
+                // the accordion finish together. Spelled the same way as that
+                // one rather than as a multiple of a shorter constant, which
+                // resolved to this value but read as though it meant to differ.
+                durationOverride: Kirigami.Units.shortDuration
             }
         }
 

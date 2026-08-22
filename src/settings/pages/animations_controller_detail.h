@@ -154,7 +154,18 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 /// business of offering to delete a tweak the user just made on the
 /// descendant, which is the bug this exclusion exists to fix. The
 /// descendant's own card is where that state is disclosed, via the shader
-/// row's ownership caption (AnimationProfileEditor.shaderOwnership).
+/// row's ownership caption, which AnimationProfileEditor derives from its
+/// `shaderOwnsPack` and `shaderOwnsParamsOnly` inputs.
+///
+/// One consequence worth stating, because nothing surfaces it from the
+/// ancestor: when the ancestor SWITCHES pack, a params-only descendant keeps
+/// its stored map and resolves the new pack carrying the old pack's parameter
+/// ids. Parameter ids are per-pack, so the new pack matches none of them and
+/// falls back to its own defaults for every value. The descendant is not
+/// broken and nothing is lost — clearing its parameters on its own card
+/// removes the entry and restores inheritance — but the ancestor's "clear
+/// shadowing children" affordance deliberately will not reach it, so that card
+/// is the only place it can be resolved.
 inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                     const QString& path)
 {
@@ -175,12 +186,14 @@ inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShade
 
 /// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
 /// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
-/// for single-word segments. Shared by animationspagecontroller.cpp's
-/// `eventSections` (cached event tree) and animationspagecontroller_paths.cpp's
-/// `eventLabel` (per-path lookup) so the two surfaces format identically.
-/// Inline in this header so the label format stays in one place —
-/// diverging here would silently break the path-vs-tree label match
-/// downstream consumers rely on.
+/// for single-word segments.
+///
+/// Its one caller is `AnimationsPageController::segmentLabel`
+/// (animationspagecontroller_paths.cpp), which is itself the single source both
+/// label surfaces go through: `eventSections` builds the cached event tree from
+/// it and `eventLabel` answers per-path lookups with it, so the two format
+/// identically by construction. Inline in this header to keep the format in one
+/// place.
 inline QString humanizeSegment(const QString& segment)
 {
     if (segment.isEmpty())

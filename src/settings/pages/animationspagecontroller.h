@@ -298,7 +298,10 @@ public:
     // clearShaderOverrideOnPaths, clearShaderOverrideDescendantsOnPaths) and
     // the group readers (shaderOverrideDescendantCountForPaths,
     // anyPathOwnsShaderPack, anyPathSupportsShaderLeg) all SKIP a non-built-in
-    // path, while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
+    // path — the last of those three through `supportsShaderLeg`, whose
+    // supported set is built entirely from ProfilePaths constants and so cannot
+    // contain one, rather than through an isValidEventPath call of its own —
+    // while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
     // which rejects it, so that path is absent from the returned count and the
     // call toasts — a caller bug surfaces instead of being silently dropped.
     // allPathsHoldShaderEffect is the one that neither skips nor counts: it
@@ -322,6 +325,19 @@ public:
     /// leaf, and a caller that replaced the whole map would drop them the
     /// moment the user nudged Duration.
     ///
+    /// Survival is of the SANITIZED form, not of the bytes on disk: the base is
+    /// read through `rawProfile`, so a hand-edited out-of-range minDistance or
+    /// an unknown sequenceMode enumerator is normalised by an unrelated Duration
+    /// nudge. No resolved value changes, because the sanitizer mirrors what the
+    /// daemon's own parser would have made of the same file, but the rewrite is
+    /// real. clearFieldOnPaths states the same effect for its own rewrite pass.
+    ///
+    /// @p fields is ALLOWLISTED: only the six keys named above plus curve and
+    /// duration are merged, and any other key is dropped with a warning rather
+    /// than written. A stray key would otherwise land in the user's profile
+    /// file and stay there until some later write happened to rewrite the
+    /// object.
+    ///
     /// @p curveFromCommit distinguishes the two things a caller can mean about
     /// the curve, which a plain map cannot express. An INVALID or NULL QVariant
     /// (QML `undefined` or `null`) means "the user did not touch the curve":
@@ -344,8 +360,12 @@ public:
     /// A path whose merged object already matches disk comes back Unchanged and
     /// is NOT counted, so a call where every path was already in the desired
     /// state returns 0. That is the clearFieldOnPaths convention, and the
-    /// OPPOSITE of the shader group writers, which count an already-satisfied
-    /// path as written. Test success with `>= 0`, never with `> 0`.
+    /// OPPOSITE of the two applyShaderGroupWrite-backed setters
+    /// (setShaderOverrideOnPaths, setShaderParametersOnPaths), which count an
+    /// already-satisfied path as written. The shader CLEARS do not — they count
+    /// removals, so a path with nothing to clear is skipped uncounted, the same
+    /// way this one skips an Unchanged write. Test success with `>= 0`, never
+    /// with `> 0`.
     Q_INVOKABLE int setOverrideMergedOnPaths(const QStringList& rawPaths, const QVariantMap& fields,
                                              const QVariant& curveFromCommit);
 
@@ -371,7 +391,7 @@ public:
     /// support a leg would otherwise keep its shader override across a toggle
     /// off, and `divergentPathCount` would then report a divergence no control
     /// on the card could clear.
-    Q_INVOKABLE bool anyPathSupportsShaderLeg(const QStringList& paths) const;
+    Q_INVOKABLE bool anyPathSupportsShaderLeg(const QStringList& rawPaths) const;
 
     /// True iff every shader-capable path in @p rawPaths already carries
     /// @p effectId as its DIRECT shader override. Non-supporting paths are
@@ -379,7 +399,12 @@ public:
     /// them), so a mixed group can report true right after a successful group
     /// write. The empty string is the engaged-empty "None" sentinel, which is
     /// a real stored value and distinct from carrying no override at all.
-    Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& paths, const QString& effectId) const;
+    ///
+    /// FALSE when nothing was compared, the same way an empty list is false. A
+    /// group whose every member was skipped as non-supporting has tested no
+    /// path, and "every path already carries this effect" must not come back
+    /// true off the back of zero comparisons.
+    Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& rawPaths, const QString& effectId) const;
 
     /// Set @p effectId (with @p parameters) as the shader override on every
     /// path in @p rawPaths that can host a shader leg. Non-supporting paths are
@@ -389,8 +414,14 @@ public:
     /// The whole group is applied to ONE tree read and written back ONCE, so a
     /// card cannot observe a half-written group, and a drag over a shader
     /// parameter costs one settings write per tick rather than one per path.
-    /// @return the number of paths written, or -1 if the call was refused
-    /// because an async discard owns the tree (it toasts).
+    /// @return the number of paths written, or -1 from either of TWO refusals.
+    /// An async discard owning the tree is the first, and it toasts. An
+    /// @p effectId that `acceptableShaderEffectId` rejects — over-length,
+    /// NUL-bearing, carrying a path separator, or naming no installed pack — is
+    /// the second, and it does NOT toast: it is a caller bug rather than
+    /// something the user did, so it warns to the log and nothing else.
+    /// @p parameters is passed through without validation of its keys or
+    /// values; the id is the only half of the write that is gated.
     Q_INVOKABLE int setShaderOverrideOnPaths(const QStringList& rawPaths, const QString& effectId,
                                              const QVariantMap& parameters);
 
@@ -446,8 +477,10 @@ public:
     /// walk; `rawShaderProfile` is not memoised), and a card called it once per
     /// write path inside a refresh that runs at drag rate. That is precisely
     /// the read-in-a-loop shape the block comment above forbids.
-    /// @return the summed count; 0 when there is no ISettings. Never negative:
-    /// this reads and cannot be refused.
+    /// @return the number of DISTINCT shadowing descendants, unioned across the
+    /// group rather than summed, so a descendant shared by two paths in the
+    /// list counts once. 0 when there is no ISettings. Never negative: this
+    /// reads and cannot be refused.
     Q_INVOKABLE int shaderOverrideDescendantCountForPaths(const QStringList& rawPaths) const;
 
     /// True when at least ONE path in @p rawPaths directly owns a shader pack,
@@ -498,8 +531,12 @@ public:
     /// The curve counts only when @p compareCurve is true, which the caller
     /// sets false in simple mode: there is no curve control there, so no edit
     /// could converge a divergent curve and counting it would latch the banner
-    /// on permanently. The motion-set fields never count, because the merged
-    /// writer preserves each path's own rather than converging them.
+    /// on permanently. The motion-set fields do not count, because the merged
+    /// writer preserves each path's own for any field the caller does not name,
+    /// and no caller names one today — the card sends duration, or a curve, and
+    /// nothing else. A caller that did name one would converge that field while
+    /// this measure kept reporting 0 for it, so the two would have to be
+    /// brought back into step together.
     ///
     /// The shader axis is compared only for paths that can host a shader leg. A
     /// non-supporting path always stores nothing on that axis, so comparing its
@@ -647,13 +684,20 @@ public:
     /// falls through to the parent again — the sentinel is what makes "I
     /// disabled all popups" stick even when a parent assigns a shader. Emits
     /// `pendingChangesChanged()` whenever the call actually changed state.
-    Q_INVOKABLE bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
+    ///
+    /// NOT Q_INVOKABLE, and neither are the three per-path shader operations
+    /// below. QML goes through the `*OnPaths` group forms exclusively, and the
+    /// group-writes block above depends on that: one tree read, one write back,
+    /// one broadcast for a whole mirror group, which a per-path call reachable
+    /// from a delegate would quietly defeat by writing N times. These remain
+    /// public for the group writers that build on them and for tests.
+    bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
 
     /// Remove the shader override at @p path; ancestors take over via
     /// `ShaderProfileTree::resolve` walk-up. Emits
     /// `pendingChangesChanged()` whenever the call actually changed
     /// state.
-    Q_INVOKABLE bool clearShaderOverride(const QString& path);
+    bool clearShaderOverride(const QString& path);
 
     /// Count of shader overrides on paths strictly DEEPER than @p path
     /// (i.e. paths whose first component up to a `.` matches @p path).
@@ -662,7 +706,7 @@ public:
     /// session silently wins the deeper-leaf-overlay merge inside
     /// `ShaderProfileTree::resolve` and the parent's value never
     /// reaches runtime even though the UI control shows it set.
-    Q_INVOKABLE int shaderOverrideDescendantCount(const QString& path) const;
+    int shaderOverrideDescendantCount(const QString& path) const;
 
     /// Clear every shader override whose path is strictly DEEPER than
     /// @p path (i.e. paths starting with `<path>.`). Does NOT clear
@@ -675,7 +719,7 @@ public:
     /// `shaderProfileChanged()` signal — NOT one per cleared path.
     /// Also emits `pendingChangesChanged()`. Used by parent-node
     /// cards' "Clear shadowing children" affordance.
-    Q_INVOKABLE int clearShaderOverrideDescendants(const QString& path);
+    int clearShaderOverrideDescendants(const QString& path);
 
     /// Reverse-lookup: list every event path whose direct shader
     /// override targets @p effectId. Each entry: `{ path, label }` with

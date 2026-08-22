@@ -417,7 +417,6 @@ int AnimationsPageController::clearFieldOnPaths(const QStringList& rawPaths, con
         // re-entering through the partial-failure door. -1 is reserved for
         // "nothing was attempted"; the toast above is how a partial failure
         // reaches the user.
-        return changed;
     }
     return changed;
 }
@@ -605,12 +604,14 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
     // no id at all. The stored one is reused verbatim, and it was validated by
     // whichever write put it there.
     return applyShaderGroupWrite(rawPaths, QLatin1String("setShaderParametersOnPaths"), {},
-                                 [&](const ShaderProfile& stored, bool hasStored) -> std::optional<ShaderProfile> {
+                                 [&](const ShaderProfile& stored, bool /*hasStored*/) -> std::optional<ShaderProfile> {
                                      // START FROM THE STORED PROFILE, which is what keeps `effectId`
-                                     // as it was. Default-constructing here would leave it unengaged
-                                     // even for a path that owns a pack, silently dropping that pack
-                                     // back to inherited the first time a slider moved.
-                                     ShaderProfile profile = hasStored ? stored : ShaderProfile{};
+                                     // as it was. Default-constructing instead would leave it
+                                     // unengaged even for a path that owns a pack, silently dropping
+                                     // that pack back to inherited the first time a slider moved.
+                                     // `hasStored` needs no test here: the shared helper already
+                                     // hands over a default-constructed profile when there is none.
+                                     ShaderProfile profile = stored;
                                      if (parameters.isEmpty())
                                          profile.parameters.reset();
                                      else
@@ -663,7 +664,12 @@ bool AnimationsPageController::anyPathOwnsShaderPack(const QStringList& rawPaths
             continue;
         if (!tree.hasOverride(path))
             continue;
-        const std::optional<QString>& id = tree.directOverride(path).effectId;
+        // By value, not by reference: `directOverride` returns a ShaderProfile
+        // BY VALUE, so binding a reference to a member of that temporary lives
+        // only as long as the full expression. It is correct today through
+        // lifetime extension, and it would break silently the moment anything
+        // is inserted between the call and the member access.
+        const std::optional<QString> id = tree.directOverride(path).effectId;
         // Engaged AND non-empty. The engaged-empty sentinel is an explicit
         // "no shader here", not a pack this event owns.
         if (id.has_value() && !id->isEmpty())
