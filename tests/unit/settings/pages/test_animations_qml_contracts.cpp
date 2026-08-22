@@ -646,6 +646,12 @@ private Q_SLOTS:
             // `widget.*` cards under the scope check, and the exemption goes away
             // the day `cursor` gains an owner.
             {"AnimationsWidgetsPage.qml", "animations-widgets", 22, "cursor."},
+            // The remaining three surface pages. Each one's cards sit wholly
+            // inside its own scope (`popup`, `editor`, `scrolling`), so none
+            // needs the exemption Widgets does.
+            {"AnimationsOverlaysPage.qml", "animations-overlays", 9, nullptr},
+            {"AnimationsEditorPage.qml", "animations-editor", 4, nullptr},
+            {"AnimationsScrollingPage.qml", "animations-scrolling", 2, nullptr},
         };
 
         static const QRegularExpression re(QStringLiteral("\"eventPath\"\\s*:\\s*\"([^\"]+)\""));

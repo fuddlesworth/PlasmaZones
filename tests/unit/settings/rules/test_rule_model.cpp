@@ -108,6 +108,7 @@ private Q_SLOTS:
     void reorder();
     void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
+    void inertAnimationActionCountRole();
     void screenIdsOfCollectsOnlyLiteralPinOperators();
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
@@ -343,6 +344,50 @@ void TestRuleModel::validationIssueCountRole()
 
     // The role surfaces via its registered name so QML can bind by string.
     QVERIFY(model.roleNames().values().contains(QByteArrayLiteral("validationIssueCount")));
+}
+
+void TestRuleModel::inertAnimationActionCountRole()
+{
+    // The three shapes the count has to tell apart. Only the middle one is
+    // inert: a rule can drive window.appearance.open, cannot drive
+    // desktop.switch (the compositor resolves it without a window), and a path
+    // this build does not know is not "not per window" — it is not an event, so
+    // it is left to render as missing rather than counted here.
+    Rule drivable = applicationRule(QStringLiteral("firefox"), QStringLiteral("drivable"));
+    RuleAction live;
+    live.type = QString(ActionType::OverrideAnimationShader);
+    live.params.insert(ActionParam::Event, QStringLiteral("window.appearance.open"));
+    live.params.insert(ActionParam::EffectId, QStringLiteral("fade"));
+    drivable.actions = {live};
+
+    Rule inert = applicationRule(QStringLiteral("firefox"), QStringLiteral("inert"));
+    RuleAction windowless;
+    windowless.type = QString(ActionType::OverrideAnimationTiming);
+    windowless.params.insert(ActionParam::Event, QStringLiteral("desktop.switch"));
+    inert.actions = {windowless};
+
+    Rule unknownPath = applicationRule(QStringLiteral("firefox"), QStringLiteral("unknown"));
+    RuleAction typo;
+    typo.type = QString(ActionType::OverrideAnimationCurve);
+    typo.params.insert(ActionParam::Event, QStringLiteral("desktop.switchx"));
+    unknownPath.actions = {typo};
+
+    RuleModel model;
+    model.setRules({drivable, inert, unknownPath});
+
+    QCOMPARE(model.data(model.index(0, 0), RuleModel::InertAnimationActionCountRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(1, 0), RuleModel::InertAnimationActionCountRole).toInt(), 1);
+    QCOMPARE(model.data(model.index(2, 0), RuleModel::InertAnimationActionCountRole).toInt(), 0);
+
+    // A non-animation action carrying no event at all must not be counted.
+    Rule floatOnly = applicationRule(QStringLiteral("firefox"), QStringLiteral("float only"));
+    model.setRules({floatOnly});
+    QCOMPARE(model.data(model.index(0, 0), RuleModel::InertAnimationActionCountRole).toInt(), 0);
+
+    // The role surfaces via its registered name so QML can bind by string —
+    // RuleRow declares it `required`, so a rename here is a runtime failure
+    // there rather than a compile error.
+    QVERIFY(model.roleNames().values().contains(QByteArrayLiteral("inertAnimationActionCount")));
 }
 
 void TestRuleModel::screenIdsOfCollectsOnlyLiteralPinOperators()

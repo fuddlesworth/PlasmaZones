@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorRules/ActionParams.h>
+#include <PhosphorRules/ActionTypes.h>
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonObject>
@@ -453,6 +455,134 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("Param kinds the settings-layer dispatcher does not recognise, so their "
                                            "editors silently fall back to a text field: %1")
                                 .arg(offenders.join(QStringLiteral(", ")))));
+    }
+
+    /// paramKeyOfKind answers the STRUCTURAL question a consumer needs so it
+    /// does not keep its own list of action type ids.
+    ///
+    /// The KWin window filter uses it to tell an appearance action that can
+    /// fire from one pinned to an animation event, without hardcoding which
+    /// action types are event-scoped — a hardcoded list drifts silently the day
+    /// a fourth such action is registered, and the whole point of asking the
+    /// descriptor is that it cannot.
+    void testParamKeyOfKindFindsEventScopedActions()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+
+        // Every animation override is event-scoped, and they all name the event
+        // through the same wire key.
+        QCOMPARE(reg.paramKeyOfKind(QString(ActionType::OverrideAnimationShader), ParamKind::AnimationEvent),
+                 QString(ActionParam::Event));
+        QCOMPARE(reg.paramKeyOfKind(QString(ActionType::OverrideAnimationTiming), ParamKind::AnimationEvent),
+                 QString(ActionParam::Event));
+        QCOMPARE(reg.paramKeyOfKind(QString(ActionType::OverrideAnimationCurve), ParamKind::AnimationEvent),
+                 QString(ActionParam::Event));
+
+        // An appearance action that is NOT event-scoped answers empty, which is
+        // what makes it always-live to the filter.
+        QVERIFY(reg.paramKeyOfKind(QString(ActionType::SetOpacity), ParamKind::AnimationEvent).isEmpty());
+        // A param-less action, and an unregistered type.
+        QVERIFY(reg.paramKeyOfKind(QString(ActionType::Float), ParamKind::AnimationEvent).isEmpty());
+        QVERIFY(reg.paramKeyOfKind(QStringLiteral("no.such.action"), ParamKind::AnimationEvent).isEmpty());
+        // A kind nothing declares.
+        QVERIFY(reg.paramKeyOfKind(QString(ActionType::OverrideAnimationShader), QLatin1StringView("nosuchkind"))
+                    .isEmpty());
+    }
+
+    /// The event-scoped set is EXACTLY the three animation overrides.
+    ///
+    /// Pinned so a fourth event-scoped action cannot be added without a
+    /// deliberate decision: the window filter treats "declares no animationEvent
+    /// param" as "always live", so a new event-scoped action that slipped in
+    /// unnoticed would force-animate its matches even when its event is one no
+    /// rule can drive.
+    void testEventScopedActionsAreExactlyTheThreeAnimationOverrides()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QStringList eventScoped;
+        for (const QString& type : reg.registeredTypes()) {
+            if (!reg.paramKeyOfKind(type, ParamKind::AnimationEvent).isEmpty()) {
+                eventScoped.append(type);
+            }
+        }
+        eventScoped.sort();
+
+        QStringList expected{QString(ActionType::OverrideAnimationShader), QString(ActionType::OverrideAnimationTiming),
+                             QString(ActionType::OverrideAnimationCurve)};
+        expected.sort();
+        QCOMPARE(eventScoped, expected);
+    }
+
+    /// The action walk behind the KWin window filter's rule-override gate.
+    ///
+    /// The gate force-animates a window past the user's min-size and exclusion
+    /// settings when a rule matches it, on the reasoning that authoring a
+    /// matching rule is the opt-in signal. This is the test of whether the rule
+    /// can actually DO anything. Every branch is exercised, because the gate
+    /// itself lives in a KWin-linked TU no unit test compiles — this seam is
+    /// where the branching becomes checkable.
+    void testRuleHasLiveEffectAction()
+    {
+        // Nothing per-window drivable is "live" for these cases; the stub says
+        // only `window.appearance.open` is, so the branches are unambiguous.
+        const auto eventIsLive = [](const QString& event) {
+            return event.isEmpty() || event == QLatin1String("window.appearance.open");
+        };
+
+        const auto animAction = [](QLatin1StringView type, const QString& event) {
+            RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(ActionParam::Event), event);
+            return a;
+        };
+
+        // No actions at all.
+        QVERIFY(!ruleHasLiveEffectAction({}, eventIsLive));
+
+        // A non-appearance action is skipped entirely, so a rule of only those
+        // is not live (it is also never admitted to the effect set upstream).
+        RuleAction floatAction;
+        floatAction.type = QString(ActionType::Float);
+        QVERIFY(!ruleHasLiveEffectAction({floatAction}, eventIsLive));
+
+        // An appearance action that is NOT event-scoped is live without the
+        // predicate being consulted at all.
+        RuleAction opacity;
+        opacity.type = QString(ActionType::SetOpacity);
+        opacity.params.insert(QString(ActionParam::Value), 0.5);
+        bool consulted = false;
+        QVERIFY(ruleHasLiveEffectAction({opacity}, [&consulted](const QString&) {
+            consulted = true;
+            return false;
+        }));
+        QVERIFY2(!consulted, "a non-event-scoped appearance action must not consult the event predicate");
+
+        // Event-scoped, drivable event: live.
+        QVERIFY(ruleHasLiveEffectAction(
+            {animAction(ActionType::OverrideAnimationShader, QStringLiteral("window.appearance.open"))}, eventIsLive));
+
+        // Event-scoped, NOT drivable: inert. This is the case the whole change
+        // exists for.
+        QVERIFY(!ruleHasLiveEffectAction(
+            {animAction(ActionType::OverrideAnimationTiming, QStringLiteral("desktop.switch"))}, eventIsLive));
+
+        // An unset event is treated as live rather than silently withdrawing an
+        // opt-in the user did author.
+        QVERIFY(ruleHasLiveEffectAction({animAction(ActionType::OverrideAnimationCurve, QString())}, eventIsLive));
+
+        // An inert action alongside a live one keeps the rule live, whichever
+        // order they appear in.
+        const RuleAction inert = animAction(ActionType::OverrideAnimationTiming, QStringLiteral("desktop.switch"));
+        QVERIFY(ruleHasLiveEffectAction({inert, opacity}, eventIsLive));
+        QVERIFY(ruleHasLiveEffectAction({opacity, inert}, eventIsLive));
+
+        // Two inert ones stay inert — no accidental accumulate.
+        const RuleAction inert2 = animAction(ActionType::OverrideAnimationCurve, QStringLiteral("scrolling.view"));
+        QVERIFY(!ruleHasLiveEffectAction({inert, inert2}, eventIsLive));
+
+        // A null predicate degrades to the pre-narrowing behaviour: every
+        // event-scoped action counts as live.
+        QVERIFY(ruleHasLiveEffectAction({inert}, nullptr));
     }
 };
 

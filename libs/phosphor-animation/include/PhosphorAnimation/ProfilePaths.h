@@ -79,6 +79,13 @@ PHOSPHORANIMATION_EXPORT extern const QString DesktopPeek;
 // window snapping — window-snap animations are KWin's
 // compositor-level domain. These paths only fire inside the
 // Phosphor layout editor.
+//
+// snapIn and snapOut are the two DIRECTIONS of one animator
+// (ZoneFillAnimation.qml), picked by whether the zone is taking space or
+// giving it up: snapIn on the fill preview and on a neighbour absorbing a
+// deleted zone, snapOut on the original half when a zone is split. They are
+// not two animators, so a caller that changes geometry gets the right leg by
+// direction rather than by naming one.
 PHOSPHORANIMATION_EXPORT extern const QString Editor;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;
@@ -154,12 +161,6 @@ PHOSPHORANIMATION_EXPORT extern const QString PanelFadeOut;
 PHOSPHORANIMATION_EXPORT extern const QString Cursor;
 PHOSPHORANIMATION_EXPORT extern const QString CursorHover;
 PHOSPHORANIMATION_EXPORT extern const QString CursorClick;
-
-// shader.*
-PHOSPHORANIMATION_EXPORT extern const QString Shader;
-PHOSPHORANIMATION_EXPORT extern const QString ShaderOpen;
-PHOSPHORANIMATION_EXPORT extern const QString ShaderClose;
-PHOSPHORANIMATION_EXPORT extern const QString ShaderSwitch;
 
 // widget.* — per-archetype paths so library defaults preserve original motion.
 PHOSPHORANIMATION_EXPORT extern const QString Widget;
@@ -241,8 +242,12 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 //
 // Adding a path ROOT? A different list, and longer than it looks. The `shell`
 // root needed every one of these:
-//   1. `allBuiltInPaths()` below — the motion tree's persistence filter. A path
-//      missing here is silently dropped on save.
+//   1. `allBuiltInPaths()` below — the taxonomy every UI and validity check
+//      reads. It is NOT a persistence filter: the motion tree stores and
+//      loads whatever path it is given (ProfileTree::setOverride/fromJson
+//      reject only an empty one), so a path missing here is not dropped, it
+//      just becomes unreachable from the UI and inert at resolve time. The
+//      writer-side reject lives in AnimationsPageController::isValidEventPath.
 //   2. `eventClassForPath` — an unclassified root reads as the ambiguous-row
 //      fallback in the pack pickers.
 //   3. `shaderConsumedLeafEventPaths` (animationshadersupportedpaths.h) — the
@@ -365,6 +370,48 @@ PHOSPHORANIMATION_EXPORT QStringList allEventClassTokens();
 /// root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
+/// True when @p path is resolved AGAINST A PARTICULAR WINDOW, so per-window
+/// state can reach it.
+///
+/// The property this answers is narrow and mechanical: does the compositor
+/// reach this event holding the window it is for. Ten paths do — the four
+/// `window.appearance` leaves, the five `window.movement` leaves, and
+/// `scrolling.tabSwitch`. No other path in the taxonomy is, either because its
+/// subject is not a window at all (a desktop switch, the scrolling strip
+/// itself, an OSD, a panel, the editor's own widgets) or because it is a
+/// surface no application owns (the `shell` subtree, deliberately, so a rule
+/// cannot retarget a pack engaged on the Shell page). Many of those are never
+/// resolved by a compositor leg at all; the rest resolve windowless.
+///
+/// WHY IT MATTERS TO CALLERS: a Rule's animation actions are stored per event
+/// path and resolved through the rule evaluator, which needs a window to match
+/// against. On a windowless path the resolvers short-circuit before the
+/// evaluator runs, so a rule naming one is stored, shown, and never consulted.
+/// The rule editor uses this to avoid offering such a path in the first place.
+/// The compositor ALSO reads it to decide whether to run its window filter, so
+/// a path this calls windowless skips the user's Animations.WindowFiltering
+/// exclusions as well as its rule tier. On `scrolling.tabSwitch` the window a
+/// rule matches against is the ARRIVING tab; a rule written against the
+/// departing application never fires on that event.
+///
+/// KEEPING IT HONEST: `tryBeginShaderForEvent` consults this to decide whether
+/// to resolve an event windowless, so for that leg the list is not a
+/// description of the routing that could drift from it — it IS the routing. The
+/// other resolve legs do not consult it and are windowless or per-window by
+/// construction at their own call sites: the desktop legs in lifecycle_wiring,
+/// the strip in tiling, the daemon's overlay legs in animation_config, and
+/// `applyWindowGeometry`'s per-window resolve in drag_snap.
+///
+/// The hazard runs in the fail-open direction. Add a PER-WINDOW leg without
+/// listing it here and tryBeginShaderForEvent resolves it windowless, dropping
+/// both its rule tier and its window filter with no warning. (Listing a
+/// windowless leg here is the opposite mistake: it would then run through
+/// shouldAnimateWindow, whose blanket plasma-shell reject kills it outright.)
+/// The exact set is pinned by test_profiletree, in both directions, so a
+/// taxonomy addition has to make the call explicitly rather than default into
+/// either failure.
+PHOSPHORANIMATION_EXPORT bool eventPathResolvesPerWindow(const QString& path);
+
 /// Full list of built-in paths in taxonomy order.
 PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 
@@ -385,8 +432,8 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 ///     popup.{zoneSelector,layoutPicker,snapAssist,cheatsheet}.{show,hide})
 ///     → "fade"
 ///     (fade-and-scale), run by the daemon SurfaceAnimator instead of its C++
-///     opacity/scale legs. The category roots (osd, popup, osd.pop) carry no
-///     default.
+///     opacity/scale legs. Neither the category roots (osd, popup) nor the
+///     osd.pop leaf carries a default.
 /// Every other event defaults to none. The default applies only when the user
 /// has set no override for the path or an ancestor (an explicit "None" is an
 /// override and is respected) — see `resolveShaderWithDefault` in

@@ -444,4 +444,16 @@ std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& r
     return factor;
 }
 
+bool ruleCarriesLiveEffectAction(const PhosphorRules::Rule& rule)
+{
+    // The action walk is rule semantics and lives in phosphor-rules; this
+    // supplies the half only the compositor's taxonomy can answer.
+    return PhosphorRules::ruleHasLiveEffectAction(rule.actions, [](const QString& event) {
+        // An EMPTY event is unset rather than windowless, so it stays live. An
+        // event this build does not know names no leg any resolver asks for, so
+        // it is inert exactly like a windowless one.
+        return event.isEmpty() || PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(event);
+    });
+}
+
 } // namespace PlasmaZones

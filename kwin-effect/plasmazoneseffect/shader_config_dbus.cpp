@@ -42,7 +42,6 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVariant>
-#include <QVariantMap>
 
 #include <functional>
 #include <memory>
@@ -70,7 +69,10 @@ constexpr int kRuleFetchRetryDelayMs = 1000;
 /// minute after a wedged daemon.
 constexpr int kRuleFetchTimeoutMs = 5000;
 
-/// Hard cap on the getAllRules payload before it reaches QJsonDocument::fromJson.
+/// Hard cap on a D-Bus JSON payload before it reaches QJsonDocument::fromJson.
+/// Applied to getAllRules at its own call site, and to every setting that goes
+/// through `dispatchJsonSetting` (the shader profile, the motion profile tree
+/// and the shader registry), so no JSON crossing this boundary is unbounded.
 /// The receive-side QString allocation is bounded by libdbus's own
 /// message-size limit, not by this cap — what it genuinely bounds is the
 /// JSON parse (and, via the call site's pre-check on the QString length,
@@ -220,8 +222,8 @@ QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> r
 
 /// Parse a D-Bus setting variant containing a JSON-encoded string and
 /// dispatch to one of two callers based on the document's top-level
-/// shape. Used by the three `load*FromDbus` setting fetchers in
-/// `shader_transitions.cpp` — `loadShaderProfileFromDbus`,
+/// shape. Used by the three `load*FromDbus` setting fetchers below in
+/// this file — `loadShaderProfileFromDbus`,
 /// `loadMotionProfileTreeFromDbus`, `loadShaderRegistryFromDbus`. Each
 /// loader differs only in (a) which shape it expects and (b) what it
 /// does with the parsed JSON, so every other piece (UTF-8 decode,
@@ -245,7 +247,25 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
                                 std::function<void(const QJsonObject&)> objectSink,
                                 std::function<void(const QJsonArray&)> arraySink)
 {
-    const QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+    // Same two-stage bound the getAllRules path applies, for the same reason
+    // and against the same cap: these payloads cross D-Bus too, and what the
+    // cap genuinely bounds is the UTF-8 conversion copy and then the JSON
+    // parse. Checking the QString length first keeps a hostile or mis-built
+    // payload from being converted at all; UTF-8 can inflate up to 3x, so the
+    // byte-exact check still runs afterwards.
+    const QString text = v.toString();
+    if (text.size() > kRuleFetchMaxPayloadBytes) {
+        qCWarning(lcEffect) << "Refusing to convert" << name << "— payload of" << text.size()
+                            << "UTF-16 units exceeds the" << kRuleFetchMaxPayloadBytes << "byte cap";
+        return;
+    }
+    const QByteArray utf8 = text.toUtf8();
+    if (utf8.size() > kRuleFetchMaxPayloadBytes) {
+        qCWarning(lcEffect) << "Refusing to parse" << name << "— payload of" << utf8.size() << "bytes exceeds the"
+                            << kRuleFetchMaxPayloadBytes << "byte cap";
+        return;
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(utf8);
     if (doc.isObject() && objectSink) {
         objectSink(doc.object());
     } else if (doc.isArray() && arraySink) {
@@ -329,30 +349,38 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (profilePath.isEmpty()) {
         return;
     }
-    // A shell surface on its own leg. Two things follow, and both mirror what
-    // the decoration tier does for the same surfaces:
+    // Is this event resolved against a particular window? Ask the taxonomy, not
+    // the surface. A path it does not name as per-window resolves WINDOWLESS
+    // below, and two things follow, both mirroring the decoration tier:
     //
     //  • The window filter is SKIPPED. Every clause of it is written about
-    //    application windows and each one rejects these outright (a panel is a
-    //    dock, an applet popup is a special window), which is why
-    //    shouldAnimateWindow keeps its blanket plasma-shell reject: that gate
-    //    is what stops any OTHER leg (focus, minimize, a geometry morph) from
-    //    ever reaching a surface plasmashell owns. Only the paths
-    //    animationEventPathFor names get here.
+    //    application windows and rejects these outright (a panel is a dock, an
+    //    applet popup is a special window), which is why shouldAnimateWindow
+    //    keeps its blanket plasma-shell reject: that gate is what stops any
+    //    OTHER leg (focus, minimize, a geometry morph) from reaching a surface
+    //    plasmashell owns.
     //
-    //  • The rule tier is skipped too, by resolving with an empty query and an
-    //    empty window id (the windowless convention the desktop legs use). A
-    //    rule's match expression is authored against app identity — appId,
-    //    class, title, PID — none of which meaningfully describes plasmashell's
-    //    own surfaces, so a broad rule must not silently retarget a pack the
-    //    user engaged on the Shell page.
-    // Ask the resolver's own predicate rather than inferring shell-ness from the
-    // fact that the path got rewritten. The two agree today — animationEventPathFor
-    // rewrites for nothing but a shell leg — but that is a property of a function in
-    // another TU, and this flag gates the rule tier. Inferring it means the day
-    // animationEventPathFor learns any other remap, the rule tier silently re-opens
-    // on these surfaces while the comment above still claims it is closed.
-    const bool shellSurfaceLeg = !PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath).isEmpty();
+    //  • The rule tier is skipped too, via an empty query and an empty window
+    //    id (the windowless convention the desktop legs use). A rule matches on
+    //    app identity — appId, class, title, PID — none of which describes
+    //    plasmashell's own surfaces, so a broad rule must not silently retarget
+    //    a pack the user engaged on the Shell page.
+    //
+    // Consulting the predicate rather than testing for shell-ness is what makes
+    // this load-bearing: eventPathResolvesPerWindow is the same list the rule
+    // editor filters its picker with, so the picker cannot come to offer a path
+    // this function then refuses to consult rules for. The two sets coincide
+    // today (the shell legs are the only windowless paths reaching here), so the
+    // swap onto it was behaviour-identical.
+    //
+    // MIND THE DIRECTION, it is fail-open for a NEW leg: an unlisted path reads
+    // as windowless, so a per-window leg missing from kPerWindowPaths resolves
+    // windowless here, silently dropping both its rule tier and the user's
+    // Animations.WindowFiltering exclusions. (Listing a WINDOWLESS leg there is
+    // the opposite mistake: shouldAnimateWindow's shell reject then kills it.)
+    // test_profiletree pins the set in both directions so an addition has to
+    // make the call rather than defaulting into either failure.
+    const bool windowlessLeg = !PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(profilePath);
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
     // app / class) AND lets a Rule carrying any appearance/animation
@@ -369,7 +397,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // probes, the resolver pass below reuses it instead of walking the ~30
     // KWin accessors a second time per animated event.
     std::optional<PhosphorRules::WindowQuery> sharedQuery;
-    if (!shellSurfaceLeg && !shouldAnimateWindow(window, &sharedQuery)) {
+    if (!windowlessLeg && !shouldAnimateWindow(window, &sharedQuery)) {
         return;
     }
     // Cascade: per-window animation Rule → ShaderProfileTree
@@ -385,23 +413,37 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // built into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
     //
-    // A shell leg resolves WINDOWLESS instead. What closes the rule tier is that
-    // BOTH resolvers short-circuit on !query.hasWindow() before any evaluator walk
-    // (resolveAnimationShaderProfile in shader_resolve.cpp, and the rule overlay in
-    // resolveEventMotionProfile below), so no rule is consulted and no cache slot is
-    // consumed. Do NOT reduce that to "an empty query matches no rule" and move the
-    // gate: an empty query is not inert on its own, because MatchExpression treats an
-    // empty All{} as the always-true catch-all and a None{...} whose children all
-    // miss — which every window-property leaf does on an empty query — as TRUE. This
-    // is the same shape the
-    // desktop legs use for an event whose subject is not an application window
-    // (see the DesktopPeek resolve in lifecycle_wiring.cpp). The real window id
-    // is still used everywhere else below — this pair is the rule tier's input,
-    // not the transition's identity.
+    // A windowless leg resolves with an empty pair instead. What closes the rule
+    // tier is that BOTH resolvers short-circuit on !query.hasWindow() before any
+    // evaluator walk (resolveAnimationShaderProfile in shader_resolve.cpp, and the
+    // rule overlay in resolveEventMotionProfile below), so no rule is consulted and
+    // no cache slot is consumed. Do NOT reduce that to "an empty query matches no
+    // rule" and move the gate: an empty query is not inert on its own, because
+    // MatchExpression treats an empty All{} as the always-true catch-all and a
+    // None{...} whose children all miss — which every window-property leaf does on
+    // an empty query — as TRUE. This is the same shape the desktop legs use for an
+    // event whose subject is not an application window (see the DesktopPeek resolve
+    // in lifecycle_wiring.cpp). This pair is the rule tier's INPUT only; the
+    // transition's own identity downstream is the EffectWindow*, not an id string.
+    //
+    // A config with NO animation rules collapses to the same empty pair, and for
+    // the same observable result rather than as an optimisation on faith: with an
+    // empty set, resolveAnimationShaderProfile's evaluator walk finds no slot and
+    // falls through to `tree.resolve(eventPath)`, which is exactly what its
+    // !hasWindow() short-circuit returns, and resolveEventMotionProfile already
+    // gates its rule overlay on `!animationRuleSet().isEmpty()`. Without this the
+    // common case (no rules configured) pays a full ~30-accessor ruleQuery walk,
+    // an evaluator resolve and a per-window cache insert on every window open,
+    // close, focus, minimize, maximize and move, and discards all three.
+    //
+    // This must NOT be folded into the window-filter gate above. That gate stays
+    // on `windowlessLeg` alone: skipping shouldAnimateWindow here would ignore
+    // the user's Animations.WindowFiltering exclusions for every window whenever
+    // they happen to have no rules, which is the opposite of what they asked for.
+    const bool skipRuleTier = windowlessLeg || m_shaderManager.animationRuleSet().isEmpty();
     const PhosphorRules::WindowQuery query =
-        shellSurfaceLeg ? PhosphorRules::WindowQuery{} : (sharedQuery ? *sharedQuery : ruleQuery(window));
-    const QString windowId = getWindowId(window);
-    const QString ruleWindowId = shellSurfaceLeg ? QString() : windowId;
+        skipRuleTier ? PhosphorRules::WindowQuery{} : (sharedQuery ? *sharedQuery : ruleQuery(window));
+    const QString ruleWindowId = skipRuleTier ? QString() : getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event motion profile (curve + duration) in ONE walk, via the shared
     // SSOT: global animator profile → category "All" → per-node motion-tree
@@ -472,10 +514,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
         // carry no effectId). Gating on the whole rule set restored the
         // warning for any border/opacity/layer rule — the exact population
         // the demotion exists to silence.
-        // ...and not for a shell leg even then: the rule tier was skipped for it
-        // above (empty query, empty window id), so no rule of any kind can be the
-        // reason this resolve came back empty.
-        const bool shaderAssigningRules = !shellSurfaceLeg && m_shaderManager.hasAnimationShaderRules();
+        // ...and not for a windowless leg even then: the rule tier was skipped
+        // for it above (empty query, empty window id), so no rule of any kind can
+        // be the reason this resolve came back empty.
+        const bool shaderAssigningRules = !windowlessLeg && m_shaderManager.hasAnimationShaderRules();
         bool cascadeCovered = false;
         // The by-value QStringList is built ONCE and reused by both the loop
         // and the warn diagnostic below — the pre-change code paid it twice

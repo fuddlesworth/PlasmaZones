@@ -621,6 +621,14 @@ ComboBox {
             // prevent. Clearing first means the worst case is one press that
             // does nothing, which the next press recovers from.
             root._opening = false;
+            // A successful build over an EMPTY item list adds nothing, so
+            // popping up here would show a bare empty frame. Reachable while a
+            // host is still wiring up and its `items` binding returns [] (the
+            // animation-event picker does exactly that until its controller
+            // arrives). Same disposition as the build-failure return above: do
+            // nothing, and let the next items change or press retry.
+            if (_allItems.length === 0)
+                return;
             updateChecks();
             categoryMenu.popup(root, 0, root.height);
         }

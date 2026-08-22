@@ -136,19 +136,31 @@ public:
     /// ```
     /// { "section": "window", "label": "Window",
     ///   "paths": [ { "path": "window", "label": "Window",
-    ///                "parent": "global", "isCategory": true },
+    ///                "parent": "global", "isCategory": true,
+    ///                "acceptsWindowRules": false },
     ///              { "path": "window.appearance.open", "label": "Open",
-    ///                "parent": "window.appearance", "isCategory": false }, ... ] }
+    ///                "parent": "window.appearance", "isCategory": false,
+    ///                "acceptsWindowRules": true }, ... ] }
     /// ```
     /// All built-in paths from `ProfilePaths::allBuiltInPaths()` are included.
+    /// QML reads these key names directly, so keep this sample in step with
+    /// what the builder inserts.
     Q_INVOKABLE QVariantList eventSections() const;
 
     /// The UI section @p path groups under, driving the sidebar grouping.
     /// Usually the first dotted segment (`"window.appearance.open"` →
-    /// `"window"`), and `"global"` for the global root, but three top-level
+    /// `"window"`), and `"global"` for the global root, but four top-level
     /// segments are remapped: `osd`, `popup`, and `panel` all collapse into
     /// `"overlays"`, and `cursor` into `"widget"`. Empty for an empty path.
     Q_INVOKABLE QString sectionForPath(const QString& path) const;
+
+    /// Whether a per-window Rule can reach @p path. Forwards to
+    /// `ProfilePaths::eventPathResolvesPerWindow()` and so mirrors the
+    /// `acceptsWindowRules` flag on each `eventSections()` entry, for the
+    /// callers that hold a path rather than a model row — notably a rule that
+    /// ALREADY stores a windowless event, which the picker no longer lists and
+    /// which therefore has no row to read the flag from.
+    Q_INVOKABLE bool eventPathAcceptsWindowRules(const QString& path) const;
 
     /// Translated label for @p path's last segment (e.g. `"editor.snapIn"`
     /// → `"Snap In"`), through @ref segmentLabel. Empty for an empty path.
@@ -699,13 +711,6 @@ public:
     /// gates on an actual flip so a no-op refresh is free.
     void refreshDirtyState();
 
-    /// Flip-gated emitter for stockSuppressedEventsChanged: recomputes the
-    /// list and emits only when it actually changed. All three gate inputs
-    /// (registry rescan, tree assignment, animations master toggle) route
-    /// through here so tree edits that cannot affect the suppression set
-    /// stop re-running the conflict-chip bindings.
-    void maybeEmitStockSuppressedEventsChanged();
-
     /// Restore every file in the snapshot to its pre-edit state and
     /// clear the snapshot. Called from `SettingsController::load()`
     /// (Discard). Emits `overrideChanged`/`userPresetsChanged`/
@@ -752,6 +757,13 @@ public:
     bool asyncRevertInFlight() const;
 
 private:
+    /// Flip-gated emitter for stockSuppressedEventsChanged: recomputes the
+    /// list and emits only when it actually changed. All three gate inputs
+    /// (registry rescan, tree assignment, animations master toggle) route
+    /// through here so tree edits that cannot affect the suppression set
+    /// stop re-running the conflict-chip bindings.
+    void maybeEmitStockSuppressedEventsChanged();
+
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;
     QString profileFilePath(const QString& path) const;

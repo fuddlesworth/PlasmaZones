@@ -1792,22 +1792,22 @@
         <translation>Не удалось записать файл алгоритма. Проверьте наличие свободного места на диске и права доступа.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="102"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="101"/>
         <source>Cannot modify sets while a discard is in progress.</source>
         <translation>Невозможно изменить наборы, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="391"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="390"/>
         <source>Cannot save while a discard is in progress.</source>
         <translation>Невозможно сохранить, пока выполняется отмена изменений.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="635"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="634"/>
         <source>A discard is already in progress. Try again in a moment.</source>
         <translation>Отмена изменений уже выполняется. Повторите попытку чуть позже.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="728"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="727"/>
         <source>Could not restore %n profile file. It remains pending.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -1816,7 +1816,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="730"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="729"/>
         <source>Could not restore %n profile files. They remain pending.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -1830,8 +1830,8 @@
         <translation>Отмена изменений уже выполняется.</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="866"/>
-        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="876"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="878"/>
+        <location filename="../src/settings/pages/animationspagecontroller.cpp" line="888"/>
         <source>Cannot modify presets while a discard is in progress.</source>
         <translation>Невозможно изменить предустановки, пока выполняется отмена изменений.</translation>
     </message>
@@ -4225,7 +4225,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="363"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
         <source>On</source>
@@ -4238,7 +4238,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="363"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="351"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="454"/>
         <source>Off</source>
@@ -4387,7 +4387,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="580"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="611"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="355"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="402"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="400"/>
         <source>Accent</source>
         <translation>Акцент</translation>
     </message>
@@ -5125,8 +5125,8 @@
         <translation>Правый зазор: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel.cpp" line="188"/>
-        <location filename="../src/settings/rules/rulemodel.cpp" line="544"/>
+        <location filename="../src/settings/rules/rulemodel.cpp" line="229"/>
+        <location filename="../src/settings/rules/rulemodel.cpp" line="589"/>
         <source>Everywhere</source>
         <translation>Везде</translation>
     </message>
@@ -9646,7 +9646,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="885"/>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="358"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="360"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="126"/>
         <source>Scrolling (no template)</source>
         <translation type="unfinished"></translation>
@@ -10194,13 +10194,13 @@
         <translation>Не удалось сохранить предустановку &quot;%1&quot;.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="253"/>
+        <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="261"/>
         <source>Could not find the preset &quot;%1&quot;.</source>
         <translation>Не удалось найти предустановку &quot;%1&quot;.</translation>
     </message>
     <message>
-        <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="261"/>
-        <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="271"/>
+        <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="269"/>
+        <location filename="../src/settings/stores/animationpresetlibrary.cpp" line="279"/>
         <source>Could not delete the preset &quot;%1&quot;.</source>
         <translation>Не удалось удалить предустановку &quot;%1&quot;.</translation>
     </message>
@@ -11026,69 +11026,69 @@
         <translation>Уведомление об ошибке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
         <source>Layout Editor</source>
         <comment>@title</comment>
         <translation>Редактор раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
         <source>Scrolling Template Editor</source>
         <comment>@title</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="796"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="799"/>
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>Выйти из полноэкранного режима</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="819"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="822"/>
         <source>Exit Fullscreen (F11)</source>
         <translation>Выйти из полноэкранного режима (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="847"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="883"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="929"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="850"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="886"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="932"/>
         <source>Unsaved Changes</source>
         <comment>@title:window</comment>
         <translation>Несохранённые изменения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="848"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="851"/>
         <source>You have unsaved changes. What would you like to do?</source>
         <comment>@info</comment>
         <translation>У вас есть несохранённые изменения. Что вы хотите сделать?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="884"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="887"/>
         <source>Switching to %1 will load that screen&apos;s layout. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Переключение на %1 загрузит раскладку этого экрана. Что вы хотите сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="930"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
         <source>Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Открытие другой раскладки заменит ту, которую вы редактируете. Что вы хотите сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="930"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="957"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="960"/>
         <source>Import Layout</source>
         <comment>@title:window</comment>
         <translation>Импорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="958"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="970"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="961"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="973"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="964"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="993"/>
         <source>JSON files (*.json)</source>
@@ -11096,7 +11096,7 @@
         <translation>Файлы JSON (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="958"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="961"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="944"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="964"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="993"/>
@@ -11105,49 +11105,49 @@
         <translation>Все файлы (*)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="969"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="972"/>
         <source>Export Layout</source>
         <comment>@title:window</comment>
         <translation>Экспорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="997"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
         <source>Layout Editor Help</source>
         <comment>@title:window</comment>
         <translation>Справка редактора раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="997"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1044"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
         <source>Layout saved successfully</source>
         <comment>@info</comment>
         <translation>Раскладка успешно сохранена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1044"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
         <source>Template saved</source>
         <comment>@info</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1048"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1051"/>
         <source>Layout exported</source>
         <comment>@info</comment>
         <translation>Раскладка экспортирована</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1055"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1058"/>
         <source>Failed to load layout: %1</source>
         <comment>@info</comment>
         <translation>Не удалось загрузить раскладку: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1059"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1062"/>
         <source>Failed to save layout: %1</source>
         <comment>@info</comment>
         <translation>Не удалось сохранить раскладку: %1</translation>
@@ -13951,7 +13951,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="850"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="467"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="468"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
         <source>Cancel</source>
         <translation>Отмена</translation>
@@ -16983,7 +16983,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListEditor.qml.cpp" line="69"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="354"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="389"/>
         <source>THEN</source>
         <translation>ТО</translation>
     </message>
@@ -17003,64 +17003,64 @@
         <translation>Добавить действие к этому правилу</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="239"/>
         <source>e.g. 1, 2 or 1-2</source>
         <comment>@info:placeholder zone numbers for a snap-to-zone rule</comment>
         <translation>например, 1, 2 или 1-2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="179"/>
         <source>e.g. Editor, Terminal</source>
         <comment>@info:placeholder zone names for a snap-to-zone rule</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="181"/>
         <source>Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone names field of a snap-to-zone rule</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="205"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="203"/>
         <source>Add a name…</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="204"/>
         <source>Add a zone name from your layouts</source>
         <comment>@info:accessibility</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="241"/>
         <source>One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone numbers field of a snap-to-zone rule</comment>
         <translation type="unfinished">Один или несколько номеров зон (нумерация с 1), к которым прилепляются подходящие окна. Несколько зон охватывают их общую область.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="406"/>
         <source>Reset to the system accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="407"/>
         <source>Follow the system accent color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="529"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="534"/>
         <source>None</source>
         <comment>@item:inlistbox scrolling template rule action, use no template at all</comment>
         <translation type="unfinished">Нет</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="546"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="551"/>
         <source>Choose a template…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="569"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="104"/>
@@ -17068,7 +17068,7 @@
         <translation>Основной</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="569"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="527"/>
         <source>%1 · %2</source>
@@ -17076,72 +17076,77 @@
         <translation>%1 · %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="585"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="590"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="547"/>
         <source>Choose a monitor…</source>
         <translation>Выберите экран…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="629"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="634"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="500"/>
         <source>Choose a desktop…</source>
         <translation>Выберите рабочий стол…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="740"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="775"/>
+        <source>This event is not driven per window, so a rule cannot change it. It stays here because this action already names it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="782"/>
         <source>Choose an event…</source>
         <translation>Выберите событие…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="852"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="894"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/ChainEditor.qml.cpp" line="368"/>
         <source>Add a pack…</source>
         <comment>@action:button</comment>
         <translation>Добавить пакет…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="970"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1012"/>
         <source>Choose a shader…</source>
         <translation>Выберите шейдер…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="997"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="1039"/>
         <source>Choose an overlay shader…</source>
         <translation>Выберите шейдер наложения…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="382"/>
         <source>This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule&apos;s match, or pick a different action.</source>
         <translation>Это действие выполняется во время разрешения контекста и не может сопоставляться со свойствами окна. Уберите условия окна из совпадения правила или выберите другое действие.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="370"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="386"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="207"/>
         <source>Choose…</source>
         <translation>Выбрать…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="371"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="387"/>
         <source>Action type</source>
         <translation>Тип действия</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="441"/>
         <source>Action incompatible with the rule&apos;s match</source>
         <translation>Действие несовместимо с совпадением правила</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="428"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="444"/>
         <source>This action runs during context resolution, but the rule&apos;s match references window properties, so the action would never fire as written.</source>
         <translation>Это действие выполняется во время разрешения контекста, но совпадение правила ссылается на свойства окна, поэтому действие никогда не сработает в текущем виде.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="518"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="542"/>
         <source>Remove action</source>
         <translation>Удалить действие</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="520"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="544"/>
         <source>Remove this action</source>
         <translation>Удалить это действие</translation>
     </message>
@@ -17158,7 +17163,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/AddRuleWizard.qml.cpp" line="294"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="563"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="564"/>
         <source>Add rule</source>
         <translation>Добавить правило</translation>
     </message>
@@ -17592,7 +17597,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="288"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="373"/>
         <source>WHEN</source>
         <translation>КОГДА</translation>
     </message>
@@ -17654,17 +17659,17 @@
         <translation>В этом правиле есть проблемы:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="119"/>
         <source>Disable rule %1</source>
         <translation>Отключить правило %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="119"/>
         <source>Enable rule %1</source>
         <translation>Включить правило %1</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="127"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="135"/>
         <source>%n validation issue</source>
         <translation>
             <numerusform>%n проблема проверки</numerusform>
@@ -17673,7 +17678,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="130"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="138"/>
         <source>This rule has %n validation issue. Open the editor to see the details.</source>
         <translation>
             <numerusform>В этом правиле %n проблема проверки. Откройте редактор, чтобы посмотреть подробности.</numerusform>
@@ -17681,14 +17686,32 @@
             <numerusform>В этом правиле %n проблем проверки. Откройте редактор, чтобы посмотреть подробности.</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="161"/>
+        <source>%n animation action that cannot run</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="165"/>
+        <source>This rule has %n animation action naming an event that does not belong to a window, so it never runs. Rules match windows.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="236"/>
         <source>Composite</source>
         <comment>Badge shown when the rule&apos;s match is a composite expression</comment>
         <translation>Составное</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="220"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="255"/>
         <source>%n Condition</source>
         <translation>
             <numerusform>%n условие</numerusform>
@@ -17697,7 +17720,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="239"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="274"/>
         <source>%n Action</source>
         <translation>
             <numerusform>%n действие</numerusform>
@@ -17706,49 +17729,49 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="260"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="295"/>
         <source>Lowest priority</source>
         <comment>Priority badge for a managed baseline rule that always sorts last</comment>
         <translation>Наименьший приоритет</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="260"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="295"/>
         <source>Priority %1</source>
         <comment>Badge showing the rule&apos;s raw priority integer</comment>
         <translation>Приоритет %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="291"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="326"/>
         <source>Edit rule</source>
         <translation>Изменить правило</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="293"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="328"/>
         <source>Edit rule %1</source>
         <translation>Изменить правило %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="339"/>
         <source>Duplicate rule</source>
         <translation>Дублировать правило</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="306"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="341"/>
         <source>Duplicate rule %1</source>
         <translation>Дублировать правило %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="317"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="352"/>
         <source>System rules can&apos;t be deleted</source>
         <translation>Системные правила нельзя удалить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="317"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="352"/>
         <source>Delete rule</source>
         <translation>Удалить правило</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="319"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="354"/>
         <source>Delete rule %1</source>
         <translation>Удалить правило %1</translation>
     </message>
@@ -17798,123 +17821,123 @@
         <translation>О чём должно быть это правило?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="349"/>
         <source>Failed to save rules.</source>
         <translation>Не удалось сохранить правила.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
         <source>Choose Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="426"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
         <source>The PlasmaZones daemon is not running. Rules cannot be loaded or saved until it starts.</source>
         <translation>Служба PlasmaZones не запущена. Правила нельзя загрузить или сохранить, пока она не запущена.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="433"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="434"/>
         <source>The rules changed on disk while you were editing. Saving now will overwrite those changes. Review your edits before saving, or discard them to reload.</source>
         <translation>Правила на диске изменились, пока вы их редактировали. Сохранение сейчас перезапишет эти изменения. Просмотрите свои правки перед сохранением или отмените их, чтобы перезагрузить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="444"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="445"/>
         <source>Save anyway</source>
         <translation>Всё равно сохранить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="450"/>
         <source>Discard and reload</source>
         <translation>Отменить и перезагрузить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="462"/>
         <source>Overwrite daemon-side changes?</source>
         <translation>Перезаписать изменения на стороне службы?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="462"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="463"/>
         <source>Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.</source>
         <translation>Сохранение заменит набор правил, который служба сейчас хранит на диске, вашими подготовленными правками. Все правила, изменившиеся там, пока вы редактировали, будут потеряны.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="473"/>
         <source>Overwrite</source>
         <translation>Перезаписать</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="516"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="517"/>
         <source>Search rules…</source>
         <translation>Поиск правил…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="517"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="518"/>
         <source>Search rules</source>
         <translation>Поиск правил</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="533"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="534"/>
         <source>Filter Rules</source>
         <comment>@title:menu</comment>
         <translation>Фильтр правил</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="537"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="538"/>
         <source>System</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Системные</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="541"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="542"/>
         <source>User-created</source>
         <comment>@option:check filter rules by source</comment>
         <translation>Созданные пользователем</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="553"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="554"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Активен</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="557"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="558"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
         <translation>Отключено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="565"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="566"/>
         <source>Add a new rule</source>
         <translation>Добавить новое правило</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="583"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
         <source>No rules yet</source>
         <translation>Пока нет правил</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="583"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
         <source>No rules match the current filter</source>
         <translation>Нет правил, соответствующих текущему фильтру</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
         <source>Add a rule to assign layouts to monitors, float application windows, or override animations.</source>
         <translation>Добавьте правило, чтобы назначать раскладки экранам, делать окна приложений плавающими или переопределять анимации.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="585"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="604"/>
         <source>Try a different filter or search term.</source>
         <translation>Попробуйте другой фильтр или условие поиска.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="595"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="596"/>
         <source>All rules</source>
         <translation>Все правила</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="597"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="598"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorOverviewTile.qml.cpp" line="149"/>
         <source>%n rule</source>
         <translation>
@@ -17924,7 +17947,7 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="598"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="599"/>
         <source>%1 · drag to set precedence</source>
         <comment>Suffix in the rule list header showing the count and a reorder hint</comment>
         <translation>%1 · перетащите, чтобы задать старшинство</translation>
@@ -21714,7 +21737,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="613"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="618"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="482"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
@@ -22162,397 +22185,361 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="47"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
         <source>Accordion Collapse</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="50"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="64"/>
         <source>Accordion Expand</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="53"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Внешний вид</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="56"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="59"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
         <source>Badge Hide</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="62"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="76"/>
         <source>Badge Pulse</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="65"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="79"/>
         <source>Badge Show</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="68"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="82"/>
         <source>Border</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Рамка</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="71"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="74"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
         <source>Click</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Щелчок</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="77"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="91"/>
         <source>Close</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Закрыть</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="80"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="94"/>
         <source>Cursor</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="83"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="97"/>
         <source>Desktop</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Рабочий стол</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="86"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="100"/>
         <source>Dim</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Затемнение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="89"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="103"/>
         <source>Editor</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Редактор</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="92"/>
-        <source>Fade</source>
-        <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="95"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Появление</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="98"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Исчезание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="101"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
         <source>Fast</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="104"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="115"/>
         <source>Focus</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Фокус</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="107"/>
-        <source>Geometry</source>
-        <comment>animation event or section</comment>
-        <translation type="unfinished">Геометрия</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="110"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Глобальные</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="113"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
         <source>Hide</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="116"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Наведение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="119"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
         <source>Layout Picker</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Выбор раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="122"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
         <source>Layout Switch</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="125"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
         <source>Maximize</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="128"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="136"/>
         <source>Minimize</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="131"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="139"/>
         <source>Move</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="134"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="142"/>
         <source>Movement</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="137"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="145"/>
         <source>Open</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="140"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="148"/>
         <source>OSD</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="143"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
         <source>Overlays</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Наложения</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="146"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="154"/>
         <source>Panel</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="149"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="157"/>
         <source>Peek</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="152"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="160"/>
         <source>Pop</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="155"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Всплывающее окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="158"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
         <source>Press</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Нажатие</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="161"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="169"/>
         <source>Progress</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Прогресс</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="164"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="172"/>
         <source>Pulse</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="167"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Переупорядочивание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="170"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
         <source>Scrolling</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Прокрутка</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="173"/>
-        <source>Shader</source>
-        <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="176"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="181"/>
         <source>Shell</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="179"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="184"/>
         <source>Show</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="182"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Вдвигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="185"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Выдвигание</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="188"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
         <source>Slow</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="191"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="196"/>
         <source>Snap Assist</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Помощник прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="194"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
         <source>Snap In</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="197"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
         <source>Snap Out</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="200"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
         <source>Snap Resize</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="203"/>
-        <source>Strip</source>
-        <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="206"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="208"/>
         <source>Switch</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="209"/>
-        <source>Tab</source>
-        <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="212"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="211"/>
         <source>Tab Switch</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="215"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="214"/>
         <source>Tint</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Оттенок</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="218"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="217"/>
         <source>Toggle Off</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Отключение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="221"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="220"/>
         <source>Toggle On</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Включение</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="224"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="223"/>
         <source>View</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="227"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="226"/>
         <source>Widget</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="230"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="229"/>
         <source>Window</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Окно</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="233"/>
-        <source>Window Morph</source>
-        <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="236"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="232"/>
         <source>Zone Highlight</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Подсветка зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="239"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
         <source>Zone Overlay Flash</source>
         <comment>animation event or section</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="242"/>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="238"/>
         <source>Zone Selector</source>
         <comment>animation event or section</comment>
         <translation type="unfinished">Выбор зоны</translation>
@@ -22606,13 +22593,13 @@
         <translation type="unfinished">пикс.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="329"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="171"/>
         <source>Snapping (no layout)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="336"/>
+        <location filename="../src/settings/rules/rulecontroller_views.cpp" line="338"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="153"/>
         <source>Tiling (no algorithm)</source>
         <translation type="unfinished"></translation>
@@ -22622,6 +22609,21 @@
         <source>None</source>
         <comment>no tiling algorithm is set</comment>
         <translation type="unfinished">Нет</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="101"/>
+        <source>This event is not driven per window, so the rule cannot change it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
+        <source>Rules match windows, and this event does not belong to a window, so this action never runs. Set the animation for this event on the Animations pages instead, where it applies everywhere.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
+        <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

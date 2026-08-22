@@ -20,6 +20,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
+#include "shader_resolve.h"
 #include "window_query.h"
 
 namespace PlasmaZones {
@@ -649,10 +650,11 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     //
     // The plasma-shell reject STAYS, and it stays blanket, even though a shell
     // surface can now animate on its own `shell.*` leg. That leg does not come
-    // through this gate: tryBeginShaderForEvent routes the surface with
-    // animationEventPathFor and skips the filter for the paths that resolver
-    // names — the same shape shouldDecorateWindow's shell arms use, where the
-    // decoration tree rather than the window filter is the opt-in. Keeping the
+    // through this gate: tryBeginShaderForEvent skips the filter for any path
+    // `ProfilePaths::eventPathResolvesPerWindow` does NOT name, which today is
+    // exactly the `shell.*` legs animationEventPathFor routes to — the same
+    // shape shouldDecorateWindow's shell arms use, where the decoration tree
+    // rather than the window filter is the opt-in. Keeping the
     // reject here is what confines shell animation to those two paths, so a
     // window-family leg (focus, minimize, a geometry morph) cannot reach a
     // surface plasmashell owns from any call site, present or future. Do NOT
@@ -750,7 +752,13 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     // user-exclusion filters below — neither action is an appearance change.
     // `hasAnyMatch` never surfaces a rule whose actions are EXCLUSIVELY
     // `ExcludeAnimations` — those route through the exclusion gate below.
-    if (haveAnimationRules && animationEvaluator.hasAnyMatch(query())) {
+    //
+    // ...and only when one of those actions can actually fire. A rule whose
+    // every Tag::Effect action is an animation override pinned to an event the
+    // compositor resolves windowless signals nothing, yet it was force-animating
+    // its matches past the filters below. Same narrowing the verdict actions got
+    // above. See ruleCarriesLiveEffectAction for what "live" means.
+    if (haveAnimationRules && animationEvaluator.hasAnyMatchFiltered(query(), ruleCarriesLiveEffectAction)) {
         return true;
     }
 

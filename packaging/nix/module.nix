@@ -51,8 +51,8 @@ in
 
         PlasmaZones is a per-user tool, so autostart is opt-in rather than
         enabled for every user on the system. Note this differs deliberately
-        from the Home Manager module, where the same option defaults to true:
-        that module already configures exactly one user, so there is no
+        from the Home Manager module, where the same option defaults to true.
+        That module already configures exactly one user, so there is no
         every-user-on-the-box concern to guard against.
       '';
     };
