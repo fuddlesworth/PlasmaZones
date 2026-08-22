@@ -79,6 +79,7 @@ private Q_SLOTS:
     void stickyWindowHandlingOverrideIsPerScreen();
     void widthClientDecidesOverrideIsPerScreen();
     void outOfRangeWidthRuleDoesNotSuppressClientDecides();
+    void retileKeepsClientDecidedWidthsUnlessARulePinsOne();
     void wrongTypedBehaviourOverridesAreRejected();
 
 private:
@@ -373,6 +374,54 @@ void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides(
     const QVector<QRect> rulePinned = engine->visibleTileRects(kS2);
     QCOMPARE(rulePinned.size(), 1);
     QCOMPARE(Ax::mainLen(rulePinned.first()), qRound(0.75 * kMainExtent));
+}
+
+void TestScrollEngineBehaviour::retileKeepsClientDecidedWidthsUnlessARulePinsOne()
+{
+    // Retile's scrolling arm resets every column to "the default width", and
+    // on a ClientDecides screen there is no such width: the column opened at
+    // the client's own size, and the reset must leave it there rather than
+    // hand it the global proportion the user turned off. A rule fraction
+    // outranks the kind (the open path's rule), so a ClientDecides screen
+    // WITH a rule width does reset to the rule's width.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.25;
+    auto* tracker = new StubWindowTracking(&owner);
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
+    ScrollEngine* engine = makeEngine(&owner, settings, tracker);
+    engine->applyPerScreenConfig(
+        kS1, onlyKey(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::ClientDecides)));
+    QVariantMap pinned;
+    pinned.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::ClientDecides));
+    pinned.insert(ScrollPerScreenKeys::defaultColumnWidth(), 0.75);
+    engine->applyPerScreenConfig(kS2, pinned);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    // Push both off their opening width so the reset has something to do.
+    engine->windowFocused(QStringLiteral("app|a"), kS1);
+    engine->setColumnWidth(ColumnWidth::makeProportion(0.5), kS1);
+    engine->windowFocused(QStringLiteral("app|b"), kS2);
+    engine->setColumnWidth(ColumnWidth::makeProportion(0.5), kS2);
+    QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS1).first()), kMainExtent / 2);
+    QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS2).first()), kMainExtent / 2);
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+    // ClientDecides with no rule: the width the user set stays, and with
+    // nothing else off its default the verb reports no_target rather than a
+    // success that changed nothing.
+    engine->resetStripToDefaults(kS1);
+    QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS1).first()), kMainExtent / 2);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("retile"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+
+    // ClientDecides with a rule width: the rule's width is the default.
+    engine->resetStripToDefaults(kS2);
+    QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS2).first()), qRound(0.75 * kMainExtent));
+    QCOMPARE(feedback.last().at(0).toBool(), true);
 }
 
 void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()

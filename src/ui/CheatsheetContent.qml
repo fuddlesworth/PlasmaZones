@@ -115,7 +115,7 @@ Item {
             return root.scrollingAvailable && root.currentMode === "scrolling";
         if (row.mode === "layouts")
             return root.layoutsAvailable;
-        // The engine-managed pair, autotile or scrolling: the row does
+        // The engine-managed modes, autotile or scrolling: the row does
         // something on either and nothing on snapping, so neither "all" nor a
         // single mode tag would tell the truth.
         if (row.mode === "managed")
@@ -234,6 +234,12 @@ Item {
         id: metrics
 
         readonly property int paddingSide: Kirigami.Units.gridUnit
+        // The category heading's de-emphasis. Opacity rather than
+        // disabledTextColor, because the heading is not disabled content;
+        // Kirigami has no named token for "secondary but enabled", so the
+        // number lives here, beside the other layout constants, instead of
+        // inline on the label.
+        readonly property real headingOpacity: 0.7
         // Preferred width, shrunk to the available screen width when even a
         // single column at the preferred size would push the card (content +
         // side padding) past the screen edge — narrow screens get a
@@ -394,7 +400,7 @@ Item {
                                     // size/weight differentiation below carries
                                     // the hierarchy without misusing the role.
                                     color: Kirigami.Theme.textColor
-                                    opacity: 0.7
+                                    opacity: metrics.headingOpacity
                                     // Constrain to the column and wrap: a
                                     // long translated category name grows a
                                     // second line instead of overflowing

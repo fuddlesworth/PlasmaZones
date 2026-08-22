@@ -380,9 +380,14 @@ void TestScrollEngineVerbs::scrollViewByPercentPansWithoutMovingFocus()
     // view is still where the pan put it.
     engine->retile();
     QCOMPARE(viewX(), before - qRound(0.25 * ScrollTestUtils::kMainExtent));
+    // And the retile neither moved focus nor handed the view back.
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(state->strip().viewDetached());
 
     // A pan pinned at the end it is asked to move toward refuses with
     // no_target and emits no placement change — there is nothing to save.
+    // The refusal leaves the latch as it found it: the view is still the
+    // user's.
     engine->scrollViewByPercent(100, QStringLiteral("S1"));
     engine->scrollViewByPercent(100, QStringLiteral("S1"));
     const int placementAfterPin = placement.count();
@@ -390,12 +395,16 @@ void TestScrollEngineVerbs::scrollViewByPercentPansWithoutMovingFocus()
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
     QCOMPARE(placement.count(), placementAfterPin);
+    QVERIFY(state->strip().viewDetached());
 
     // A percent too small to reach a pixel is a refusal too, not a success
-    // that moved nothing. 0.01% of the fixture's extent rounds to zero.
+    // that moved nothing, and under its OWN token: the OSD must not call a
+    // step that rounded away "the end of the strip". 0.01% of the fixture's
+    // extent rounds to zero.
     engine->scrollViewByPercent(-0.01, QStringLiteral("S1"));
     QCOMPARE(feedback.last().at(0).toBool(), false);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
+    QCOMPARE(placement.count(), placementAfterPin);
 }
 
 void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()

@@ -619,8 +619,9 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // this the first arrival kept the focus it won on the empty strip and
     // every mode round trip re-anchored on an arbitrary window. The anchor
     // is restored after the focus so the user's actual view wins over the
-    // focus change's centering-policy reanchor (clamped against the partial
-    // strip now; later arrivals re-clamp as the strip grows).
+    // focus change's centering-policy reanchor. Restored RAW, by
+    // restoreViewAnchor's contract; later structural inserts re-clamp as the
+    // strip grows (insertWindowAt's anchor re-clamp).
     //
     // Re-asserted on EVERY arrival once the focused window is on the strip,
     // not only on the arrival that IS it: inserts steal focus (both insert

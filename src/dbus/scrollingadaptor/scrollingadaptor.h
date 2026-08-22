@@ -26,8 +26,9 @@ namespace PlasmaZones {
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
- * (with the preset vocabulary beside it), the wheel-driven focusColumn
- * verb, the four absolute width/height setters for external scripting, the
+ * (with the preset vocabulary beside it), the wheel-driven focusColumn and
+ * scrollView verbs, the four absolute width/height setters for external
+ * scripting, the
  * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
  * when a client leaves fullscreen on its own), the reapplyWindowGeometry
  * repair call (inbound too, for a fullscreen exit whose strip rects never
@@ -136,6 +137,19 @@ public:
     /// live. Unset, scrollView is a silent no-op.
     void setViewScrollStepProvider(std::function<int()> provider);
 
+    /// Install the per-context disable gate every geometry verb on this
+    /// surface consults: true when @p screenId's CURRENT scrolling context
+    /// is disabled. The keyboard verbs already pass through this gate in the
+    /// daemon (Daemon::isFocusedContextGatedForMode); the wheel and the
+    /// absolute setters arrive on the bus instead and would otherwise pan
+    /// and resize a context the user turned off. A provider rather than the
+    /// resolver type so this library never names the daemon's context
+    /// machinery. FAIL-CLOSED: with no provider installed every gated verb
+    /// refuses, the same way the daemon's gate refuses with no resolver, so
+    /// a daemon that forgot the install cannot ship an ungated wheel. The
+    /// daemon installs it in the same pass that creates the adaptor.
+    void setContextGateProvider(std::function<bool(const QString& screenId)> provider);
+
 public Q_SLOTS:
     /**
      * @brief Focus the adjacent column on a scrolling screen
@@ -156,9 +170,10 @@ public Q_SLOTS:
      * wheel notch can legitimately move focus to another monitor.
      *
      * Every rejection is a SILENT no-op, not an error reply: an empty
-     * @p screenId, a screen the engine does not own, and any @p delta
-     * other than -1 or +1 all return without acting, so a caller cannot
-     * distinguish a refusal from a call that landed on an empty strip.
+     * @p screenId, a screen the engine does not own, a screen whose current
+     * scrolling context is disabled (setContextGateProvider), and any
+     * @p delta other than -1 or +1 all return without acting, so a caller
+     * cannot distinguish a refusal from a call that landed on an empty strip.
      *
      * @param screenId Screen whose strip should move (the cursor's screen);
      *                 an empty string is ignored
@@ -176,8 +191,11 @@ public Q_SLOTS:
      * through the provider the daemon installs with setViewScrollStepProvider.
      * The keyboard's pan is the PAGE (a whole viewport, on its own shortcut
      * pair); the step has no keyboard row, for the same reason focusColumn
-     * has none. Same silent wire-boundary policy as focusColumn; a notch at
-     * the strip's end is a no-op that never crosses to another output.
+     * has none. Same silent wire-boundary policy as focusColumn (ownership
+     * and per-context gates). A notch at the strip's end never crosses to
+     * another output: it answers with the no-target navigation OSD like the
+     * sibling verbs, and a step that rounds to zero pixels answers under its
+     * own no_movement reason.
      *
      * @param screenId Screen whose strip should move (the cursor's screen);
      *                 an empty string is ignored
@@ -192,7 +210,8 @@ public Q_SLOTS:
      * The D-Bus home of niri's absolute set-column-width and
      * set-window-height: a global shortcut carries no value argument, so the
      * absolute setters live only on this surface. All four share focusColumn's
-     * silent ownership gate, and each refuses out-of-range values silently —
+     * silent ownership and per-context gates, and each refuses out-of-range
+     * values silently —
      * proportions outside the settings UI's proportion range, pixels outside
      * its fixed range (the width and height fixed ranges happen to agree
      * today; each is validated against its own accessor). A value equal to
@@ -287,7 +306,8 @@ public Q_SLOTS:
      * preset list, so a template that defines widths but no heights yields
      * template widths beside the configured heights. This is the vocabulary
      * the cycle-preset-width and cycle-preset-height shortcuts walk on that
-     * screen. Same silent ownership gate as focusColumn: an empty object when
+     * screen. Same ownership gate as focusColumn (reads are not
+     * context-gated): an empty object when
      * the screen is not scrolling.
      *
      * NOTE: nothing in this tree calls it. It stays as part of the PUBLISHED
@@ -314,7 +334,8 @@ public Q_SLOTS:
      * different template.
      *
      * Reports the CURRENT (desktop, activity) context, matching
-     * visibleStripJson. Same silent ownership gate as focusColumn: an empty
+     * visibleStripJson. Same ownership gate as focusColumn (reads are not
+     * context-gated): an empty
      * object when the screen is not scrolling.
      *
      * @param screenId Screen whose progress to describe
@@ -365,6 +386,13 @@ private:
     PhosphorScrollEngine::ScrollEngine* m_engine = nullptr;
     /// scrollView's step reader (setViewScrollStepProvider).
     std::function<int()> m_viewScrollStep;
+    /// The per-context disable gate (setContextGateProvider).
+    std::function<bool(const QString&)> m_contextGated;
+    /// Whether the verb must refuse for @p screenId's context: the gate
+    /// says so, or no gate is installed (fail-closed, see the setter). Called
+    /// AFTER the ownership gate, which is the cheaper test and the one the
+    /// keyboard path also resolves first.
+    bool refusesForContext(const QString& screenId) const;
     /// Last set broadcast on the bus (the change gate's memory; the engine
     /// re-emits identical sets on desktop switches for the tiling channel).
     QStringList m_lastBroadcastScreens;

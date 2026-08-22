@@ -232,8 +232,8 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightShortcut(), QStringLiteral("Meta+Alt+H"));
         QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+H"));
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
-        // The no-focus PAGE pan, on the pool's last free letter. The step
-        // pan is the wheel's (Meta+Shift+wheel, an effect-side axis
+        // The no-focus PAGE pan, on a free letter of the Meta+Alt pool. The
+        // step pan is the wheel's (Meta+Shift+wheel, an effect-side axis
         // shortcut) and has no keyboard row at all.
         QCOMPARE(ConfigDefaults::scrollingViewPageBackShortcut(), QStringLiteral("Meta+Alt+Y"));
         QCOMPARE(ConfigDefaults::scrollingViewPageForwardShortcut(), QStringLiteral("Meta+Alt+Shift+Y"));
@@ -241,7 +241,6 @@ private Q_SLOTS:
         // T (outside the Meta+Alt family) and grow-into-empty-space's E.
         QCOMPARE(ConfigDefaults::scrollingEqualizeColumnWidthsShortcut(), QStringLiteral("Meta+Ctrl+Shift+T"));
         QCOMPARE(ConfigDefaults::scrollingMinimizeColumnWidthShortcut(), QStringLiteral("Meta+Alt+Shift+E"));
-        QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
 
         // Ships unbound, per the same docs: the edge-stop/wrap focus
         // variants and the one-way float verbs.
@@ -1046,6 +1045,25 @@ private Q_SLOTS:
         QCOMPARE(settings.scrollingWindowHeightStepPercent(), ConfigDefaults::scrollingStepPercentMin());
         QCOMPARE(heightStepSpy.count(), 2);
         QCOMPARE(changedSpy.count(), preHeightChanged + 2);
+
+        // The view scroll step is the third of the family, with the wheel
+        // as its only reader: same in-range write, same clamp, same single
+        // announcement each. A write that clamps to the value already held
+        // announces nothing, which is the one arm the twins above do not
+        // pin (their clamped writes land on a new value).
+        QSignalSpy viewStepSpy(&settings, &Settings::scrollingViewScrollStepPercentChanged);
+        const int preViewChanged = changedSpy.count();
+        settings.setScrollingViewScrollStepPercent(40);
+        QCOMPARE(settings.scrollingViewScrollStepPercent(), 40);
+        QCOMPARE(viewStepSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preViewChanged + 1);
+        settings.setScrollingViewScrollStepPercent(999);
+        QCOMPARE(settings.scrollingViewScrollStepPercent(), ConfigDefaults::scrollingStepPercentMax());
+        QCOMPARE(viewStepSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preViewChanged + 2);
+        settings.setScrollingViewScrollStepPercent(1000); // clamps to the same max: silent
+        QCOMPARE(viewStepSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preViewChanged + 2);
     }
 
     /// Preset lists canonicalize to numeric proportions in (0, 1]: junk and

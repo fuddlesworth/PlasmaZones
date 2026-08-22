@@ -303,6 +303,9 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->decreaseMasterCountRequested();
      }},
+    // Mode-neutral since the scrolling arm landed (the catalog tags it
+    // "managed"); it stays in this block because its config key and
+    // accessor are still the autotile ones, which existing bindings name.
     {kIdRetile, &ConfigDefaults::autotileRetileShortcut, &Settings::autotileRetileShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Retile Windows"),
      [](ShortcutManager* sm) {

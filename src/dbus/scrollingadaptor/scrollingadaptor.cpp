@@ -169,7 +169,7 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     if (!m_engine || screenId.isEmpty() || (delta != -1 && delta != 1)) {
         return;
     }
-    if (!m_engine->isActiveOnScreen(screenId)) {
+    if (!m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
         return;
     }
     // The delta is STRIP-RELATIVE (previous/next column) — the effect collapses
@@ -187,6 +187,16 @@ void ScrollingAdaptor::setViewScrollStepProvider(std::function<int()> provider)
     m_viewScrollStep = std::move(provider);
 }
 
+void ScrollingAdaptor::setContextGateProvider(std::function<bool(const QString&)> provider)
+{
+    m_contextGated = std::move(provider);
+}
+
+bool ScrollingAdaptor::refusesForContext(const QString& screenId) const
+{
+    return !m_contextGated || m_contextGated(screenId);
+}
+
 void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
 {
     // focusColumn's wire-boundary gate, plus the provider: without a step
@@ -194,7 +204,7 @@ void ScrollingAdaptor::scrollView(const QString& screenId, int delta)
     if (!m_engine || !m_viewScrollStep || screenId.isEmpty() || (delta != -1 && delta != 1)) {
         return;
     }
-    if (!m_engine->isActiveOnScreen(screenId)) {
+    if (!m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
         return;
     }
     // Signed percent: the engine resolves the direction against the screen's
@@ -209,7 +219,7 @@ void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double 
     // the range refusal is silent per the interface's documented convention.
     // The bounds are the same accessors the settings UI and the hand-written
     // width setter enforce.
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
         return;
     }
     // Negated inclusive form rather than "< min || > max": both of those
@@ -225,7 +235,7 @@ void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double 
 
 void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
 {
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
         return;
     }
     if (px < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()
@@ -237,7 +247,7 @@ void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
 
 void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double proportion)
 {
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
         return;
     }
     // Height-proportion accessors (they delegate to the width range today;
@@ -253,7 +263,7 @@ void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double
 
 void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
 {
-    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId) || refusesForContext(screenId)) {
         return;
     }
     if (px < ConfigDefaults::scrollingDefaultWindowHeightMin()

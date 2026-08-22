@@ -3,16 +3,17 @@
 
 #pragma once
 
-#include "configdefaults_scrolling.h"
+#include "configdefaults_scrolling_behavior.h"
 
 namespace PlasmaZones {
 
-// Chain link 7: the Shortcuts.Scrolling chord defaults. Split out of
+// Chain link 8: the Shortcuts.Scrolling chord defaults. Split out of
 // configdefaults_scrolling.h to keep that file inside the size ceiling; the
-// scrolling engine's own Scrolling defaults stay there. Every accessor here
+// engine's own Scrolling defaults stay there (link 6) and its behaviour
+// tunables in configdefaults_scrolling_behavior.h (link 7). Every accessor here
 // reaches call sites through the ConfigDefaults leaf as before, so no consumer
 // changes.
-class ConfigDefaultsScrollingShortcuts : public ConfigDefaultsScrolling
+class ConfigDefaultsScrollingShortcuts : public ConfigDefaultsScrollingBehavior
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -236,8 +237,8 @@ public:
         // and can carry a whole viewport; a wheel notch is one of a stream
         // and would overshoot. No keyboard step pair, for the same reason
         // Meta+wheel's column focus has none: the wheel is a different input
-        // with a different feel, not a duplicate of the keys. Y is the last
-        // free letter in the Meta+Alt pool (see the banner's externally-owned
+        // with a different feel, not a duplicate of the keys. Y is a free
+        // letter in the Meta+Alt pool (see the banner's externally-owned
         // table); back and forward are the letter+Shift pair per the
         // family's convention, and "back" is toward the strip's start
         // whichever way the strip runs.

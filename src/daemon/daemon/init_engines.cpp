@@ -1214,6 +1214,15 @@ void Daemon::initEnginesAndWiring()
     m_scrollingAdaptor->setViewScrollStepProvider([this]() {
         return m_shortcutManager->scrollViewScrollStepPercent();
     });
+    // The same per-context disable gate the keyboard scroll verbs pass
+    // through (scrolling_init.cpp's engineFor), so a context the user turned
+    // off cannot be panned or resized from the wheel or the bus. Installed
+    // unconditionally: the adaptor fails closed without it. The gate reads
+    // the resolver live, so a null resolver early in start-up refuses the
+    // way the keyboard path does.
+    m_scrollingAdaptor->setContextGateProvider([this](const QString& screenId) {
+        return isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling);
+    });
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,

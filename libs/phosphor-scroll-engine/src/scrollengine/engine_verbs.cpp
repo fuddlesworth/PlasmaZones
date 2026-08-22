@@ -149,7 +149,11 @@ void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)
 
 void ScrollEngine::equalizeVisibleColumnWidths(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().equalizeVisibleColumnWidths(params), "resize", false, QString());
+    // "equalize" in the reason slot: the OSD's generic resize copy names one
+    // column, and this verb rewrote a group. The failure token stays the
+    // shared no_target.
+    P_SCROLL_VERB(screenId, state->strip().equalizeVisibleColumnWidths(params), "resize", false,
+                  QStringLiteral("equalize"));
 }
 
 void ScrollEngine::minimizeColumnWidth(const QString& screenId)
@@ -161,10 +165,14 @@ void ScrollEngine::resetStripToDefaults(const QString& screenId)
 {
     // "retile" rather than "resize": this is the scrolling arm of the
     // mode-neutral Retile shortcut, and the OSD's retile copy is what the
-    // user pressed for. The display default is resolved here because the
-    // strip does not carry it in params (see resetToDefaults).
-    P_SCROLL_VERB(screenId, state->strip().resetToDefaults(effectiveDefaultColumnDisplay(screen), params), "retile",
-                  false, QString());
+    // user pressed for. Both defaults are resolved here because the strip
+    // does not carry the display in params, and the width may be "the
+    // client decides", which has no value to hand down (see
+    // resetDefaultColumnWidthFor and resetToDefaults).
+    P_SCROLL_VERB(screenId,
+                  state->strip().resetToDefaults(resetDefaultColumnWidthFor(screen, params),
+                                                 effectiveDefaultColumnDisplay(screen), params),
+                  "retile", false, QString());
 }
 
 void ScrollEngine::cycleWindowPresetHeight(int delta, const QString& screenId)
@@ -202,12 +210,13 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     }
     // Against the MAIN extent, so a percent means the same thing on either
     // axis and "100" is exactly one viewport, which is what the page variant
-    // asks for. Rounded, then refused if it collapses to nothing: a 1% step
-    // on a tiny work area must not read as a press that did nothing for no
-    // reason the OSD can name.
+    // asks for. Rounded, then refused if it collapses to nothing, under its
+    // OWN token: a 1% step on a tiny work area is not "the end of the
+    // strip", and the OSD names the two refusals differently.
     const int deltaPx = qRound(percent / 100.0 * params.axis.mainSize(params.workArea));
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
+    const QString refusal = deltaPx == 0 ? QStringLiteral("no_movement") : QStringLiteral("no_target");
     if (changed) {
         // focusAfter=false for the same reason the sizing verbs pass it: a pan
         // moves geometry and nothing else, and must not yank focus off a
@@ -218,8 +227,7 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // The active window is unchanged either way — that is the verb's whole
     // point — so the target slot carries it back unchanged on success too.
     Q_EMIT navigationFeedback(changed, QStringLiteral("scroll"),
-                              changed ? Detail::physicalTokenForMain(deltaPx > 0 ? 1 : -1, params.axis)
-                                      : QStringLiteral("no_target"),
+                              changed ? Detail::physicalTokenForMain(deltaPx > 0 ? 1 : -1, params.axis) : refusal,
                               sourceWindow, changed ? sourceWindow : QString(), screen);
 }
 

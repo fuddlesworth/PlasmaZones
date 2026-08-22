@@ -650,7 +650,8 @@ public:
     /// daemon persists this blob through the WTA KConfig layer so a login
     /// restore rebuilds stacked columns (with each column's active tile,
     /// i.e. a tabbed column's shown tab), the strip focus, and the view
-    /// anchor instead of one default column per window. Per-tile height
+    /// anchor together with whether that anchor was an explicit pan (the
+    /// detach latch) instead of one default column per window. Per-tile height
     /// intents ride along; per-window minimum sizes do not — the client
     /// re-reports those. (engine_serialize.cpp)
     QJsonObject serializeStripState() const;
@@ -1356,6 +1357,14 @@ private:
     /// as "pinned to a width" and gets the opposite of what the user chose.
     bool effectiveWidthClientDecides(const QString& screenId) const;
     bool effectiveWidthClientDecides(const QVariantMap& overrides) const;
+    /// The width resetStripToDefaults hands the strip for @p screenId:
+    /// params.defaultColumnWidth (which already folds a rule's fraction in,
+    /// rule > screen > global), or std::nullopt when the effective verdict
+    /// is "the client decides" and no rule pins a width. The same two-term
+    /// test the open path applies (minus its tracker term, which only gates
+    /// READING a client size; a reset reads none).
+    std::optional<ColumnWidth> resetDefaultColumnWidthFor(const QString& screenId,
+                                                          const ScrollLayoutParams& params) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QVariantMap& overrides) const;
     /// Height needs the work area AND the axis: the rule channel's bare

@@ -60,9 +60,10 @@ using namespace ShortcutIds;
 //    layoutsAvailable). Covers the layout cycle pair, the picker, the
 //    layout lock, and the quick-layout digits — on a non-layout screen
 //    those keys answer with a "not available" OSD, so the sheet hides them.
-//  - "managed" for the engine-managed pair, autotile OR scrolling: Retile
-//    re-applies either engine's layout and is a hard no-op on snapping,
-//    so neither "all" nor one mode tag would tell the truth
+//  - "managed" for the engine-managed modes, autotile OR scrolling (one
+//    row today, Retile): it re-applies either engine's layout and is a
+//    hard no-op on snapping, so neither "all" nor one mode tag would tell
+//    the truth
 //  - toggle_autotile is the doorway INTO autotile → all modes, always shown
 // A row tagged "all" also has to READ mode-neutrally. A label that names
 // zones on a key which addresses columns in scrolling misinforms the reader
@@ -76,9 +77,10 @@ struct CatalogMeta
     // without renumbering the table. Gaps are not removed categories.
     int categoryOrder;
     // "all" | "snapping" | "autotile" | "scrolling" | "layouts" | "managed" — string form
-    // matches what the QML filter consumes; no enum round-trip needed. The
-    // last value is a capability tag (engine layoutSupport), not a mode;
-    // see the contract block above.
+    // matches what the QML filter consumes; no enum round-trip needed.
+    // "layouts" is a capability tag (engine layoutSupport), not a mode, and
+    // "managed" is the union of the two engine modes; see the contract
+    // block above.
     const char* mode;
     // Optional tr() disambiguation for the category word (e.g. the mode
     // name "Scrolling", whose bare source would otherwise inherit the

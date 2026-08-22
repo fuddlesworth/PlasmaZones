@@ -488,6 +488,14 @@ void Daemon::handleRetile()
         if (!scroll || isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Scrolling)) {
             return;
         }
+        // Membership, not just the router's verdict: the engine's screen
+        // resolver falls back to ANOTHER scrolling screen for an id it does
+        // not own (the same transient the master-ratio handlers guard
+        // against above), and a retile landing on the wrong monitor with
+        // that monitor's OSD is worse than a silent press.
+        if (!scroll->isActiveOnScreen(focusedScreen)) {
+            return;
+        }
         scroll->resetStripToDefaults(focusedScreen);
         return;
     }

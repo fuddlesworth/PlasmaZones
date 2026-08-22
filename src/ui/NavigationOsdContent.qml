@@ -379,9 +379,24 @@ Item {
             if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
                 return noWindowText;
 
+            // A step too small to reach a pixel (a 1% step on a tiny work
+            // area) is its own refusal, not the strip's end.
+            if (reason === "no_movement")
+                return i18n("The scroll step is too small to move the view");
+
             // The pan is pinned at the strip's end in the pressed direction.
             return i18n("Already at the end of the strip");
         } else if (action === "retile") {
+            // The scrolling arm of Retile reports through the engine's
+            // shared verb feedback, so it can refuse like any other strip
+            // verb: an empty strip, or columns already at their defaults.
+            // Neither is an error, and neither gets the error copy below.
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            if (reason === "no_target")
+                return i18n("Columns are already at their default sizes");
+
             return i18n("Could not refresh the layout");
         } else if (action === "focus_master") {
             // Unreachable today (the sole producer emits only no_windows);
@@ -524,6 +539,13 @@ Item {
         } else if (action === "retile") {
             return i18n("Layout refreshed");
         } else if (action === "resize") {
+            // "equalize" is the group-width verb's reason: it rewrote every
+            // fully visible column, so the single-target copy would
+            // understate it. The bare reason is every other width and height
+            // verb.
+            if (reason === "equalize")
+                return i18n("Column widths equalized");
+
             return i18nc("@info:status the window was resized", "Resized");
         } else if (action === "tabbed") {
             return i18n("Tabbed display toggled");

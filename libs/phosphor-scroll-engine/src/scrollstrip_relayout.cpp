@@ -74,8 +74,17 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
     if (c.isEmpty() || c.isFullyMinimized()) {
         return 0;
     }
-    int px = resolveColumnWidthPx(c.width, params);
-    if (params.respectMinimumSize) {
+    const int px = qMax(resolveColumnWidthPx(c.width, params), columnMinExtentPx(c, params));
+    return qMin(px, mainExtent(params));
+}
+
+int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const
+{
+    if (!params.respectMinimumSize) {
+        return 0;
+    }
+    int floor = 0;
+    {
         // A tabbed column with a LEFT/RIGHT within-column indicator hands
         // its tiles contentRectFor(rect) = rect minus reservedThickness, so
         // when the min-width clamp is what sets the column width the
@@ -117,12 +126,12 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
             // minMain, not minWidth: this is the column's floor ALONG the
             // strip, which is the client's minimum height on a vertical one.
             const int tileMinMain = tile.minMain(params.axis);
-            if (!tile.minimized && tileMinMain + reservationFloor > px) {
-                px = tileMinMain + reservationFloor;
+            if (!tile.minimized && tileMinMain + reservationFloor > floor) {
+                floor = tileMinMain + reservationFloor;
             }
         }
     }
-    return qMin(px, mainExtent(params));
+    return floor;
 }
 
 int ScrollStrip::columnStripPos(int columnIndex, const ScrollLayoutParams& params) const
@@ -172,7 +181,7 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     return (mainExtent(params) - colMain) / 2;
 }
 
-int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const
+int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params)
 {
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there). Checked here too so the centering arms cannot bypass it.
@@ -185,6 +194,9 @@ int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParam
     // the focused column drifts off-center until the next focus move.
     const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
     if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+        // The policy took the view back; a pan that stayed latched here would
+        // leave the next pass refusing to re-derive the position it has.
+        m_viewDetached = false;
         return centeredAnchorFor(m_activeColumnIdx, params);
     }
     return clampedAnchor(columnStripPos(m_activeColumnIdx, params) - oldViewOffset, params);
