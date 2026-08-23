@@ -209,8 +209,8 @@ int validatePack(const QString& packDir, QTextStream& out)
     // pack that needed it and ran only for packs that were already fine.
     //
     // Raw `multipass` alone, and not "declares any bufferShaders": that key is
-    // the only thing parseShaderMetadata ever sets isMultipass TRUE from
-    // (:143), so reading it here opens the block for exactly the packs the
+    // the only thing parseShaderMetadata (shaderregistry_parse.cpp) ever sets
+    // isMultipass TRUE from, so reading it here opens the block for the packs the
     // runtime treats as multipass, including the ones whose parse then
     // fail-closed. A pack that lists bufferShaders WITHOUT multipass is inert
     // at runtime — the buffers are never resolved or baked — so linting its
