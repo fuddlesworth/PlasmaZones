@@ -96,8 +96,25 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     if (workW <= 0) {
         return false; // degenerate area: qBound(1, …, workW) would invert
     }
-    const int current = resolveColumnWidthPx(col->width, params);
-    const int target = qBound(1, current + qRound(deltaPercent / 100.0 * workW), workW);
+    // Measure from what is ON SCREEN, not from the bare intent: a column
+    // sitting at its minimum-size floor resolves to a narrower intent than it
+    // renders, and stepping from the intent would let a shrink write ever
+    // smaller values while nothing moved, so the matching grow presses then
+    // did nothing visible until they climbed back out of that hole.
+    const int current = columnExtentPx(*col, params);
+    if (current <= 0) {
+        return false; // empty or fully minimized column: nothing to size
+    }
+    // Floor, the twin of the one adjustActiveWindowHeight applies across the
+    // strip: the engine's declared narrowest column (every OTHER producer of a
+    // width — the config read, the rule overrides, the preset list, the
+    // persisted blob — already clamps against it), raised to the column's own
+    // client minimum when minimum sizes are respected. Without it this verb
+    // was the one width producer that could walk a column down to a single
+    // pixel and commit that extent to the client.
+    const int fractionFloor = qMax(1, qRound(MinColumnWidthFraction * workW));
+    const int floorPx = qBound(1, qMax(fractionFloor, columnMinExtentPx(*col, params)), workW);
+    const int target = qBound(floorPx, current + qRound(deltaPercent / 100.0 * workW), workW);
     if (target == current) {
         return false;
     }
@@ -489,7 +506,15 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // Capped at workH as well: a client cross-minimum LARGER than the work
     // area (reachable through a work-area shrink after the minimum was
     // recorded) would otherwise invert the qBound below (min > max is UB).
-    const int floorPx = params.respectMinimumSize ? qBound(1, tile->minCross(params.axis), workH) : 1;
+    //
+    // The engine's own declared shortest tile is the floor under that, so the
+    // verb cannot walk a window down to a single pixel with minimum sizes
+    // off — every other producer of a height (the config read, the rule
+    // overrides, the preset list, the persisted blob, the open rule) already
+    // clamps against MinWindowHeightFraction, and this one did not.
+    const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
+    const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
+    const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);
     const int target = qBound(floorPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
     if (target == currentPx) {
         return false;

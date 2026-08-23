@@ -72,6 +72,7 @@ private Q_SLOTS:
     void moveColumnToFirstLast();
     void widthPresetCycling();
     void widthAdjustByPercent();
+    void sizeAdjustFloorsAtTheEngineMinimum();
     void maximizeColumnToggle();
     void expandToAvailableWidth();
     void windowHeights();
@@ -276,6 +277,45 @@ void TestScrollStripOps::widthAdjustByPercent()
     // Clamped at the work area's MAIN extent.
     QVERIFY(strip.adjustActiveColumnWidth(500.0, params));
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), Ax::mainLen(params.workArea));
+}
+
+void TestScrollStripOps::sizeAdjustFloorsAtTheEngineMinimum()
+{
+    // Repeated shrink presses must stop at the engine's declared minimums
+    // (5% of the work area on each axis) rather than walking a column or a
+    // tile down to a single pixel and committing that extent to the client.
+    // Minimum sizes are switched OFF here, the arm that has no client floor
+    // to fall back on.
+    auto params = defaultParams();
+    params.respectMinimumSize = false;
+    const int minMain = qRound(MinColumnWidthFraction * Ax::mainLen(params.workArea)); // 60
+    const int minCross = qRound(MinWindowHeightFraction * Ax::crossLen(params.workArea)); // 40
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // Twenty presses of -25% would reach 1px without the floor.
+    bool everRefused = false;
+    for (int i = 0; i < 20; ++i) {
+        if (!strip.adjustActiveColumnWidth(-25.0, params)) {
+            everRefused = true;
+        }
+    }
+    QVERIFY(everRefused); // the floor is a refusal, not a silent no-op success
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minMain);
+
+    for (int i = 0; i < 20; ++i) {
+        strip.adjustActiveWindowHeight(-25.0, params);
+    }
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minCross);
+
+    // And growing back out of the floor moves on the FIRST press: the shrinks
+    // stopped at the floor instead of burying an ever smaller intent under it.
+    QVERIFY(strip.adjustActiveColumnWidth(10.0, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minMain + 120);
+    QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minCross + 80);
 }
 
 void TestScrollStripOps::maximizeColumnToggle()
