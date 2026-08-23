@@ -188,8 +188,15 @@ public:
     /// Number of descendant surfaces under @p path that carry their own
     /// override — they SHADOW this parent node (the resolve walk stops at the
     /// descendant's own profile, so the parent's chain never reaches them).
-    /// Drives the parent-node "Clear shadowing children" affordance, mirroring
-    /// AnimationsPageController::shaderOverrideDescendantCount.
+    /// Drives the parent-node "Clear shadowing children" affordance. The same
+    /// affordance as AnimationsPageController::shaderOverrideDescendantCount,
+    /// but NOT the same rule, and the difference is deliberate on that side
+    /// rather than an omission on this one: the animations walk skips
+    /// leaf-isolated paths (which never consult an ancestor) and params-only
+    /// overrides (which ride the ancestor's pack rather than pinning one).
+    /// Neither exclusion has an analogue here — every decoration surface
+    /// resolves through its ancestors, and this tree's `chain` is the pack
+    /// choice itself — so this counts every descendant override.
     Q_INVOKABLE int overrideDescendantCount(const QString& path) const;
 
     /// Clear every descendant override under @p path so the whole subtree

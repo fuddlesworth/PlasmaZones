@@ -17,8 +17,10 @@
 #include "daemon/rendering/dmabuffencewaiter.h"
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QImage>
+#include <QLoggingCategory>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
@@ -32,6 +34,8 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include "phosphor_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
+
+Q_DECLARE_LOGGING_CATEGORY(lcSnapAssistTrace)
 
 namespace PlasmaZones {
 
@@ -92,6 +96,11 @@ QVariantList candidatesToVariantList(const PhosphorProtocol::SnapAssistCandidate
 void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProtocol::EmptyZoneList& emptyZones,
                                     const PhosphorProtocol::SnapAssistCandidateList& candidates)
 {
+    static const bool traceEnabled = PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled();
+    QElapsedTimer showTimer;
+    if (traceEnabled) {
+        showTimer.start();
+    }
     // Bail paths emit dismissed only when snap-assist is NOT currently
     // visible: the emit exists so a failed show releases an idle Escape
     // grab, but when snap-assist is live on ANOTHER screen an unconditional
@@ -273,6 +282,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
         // already sized/shown.
         qCInfo(lcOverlay) << "showSnapAssist: refreshed in place on screen=" << resolvedId
                           << "zones=" << emptyZones.size() << "candidates=" << candidates.size();
+        if (traceEnabled) {
+            qCInfo(lcSnapAssistTrace).nospace()
+                << "show refresh zones=" << emptyZones.size() << " candidates=" << candidates.size()
+                << " handler=" << showTimer.nsecsElapsed() / 1000 << "us";
+        }
         Q_EMIT snapAssistShown(resolvedId, emptyZones, candidates);
         return;
     }
@@ -344,6 +358,13 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     qCInfo(lcOverlay) << "showSnapAssist: screen=" << resolvedId << "zones=" << emptyZones.size()
                       << "candidates=" << candidates.size();
+    if (traceEnabled) {
+        // Main-thread time the show handler itself holds. Thumbnail posts
+        // arriving while it runs queue behind it, so this is the floor of
+        // their D-Bus round-trip during a show.
+        qCInfo(lcSnapAssistTrace).nospace() << "show zones=" << emptyZones.size() << " candidates=" << candidates.size()
+                                            << " handler=" << showTimer.nsecsElapsed() / 1000 << "us";
+    }
 
     // snapAssistShown signal is wired in shortcuts_wiring.cpp to
     // ensureCancelOverlayShortcutRegistered() - the shell's wl_surface is
@@ -371,8 +392,10 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     // snap-assist for that window re-captures instead of stranding on the
     // icon fallback.
     //
-    // Bounds: a 256² thumbnail is the steady-state size; the shared
-    // protocol ceiling is the cap. Anything larger is almost certainly a
+    // Bounds: the effect captures at the size the card draws (well under
+    // 256² for a crowded show, larger only for a lone candidate on a HiDPI
+    // output); the shared protocol ceiling is the cap. Anything larger is
+    // almost certainly a
     // marshalling bug or a hostile sender that slipped past auth, and
     // consumes excessive bytes to round-trip through the cache.
     static constexpr int MaxDimension = PhosphorProtocol::Service::SnapAssistThumbnailMaxDimension;
@@ -392,9 +415,23 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     // survives @p pixels going out of scope. With dimensions and byte count
     // already validated above the constructor cannot produce a null image,
     // so no isNull guard is needed before .copy().
+    static const bool traceEnabled = PhosphorProtocol::Service::snapAssistThumbnailTraceEnabled();
+    QElapsedTimer receiveTimer;
+    if (traceEnabled) {
+        receiveTimer.start();
+    }
     QImage view(reinterpret_cast<const uchar*>(pixels.constData()), width, height, width * 4, QImage::Format_ARGB32);
     QImage image = view.copy();
-    return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
+    const qint64 copyUs = traceEnabled ? receiveTimer.nsecsElapsed() / 1000 : 0;
+    const bool accepted = updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
+    if (traceEnabled) {
+        // copy = detaching the D-Bus byte buffer into an owned QImage; total
+        // adds the provider insert and the candidate-map/QML push.
+        qCInfo(lcSnapAssistTrace).nospace()
+            << "receive " << compositorHandle << " " << width << "x" << height << " payload=" << pixels.size()
+            << "B copy=" << copyUs << "us total=" << receiveTimer.nsecsElapsed() / 1000 << "us accepted=" << accepted;
+    }
+    return accepted;
 }
 
 bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)

@@ -111,8 +111,10 @@ QStringList validatedShaderSearchPaths(const QJsonArray& arr)
         }
         // The RAW components, not QDir::cleanPath's: cleanPath collapses `..`
         // away, so testing its output would pass every traversal through.
-        // Rejecting the raw form keeps the registered root exactly what the
-        // daemon named.
+        // Rejecting the raw form is what makes the check meaningful — note the
+        // loader normalises the path with cleanPath before registering it, so
+        // what ends up registered is the normalised form, not the exact string
+        // the daemon named.
         if (path.split(QLatin1Char('/')).contains(QLatin1String(".."))) {
             qCWarning(lcEffect) << "loadShaderRegistryFromDbus: rejecting search path with a traversal component"
                                 << path;
@@ -204,8 +206,11 @@ const QSet<PhosphorRules::Field>& activeLayoutField()
 /// The caller's slices are already filtered to real candidates for their
 /// respective rule sets, so a removal here is always a rule the effect
 /// would otherwise have bound.
+/// @p outActiveLayoutWithheld is REQUIRED, deliberately: every caller ORs its
+/// slice's contribution into one marker, and a defaulted-away out-param is how
+/// a future fourth slice would silently drop its own.
 QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> rules, bool activeLayoutsSeeded,
-                                                    bool* outActiveLayoutWithheld = nullptr)
+                                                    bool* outActiveLayoutWithheld)
 {
     const QSet<PhosphorRules::Field>& fields = effectNeverStampedFields(activeLayoutsSeeded);
     rules.removeIf([&fields, activeLayoutsSeeded, outActiveLayoutWithheld](const PhosphorRules::Rule& rule) {
@@ -243,9 +248,9 @@ QList<PhosphorRules::Rule> withoutNeverStampedRules(QList<PhosphorRules::Rule> r
 /// `arraySink` runs when it is a top-level JSON array. Pass a
 /// no-op (empty std::function) for the shape the caller doesn't
 /// expect — a payload of the wrong shape logs and is dropped.
-inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
-                                std::function<void(const QJsonObject&)> objectSink,
-                                std::function<void(const QJsonArray&)> arraySink)
+void dispatchJsonSetting(QLatin1String name, const QVariant& v,
+                         const std::function<void(const QJsonObject&)>& objectSink,
+                         const std::function<void(const QJsonArray&)>& arraySink)
 {
     // Same two-stage bound the getAllRules path applies, for the same reason
     // and against the same cap: these payloads cross D-Bus too, and what the
@@ -279,7 +284,19 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
             : objectSink                                 ? "object"
             : arraySink                                  ? "array"
                                                          : "(no shape — caller wired neither sink)";
-        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON" << expected;
+        // The variant's TYPE too. A payload that was never a string at all
+        // converts to an empty QString, parses to a null document, and lands
+        // here reading as though the daemon had sent JSON of the wrong shape —
+        // which points a reader at the sinks when the real fault is upstream,
+        // in what was put on the wire.
+        // An unset QDBusVariant reaches here (loadSettingAsync checks the reply,
+        // not the inner variant) and typeName() answers a NULL const char* for
+        // it, so the null guard below is required. typeName() and
+        // metaType().name() are the same call — do not "simplify" to the other
+        // spelling and drop the guard along the way.
+        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON" << expected
+                            << "(variant type" << QLatin1String(v.typeName() ? v.typeName() : "invalid") << ","
+                            << utf8.size() << "bytes)";
     }
 }
 
@@ -290,6 +307,15 @@ bool PlasmaZonesEffect::resolvedShaderAppliesToEvent(const QString& effectId, co
     // See the header doc. Routed through the canonical predicate
     // (shaderEffectAppliesToEventPath) — the same one the settings pickers
     // filter with — so runtime refusal and picker filtering can never drift.
+    //
+    // `effect()` returns BY VALUE, copying the whole descriptor (a dozen-odd
+    // QStrings, four QStringLists, a parameter list and a texture-slot list) to
+    // read two fields. Implicit sharing makes that refcount traffic rather than
+    // allocation, but it is reachable per geometry apply — per frame during an
+    // autotile drag. The fix is a narrow applies-to-path accessor on the
+    // registry, which is a library arm and wants a measurement first. Do NOT
+    // cache the descriptor here: the registry rescans, and a stale copy would
+    // refuse a pack that had just become valid.
     const auto eff = m_shaderManager.m_animationShaderRegistry.effect(effectId);
     if (!eff.isValid()) {
         // Unknown id: pass through. The pack may still be scanning, and
@@ -473,16 +499,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // rule wins per-slot, with engaged-empty effectId still blocking the tree
     // fallthrough and durationMs <= 0 still meaning "inherit".
     //
-    // Clamp the resolved duration to the upstream `durationMs` floor: if
-    // the cascade collapses to <= 0 (corrupt persisted rule, missing
-    // motion-tree node feeding baseDurationMs), the QTimer::singleShot
-    // below would fire on the next event-loop tick and tear down the
-    // just-installed transition before its first paint. The input
-    // `durationMs` was already clamped by the daemon-bringup loader to
-    // [MinAnimationDurationMs, MaxAnimationDurationMs], and the
-    // `durationMs <= 0` guard at the top of `tryBeginShaderForEvent`
-    // rejects non-positive inputs, so `durationMs` here is a safe
-    // positive floor.
+    // Structural backstop, NOT the guarantee. A duration collapsing to <= 0
+    // would let the teardown timer fire on the next tick and kill the transition
+    // before its first paint — but what prevents that is the clamp inside
+    // resolveEventMotionProfile, which bounds an engaged duration into the
+    // envelope and falls back to the profile default otherwise, so
+    // `baseDurationMs` is positive on every path and the branch is dead today.
+    // Kept because its fallback is genuinely safe; do NOT read it as the reason
+    // the invariant holds, or drop that clamp on the strength of it.
     const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
                                                                      profileTree, ruleWindowId, query, profilePath);
     const auto& profile = resolved.profile;
@@ -501,62 +525,84 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
         // An empty resolve is the NORMAL state for any event whose cascade
-        // chain carries no override — not just for an empty tree. The old
-        // demotion keyed on the whole tree being empty, so a user with nine
-        // overrides on open/close/move legs got a WARNING three times per
-        // focus change, forever, because window.appearance.focus had none.
-        // Only an override ON THIS PATH'S CASCADE (exact, or a dotted-path
-        // ancestor like "window.appearance" / "window") makes an empty
-        // resolve genuinely surprising (the documented prune / D-Bus-race
-        // scenarios) — cascade resolution would otherwise have inherited it.
-        // Rules keep a term, but only for the ONE action that can assign a
-        // shader per-window: OverrideAnimationShader (timing/curve overrides
-        // carry no effectId). Gating on the whole rule set restored the
-        // warning for any border/opacity/layer rule — the exact population
-        // the demotion exists to silence.
-        // ...and not for a windowless leg even then: the rule tier was skipped
-        // for it above (empty query, empty window id), so no rule of any kind can
-        // be the reason this resolve came back empty.
-        const bool shaderAssigningRules = !windowlessLeg && m_shaderManager.hasAnimationShaderRules();
-        bool cascadeCovered = false;
-        // The by-value QStringList is built ONCE and reused by both the loop
-        // and the warn diagnostic below — the pre-change code paid it twice
-        // (once for the range-for, once for .size() in the warn branch).
-        const QStringList overriddenPaths = profileTree.overriddenPaths();
-        // An ISOLATED path does not have the chain this loop assumes. resolve()
-        // trims everything above the isolation root away, so for a shell leg an
-        // override at `global` — or anywhere else outside the subtree — is not part
-        // of the cascade at all and cannot be why the resolve came back empty.
-        // Empty for every ordinary path, which leaves their behaviour untouched.
-        const QString isolationRoot = PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath);
-        const auto insideIsolatedSubtree = [&isolationRoot](const QString& path) {
-            return path == isolationRoot
-                || (path.size() > isolationRoot.size() && path.startsWith(isolationRoot)
-                    && path.at(isolationRoot.size()) == QLatin1Char('.'));
-        };
-        for (const QString& overridden : overriddenPaths) {
-            // The literal "global" root is a genuine chain member of every
-            // NON-isolated path (parentPath terminates every such cascade at
-            // Global), so an override stored there covers this resolve too.
-            // Ancestry is a prefix-plus-dot test rather than a per-entry
-            // concatenation.
-            const bool isChainMember = profilePath == overridden
-                || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
-                    && profilePath.at(overridden.size()) == QLatin1Char('.'))
-                || (isolationRoot.isEmpty() && overridden == PhosphorAnimation::ProfilePaths::Global);
-            if (isChainMember && (isolationRoot.isEmpty() || insideIsolatedSubtree(overridden))) {
-                cascadeCovered = true;
-                break;
+        // carries no override, not just for an empty tree. The old demotion
+        // keyed on the whole tree being empty, so a user with overrides on the
+        // open/close/move legs got a WARNING three times per focus change,
+        // forever, because window.appearance.focus had none.
+        //
+        // A rule that filled this event's shader slot is the first and cheapest
+        // answer: resolveAnimationShaderProfile takes the rule's effectId
+        // VERBATIM and never consults the tree, so an engaged-empty one is a
+        // deliberate per-app "no shader here" and the cascade question does not
+        // apply. Asking it anyway warned on every event of that leg forever,
+        // which is the same defect one layer up.
+        if (resolved.shaderSlotFromRule) {
+            qCDebug(lcEffect) << "tryBeginShader[" << profilePath
+                              << "]: no shader assigned (a window rule set this event to none)";
+            return;
+        }
+        // Past here the profile came from the tree, so no rule can be why it is
+        // empty. What is left worth asking is WHICH entry explains it — not
+        // "should this warn": the walk answers resolve's own question, so it
+        // cannot disagree with resolve, and inside a branch gated on the resolve
+        // being empty there is nothing surprising left to warn about. The old
+        // scan could warn only because it asked something different (whether ANY
+        // entry in insertion order pinned a pack), which is exactly the defect
+        // this replaced.
+        //
+        // Walk the REAL cascade, nearest first, stopping at the first entry
+        // that engages an effectId. Same answer resolve() reaches from the
+        // other end: it overlays root-to-leaf and ShaderProfile::overlay
+        // assigns only engaged fields, so the DEEPEST engaged entry wins.
+        QString explainedBy;
+        if (PhosphorAnimationShaders::shaderPathResolvesInIsolation(profilePath)) {
+            // These legs have no chain at all: resolve() consults ONLY the
+            // direct override and never walks up, so an ancestor's pack is not
+            // part of this resolve and cannot be why it came back empty. This
+            // is a DIFFERENT predicate from an isolation ROOT and the two sets
+            // are disjoint — shaderPathIsolationRoot answers only for the shell
+            // family and is empty for exactly these paths, which is why it is
+            // not even computed on this arm.
+            if (profileTree.directOverride(profilePath).effectId.has_value()) {
+                explainedBy = profilePath;
+            }
+        } else {
+            const QString isolationRoot = PhosphorAnimationShaders::shaderPathIsolationRoot(profilePath);
+            for (QString step = profilePath; !step.isEmpty();
+                 step = PhosphorAnimation::ProfilePaths::parentPath(step)) {
+                // directOverride returns BY VALUE and answers with a
+                // default-constructed profile for a path it does not hold, so a
+                // DISENGAGED effectId is the common case here and the engagement
+                // test has to come before any dereference.
+                if (profileTree.directOverride(step).effectId.has_value()) {
+                    explainedBy = step;
+                    break;
+                }
+                // The isolation root is itself a chain member — resolve() trims
+                // the chain down to it but keeps it — so it is tested above
+                // before the walk stops here.
+                if (!isolationRoot.isEmpty() && step == isolationRoot) {
+                    break;
+                }
+                // The BASELINE is not visited and cannot be — it is not a path,
+                // so parentPath cannot reach it. resolve() does seed from it, so
+                // one pinning a real pack would be an explanation this misses.
+                // Unreachable today: the only caller of setBaseline on a shader
+                // tree is the prune helper, which copies the source baseline
+                // through and cannot introduce one, so it stays disengaged.
             }
         }
-        if (!cascadeCovered && !shaderAssigningRules) {
-            qCDebug(lcEffect) << "tryBeginShader[" << profilePath
-                              << "]: no shader assigned (no override on this path's cascade)";
+        // Both arms are qCDebug, because neither is a fault. An explicit None
+        // is the user's own choice, and no override at all is the ordinary
+        // state of most events.
+        if (!explainedBy.isEmpty()) {
+            qCDebug(lcEffect) << "tryBeginShader[" << profilePath << "]: no shader assigned (an explicit None at"
+                              << explainedBy << ")";
         } else {
-            qCWarning(lcEffect) << "tryBeginShader[" << profilePath
-                                << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << overriddenPaths.size() << " rules=" << m_shaderManager.animationRuleSet().count()
-                                << " shaderAssigningRules=" << shaderAssigningRules << ")";
+            qCDebug(lcEffect) << "tryBeginShader[" << profilePath
+                              << "]: no shader assigned (no override on this path's cascade, tree size="
+                              << profileTree.overriddenPaths().size()
+                              << " rules=" << m_shaderManager.animationRuleSet().count() << ")";
         }
         return;
     }
@@ -591,6 +637,12 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (profilePath == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch) {
         if (auto* live = m_shaderManager.findTransition(window)) {
             const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
+            // No `.shader` null-sentinel operand here, unlike the same-pointer
+            // test further down. It would be inert: beginShaderTransition
+            // refuses to install when the cached entry carries a null shader,
+            // so a LIVE transition can never point at the sentinel in the first
+            // place. The other site guards a different question, where the
+            // entry it compares against need not have been installed from.
             if (cacheIt != m_shaderManager.m_shaderCache.end() && live->cached == &cacheIt->second) {
                 endShaderTransition(window);
             }
@@ -717,6 +769,12 @@ void PlasmaZonesEffect::loadShaderProfileFromDbus()
             dispatchJsonSetting(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree, v,
                                 [this](const QJsonObject& obj) {
                                     auto& tree = m_shaderManager.profileTree();
+                                    // Assigned unconditionally: fromJson is TOTAL, so it
+                                    // cannot report a bad payload the way RuleSet::fromJson
+                                    // can, and an object with no `overrides` array yields
+                                    // the empty tree — the right outcome for a user who
+                                    // cleared every override. No other shape reaches here:
+                                    // dispatchJsonSetting rejects a non-object first.
                                     tree = PhosphorAnimationShaders::ShaderProfileTree::fromJson(obj);
                                     qCDebug(lcEffect) << "loadShaderProfileFromDbus: tree loaded with"
                                                       << tree.overriddenPaths().size()
@@ -793,6 +851,22 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
             // chain the marker sits stale-FALSE; the exhaustion arm below
             // re-arms it so the NEXT seeding edge re-drives instead of
             // trusting a fetch that never landed.
+            //
+            // Deliberately an UNOWNED singleShot, so nothing can cancel it.
+            // Every cancel path skips the exhaustion arm below, which is the
+            // only thing that re-arms the marker: cancel-by-fresh-trigger heals
+            // itself (that fetch recomputes the marker wholesale), but cancel
+            // on DAEMON LOSS would leave it stale-FALSE with the withheld rules
+            // out of every evaluator. Anyone making this cancellable must set
+            // m_activeLayoutRulesWithheld on that edge, and rewrite the comment
+            // in lifecycle_wiring_daemon.cpp that says the retry is deliberately
+            // allowed to run against a not-yet-ready daemon at bring-up.
+            //
+            // The cost is one redundant getAllRules if a stale chain fires after
+            // a fresh trigger succeeded. That reply bumps the generation itself
+            // so it is processed in full, which is harmless: it is a wholesale
+            // refresh over the current store and applying it twice lands the
+            // same state.
             if (m_ruleFetchRetriesLeft > 0) {
                 --m_ruleFetchRetriesLeft;
                 QTimer::singleShot(kRuleFetchRetryDelayMs, this, [this] {
@@ -1269,6 +1343,19 @@ void PlasmaZonesEffect::loadShaderRegistryFromDbus()
                                 /*objectSink=*/{}, [this](const QJsonArray& arr) {
                                     const QStringList paths = validatedShaderSearchPaths(arr);
                                     if (!paths.isEmpty()) {
+                                        // ADD-only: the registry has no verb that
+                                        // unregisters a root, so one the daemon stops
+                                        // publishing stays registered with its watcher for
+                                        // the session. Retracting would need a "replace the
+                                        // published set" arm on the loader, and the daemon
+                                        // does not retract one today.
+                                        //
+                                        // It also scans SYNCHRONOUSLY on the compositor
+                                        // thread and the effectsChanged handler then ends
+                                        // every live transition inline. A no-op on any
+                                        // republish of an unchanged list (the loader skips
+                                        // the scan when every path is known), so only a
+                                        // mid-session NEW root pays for it.
                                         m_shaderManager.m_animationShaderRegistry.addSearchPaths(paths);
                                         // paths.size() is the REQUESTED count, pre-dedupe:
                                         // addSearchPaths silently drops already-registered

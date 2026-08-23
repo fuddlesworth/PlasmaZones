@@ -7,9 +7,11 @@
 // files (animationspagecontroller.cpp and its _overrides / _shaders / _paths /
 // _groupwrites siblings). Covers the shader-effect / parameter / shader-profile conversions
 // those TUs hand to QML, the override-file read and normalisation
-// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, readProfileJson,
-// sanitizedProfileMap, profileToVariantMap,
-// mergeMissingFields, fillLibraryDefaults), and the two path helpers
+// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, kMaxProfileReadBytes,
+// readProfileJson, sanitizedProfileMap, profileToVariantMap,
+// mergeMissingFields, fillLibraryDefaults), the Q_INVOKABLE-boundary bound on
+// what a caller's map may carry to disk (kMaxWrittenMap*, boundedWrittenMap),
+// and the two path helpers
 // (humanizeSegment, collectShaderOverrideDescendants). Inline definitions here ensure every TU
 // gets its own copy without relying on unity-build TU merging for cross-TU
 // linkage.
@@ -131,6 +133,41 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 /// false "shadowing children" warning on the ancestor card, and the
 /// paired clear action would silently wipe a setting the user made on the
 /// Window Dragging page.
+///
+/// PARAMS-ONLY overrides are excluded, but for a narrower reason than the
+/// leaf-isolated ones above, and the difference matters. An override whose
+/// `effectId` is not engaged still inherits the ancestor's PACK, so change
+/// the pack above and the descendant follows. Only an ENGAGED effectId
+/// pins a pack at the descendant and makes it stop following, which is
+/// what "shadows this parent" means to a user reading the warning. Note an
+/// engaged effectId counts even when it currently equals what the ancestor
+/// resolves: the two are the same pack today and independent tomorrow, and
+/// it is that pin the warning exists to surface.
+///
+/// It does NOT follow that a params-only descendant shadows nothing. On the
+/// PARAMETER axis it shadows completely: ShaderProfile::overlay REPLACES
+/// the whole parameter map rather than merging keys (pinned by
+/// libs/phosphor-animation/tests/test_shaderprofiletree.cpp,
+/// testResolveLeafFillsFromCategoryThenBaseline), so a descendant that
+/// stores parameters freezes every value at that leaf and stops following
+/// the ancestor's parameter edits. That is deliberately not surfaced here,
+/// because this walk drives a warning whose one action is a destructive
+/// clear: counting the parameter axis would put the ancestor back in the
+/// business of offering to delete a tweak the user just made on the
+/// descendant, which is the bug this exclusion exists to fix. The
+/// descendant's own card is where that state is disclosed, via the shader
+/// row's ownership caption, which AnimationProfileEditor derives from its
+/// `shaderOwnsPack` and `shaderOwnsParamsOnly` inputs.
+///
+/// One consequence worth stating, because nothing surfaces it from the
+/// ancestor: when the ancestor SWITCHES pack, a params-only descendant keeps
+/// its stored map and resolves the new pack carrying the old pack's parameter
+/// ids. Parameter ids are per-pack, so the new pack matches none of them and
+/// falls back to its own defaults for every value. The descendant is not
+/// broken and nothing is lost — clearing its parameters on its own card
+/// removes the entry and restores inheritance — but the ancestor's "clear
+/// shadowing children" affordance deliberately will not reach it, so that card
+/// is the only place it can be resolved.
 inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                     const QString& path)
 {
@@ -140,20 +177,60 @@ inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShade
     const QString prefix = path + QLatin1Char('.');
     const QStringList paths = tree.overriddenPaths();
     for (const QString& p : paths) {
-        if (p.startsWith(prefix) && !PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
-            out.append(p);
+        if (!p.startsWith(prefix) || PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
+            continue;
+        if (!tree.directOverride(p).effectId.has_value())
+            continue;
+        out.append(p);
+    }
+    return out;
+}
+
+/// Descendants of @p path that store PARAMETERS but no pack of their own.
+///
+/// The complement of `collectShaderOverrideDescendants` above, over the same
+/// prefix relation and with the same leaf-isolation exclusion. That one answers
+/// "who shadows this parent's PACK", which is what the shadowing warning acts
+/// on; this one answers "who carries parameter values while still following
+/// this parent's pack", which is the population an ancestor pack SWITCH can
+/// strand — their stored ids belong to the pack that was replaced.
+///
+/// Deliberately says nothing about whether those ids are still meaningful. That
+/// needs the shader registry to know which ids a pack declares, which lives on
+/// the controller, so the staleness test is applied by the caller.
+inline QStringList collectParamsOnlyDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                const QString& path)
+{
+    QStringList out;
+    if (path.isEmpty())
+        return out;
+    const QString prefix = path + QLatin1Char('.');
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& p : paths) {
+        if (!p.startsWith(prefix) || PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
+            continue;
+        const auto stored = tree.directOverride(p);
+        // Owning a pack — including the engaged-empty "None" sentinel — puts a
+        // path in the OTHER collector's population, not this one.
+        if (stored.effectId.has_value())
+            continue;
+        if (!stored.parameters.has_value() || stored.parameters->isEmpty())
+            continue;
+        out.append(p);
     }
     return out;
 }
 
 /// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
 /// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
-/// for single-word segments. Shared by animationspagecontroller.cpp's
-/// `eventSections` (cached event tree) and animationspagecontroller_paths.cpp's
-/// `eventLabel` (per-path lookup) so the two surfaces format identically.
-/// Inline in this header so the label format stays in one place —
-/// diverging here would silently break the path-vs-tree label match
-/// downstream consumers rely on.
+/// for single-word segments.
+///
+/// Its one caller is `AnimationsPageController::segmentLabel`
+/// (animationspagecontroller_paths.cpp), which is itself the single source both
+/// label surfaces go through: `eventSections` builds the cached event tree from
+/// it and `eventLabel` answers per-path lookups with it, so the two format
+/// identically by construction. Inline in this header to keep the format in one
+/// place.
 inline QString humanizeSegment(const QString& segment)
 {
     if (segment.isEmpty())
@@ -191,6 +268,57 @@ inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile
 /// Ceiling on one profile file read. Derived from the shared cap so it
 /// cannot drift from the snapshot, preset, and set-file readers.
 constexpr qint64 kMaxProfileReadBytes = animfileutil::kMaxJsonFileBytes;
+
+/// Caps on a QVariantMap arriving from QML at a Q_INVOKABLE boundary.
+///
+/// Generous by design — well above any legitimate parameter set or preset
+/// name — because the point is to bound what reaches disk, not to second-guess
+/// a pack's schema. A pack declaring more than a few dozen parameters, or a
+/// name longer than a sentence, is already outside what the UI can present.
+constexpr int kMaxWrittenMapEntries = 256;
+constexpr int kMaxWrittenMapKeyChars = 128;
+constexpr int kMaxWrittenMapStringChars = 1024;
+
+/// @p in with over-long keys and over-long string values dropped.
+///
+/// The effect id at these writers is already gated, and the merged writer
+/// allowlists its field KEYS, but nothing bounded the VALUES riding with
+/// either. Both are persisted close to verbatim — the shader parameter map is
+/// copied through `ShaderProfile::fromJson` with no validation on the way back
+/// in — so an over-long value written once stays on disk until some later write
+/// happens to rewrite the object.
+///
+/// It is not merely untidy. A profile file pushed past `kMaxProfileReadBytes`
+/// is skipped WHOLE by `readProfileJson`, so `rawProfile` answers empty and the
+/// card renders every field as inherited while `hasOverride` still reports
+/// true. The next write repairs it, but the state in between is a card
+/// asserting something untrue about itself.
+///
+/// Drops rather than refuses, matching the merged writer's treatment of an
+/// unknown field: the rest of the map is still what the user asked for.
+inline QVariantMap boundedWrittenMap(const QVariantMap& in, QLatin1String context)
+{
+    QVariantMap out;
+    for (auto it = in.constBegin(); it != in.constEnd(); ++it) {
+        if (out.size() >= kMaxWrittenMapEntries) {
+            qCWarning(lcConfig) << context << ": dropping entries past the" << kMaxWrittenMapEntries
+                                << "entry cap; map carried" << in.size();
+            break;
+        }
+        if (it.key().size() > kMaxWrittenMapKeyChars) {
+            qCWarning(lcConfig) << context << ": dropping over-long key of" << it.key().size() << "characters";
+            continue;
+        }
+        if (it.value().metaType().id() == QMetaType::QString
+            && it.value().toString().size() > kMaxWrittenMapStringChars) {
+            qCWarning(lcConfig) << context << ": dropping over-long value for key" << it.key() << "of"
+                                << it.value().toString().size() << "characters";
+            continue;
+        }
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
 
 /// Read the JSON object at @p path. Returns an empty object on missing
 /// file / parse error / non-object root. The `name` field is stripped so
