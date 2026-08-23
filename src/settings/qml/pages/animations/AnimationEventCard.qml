@@ -354,6 +354,14 @@ Item {
     // shaderProfileChanged signal — see `onShaderProfileChanged` in the
     // `target: settingsController.animationsPage` Connections block below.
     property int _shadowingChildrenCount: 0
+    /// How many events below this one kept parameter values authored against a
+    /// pack this card no longer resolves. Assigned by refreshShaderFromTree
+    /// from one group call, like the shadowing count above it.
+    property int _staleParamChildrenCount: 0
+    /// Whether THIS event's own parameter values are the orphaned kind, which
+    /// is what the row's ownership caption needs to say so rather than calling
+    /// them "settings of its own".
+    property bool _shaderParamsStale: false
     // Bumped on every `shaderEffectsChanged` so any binding that reads
     // a shader-registry Q_INVOKABLE (`availableShaderEffects()`,
     // `shaderParameters()`, etc.) can become reactive to registry
@@ -401,6 +409,27 @@ Item {
             return "";
 
         return chain.slice(1).join(" ← ");
+    }
+
+    // ── Timing read / writes ────────────────────────────────────────
+    // Same split, same reason, as the shader block below: the bodies live in
+    // AnimationEventCardTimingIo and these forwarders keep every call site —
+    // handlers, bindings and the QML-contract scrape — reading `root._foo(...)`.
+    function _applyEffective() {
+        return timingIo._applyEffective.apply(timingIo, arguments);
+    }
+    function commitDurationOverride() {
+        return timingIo.commitDurationOverride.apply(timingIo, arguments);
+    }
+    function commitCurveOverride() {
+        return timingIo.commitCurveOverride.apply(timingIo, arguments);
+    }
+
+    // Never read by name — see the `_shaderIo` note below.
+    readonly property AnimationEventCardTimingIo _timingIo: AnimationEventCardTimingIo {
+        id: timingIo
+
+        card: root
     }
 
     // ── Shader read / parameter writes ──────────────────────────────
@@ -463,6 +492,9 @@ Item {
     function _clearFieldOnAll() {
         return writers._clearFieldOnAll.apply(writers, arguments);
     }
+    function _clearStaleParamDescendantsOnAll() {
+        return writers._clearStaleParamDescendantsOnAll.apply(writers, arguments);
+    }
     function _clearShaderOverrideDescendantsOnAll() {
         return writers._clearShaderOverrideDescendantsOnAll.apply(writers, arguments);
     }
@@ -480,39 +512,6 @@ Item {
         id: writers
 
         card: root
-    }
-
-    /// Seeds the working controls (timing mode, curve, duration) from an
-    /// already-resolved profile. Imperative rather than a binding because the
-    /// user edits these directly, so a binding would be severed on first edit
-    /// and stop tracking afterwards.
-    function _applyEffective(effective, resolvedCurve) {
-        var curve = (typeof effective.curve === "string" && effective.curve.length > 0) ? effective.curve : resolvedCurve;
-        if (typeof curve === "string" && curve.indexOf("spring:") === 0) {
-            // Spring mode is set for a malformed wire string too, since the
-            // engine still resolves one. Without it the mode kept its previous
-            // value (Easing on first seed) and drew a Duration slider the
-            // resolved spring ignores. CurvePresets.parseSpring supplies the
-            // values the engine will actually play, so the controls, the
-            // thumbnail and the "Current:" line all describe the same spring,
-            // and a curve edit commits that spring rather than a fabricated
-            // "spring:<stale>,<stale>".
-            const s = CurvePresets.parseSpring(curve);
-            root.currentTimingMode = CurvePresets.timingModeSpring;
-            root.currentSpringOmega = s.omega;
-            root.currentSpringZeta = s.zeta;
-        } else {
-            root.currentTimingMode = CurvePresets.timingModeEasing;
-            // With a default fallback, matching the duration line below and
-            // inheritSummaryText's read of the same value: without the else,
-            // an absent curve (mid-warmup {} resolution, or resolvedProfile's
-            // empty-path early return) kept the property's PREVIOUS value —
-            // which after a revert is exactly the just-reverted curve, the
-            // stale-view class this card's fix exists to close — while the
-            // italic "Current:" line already showed the default.
-            root.currentEasingCurve = (typeof curve === "string" && curve.length > 0) ? curve : CurvePresets.defaultEasingCurve;
-        }
-        root.currentDuration = effective.duration !== undefined ? effective.duration : CurvePresets.defaultDurationMs;
     }
 
     /// @param selfDriven true when the caller is one of this card's own group
@@ -633,44 +632,6 @@ Item {
     // already carved the curve out, and the per-axis split extends the same
     // rule to both fields in both modes. The controller stamps the `name`
     // field automatically.
-    function commitDurationOverride() {
-        // Drag-rate (the slider emits per move), so a refused write is dropped
-        // without restoring the slider — refreshing per tick would pull the
-        // handle back out from under the user. Same trade as
-        // `_writeShaderParam`; `commitCurveOverride` below is discrete and does
-        // restore.
-        if (root._writesRefused)
-            return;
-
-        // The merged writer overlays only the fields in `profile`, and the
-        // `undefined` curve means "each path keeps its own curve, or keeps
-        // inheriting" — decided PER PATH so a mirror that owns a curve is
-        // preserved and one that inherits stays inheriting.
-        root._noteWriteResult(root._setOverrideMerged({
-            "duration": root.currentDuration
-        }, undefined));
-    }
-
-    function commitCurveOverride() {
-        // Discrete (a combo activation or the curve dialog accepting), so a
-        // refused write leaves the editor showing a curve that never reached
-        // disk with no later tick to correct it. Restore the stored state.
-        //
-        // selfDriven, like every other refresh this card drives itself. Without
-        // it the refresh would clear `_writesRefused` — the very latch that
-        // just refused this write — and would take the close-the-editor branch
-        // if the discard has already emptied the store, folding the timing
-        // editor away under the user who just picked the curve.
-        if (root._writesRefused) {
-            root.refreshFromTree(true);
-            return;
-        }
-
-        // Empty profile map: nothing but the curve travels. Each path's own
-        // stored duration (or its absence) survives the merge untouched.
-        root._noteWriteResult(root._setOverrideMerged({}, root.currentCurveString));
-    }
-
     // Two emitters pass an empty path, and both mean "reload everything":
     // `shaderProfileChanged` on a full-tree reload, and `overrideChanged` from
     // the controller's `forgetCachedOverrideFiles`, which fires when somebody
@@ -920,6 +881,7 @@ Item {
                 overrideActive: root.overrideEnabled
                 timingEditorOpen: root._timingEditorOpen
                 shadowingChildrenCount: root._shadowingChildrenCount
+                staleParamChildrenCount: root._staleParamChildrenCount
                 mirrorsDiverged: root._mirrorsDiverged
                 divergentPathCount: root._divergentPathCount
                 writePathCount: root._writePaths.length
@@ -932,6 +894,7 @@ Item {
                 // are current either way, and the controller owns the refusal
                 // toast. Reading the -1 here would only duplicate that.
                 onClearShadowingRequested: root._clearShaderOverrideDescendantsOnAll()
+                onClearStaleParamsRequested: root._clearStaleParamDescendantsOnAll()
             }
 
             // Section visibility splits the per-axis behaviour the
@@ -957,6 +920,7 @@ Item {
                 // predicates on purpose. See `_anyWritePathOwnsShaderPack`.
                 shaderOwnsPack: root._ownsShaderPack
                 shaderOwnsParamsOnly: root._ownsShaderParamsOnly
+                shaderParamsStale: root._shaderParamsStale
                 shaderOverrideStored: root._storesShaderOverride
                 shaderBlocksInherited: root._shaderBlocksInherited
                 shaderPackRemovable: root._anyWritePathOwnsShaderPack

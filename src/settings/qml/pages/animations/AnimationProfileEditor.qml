@@ -151,6 +151,11 @@ ColumnLayout {
     /// exists today — AnimationEventCard always sets this explicitly, and
     /// GlobalTimingDefaultsCard turns the shader leg off entirely — so the
     /// default is documentation of the contract rather than a live code path.
+    /// Whether this event's own parameter values were authored against a pack
+    /// that no longer resolves here, so they apply to nothing. Only meaningful
+    /// alongside `shaderOwnsParamsOnly`; the consumer supplies it because the
+    /// answer needs the shader registry.
+    property bool shaderParamsStale: false
     property bool shaderPackRemovable: shaderOwnsPack
     /// Whether naming the shown pack on the remove control is accurate, i.e.
     /// every path the control writes holds THAT pack. False on a group whose
@@ -254,8 +259,17 @@ ColumnLayout {
         if (shaderOwnsPack)
             return i18n("Overridden for this event");
 
-        if (shaderOwnsParamsOnly)
+        if (shaderOwnsParamsOnly) {
+            // Its own settings, but for a pack that is no longer the one
+            // resolving here — an ancestor switched pack out from under them.
+            // Parameter ids are per-pack, so they apply to nothing now while
+            // still replacing whatever the ancestor resolves. Saying "settings
+            // of its own" alone would be true and useless.
+            if (shaderParamsStale)
+                return i18n("Following the inherited pack, with saved settings that no longer apply");
+
             return i18n("Following the inherited pack, with settings of its own");
+        }
 
         return i18n("Following the inherited value");
     }

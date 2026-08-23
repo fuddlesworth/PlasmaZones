@@ -678,6 +678,23 @@ int AnimationsPageController::setShaderOverrideOnPaths(const QStringList& rawPat
         });
 }
 
+// setShaderParametersOnPaths rides the cascade on the PACK axis only.
+// ShaderProfile::overlay REPLACES the whole parameter map rather than merging
+// keys, so whatever this stores becomes the complete parameter set at that path
+// and stops following the ancestor's parameter edits. That is the documented
+// model rather than a defect, and the descendant's card discloses it through
+// the shader row's ownership caption — see also shaderParamsAreStale below for
+// what an ancestor pack SWITCH then leaves behind.
+//
+// The two empty-map outcomes are deliberate, and differ from
+// setShaderOverrideOnPaths, which treats an empty map as "leave parameters
+// unset" and still stores an entry:
+//   - path owns a pack (engaged effectId, sentinel included): the parameters
+//     are stripped and the entry stays, pack intact.
+//   - path owns only parameters: nothing would remain engaged, so the ENTRY IS
+//     REMOVED rather than stored empty. An empty profile would be a no-op
+//     override that the pruner, the diff and the ancestor's shadowing walk all
+//     have to reason about.
 int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawPaths, const QVariantMap& parameters)
 {
     using namespace PhosphorAnimationShaders;
@@ -709,6 +726,108 @@ int AnimationsPageController::setShaderParametersOnPaths(const QStringList& rawP
                                          return std::nullopt;
                                      return profile;
                                  });
+}
+
+bool AnimationsPageController::paramsAreStaleAt(const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                const QString& path) const
+{
+    using namespace PhosphorAnimationShaders;
+    const ShaderProfile stored = tree.directOverride(path);
+    // Owning a pack means the stored ids were authored against THAT pack, so
+    // they cannot be orphaned by somebody else's switch. The engaged-empty
+    // "None" sentinel counts as owning one for the same reason.
+    if (stored.effectId.has_value())
+        return false;
+    if (!stored.parameters.has_value() || stored.parameters->isEmpty())
+        return false;
+    const QString resolvedId = resolveShaderWithDefault(tree, path).effectiveEffectId();
+    // Nothing resolves, so there is no pack for the stored ids to mismatch. The
+    // values are inert, but that is the "no shader here" state rather than the
+    // orphaned one, and it says itself on the row.
+    if (resolvedId.isEmpty())
+        return false;
+    const QVariantList declared = shaderParameters(resolvedId);
+    // An unpopulated registry cannot tell an unknown id from an unscanned pack,
+    // the same caution acceptableShaderEffectId applies to its membership gate.
+    // Refusing to judge is the safe answer: claiming stale here would offer to
+    // delete values that are perfectly good.
+    if (declared.isEmpty())
+        return false;
+    QSet<QString> declaredIds;
+    declaredIds.reserve(declared.size());
+    for (const QVariant& entry : declared)
+        declaredIds.insert(entry.toMap().value(QLatin1String("id")).toString());
+    // Stale means EVERY stored id is unknown to the resolved pack, i.e. the map
+    // does nothing at all. A partial overlap still applies some values, which is
+    // a muddle rather than a dead entry, and offering to delete it would throw
+    // away settings that are working.
+    for (auto it = stored.parameters->constBegin(); it != stored.parameters->constEnd(); ++it) {
+        if (declaredIds.contains(it.key()))
+            return false;
+    }
+    return true;
+}
+
+bool AnimationsPageController::shaderParamsAreStale(const QString& path) const
+{
+    if (!m_settings || !isValidEventPath(path))
+        return false;
+    return paramsAreStaleAt(m_settings->shaderProfileTree(), path);
+}
+
+int AnimationsPageController::staleParamDescendantCountForPaths(const QStringList& rawPaths) const
+{
+    if (!m_settings)
+        return 0;
+    // ONE tree read for the whole group, and unioned rather than summed, for
+    // the same reasons shaderOverrideDescendantCountForPaths gives: two paths in
+    // a mirror group can share a descendant, and the count drives a button whose
+    // click must not claim to act on it twice.
+    const PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    QSet<QString> stale;
+    for (const QString& path : distinctPaths(rawPaths)) {
+        if (!isValidEventPath(path))
+            continue;
+        const QStringList candidates = collectParamsOnlyDescendants(tree, path);
+        for (const QString& descendant : candidates) {
+            if (paramsAreStaleAt(tree, descendant))
+                stale.insert(descendant);
+        }
+    }
+    return static_cast<int>(stale.size());
+}
+
+int AnimationsPageController::clearStaleParamDescendantsOnPaths(const QStringList& rawPaths)
+{
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearStaleParamDescendantsOnPaths: refusing while an async discard is in flight";
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot change this while a discard is in progress."));
+        return -1;
+    }
+    if (!m_settings)
+        return 0;
+    PhosphorAnimationShaders::ShaderProfileTree tree = m_settings->shaderProfileTree();
+    QSet<QString> stale;
+    for (const QString& path : distinctPaths(rawPaths)) {
+        if (!isValidEventPath(path))
+            continue;
+        const QStringList candidates = collectParamsOnlyDescendants(tree, path);
+        for (const QString& descendant : candidates) {
+            if (paramsAreStaleAt(tree, descendant))
+                stale.insert(descendant);
+        }
+    }
+    if (stale.isEmpty())
+        return 0;
+    // The whole entry goes, not just its parameter map. A params-only override
+    // IS its parameter map, so removing the values leaves nothing worth an
+    // entry, and clearOverride is what returns the event to plain inheritance.
+    for (const QString& path : stale)
+        tree.clearOverride(path);
+    m_settings->setShaderProfileTree(tree);
+    // pendingChangesChanged arrives through the shaderProfileTreeChanged
+    // handler, as it does for every other writer here.
+    return static_cast<int>(stale.size());
 }
 
 int AnimationsPageController::shaderOverrideDescendantCountForPaths(const QStringList& rawPaths) const

@@ -25,6 +25,9 @@
 
 namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
+// Forward-declared rather than included: only a const reference to it appears
+// in this header (paramsAreStaleAt), so the definition is a .cpp concern.
+class ShaderProfileTree;
 }
 
 namespace PlasmaZones {
@@ -419,24 +422,11 @@ public:
     /// where the path owns a pack, unengaged where it inherits one — so a
     /// params-only override rides the cascade instead of severing it.
     ///
-    /// It rides the cascade on the PACK axis only. `ShaderProfile::overlay`
-    /// replaces the whole parameter map rather than merging keys, so whatever
-    /// this stores becomes the complete parameter set at that path and stops
-    /// following the ancestor's parameter edits. That is the documented model,
-    /// not a defect here, and the descendant's card discloses it through the
-    /// shader row's ownership caption.
-    ///
-    /// An EMPTY @p parameters means "own no parameter values", and what that
-    /// resolves to depends on what else the path owns. The two outcomes are
-    /// deliberate and differ from setShaderOverrideOnPaths, which treats an
-    /// empty map as "leave `parameters` unset" and still stores an entry:
-    ///   - path owns a pack (engaged `effectId`, sentinel included): the
-    ///     parameters are stripped and the entry stays, pack intact.
-    ///   - path owns only parameters: nothing would remain engaged, so the
-    ///     ENTRY IS REMOVED rather than stored empty. Storing an empty profile
-    ///     would leave a no-op override that the pruner, the diff and the
-    ///     ancestor's shadowing walk all have to reason about.
-    /// So this is also the vehicle for "revert my parameters to inherited".
+    /// An EMPTY @p parameters means "own no parameter values", which strips the
+    /// parameters off a path that owns a pack and REMOVES the entry outright
+    /// from one that owned only parameters — so it is also the vehicle for
+    /// "revert my parameters to inherited". That, and why this replaces rather
+    /// than merges the map, are written up beside the implementation.
     ///
     /// @return the number of paths that hold the requested end state, which
     /// counts a path whose stored value already matched and a path that had
@@ -495,6 +485,16 @@ public:
     /// @return the number of paths whose override was removed, or -1 if the
     /// call was refused because an async discard owns the tree (it toasts).
     Q_INVOKABLE int clearShaderOverrideOnPaths(const QStringList& rawPaths);
+
+    // Orphaned parameter overrides: a descendant storing params but no pack of
+    // its own, whose stored ids the pack it now resolves does not declare. What
+    // an ancestor pack SWITCH leaves behind, since parameter ids are per-pack.
+    // Kept separate from the shadowing count above, which is about paths that
+    // override the parent's PACK; these follow it. The predicate, its carve-outs
+    // and why the clear is destructive are in the _groupwrites.cpp beside it.
+    Q_INVOKABLE bool shaderParamsAreStale(const QString& path) const;
+    Q_INVOKABLE int staleParamDescendantCountForPaths(const QStringList& rawPaths) const;
+    Q_INVOKABLE int clearStaleParamDescendantsOnPaths(const QStringList& rawPaths);
 
     /// Clear the shader overrides BELOW every path in @p rawPaths.
     /// @return the total number cleared, or -1 if any path refused (the
@@ -993,6 +993,10 @@ private:
     /// the group writer `setShaderOverrideOnPaths`, because the group writer is
     /// the only path QML uses and had silently inherited neither.
     /// @param context names the caller in the diagnostics.
+    /// Shared body of the three stale-parameter entry points, taking the tree
+    /// the caller already read so a group pass costs ONE rebuild.
+    bool paramsAreStaleAt(const PhosphorAnimationShaders::ShaderProfileTree& tree, const QString& path) const;
+
     bool acceptableShaderEffectId(const QString& effectId, QLatin1String context) const;
 
     /// Shared body of the two shader-leg group SETTERS

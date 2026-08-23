@@ -424,12 +424,19 @@ private Q_SLOTS:
         QVERIFY2(card.contains(QStringLiteral("function onPendingChangesChanged() { root._writesRefused = false; }")),
                  "the refusal latch no longer releases on pendingChangesChanged alone");
 
-        // (4) The ownership caption's three arms, in order. Ordering is the
-        // contract: owning a pack outranks owning only parameters, and the
-        // inherited-value wording is the fallthrough.
+        // (4) The ownership caption's arms, in order. Ordering is the
+        // contract: owning a pack outranks owning only parameters, the
+        // orphaned-values spelling is nested INSIDE the params-only arm (a
+        // stale map IS a params-only map, so a sibling arm would let the two
+        // orderings disagree), and inherited-value is the fallthrough.
         QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsPack) return i18n(\"Overridden for this event\");")),
                  "the caption's owned-pack arm changed");
-        QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsParamsOnly) return i18n(\"Following the inherited "
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsParamsOnly) {")),
+                 "the caption's params-only arm is no longer the outer test");
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderParamsStale) return i18n(\"Following the inherited pack, "
+                                                "with saved settings that no longer apply\");")),
+                 "the caption's orphaned-parameters arm changed, or left the params-only arm");
+        QVERIFY2(editor.contains(QStringLiteral("return i18n(\"Following the inherited "
                                                 "pack, with settings of its own\");")),
                  "the caption's params-only arm changed");
         QVERIFY2(editor.contains(QStringLiteral("return i18n(\"Following the inherited value\");")),

@@ -1583,6 +1583,26 @@ target_link_libraries(test_animations_shader_param_writes
 target_compile_definitions(test_animations_shader_param_writes PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_shader_param_writes COMMAND test_animations_shader_param_writes)
 
+# The orphaned-parameter surface. Its own TU rather than more slots in the
+# param-writes file above: every slot here needs the POPULATED registry (the
+# predicate refuses to judge without one), which is a different fixture from
+# the one that file is built around.
+add_executable(test_animations_stale_params
+    settings/pages/test_animations_stale_params.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_stale_params
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_stale_params PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
+
 # Decoration page (per-surface DecorationProfileTree editor): reader /
 # mutator coverage for DecorationPageController — chain resolution,
 # override engage/clear, per-pack parameter merge/prune, subtree ops and

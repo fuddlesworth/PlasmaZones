@@ -186,6 +186,41 @@ inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShade
     return out;
 }
 
+/// Descendants of @p path that store PARAMETERS but no pack of their own.
+///
+/// The complement of `collectShaderOverrideDescendants` above, over the same
+/// prefix relation and with the same leaf-isolation exclusion. That one answers
+/// "who shadows this parent's PACK", which is what the shadowing warning acts
+/// on; this one answers "who carries parameter values while still following
+/// this parent's pack", which is the population an ancestor pack SWITCH can
+/// strand — their stored ids belong to the pack that was replaced.
+///
+/// Deliberately says nothing about whether those ids are still meaningful. That
+/// needs the shader registry to know which ids a pack declares, which lives on
+/// the controller, so the staleness test is applied by the caller.
+inline QStringList collectParamsOnlyDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                const QString& path)
+{
+    QStringList out;
+    if (path.isEmpty())
+        return out;
+    const QString prefix = path + QLatin1Char('.');
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& p : paths) {
+        if (!p.startsWith(prefix) || PhosphorAnimationShaders::shaderPathResolvesInIsolation(p))
+            continue;
+        const auto stored = tree.directOverride(p);
+        // Owning a pack — including the engaged-empty "None" sentinel — puts a
+        // path in the OTHER collector's population, not this one.
+        if (stored.effectId.has_value())
+            continue;
+        if (!stored.parameters.has_value() || stored.parameters->isEmpty())
+            continue;
+        out.append(p);
+    }
+    return out;
+}
+
 /// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
 /// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
 /// for single-word segments.

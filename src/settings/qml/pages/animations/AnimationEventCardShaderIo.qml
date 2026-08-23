@@ -211,6 +211,11 @@ QtObject {
         // That is the read-in-a-loop shape the controller's own Group-writes
         // block calls out.
         card._shadowingChildrenCount = settingsController.animationsPage.shaderOverrideDescendantCountForPaths(card._writePaths);
+        // Refreshed in the same pass, and for the same reason: an ancestor pack
+        // switch is what creates this population, and that switch lands as a
+        // shader-tree change this function already runs on.
+        card._staleParamChildrenCount = settingsController.animationsPage.staleParamDescendantCountForPaths(card._writePaths);
+        card._shaderParamsStale = settingsController.animationsPage.shaderParamsAreStale(card.eventPath);
         // Divergence is deliberately NOT recomputed here. refreshFromTree owns
         // it, and every call site of this function calls refreshFromTree
         // alongside it (the three shader group writers' finally blocks and

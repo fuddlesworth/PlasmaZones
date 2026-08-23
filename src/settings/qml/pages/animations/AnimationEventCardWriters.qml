@@ -180,6 +180,22 @@ QtObject {
     /// cleared, or -1 if a path refused (the controller's "async discard in
     /// flight" sentinel), which the caller must not read as a smaller
     /// successful clear.
+    /// Discard the orphaned parameter overrides below every write path.
+    ///
+    /// Returns the controller's count verbatim, including its -1 refusal, the
+    /// same way `_clearShaderOverrideDescendantsOnAll` below does — the caller
+    /// is a banner action, not a drag, so there is no latch to arm.
+    function _clearStaleParamDescendantsOnAll() {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.clearStaleParamDescendantsOnPaths(card._writePaths);
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     function _clearShaderOverrideDescendantsOnAll() {
         card._committingShader = true;
         try {
