@@ -2462,7 +2462,7 @@ private:
     /// on the re-announce re-seeding instead). Dropped on close and the
     /// deleted backstop, evicted per-window by the min-size discovery leg
     /// (so the next batch re-asserts the true pair), and cleared wholesale
-    /// on daemon loss AND at onDaemonReady (handover). NOT dropped by
+    /// on daemon loss AND at bring-up (drainDeadSessionState). NOT dropped by
     /// cleanupAutotileTracking — the re-announce re-seeds it inline.
     QHash<QString, QSize> m_lastReportedMinSize;
     /// Per scroll-managed X11 window: the rect the last batch commanded, so
@@ -2481,8 +2481,8 @@ private:
     /// (both channels), the untrack funnel (cleanupAutotileTracking), the
     /// per-batch disarm when the commit deferred or the fullscreen bail
     /// fired (load-bearing: it disarms the counter rather than recording a
-    /// drag-time frame), and cleared wholesale on daemon loss and at
-    /// onDaemonReady.
+    /// drag-time frame), and cleared wholesale on daemon loss and at bring-up
+    /// (drainDeadSessionState).
     QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
 
     /// Per-output-pass state for the compositor-drawn tab indicators (see
@@ -3385,15 +3385,15 @@ private:
     /// sanctioned callers of `TilingHandler::clearActiveLayoutsForTeardown`
     /// (its only caller) already run `invalidateAllRuleCaches`, whose
     /// window-layer sweep a removed `SetWindowLayer` rule needs, and each then
-    /// rebuilds the affected decorations its own way: `onDaemonReady` with
-    /// `scheduleBorderSweep`, the `serviceUnregistered` teardown with
+    /// rebuilds the affected decorations its own way: `drainDeadSessionState`
+    /// with `scheduleBorderSweep`, the `serviceUnregistered` teardown with
     /// `clearAllDecorations` (which needs no sweep, having removed them).
     ///
     /// It DOES take the `SetOpacity` repaint bookend, because nothing else
     /// covers it on the bring-up caller: opacity resolves in the paint path,
-    /// and a straight old→new daemon handover emits no `serviceUnregistered`
-    /// edge, so the decorations (and the tint layer whose teardown covers the
-    /// daemon-loss caller) are still live there.
+    /// and that caller runs on the successor's name-claim edge, where the
+    /// decorations (and the tint layer whose teardown covers the daemon-loss
+    /// caller) have already been rebuilt or never torn down.
     void sliceActiveLayoutRulesForUnseededMap();
 
     /// One getAllRules round trip: the body of loadRuleAnimationsFromDbus,

@@ -91,7 +91,7 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // (or just before a peek started) would otherwise survive with an anchor
     // naming a pre-event cursor position, and swallow the first move within
     // the resume radius once the condition cleared. Same reasoning as the
-    // clears in setFocusFollowsMouse(false) and onDaemonReady.
+    // clears in setFocusFollowsMouse(false) and clearPerSessionDaemonState.
     // ffmOffEverywhere(), not the two global flags: the scrolling half's
     // authority is the daemon's resolved per-screen set, so a
     // SetScrollFocusFollowsMouse rule that turns the behaviour ON for one
@@ -1026,7 +1026,7 @@ void TilingHandler::drainDeadSessionState()
     // session's own state.
     //
     // The scrolling set is a pure discriminator with no lifecycle attached,
-    // so clear the DEAD session's snapshot before loadSettings re-queries:
+    // so clear the DEAD session's snapshot ahead of onDaemonReady's re-query:
     // an errored/timed-out Properties.Get (daemon still starting, or one
     // without org.plasmazones.Scrolling) is reply.isValid()-gated and would
     // otherwise leave the old set stamping Mode "scrolling" indefinitely.
@@ -1043,33 +1043,31 @@ void TilingHandler::drainDeadSessionState()
     // that m_tileStaggerGenByScreen.clear() then discards. loadSettings owns
     // the bring-up re-announce.
     //
-    // Release the dead session's windowed-fullscreen members FIRST: a
-    // straight old-to-new owner handover produces no serviceUnregistered
-    // edge (the layout-map comment below documents the same gap), so the
-    // daemon-loss restore never ran — and the announceFlipped=false call
-    // below cannot release either, its collection loop riding the announce
-    // enumeration this path skips. Bring-up is exactly when the effect's
-    // flags are stale; the adopt-on-batch arm re-establishes them from the
-    // new daemon's truth.
+    // Release the dead session's windowed-fullscreen members FIRST, and do it
+    // here rather than leaning on the teardown's own release: the
+    // announceFlipped=false call below cannot release them, its collection
+    // loop riding the announce enumeration this path skips, so a member that
+    // survived the teardown (or a bring-up that never saw one) would strand a
+    // client at a dead column's fullscreen rect. Bring-up is exactly when the
+    // effect's flags are stale; the adopt-on-batch arm re-establishes them
+    // from the new daemon's truth. Idempotent after the teardown's release.
     restoreAllWindowedFullscreen();
     setScrollingScreens({}, /*announceFlipped=*/false);
-    // The resolved per-screen scroll behaviour belongs to the dead session for
-    // the same handover reason: no serviceUnregistered edge fires on a
-    // straight old→new owner swap, so without this the dead daemon's crop set
-    // keeps blocksDirectScanout forcing composition session-wide, and its
-    // focus-follows-mouse set answers for screens the new daemon has not
-    // published. loadSettings' fetch below re-seeds both. Idempotent on the
+    // The resolved per-screen scroll behaviour belongs to the dead session
+    // too, and bring-up clears it rather than trusting the teardown to have:
+    // a surviving crop set keeps blocksDirectScanout forcing composition
+    // session-wide, and a surviving focus-follows-mouse set answers for
+    // screens the new daemon has not published. loadSettings' fetch, once the
+    // new daemon signals ready, re-seeds both. Idempotent on the
     // teardown-first path (clearScrollingScreensForTeardown already ran it).
     clearScrollEffectBehaviourForTeardown();
     // The per-screen active-layout map is the same shape of dead-session
-    // ruleQuery input, and it needs the clear here for a reason the scrolling
-    // set does not have: a straight old→new owner handover produces no
-    // serviceUnregistered edge, so the teardown clear never runs and the
-    // effect arrives at bring-up with m_activeLayoutsSeeded still TRUE over
-    // the dead daemon's map. ActiveLayout rules would then be admitted and
-    // resolved against layouts the new daemon has not published, and the
-    // seeding edge that re-drives the admission filter could never fire again
-    // for this session. Idempotent on the teardown-first path.
+    // ruleQuery input, and the consequence of arriving at bring-up with it
+    // intact is worse than for the scrolling set: m_activeLayoutsSeeded would
+    // still be TRUE over the dead daemon's map, ActiveLayout rules would be
+    // admitted and resolved against layouts the new daemon has not published,
+    // and the seeding edge that re-drives the admission filter could never
+    // fire again for this session. Idempotent on the teardown-first path.
     //
     // The teardown variant's pairing contract is satisfied by this function's
     // own tail: invalidateAllRuleCaches (below, with the tiled-membership
@@ -1079,8 +1077,9 @@ void TilingHandler::drainDeadSessionState()
     // That call also re-slices the ActiveLayout-scoped rules back out of the
     // five effect-bound rule sets (which SURVIVE the teardown by design) and
     // SETS m_activeLayoutRulesWithheld when it removed any — so on this path
-    // the marker is correct by construction, and the seed edge fired by
-    // loadSettings' reply below re-drives the fetch that restores them.
+    // the marker is correct by construction, and the seed edge fired by the
+    // reply to onDaemonReady's loadSettings re-drives the fetch that restores
+    // them.
     //
     // m_activeLayoutRulesWithheld is deliberately never CLEARED alongside the
     // unseeding. Every loadRuleAnimationsFromDbus reply that PARSES recomputes
@@ -1095,9 +1094,9 @@ void TilingHandler::drainDeadSessionState()
     // is gated on it. A stale-TRUE marker costs exactly one redundant re-drive,
     // which is the safe direction. The seed edge consumes and clears it.
     // Void the DEAD session's in-flight managedScreens property reply too:
-    // loadSettings below re-queries, and a stale reply from the previous
-    // daemon would otherwise pass its generation gate and reinstate a
-    // screen set the new daemon never published.
+    // onDaemonReady's loadSettings re-queries, and a stale reply from the
+    // previous daemon would otherwise pass its generation gate and reinstate
+    // a screen set the new daemon never published.
     ++m_screensSignalGeneration;
     // The per-session drain lives in one named function so the list has a
     // single home (see the header for the paired invariant and for why the
@@ -1182,9 +1181,8 @@ void TilingHandler::clearPerSessionDaemonState()
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
     // The three per-session scroll maps the serviceUnregistered teardown
-    // clears, for the same handover reason as everything here: a straight
-    // old→new daemon handover produces no unregistered edge, so bring-up
-    // arrives with the dead session's state intact. A stale commanded rect
+    // clears, repeated here so bring-up is authoritative on its own rather
+    // than on what that edge left behind. A stale commanded rect
     // re-arms the counter-assert against the dead session's position the
     // moment the new daemon's batches re-open the gates (and before they
     // overwrite the entry); a stale relocation delta paints a parked column at
@@ -1202,23 +1200,23 @@ void TilingHandler::clearPerSessionDaemonState()
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_lastReportedMinSize.clear();
     // The tab-indicator model, colour verdicts and paint overrides describe
-    // the dead session's strips: a straight old→new owner handover produces
-    // no serviceUnregistered edge, so without this drain the painter would
-    // keep blitting pills for columns the new daemon never laid out (its
-    // replay only names screens that still have a strip, and its "[]"
-    // retraction is latched on its own membership set). The bring-up fetches
-    // in loadSettings re-seed what the new session has; the clear pairs with
-    // a full repaint because clearAll damages nothing itself.
+    // the dead session's strips. Without this drain the painter could keep
+    // blitting pills for columns the new daemon never laid out: the replay
+    // only names screens that still have a strip, and the "[]" retraction is
+    // latched on the engine's own membership set, so neither retracts a
+    // screen the new session simply does not know about. The bring-up fetches
+    // in onDaemonReady's loadSettings re-seed what the new session has; the
+    // clear pairs with a full repaint because clearAll damages nothing itself.
     clearScrollTabState();
     if (KWin::effects) {
         KWin::effects->addRepaintFull();
     }
     // Tiled membership belongs to the dead session as well. The
     // serviceUnregistered teardown normally clears it (paired there with the
-    // decoration restore), but a straight old→new owner handover produces no
-    // unregistered edge at all, so bringup arrives with the previous daemon's
-    // IsTiled membership intact and every memoised rule verdict resolved
-    // against it. Idempotent on the teardown-first path.
+    // decoration restore); bring-up clears it again so it cannot reach the new
+    // session carrying the previous daemon's IsTiled membership, with every
+    // memoised rule verdict resolved against it. Idempotent on the
+    // teardown-first path.
     //
     // Only the membership half of clearTiledTracking: m_managedScreens is
     // deliberately kept here for the reason given above, so its per-screen

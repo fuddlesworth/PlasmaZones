@@ -381,9 +381,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // everything the effect holds is provably the OLD session's. See
         // TilingHandler::drainDeadSessionState.
         //
-        // It is also the edge that always fires: a straight old→new owner
-        // handover produces no serviceUnregistered edge, which is why the
-        // teardown above cannot be the sole drain site.
+        // The teardown above cannot be the sole drain site: it deliberately
+        // drains a SMALLER set, because the maps this call clears have to keep
+        // answering for the whole daemon-down interval. What the two share is
+        // cleared idempotently here.
         m_tilingHandler->drainDeadSessionState();
 
         // DO NOT set m_daemonGate.serviceRegistered = true here.
