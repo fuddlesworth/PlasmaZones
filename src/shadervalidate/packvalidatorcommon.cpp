@@ -126,10 +126,6 @@ void appendDidYouMean(QTextStream& out, const QString& diagnostic, const QString
     }
 }
 
-// Report a compiled stage's outcome: "OK", or "ERROR" with the glslang
-// diagnostics mapped to the author's file/line (T1.3 #line) plus the
-// did-you-mean hint. @p declared is the list of generated `p_<id>` names.
-// Returns 1 on failure, 0 on success. Shared by the zone and animation paths.
 std::optional<PackModel> detectPackModel(const QString& packDir)
 {
     const QDir shared(QFileInfo(packDir).absolutePath() + QStringLiteral("/shared"));
@@ -188,7 +184,14 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
         out << "  " << label.leftJustified(15) << "ERROR\n    cannot write " << srcPath << "\n";
         return 1;
     }
-    srcFile.write(source.toUtf8());
+    // Checked: a short write stages a TRUNCATED shader, and glslang would then
+    // report a syntax error the author's file does not contain.
+    const QByteArray encoded = source.toUtf8();
+    if (srcFile.write(encoded) != encoded.size()) {
+        out << "  " << label.leftJustified(15)
+            << "ERROR\n    could not stage the shader for compilation: " << srcFile.errorString() << "\n";
+        return 1;
+    }
     srcFile.close();
 
     // DEFAULT mode on purpose — no -V and no -G. Both of those select a SPIR-V
@@ -198,10 +201,21 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     // OpenGL-dialect GLSL and is what matches the compositor's own compile.
     QProcess proc;
     proc.start(toolPath, {QStringLiteral("-S"), stage, srcPath});
-    if (!proc.waitForFinished(60000)) {
+    // Well under the 120s ctest timeout on the shader_validate_* gates, so a
+    // wedged invocation names the pack it wedged on instead of ctest killing
+    // the whole run with nothing to point at.
+    if (!proc.waitForFinished(15000)) {
+        // A binary that cannot be executed at all (a broken symlink, no
+        // execute bit, the wrong ELF class) fails here too, and reporting
+        // that as a timeout sends the reader after the wrong problem.
+        if (proc.error() == QProcess::FailedToStart) {
+            out << "  " << label.leftJustified(15) << "ERROR\n    could not run " << toolPath << ": "
+                << proc.errorString() << "\n";
+            return 1;
+        }
         proc.kill();
         proc.waitForFinished(1000);
-        out << "  " << label.leftJustified(15) << "ERROR\n    glslangValidator timed out\n";
+        out << "  " << label.leftJustified(15) << "ERROR\n    " << toolPath << " timed out\n";
         return 1;
     }
     const QString log =
@@ -212,8 +226,8 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     }
     out << "  " << label.leftJustified(15) << "ERROR (compositor)\n";
     // glslang leads with the temp file name and then one line per diagnostic.
-    // Drop the echoed name and the trailing summary so the report shows the
-    // author's errors and nothing about where the file happened to be staged.
+    // Drop the echoed name so the report shows the author's errors and nothing
+    // about where the file happened to be staged.
     const QStringList lines = log.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
     for (const QString& line : lines) {
         const QString trimmed = line.trimmed();
@@ -233,6 +247,10 @@ int reportCompositorCompile(QTextStream& out, const QString& label, const QStrin
     return 1;
 }
 
+// Report a compiled stage's outcome: "OK", or "ERROR" with the glslang
+// diagnostics mapped to the author's file/line (T1.3 #line) plus the
+// did-you-mean hint. @p declared is the list of generated `p_<id>` names.
+// Returns 1 on failure, 0 on success. Shared by the zone and animation paths.
 int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::Result& result,
                   const QStringList& declared)
 {

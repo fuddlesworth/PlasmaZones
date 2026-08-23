@@ -65,12 +65,31 @@ int validatePack(const QString& packDir, QTextStream& out)
     // lint reading the parsed struct would silently pass the author error the
     // runtime hid). Read and parse metadata.json ONCE here and share it, instead
     // of reopening the same file per lint block.
+    // Checked on both arms: an empty rawRoot silently no-ops EVERY raw-metadata
+    // lint below (the declared-vertexShader check, the duplicate parameter id
+    // check, the buffer name and bufferScale checks), so the pack would report
+    // clean having had those checks skipped rather than passed. parsePackMetadata
+    // above rejects unparseable JSON, so the live path here is an open failure,
+    // but a lint block that can quietly evaluate against nothing is worth
+    // closing whichever way it is reached.
     QJsonObject rawRoot;
     {
         QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
-        if (metaFile.open(QIODevice::ReadOnly)) {
-            rawRoot = QJsonDocument::fromJson(metaFile.readAll()).object();
+        if (!metaFile.open(QIODevice::ReadOnly)) {
+            out << "  metadata.json  ERROR\n    cannot read " << metaFile.fileName() << ": " << metaFile.errorString()
+                << "\n";
+            return 1;
         }
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            out << "  metadata.json  ERROR\n    "
+                << (parseError.error != QJsonParseError::NoError ? parseError.errorString()
+                                                                 : QStringLiteral("not a JSON object"))
+                << "\n";
+            return 1;
+        }
+        rawRoot = doc.object();
     }
 
     // The `fragmentShader` / `bufferShaders` / `vertexShader` paths come from
@@ -386,8 +405,9 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 // rejects default-block uniforms, so the kwin branch needs a separate
 // OpenGL-target compiler. Compositor-only packs (desktop / geometry / move /
 // strip / tab classes — see shaderEffectIsCompositorOnly) are authored against that kwin
-// dialect directly and never run on the daemon, so only their metadata is
-// linted here; their compile coverage is test_animation_shader_kwin_bake.
+// dialect directly and never run on the daemon, so their stages are baked out
+// of process by bakeCompositorStage instead, through glslang in DEFAULT mode.
+// test_animation_shader_kwin_bake remains the additional driver-level check.
 // Daemon-capable packs get the full stage compile below.
 
 // Assemble one stage of a COMPOSITOR-ONLY animation pack exactly as the
@@ -400,10 +420,17 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 // and the define block second leaves the define block ABOVE the preamble,
 // which is what the compositor produces (the preamble, then
 // injectKwinDefineAfterVersion).
-int bakeCompositorStage(QTextStream& out, const QString& packDir,
-                        const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QString& path,
-                        const QString& label, const QString& stage, bool scaffold)
+static int bakeCompositorStage(QTextStream& out, const QString& packDir,
+                               const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QString& path,
+                               const QString& label, const QString& stage, bool scaffold)
 {
+    // The absent-stage bail comes FIRST so the two arms agree on the same
+    // input: a pack whose declared stage file is missing is already linted by
+    // the caller, and reporting a missing tool for it would describe the
+    // machine rather than the pack, on a machine without glslang only.
+    if (!QFile::exists(path)) {
+        return 0; // an absent stage is already linted by the caller
+    }
     const QString tool = glslangValidatorPath();
     if (tool.isEmpty()) {
         // Hard failure rather than a skip. The point of this gate is that a
@@ -412,12 +439,9 @@ int bakeCompositorStage(QTextStream& out, const QString& packDir,
         // Only compositor-only packs reach here, so a pack tree containing
         // none of them still validates on a machine without glslang.
         out << "  " << label.leftJustified(15)
-            << "ERROR\n    neither glslangValidator nor glslang found on PATH; one of them is required to "
+            << "ERROR\n    neither glslangValidator nor glslang found on PATH. One of them is required to "
                "compile compositor-only packs (install the glslang package)\n";
         return 1;
-    }
-    if (!QFile::exists(path)) {
-        return 0; // an absent stage is already linted by the caller
     }
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -726,9 +750,10 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     }
 
     // ── stage compile (reproduce the daemon runtime fragment assembly) ──
-    // Skipped for compositor-only packs: their source is kwin classic-GL
-    // (default-block uniforms, unbound samplers) that the strict SPIR-V
-    // target rejects by design, and the daemon never loads them.
+    // Compositor-only packs take the out-of-process glslang bake instead of
+    // the SPIR-V one: their source is kwin classic-GL (default-block uniforms,
+    // unbound samplers) that the strict SPIR-V target rejects by design, and
+    // the daemon never loads them.
     if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
         errors += bakeCompositorStage(out, packDir, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"),
                                       /*scaffold=*/true);
@@ -795,6 +820,11 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     //
     // Skipped for compositor-only packs for the same reason the fragment
     // stage is: the strict SPIR-V target rejects their dialect by design.
+    // Unlike the fragment and vertex stages these do NOT take the glslang
+    // bake either, so a compositor-only multipass pack's buffer passes are
+    // compiled nowhere. No bundled pack is both, and closing it means
+    // teaching bakeCompositorStage the per-pass uniform contract, which is a
+    // larger change than the stage bake was.
     if (eff.isMultipass && !PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
         const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
         for (const QString& declaredBuf : eff.bufferShaderPaths) {

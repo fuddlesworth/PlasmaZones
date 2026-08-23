@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # packaging/nix/devShell.nix — the `nix develop` environment. It is

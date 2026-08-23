@@ -18,10 +18,13 @@
 // test compiles that branch through the driver, closing the gap.
 //
 // It assembles the variant the way the runtime does: entry scaffold → include
-// expansion → param preamble → the KWin `#extension`/`#define` block. It
-// replicates that final block locally (see kwinDefineBlock) rather than linking
-// ShaderInternal::injectKwinDefineAfterVersion, which lives in a KWin-linked TU;
-// the two are equivalent for every bundled pack (all lead with a bare
+// expansion → param preamble → the KWin `#extension`/`#define` block. That
+// final block comes from PhosphorShaders::kwinDefineBlock(), the same function
+// the compositor's injector and the offline validator splice, so this gate
+// cannot drift into accepting a dialect the compositor rejects. It splices the
+// block with plain spliceAfterVersion rather than linking
+// ShaderInternal::injectKwinDefineAfterVersion, which lives in a KWin-linked
+// TU; the two are equivalent for every bundled pack (all lead with a bare
 // `#version 450`, the only input where injectKwinDefineAfterVersion's BOM /
 // comment-scan branches would diverge from a plain post-#version splice).
 //

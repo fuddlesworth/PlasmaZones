@@ -23,8 +23,9 @@
 //   • animation/transition packs (--animation, data/animations/*):
 //     AnimationShaderEffect + the animation entry scaffold (pTransition / pIn+pOut)
 //     + paramPreamble; validates effect.frag on the daemon Qt-RHI path.
-//     Compositor-only packs get metadata lints only — their kwin classic-GL
-//     source is never baked here (see validateAnimationPack).
+//     Compositor-only packs are baked out of process through glslang instead,
+//     since their kwin classic-GL source is a dialect the SPIR-V target
+//     rejects by design (see validateAnimationPack).
 //   • surface/decoration packs (--surface, data/surface/*):
 //     SurfaceShaderEffect + paramPreamble; validates effect.frag, buffer
 //     passes, and the shared vertex stage on the daemon Qt-RHI path — see
@@ -262,7 +263,7 @@ int main(int argc, char** argv)
             return *detected;
         }
         errStream << QFileInfo(pack).fileName()
-                  << ": no sibling shared/ marker, validating as an overlay pack — pass "
+                  << ": no sibling shared/ marker, validating as an overlay pack. Pass "
                      "--overlay/--animation/--surface to choose\n";
         return PackModel::Overlay;
     };

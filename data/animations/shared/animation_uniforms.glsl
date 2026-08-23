@@ -565,21 +565,27 @@ float legProgress() {
 vec2 legTranslation(vec4 fromRect, vec4 toRect) {
     vec2 nearEdge = toRect.xy - fromRect.xy;
     vec2 farEdge = (toRect.xy + toRect.zw) - (fromRect.xy + fromRect.zw);
-    // step() is 1 where the two deltas agree in sign; a zero delta lands on
-    // the 1 side and is then zeroed by the min() anyway, which is correct —
-    // a held edge means the window is not rigidly travelling on that axis.
+    // step() is 1 where the two deltas agree in sign. A zero delta lands on
+    // the 1 side, which is harmless because a zero far delta is zeroed by
+    // the min() and a zero near delta by sign(nearEdge) — a held edge means
+    // the window is not rigidly travelling on that axis.
     vec2 sameWay = step(vec2(0.0), nearEdge * farEdge);
     return sameWay * sign(nearEdge) * min(abs(nearEdge), abs(farEdge));
 }
 
-// How much of the leg is travel rather than resize, in [0, 1]. 1 is a pure
-// slide, 0 a pure anchored stretch. Packs whose character only makes sense
-// while the window is in transit (trailing lag, lane stagger, perpendicular
-// bow) scale that character by this, so they degrade to a clean uniform
-// morph on a stretch and keep their full look on a real slide.
+// How much of the leg is travel rather than resize, in [0, 1]. 1 means the
+// leg is pure slide with no size change at all, 0 means pure anchored
+// stretch. This is one scalar for the whole leg, not a per-axis split: a leg
+// that slides on one axis while growing on the other lands in between and
+// damps the transit character on both. Packs whose character only makes
+// sense while the window is in transit (trailing lag, lane stagger,
+// perpendicular bow) scale that character by this, so they degrade to a
+// clean uniform morph on a stretch and keep their full look on a real slide.
 //
-// A degenerate leg (neither term) returns 0: nothing is moving, so no
-// travel character applies. Such a leg does not normally play at all.
+// Only an exactly-still leg returns 0. Unlike legDirection this has no pixel
+// deadband, so a sub-pixel rigid residue still reads as travel and can
+// return a large share off motion smaller than legDirection accepts as an
+// axis. Such a leg does not normally play at all.
 float legTravelShare(vec4 fromRect, vec4 toRect) {
     float moved = length(legTranslation(fromRect, toRect));
     float resized = length(toRect.zw - fromRect.zw);
@@ -589,8 +595,10 @@ float legTravelShare(vec4 fromRect, vec4 toRect) {
 // The leg's axis, as a unit vector. The rigid translation names it when the
 // window travelled; failing that the growth axis does, so an anchored
 // stretch still orients along the axis that actually changed rather than a
-// fabricated default. Only a leg that neither moved nor resized falls
-// through to the downward default.
+// fabricated default. On that fallback the sign is the sign of the size
+// change, so a grow points away from the pinned edge and a shrink toward
+// it. Only a leg that neither moved nor resized falls through to the
+// downward default.
 //
 // The 1.0 thresholds are one square pixel — below that the vector is
 // rounding residue and normalize() would amplify it into a random axis.

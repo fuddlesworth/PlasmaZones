@@ -969,7 +969,8 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # also detects the model per pack now, so the flags are belt-and-braces here;
 # they pin each test to one model regardless of what a tree grows later.)
 #
-# REQUIRES the `glslangValidator` binary on PATH for shader_validate_animations.
+# REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
+# accepted) on PATH for shader_validate_animations.
 # Compositor-only animation packs (35 of the bundled 94, every desktop-* and the
 # geometry set) are classic-GL, which QShaderBaker's SPIR-V target rejects by
 # design, so they are compiled out of process through glslang's default

@@ -50,8 +50,10 @@ void main() {
     // centre delta: a window pinned at one edge and grown moves its centre
     // by half the size change while standing still, which would send the
     // wavefront across an axis nothing travelled along. legDirection falls
-    // back to the growth axis, so a resize ripples from the edge that
-    // actually moved. The wave is NOT damped for a resize the way the
+    // back to the growth axis, so a resize ripples along the axis that
+    // changed size. The sign is the sign of the size change, so a grow
+    // ripples from the edge that moved outward and a shrink from the edge
+    // opposite it. The wave is NOT damped for a resize the way the
     // staggered packs are: `rect` below interpolates rigidly, so the ripple
     // is an arrival wobble on a window that has already settled uniformly,
     // never parts of one window arriving at different times.

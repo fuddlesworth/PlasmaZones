@@ -465,8 +465,6 @@ private Q_SLOTS:
                             + r.report));
     }
 
-    /// geometryGrid clamps to 0 at load, so a negative value disables the
-    /// grid indistinguishably from never declaring it.
     /// The authoring model is DETECTED from the pack's sibling shared/ dir.
     ///
     /// This is the guard on a diagnostic that used to be actively misleading:
@@ -557,11 +555,17 @@ private Q_SLOTS:
             {P_SOURCE_DIR "/data/overlays", PackModel::Overlay},
         };
 
+        // `continue`, not QSKIP: QSKIP returns from the whole test function, so
+        // one absent tree would abandon the other two silently — and a tree
+        // going missing because it was renamed is exactly what this slot is
+        // meant to catch. A run with no tree at all is skipped after the loop.
+        int treesSeen = 0;
         for (const Tree& tree : trees) {
             QDir root(QLatin1String(tree.path));
             if (!root.exists()) {
-                QSKIP("bundled pack tree not found — running outside source tree");
+                continue;
             }
+            ++treesSeen;
             int checked = 0;
             const QStringList subdirs = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QString& sub : subdirs) {
@@ -576,6 +580,9 @@ private Q_SLOTS:
                 ++checked;
             }
             QVERIFY2(checked > 0, tree.path);
+        }
+        if (treesSeen == 0) {
+            QSKIP("no bundled pack tree found — running outside source tree");
         }
     }
 
@@ -670,10 +677,18 @@ private Q_SLOTS:
 
         const PackResult r = validate(tmp, QStringLiteral("kwin-vert"), obj);
         QCOMPARE(r.errors, 0);
+        // The two substring checks below are each satisfiable by the FRAGMENT
+        // stage's own line, so they cannot on their own tell a compiled vertex
+        // stage from a skipped one. This is the assertion that can: a bake
+        // quietly turned back into a skip prints SKIP, and nothing else here
+        // does.
+        QVERIFY2(!r.report.contains(QStringLiteral("SKIP")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("effect.vert")), qPrintable(r.report));
         QVERIFY2(r.report.contains(QStringLiteral("OK (compositor)")), qPrintable(r.report));
     }
 
+    /// geometryGrid clamps to 0 at load, so a negative value disables the
+    /// grid indistinguishably from never declaring it.
     void negativeGeometryGridIsLinted()
     {
         QTemporaryDir tmp;

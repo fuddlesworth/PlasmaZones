@@ -120,26 +120,18 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
     // CRLF appears in the source, emit "\r\n"; otherwise plain "\n".
     const bool useCrlf = working.contains(QStringLiteral("\r\n"));
     const QString eol = useCrlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
-    // KWin 6.7's generateCustomShader compiles custom effect shaders at GLSL
-    // #version 140 (it rewrites our #version 450 down to the GL context's core
-    // version). At 140 the `layout(location = N)` qualifiers our vertex stages
-    // declare on in/out attributes are illegal without these ARB extensions, so
-    // the vertex shader fails to compile (NVIDIA error C7548). Failed compiles
-    // are NOT cached (the compile path returns false without inserting into
-    // m_shaderCache), so every transition then re-runs the whole
-    // assemble+compile on the compositor thread — the cause of the severe
-    // per-command window-movement / mode-change lag. The daemon's Qt-RHI/SPIR-V
-    // path (no PLASMAZONES_KWIN) needs the explicit locations for SPIR-V, so we
-    // enable the extensions on the KWin path rather than stripping the
-    // qualifiers. `: enable` is a harmless no-op on the fragment stage and on
-    // drivers that already expose explicit locations in core 140. The
-    // directives precede every declaration (only KWin's #defines and the
-    // source's leading comments come before them), which is all NVIDIA's
-    // compiler requires.
-    // The block itself is PhosphorShaders' — the offline validator and the GPU
-    // bake test splice the same one, so none of the three can drift into
-    // checking a dialect the other two do not. Only the #version-finding walk
-    // below is this function's own.
+    // The ARB `#extension` pair and the `#define PLASMAZONES_KWIN` ABI switch
+    // come from PhosphorShaders so the offline validator and the GPU bake test
+    // splice the identical block; `kwinDefineBlock`'s declaration carries why
+    // each directive is needed (KWin 6.7 recompiles at #version 140). Only the
+    // #version-finding walk below is this function's own.
+    //
+    // Cost of getting it wrong, since that is compositor-specific: a failed
+    // COMPILE is cached as a null-shader sentinel, so it costs the assemble
+    // once and later transitions skip it. The failures that are NOT cached are
+    // the ones returning before the cache is touched at all — a missing or
+    // empty shader file, or an include-expansion error — which re-run the full
+    // read and assemble on the compositor thread every transition.
     const QString defineLine = PhosphorShaders::kwinDefineBlock(eol);
 
     // Walk the source line-by-line and find the FIRST line whose
