@@ -32,22 +32,24 @@
 namespace PlasmaZones {
 
 // WHY THE SHADER TREE IS NOT MEMOISED, since the cost is real enough that
-// someone will try. A rebuild is a store read, a QVariantMap to QJsonObject
-// conversion, a parse and a prune walk, and one card refresh takes several of
-// them. The obvious memo — cache the tree, invalidate on
-// ISettings::shaderProfileTreeChanged — is UNSAFE. That signal has exactly one
-// emit site, Settings::setShaderProfileTree, so it fires when this process
-// writes the tree and at no other time: a config reload, a settings-profile
-// switch, or an edit arriving from outside would each leave the memo serving a
-// tree that no longer exists, and every card would render shader state that is
-// simply wrong. Reading fresh is unconditionally correct, which is worth more
-// than the rebuild.
+// someone will try: a rebuild is a store read, a QVariantMap to QJsonObject
+// conversion, a parse and a prune walk, and one card refresh takes several.
 //
-// m_treeDirtyCache is memoised on that same signal and is safe, but not by the
-// same argument: it also invalidates on baseline capture, and a stale dirty
-// VERDICT self-corrects on the next write where a stale TREE would be shown to
-// the user. A future memo needs an invalidation set covering every path the
-// store can move under it, not just this one signal.
+// Not because the invalidation signal is too narrow. Be careful here, because
+// it looks narrow and is not: grepping for Q_EMIT finds a single site,
+// Settings::setShaderProfileTree, but `shaderProfileTreeJson` is a NOTIFY
+// Q_PROPERTY, so Settings::load() and applyConfigOverlayStaged re-fire
+// shaderProfileTreeChanged through emitChangedNotifyProperties whenever the
+// value moved — a reload and a settings-profile switch both reach it without
+// any explicit emit.
+//
+// What is missing is the ENUMERATION. Nobody has established that the signal
+// covers every path the store can move under a memo, and a stale TREE is shown
+// to the user where a stale dirty verdict merely self-corrects on the next
+// write (which is why m_treeDirtyCache can be memoised on it, helped by also
+// invalidating on baseline capture). Reading fresh is unconditionally correct.
+// Anyone adding the memo owes that enumeration first, not this comment's
+// former claim that one emit site made it impossible.
 
 using namespace animations_controller_detail;
 
@@ -91,7 +93,7 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
 /// header calls free. Most writers run it as their first statement;
 /// `applyShaderGroupWrite` runs it after its refusal gates instead, so a call
 /// that is going to be refused does not pay for a list it will not use.
-// None of these caps `paths.size()`, and none needs to. Each DEDUPLICATES
+// None of the group writers in this file caps `paths.size()`, and none needs to. Each DEDUPLICATES
 // its list on entry (distinctPaths). Invalid entries differ per writer:
 // clearFieldOnPaths, divergentPathCount, the four shader group writers
 // (setShaderOverrideOnPaths, setShaderParametersOnPaths,
@@ -112,7 +114,8 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
 // one lookup, never a disk read or a shader-tree rebuild. The dedup
 // matters because QML builds a group as `[eventPath].concat(mirrorPaths)`
 // and does not dedupe. (The scoped reverts declared elsewhere in this
-// header — clearOverridesUnder / clearOverridesForPaths — do NOT dedupe;
+// header animationspagecontroller.h — clearOverridesUnder /
+// clearOverridesForPaths — do NOT dedupe;
 // they are safe against duplicates anyway because the second visit to a
 // path classifies as Absent and is skipped.)
 QStringList distinctPaths(const QStringList& paths)
@@ -187,13 +190,27 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
     // the cap stop before the user's real edit was ever reached — dropping it
     // with one generic warning where the allowlist would have discarded the
     // junk for free. Allowlisting first caps the map at six by construction, so
-    // only the key- and value-length bounds still have work to do.
+    // only the value-length bound still has work to do.
     QVariantMap acceptedFields;
+    // The warn is capped, the DROP is not. Running the allowlist first means
+    // this loop sees the caller's whole map, so a buggy or hostile Q_INVOKABLE
+    // caller with twenty thousand keys would otherwise put twenty thousand
+    // lines through the logging category on the GUI thread. Name the first few
+    // — which is what a developer debugging a real typo needs — then count.
+    constexpr int kMaxNamedUnknownFields = 8;
+    int unknownFields = 0;
     for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
-        if (knownFields.contains(it.key()))
+        if (knownFields.contains(it.key())) {
             acceptedFields.insert(it.key(), it.value());
-        else
+            continue;
+        }
+        if (unknownFields < kMaxNamedUnknownFields)
             qCWarning(lcConfig) << "setOverrideMergedOnPaths: dropping unknown profile field" << it.key();
+        ++unknownFields;
+    }
+    if (unknownFields > kMaxNamedUnknownFields) {
+        qCWarning(lcConfig) << "setOverrideMergedOnPaths: dropped" << unknownFields
+                            << "unknown profile fields in total";
     }
     // Keys are allowlisted, VALUES are bounded. The allowlist alone left
     // `presetName` free to carry an arbitrarily long string straight to disk,

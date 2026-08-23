@@ -803,12 +803,13 @@ Q_SIGNALS:
     /// Emitted on any successful add/removeUserPreset.
     void userPresetsChanged();
 
-    /// Emitted on set/clearShaderOverride and on every write of the tree
-    /// through `Settings::setShaderProfileTree` — the sole emitter of
-    /// `ISettings::shaderProfileTreeChanged`, which Discard's revert also goes
-    /// through. NOT on a plain settings reload; nothing re-emits it on load.
-    /// Path-agnostic because diffing the tree to find what moved would cost
-    /// more than letting every visible card rebind.
+    /// Emitted on set/clearShaderOverride, on every write of the tree through
+    /// `Settings::setShaderProfileTree` (which Discard's revert goes through),
+    /// AND on a reload or settings-profile switch that moves the tree —
+    /// `shaderProfileTreeJson` is a NOTIFY property, so `Settings::load()`
+    /// re-fires it through `emitChangedNotifyProperties` without any explicit
+    /// Q_EMIT. Path-agnostic because diffing the tree to find what moved would
+    /// cost more than letting every visible card rebind.
     void shaderProfileChanged(const QString& path);
 
     /// Re-emit of `AnimationShaderRegistry::effectsChanged` so QML can

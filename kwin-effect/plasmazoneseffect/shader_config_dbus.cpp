@@ -289,9 +289,11 @@ void dispatchJsonSetting(QLatin1String name, const QVariant& v,
         // here reading as though the daemon had sent JSON of the wrong shape —
         // which points a reader at the sinks when the real fault is upstream,
         // in what was put on the wire.
-        // typeName() rather than metaType().name(): the latter answers a null
-        // const char* for an invalid QMetaType, and an unset QDBusVariant does
-        // reach here — loadSettingAsync checks the reply, not the inner variant.
+        // An unset QDBusVariant reaches here (loadSettingAsync checks the reply,
+        // not the inner variant) and typeName() answers a NULL const char* for
+        // it, so the null guard below is required. typeName() and
+        // metaType().name() are the same call — do not "simplify" to the other
+        // spelling and drop the guard along the way.
         qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON" << expected
                             << "(variant type" << QLatin1String(v.typeName() ? v.typeName() : "invalid") << ","
                             << utf8.size() << "bytes)";
@@ -585,8 +587,9 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
                 // The BASELINE is not visited and cannot be — it is not a path,
                 // so parentPath cannot reach it. resolve() does seed from it, so
                 // one pinning a real pack would be an explanation this misses.
-                // Unreachable today: nothing calls setBaseline on the shader
-                // tree, so the round-tripped baseline is always disengaged.
+                // Unreachable today: the only caller of setBaseline on a shader
+                // tree is the prune helper, which copies the source baseline
+                // through and cannot introduce one, so it stays disengaged.
             }
         }
         // Both arms are qCDebug, because neither is a fault. An explicit None

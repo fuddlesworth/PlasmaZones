@@ -6,12 +6,13 @@
  * @brief What the group writers REFUSE, BOUND, or fail to do — the arms that
  *        are reached when the caller or the disk misbehaves.
  *
- * Split out of test_animations_group_writes.cpp, which owns the ordinary
- * success paths (the merge, the per-field clear, the divergence measure). That
- * file reached the project's size ceiling and this is a coherent slice rather
- * than an arbitrary cut: everything here is a failure, a bound, or a refusal,
- * and every slot drives it through the real writer rather than asserting the
- * guard exists.
+ * Split out of test_animations_group_writes.cpp when that file reached the
+ * project's size ceiling. The cut is along a real seam: everything HERE is a
+ * bound or a disk-level failure, driven through the real writer rather than
+ * asserted at the guard. The converse does not hold — the sibling keeps several
+ * refusal slots of its own (the async-discard refusals, the unrecognised-field
+ * refusal, the failed clear), which sit beside the success paths they
+ * contrast with.
  *
  * Each of these pins a guard that previously survived deletion with the whole
  * suite still green, so each names the production line it fails on:
@@ -46,7 +47,6 @@
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
-#include "helpers/IsolatedConfigGuard.h"
 #include "phosphor_i18n.h"
 #include "settings/pages/animationspagecontroller.h"
 
@@ -111,8 +111,9 @@ private Q_SLOTS:
     /// sentinel.
     ///
     /// The whole reason this writer returns int rather than bool. The
-    /// all-paths-fail case is pinned above at 0, which a blanket `return -1`
-    /// regression would also fail — but a MIXED batch is the case the
+    /// all-paths-fail case is pinned by the sibling file's
+    /// `aFailedWriteToastsOnceRatherThanOncePerRetry` at 0, which a blanket
+    /// `return -1` regression would also fail — but a MIXED batch is the case the
     /// distinction exists for, and nothing reached it: the card stops
     /// re-issuing on a refusal, so folding a partial failure into -1 would
     /// abandon the paths that did write.
@@ -256,7 +257,7 @@ private Q_SLOTS:
     /// The failure toast latch RESETS once a write lands, so a second failure
     /// later in the same session is announced rather than swallowed.
     ///
-    /// The once-per-session half is pinned above. This is the half that makes
+    /// The once-per-session half is pinned in the sibling file. This is the half that makes
     /// the latch honest: a user who fixes the disk and hits a later failure has
     /// to be told. Driven by taking the directory's write permission away and
     /// giving it back, because the blocker-file technique the sibling uses
