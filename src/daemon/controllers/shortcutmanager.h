@@ -159,8 +159,9 @@ public:
      * portion of the registration surface, not all of it.
      *
      * The table is a file-local array with internal linkage, and
-     * cheatsheetModel() is a COMPRESSED view of it (an opposed pair collapses
-     * into a single row, so its second member has no row of its own). Neither
+     * cheatsheetModel() is a COMPRESSED view of it (a directional quad or a
+     * digit family collapses into a single row, so its later members have no
+     * rows of their own). Neither
      * can enumerate the registration surface, which the Shortcuts.Scrolling
      * parity check needs in order to compare it against the config schema.
      */
