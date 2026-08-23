@@ -10,8 +10,12 @@
 // no compositor). It is the CI gate for the bundled sets and a pre-commit-
 // friendly tool for pack authors.
 //
-// Three authoring models, selected by --overlay (default) / --animation /
-// --surface:
+// Three authoring models. Each pack's model is DETECTED from the marker header
+// in its sibling `shared/` directory (see detectPackModel); --overlay /
+// --animation / --surface force one model for every path given, for a pack
+// tree that carries no shared/ dir of its own. Detection is the default
+// because --overlay used to be, so validating an animation pack without
+// remembering the flag reported wrong-validator artifacts as pack errors:
 //   • zone/overlay packs (--overlay, the default, data/overlays/*):
 //     ShaderRegistry::parsePackMetadata + the zone entry scaffold (pZone/pImage);
 //     validates the frag, multipass buffer passes, and the vertex stage on the
@@ -32,6 +36,7 @@
 // where each <path> is either a pack directory (contains metadata.json) or a
 // root that holds pack subdirectories. Exits non-zero if any pack has an error.
 
+#include "packvalidatorcommon.h"
 #include "packvalidators.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
@@ -49,6 +54,8 @@
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
+
+#include <optional>
 
 using PhosphorAnimationShaders::AnimationShaderEffect;
 using PhosphorAnimationShaders::AnimationShaderRegistry;
@@ -70,8 +77,7 @@ bool isPackDir(const QString& dir)
 // glslls / glsl-language-server autocomplete, and the include resolver skips it
 // at load (ShaderIncludeResolver::GeneratedPreambleInclude), so it neither ships
 // nor affects the compiled shader. Returns 0 on success, 1 on error.
-int emitPreamble(const QString& packDir, bool animationMode, bool surfaceMode, bool quiet, QTextStream& out,
-                 QTextStream& errStream)
+int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStream& out, QTextStream& errStream)
 {
     const QString name = QFileInfo(packDir).fileName();
     QString preamble;
@@ -79,7 +85,7 @@ int emitPreamble(const QString& packDir, bool animationMode, bool surfaceMode, b
     // sidecar pulls in the right base header per authoring model.
     QString baseHeader;
 
-    if (surfaceMode) {
+    if (model == PackModel::Surface) {
         QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
         if (!metaFile.open(QIODevice::ReadOnly)) {
             errStream << name << ": cannot read metadata.json\n";
@@ -98,7 +104,7 @@ int emitPreamble(const QString& packDir, bool animationMode, bool surfaceMode, b
         }
         preamble = SurfaceShaderRegistry::paramPreamble(eff);
         baseHeader = QStringLiteral("surface_uniforms.glsl");
-    } else if (animationMode) {
+    } else if (model == PackModel::Animation) {
         QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
         if (!metaFile.open(QIODevice::ReadOnly)) {
             errStream << name << ": cannot read metadata.json\n";
@@ -170,14 +176,13 @@ int main(int argc, char** argv)
 
     QStringList args;
     bool quiet = false; // --quiet/-q: print only failing packs (clean pre-commit output)
-    // System selection: --overlay (default) vs --animation vs --surface.
-    // Three distinct authoring models (different metadata schema + entry
-    // convention), so the mode is explicit and symmetric; later flag wins if
+    // System selection: --overlay vs --animation vs --surface, each FORCING one
+    // authoring model for every path given. With none of them the model is
+    // detected per pack from its shared/ directory (detectPackModel), which is
+    // the default because the old default silently forced `--overlay` and
+    // reported wrong-validator artifacts as pack errors. Later flag wins if
     // more than one is given.
-    bool animationMode = false;
-    // --surface: surface-layer packs (data/surface/*) — the window border /
-    // rounded-corner category. Mutually exclusive with --overlay / --animation.
-    bool surfaceMode = false;
+    std::optional<PackModel> forcedModel;
     // --emit-preamble: don't validate — write each pack's `p_<id>` autocomplete
     // sidecar (T2.2) for editor tooling.
     bool emitMode = false;
@@ -195,14 +200,11 @@ int main(int argc, char** argv)
         } else if (a == QLatin1String("--quiet") || a == QLatin1String("-q")) {
             quiet = true;
         } else if (a == QLatin1String("--animation") || a == QLatin1String("-a")) {
-            animationMode = true;
-            surfaceMode = false;
+            forcedModel = PackModel::Animation;
         } else if (a == QLatin1String("--surface") || a == QLatin1String("-s")) {
-            surfaceMode = true;
-            animationMode = false;
+            forcedModel = PackModel::Surface;
         } else if (a == QLatin1String("--overlay") || a == QLatin1String("-o")) {
-            animationMode = false;
-            surfaceMode = false;
+            forcedModel = PackModel::Overlay;
         } else if (a == QLatin1String("--emit-preamble")) {
             emitMode = true;
         } else {
@@ -212,9 +214,10 @@ int main(int argc, char** argv)
     if (args.isEmpty()) {
         errStream << "usage: plasmazones-shader-validate [--quiet] [--overlay|--animation|--surface] "
                      "[--emit-preamble] [--] <pack-dir-or-root> [...]\n"
-                  << "  --overlay         zone/overlay packs (data/overlays/*)        [default]\n"
-                  << "  --animation       transition/animation packs (data/animations/*)\n"
-                  << "  --surface         surface-layer packs (data/surface/*)\n"
+                  << "  (no model flag)   detect each pack's model from its shared/ dir  [default]\n"
+                  << "  --overlay         force zone/overlay packs (data/overlays/*)\n"
+                  << "  --animation       force transition/animation packs (data/animations/*)\n"
+                  << "  --surface         force surface-layer packs (data/surface/*)\n"
                   << "  --emit-preamble   write each pack's p_generated.glsl autocomplete sidecar (no validation)\n";
         return 2;
     }
@@ -246,11 +249,29 @@ int main(int argc, char** argv)
         return 2;
     }
 
+    // The model each pack is validated (or emitted) as: the forcing flag when
+    // one was given, else the pack's own detected family. A pack with no
+    // marker falls back to overlay, which is what the tool did unconditionally
+    // before, and says so — an undetected pack is the one case where the
+    // caller still has to know which flag to pass.
+    const auto modelFor = [&forcedModel, &errStream](const QString& pack) {
+        if (forcedModel) {
+            return *forcedModel;
+        }
+        if (const std::optional<PackModel> detected = detectPackModel(pack)) {
+            return *detected;
+        }
+        errStream << QFileInfo(pack).fileName()
+                  << ": no sibling shared/ marker, validating as an overlay pack — pass "
+                     "--overlay/--animation/--surface to choose\n";
+        return PackModel::Overlay;
+    };
+
     // Emit mode: write each pack's autocomplete sidecar and exit (no validation).
     if (emitMode) {
         int failed = 0;
         for (const QString& pack : packs) {
-            if (emitPreamble(pack, animationMode, surfaceMode, quiet, out, errStream) != 0) {
+            if (emitPreamble(pack, modelFor(pack), quiet, out, errStream) != 0) {
                 ++failed;
             }
         }
@@ -268,9 +289,10 @@ int main(int argc, char** argv)
     for (const QString& pack : packs) {
         QString report;
         QTextStream reportStream(&report);
-        const int e = surfaceMode ? validateSurfacePack(pack, reportStream)
-            : animationMode       ? validateAnimationPack(pack, reportStream)
-                                  : validatePack(pack, reportStream);
+        const PackModel model = modelFor(pack);
+        const int e = model == PackModel::Surface ? validateSurfacePack(pack, reportStream)
+            : model == PackModel::Animation       ? validateAnimationPack(pack, reportStream)
+                                                  : validatePack(pack, reportStream);
         reportStream.flush();
         totalErrors += e;
         if (e > 0) {

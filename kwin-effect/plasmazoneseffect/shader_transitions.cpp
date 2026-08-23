@@ -136,9 +136,11 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
     // directives precede every declaration (only KWin's #defines and the
     // source's leading comments come before them), which is all NVIDIA's
     // compiler requires.
-    const QString defineLine = QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable") + eol
-        + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol
-        + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
+    // The block itself is PhosphorShaders' — the offline validator and the GPU
+    // bake test splice the same one, so none of the three can drift into
+    // checking a dialect the other two do not. Only the #version-finding walk
+    // below is this function's own.
+    const QString defineLine = PhosphorShaders::kwinDefineBlock(eol);
 
     // Walk the source line-by-line and find the FIRST line whose
     // non-whitespace prefix is `#version`. A naive

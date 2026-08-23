@@ -965,7 +965,19 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
 # packs (data/overlays), animation packs (--animation, data/animations), and
 # surface packs (--surface, data/surface) are distinct authoring models with
-# different entry conventions, so each gets its own invocation.
+# different entry conventions, so each gets its own invocation. (The validator
+# also detects the model per pack now, so the flags are belt-and-braces here;
+# they pin each test to one model regardless of what a tree grows later.)
+#
+# REQUIRES the `glslangValidator` binary on PATH for shader_validate_animations.
+# Compositor-only animation packs (35 of the bundled 94, every desktop-* and the
+# geometry set) are classic-GL, which QShaderBaker's SPIR-V target rejects by
+# design, so they are compiled out of process through glslang's default
+# GLSL-semantics mode. That invocation FAILS rather than skips when the binary
+# is absent: those packs are compiled nowhere else in a headless run (the
+# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip
+# would put the gate back to lints-only for a third of the set. The other two
+# invocations need no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)

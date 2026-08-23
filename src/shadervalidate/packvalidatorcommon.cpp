@@ -15,7 +15,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLatin1String>
+#include <QProcess>
 #include <QRegularExpression>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTextStream>
 
 #include <algorithm>
@@ -127,6 +130,109 @@ void appendDidYouMean(QTextStream& out, const QString& diagnostic, const QString
 // diagnostics mapped to the author's file/line (T1.3 #line) plus the
 // did-you-mean hint. @p declared is the list of generated `p_<id>` names.
 // Returns 1 on failure, 0 on success. Shared by the zone and animation paths.
+std::optional<PackModel> detectPackModel(const QString& packDir)
+{
+    const QDir shared(QFileInfo(packDir).absolutePath() + QStringLiteral("/shared"));
+    if (shared.exists(QStringLiteral("animation_uniforms.glsl"))) {
+        return PackModel::Animation;
+    }
+    if (shared.exists(QStringLiteral("surface_uniforms.glsl"))) {
+        return PackModel::Surface;
+    }
+    if (shared.exists(QStringLiteral("common.glsl"))) {
+        return PackModel::Overlay;
+    }
+    return std::nullopt;
+}
+
+QString glslangValidatorPath()
+{
+    // BOTH upstream spellings, in the order a distro is likely to carry them.
+    // glslang renamed its binary to plain `glslang` and kept `glslangValidator`
+    // as a compatibility symlink that upstream documents as deprecated, so a
+    // lookup pinned to either name alone is a time bomb: the old name breaks
+    // wherever the symlink has been dropped, and the new one is missing on
+    // anything older. Both resolve to the same program and take the same
+    // arguments.
+    //
+    // Resolved once: a run validates up to a few hundred packs and the PATH
+    // walk is the same answer every time.
+    static const QString path = [] {
+        for (const QString& name : {QStringLiteral("glslangValidator"), QStringLiteral("glslang")}) {
+            const QString found = QStandardPaths::findExecutable(name);
+            if (!found.isEmpty()) {
+                return found;
+            }
+        }
+        return QString();
+    }();
+    return path;
+}
+
+int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
+                            const QString& toolPath)
+{
+    // glslang reads the stage from the file extension unless -S says otherwise;
+    // -S is passed below, so the temp file name only has to be unique. A
+    // per-call QTemporaryDir keeps concurrent invocations from colliding and
+    // takes the file with it on scope exit.
+    QTemporaryDir tmp;
+    if (!tmp.isValid()) {
+        out << "  " << label.leftJustified(15) << "ERROR\n    cannot create a temporary directory for the "
+            << "compositor bake\n";
+        return 1;
+    }
+    const QString srcPath = tmp.filePath(QStringLiteral("kwin.") + stage);
+    QFile srcFile(srcPath);
+    if (!srcFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        out << "  " << label.leftJustified(15) << "ERROR\n    cannot write " << srcPath << "\n";
+        return 1;
+    }
+    srcFile.write(source.toUtf8());
+    srcFile.close();
+
+    // DEFAULT mode on purpose — no -V and no -G. Both of those select a SPIR-V
+    // target, which reimposes the very rules this dialect breaks (a -G run
+    // rejects the shared headers' default-block uniforms with "non-opaque
+    // uniform variables need a layout(location=L)"). Bare glslang validates
+    // OpenGL-dialect GLSL and is what matches the compositor's own compile.
+    QProcess proc;
+    proc.start(toolPath, {QStringLiteral("-S"), stage, srcPath});
+    if (!proc.waitForFinished(60000)) {
+        proc.kill();
+        proc.waitForFinished(1000);
+        out << "  " << label.leftJustified(15) << "ERROR\n    glslangValidator timed out\n";
+        return 1;
+    }
+    const QString log =
+        QString::fromUtf8(proc.readAllStandardOutput()) + QString::fromUtf8(proc.readAllStandardError());
+    if (proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0) {
+        out << "  " << label.leftJustified(15) << "OK (compositor)\n";
+        return 0;
+    }
+    out << "  " << label.leftJustified(15) << "ERROR (compositor)\n";
+    // glslang leads with the temp file name and then one line per diagnostic.
+    // Drop the echoed name and the trailing summary so the report shows the
+    // author's errors and nothing about where the file happened to be staged.
+    const QStringList lines = log.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        // glslang echoes the source file name as its first output line. That is
+        // the staging path under a temp dir, which is noise at best and a
+        // different string on every run at worst (it would make the report
+        // unstable for anything diffing it). Both the bare name and the full
+        // path are matched, since which one is echoed follows the argument.
+        if (trimmed.isEmpty() || trimmed == srcPath || trimmed == QFileInfo(srcPath).fileName()) {
+            continue;
+        }
+        if (trimmed.startsWith(QLatin1String("SPIR-V is not generated"))) {
+            continue;
+        }
+        out << "    " << trimmed << "\n";
+    }
+    return 1;
+}
+
 int reportCompile(QTextStream& out, const QString& label, const ShaderCompiler::Result& result,
                   const QStringList& declared)
 {

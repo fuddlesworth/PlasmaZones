@@ -25,6 +25,38 @@ class QTextStream;
 
 namespace PlasmaZones::ShaderValidate {
 
+// ── authoring-model detection ──────────────────────────────────────────────
+
+/// The three authoring models a pack can belong to.
+enum class PackModel {
+    Overlay,
+    Animation,
+    Surface
+};
+
+/// Which authoring model @p packDir belongs to, or nullopt when the directory
+/// carries no marker.
+///
+/// Detected from the pack's SIBLING `shared/` directory rather than from
+/// metadata.json, because the three schemas are not distinguishable: all three
+/// carry id / name / fragmentShader, and the only animation-exclusive field
+/// (`appliesTo`) is optional, so a universal animation pack that omits it looks
+/// exactly like an overlay pack. The shared directory is unambiguous, since
+/// each family's uniform header lives there under its own name, and it is the
+/// SAME include root the stage bakes resolve against, so detection and
+/// compilation can never disagree about which family a pack was treated as.
+///
+/// This exists because the model used to be a flag with `--overlay` silently
+/// the default, so running the tool on an animation pack without `--animation`
+/// produced two confident errors that were pure artifacts of the wrong
+/// validator (a demand for `zone.vert`, and `common.glsl` not resolving). A
+/// diagnostic that is wrong in a way an author cannot see through is worse than
+/// no diagnostic, so the model is inferred and the flags only override.
+///
+/// Lives here rather than in main.cpp so it is reachable from the tests: it is
+/// validator logic, and only the flag-override policy on top of it is CLI.
+std::optional<PackModel> detectPackModel(const QString& packDir);
+
 // Confine a metadata-supplied shader path to its pack dir. Returns the confined
 // path, or nullopt when the path is empty or escapes the pack dir. See the
 // definition for the canonical-vs-lexical domain rules and why this gate is
@@ -55,6 +87,32 @@ int reportCompile(QTextStream& out, const QString& label, const PhosphorRenderin
 QStringList declaredParamNames(const QList<PhosphorShaders::ShaderRegistry::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorAnimationShaders::AnimationShaderEffect::ParameterInfo>& params);
 QStringList declaredParamNames(const QList<PhosphorSurfaceShaders::SurfaceShaderEffect::ParameterInfo>& params);
+
+// ── compositor (KWin classic-GL) bake ──────────────────────────────────────
+// Packs whose appliesTo makes them compositor-only are never loaded by the
+// daemon, and their source is classic-GL (default-block uniforms, unbound
+// samplers) that QShaderBaker's strict SPIR-V target rejects by design. That
+// left 35 of the 94 bundled animation packs with metadata lints and NO stage
+// compile anywhere in a headless run — the GPU bake test that does cover them
+// QSKIPs without a desktop GL 4.5 context, which is exactly the CI case.
+//
+// glslang's DEFAULT mode (no -V / -G, so no SPIR-V target) validates plain
+// OpenGL-dialect GLSL and accepts that source, so the coverage is reachable
+// offline through the `glslangValidator` binary. Out of process rather than
+// linked: Qt vendors glslang inside ShaderTools without exposing it, and a
+// direct libglslang dependency for one code path is a heavier build cost than
+// a tool the GLSL toolchain already ships.
+
+/// Absolute path to a usable glslang binary (`glslangValidator`, else the
+/// `glslang` the project renamed it to), or an empty string when neither is on
+/// PATH. Resolved once per run.
+QString glslangValidatorPath();
+
+/// Compile @p source as @p stage through `glslangValidator` at @p toolPath and
+/// print OK/ERROR under @p label. @p stage is the glslang `-S` token ("frag" /
+/// "vert"). Returns 1 on failure, 0 on success.
+int reportCompositorCompile(QTextStream& out, const QString& label, const QString& stage, const QString& source,
+                            const QString& toolPath);
 
 // Compile one ZONE stage through the exact runtime assembly and print OK/ERROR.
 // Returns 1 on failure, 0 on success.
