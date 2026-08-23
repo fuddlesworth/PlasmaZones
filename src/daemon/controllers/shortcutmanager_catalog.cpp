@@ -13,7 +13,6 @@
 #include "shortcutmanager.h"
 #include "shortcutmanager_ids.h"
 
-#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
 
@@ -587,9 +586,12 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // templatesDescription variant too: a combinedDescription overwrites
     // BOTH tooltip roles, so a member's templatesExplanation is dropped by
     // the merge and a family needing distinct templates wording must be left
-    // uncompressed rather than given one combined string.  Every member below
-    // has an empty explanation today; give the spec a combinedDescription
-    // before adding one.
+    // uncompressed rather than given one combined string.  The directional
+    // quad members below all have empty explanations today; give the spec a
+    // combinedDescription before adding one. The two digit families are the
+    // exception: their prefix-generated per-member explanation is identical
+    // across members and reads correctly for the merged range row, so
+    // keeping the first member's is right for them.
     QVector<FamilySpec> families = {
         // Labels derive the digit range from kIndexedSlotCount, like the chip
         // token, so raising the constant cannot desynchronize the two.

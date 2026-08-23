@@ -107,9 +107,13 @@ public:
 
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
-     * one QVariantMap per row, sorted by display category:
+     * one QVariantMap per row, sorted by display category, then by authored
+     * row order within it:
      *   id (QString), label (translated QString),
      *   category (translated QString), categoryOrder (int),
+     *   rowOrder (int — the row's authoring position inside its category;
+     *   the in-category sort key, with 9000 pinning the digit families to
+     *   the end of their group),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
      *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" |
