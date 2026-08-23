@@ -161,7 +161,13 @@ int emitPreamble(const QString& packDir, PackModel model, bool quiet, QTextStrea
         errStream << name << ": cannot write " << sidecarPath << ": " << f.errorString() << "\n";
         return 1;
     }
-    f.write(sidecar.toUtf8());
+    // Checked: a short write leaves a TRUNCATED sidecar that the line below
+    // would still report as "wrote".
+    const QByteArray encoded = sidecar.toUtf8();
+    if (f.write(encoded) != encoded.size()) {
+        errStream << name << ": short write to " << sidecarPath << ": " << f.errorString() << "\n";
+        return 1;
+    }
     if (!quiet) {
         out << "wrote " << sidecarPath << "\n";
     }
