@@ -7,6 +7,7 @@
 #include "window_query.h"
 
 #include "compositor/windowanimator.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
@@ -65,8 +66,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 using ShaderInternal::kUserTextureSamplerNames;
 using ShaderInternal::kUserTextureWrapKeys;

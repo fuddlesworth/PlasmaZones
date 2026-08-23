@@ -41,7 +41,6 @@
 namespace PhosphorEngine {
 class WindowRegistry;
 class IWindowTrackingService;
-class IScrollSettings;
 }
 
 namespace PhosphorScreens {
@@ -235,11 +234,40 @@ public:
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
     void toggleMaximizeColumn(const QString& screenId);
     void expandColumnToAvailableWidth(const QString& screenId);
+    /// Equal shares of the viewport for every fully visible column
+    /// (Karousel equalize). Refuses with fewer than two.
+    void equalizeVisibleColumnWidths(const QString& screenId);
+    /// The focused column at the smallest preset (Karousel minimize-width).
+    /// The strip falls back to the engine floor when the vocabulary is
+    /// empty, an arm only a test or an embedder handing the strip bare
+    /// params can reach: every in-tree producer of the preset list
+    /// substitutes a non-empty fallback for an empty one.
+    void minimizeColumnWidth(const QString& screenId);
+    /// Every column on the screen back to the context's default width and
+    /// display, every window back to the even split: the scrolling half of
+    /// the mode-neutral Retile shortcut. Widths are left as they are when
+    /// the context's default is "the client decides" and no rule pins one
+    /// (see resetDefaultColumnWidthFor); display and heights still reset.
+    /// Re-applies the layout the way the autotile and snapping halves
+    /// re-apply theirs.
+    void resetStripToDefaults(const QString& screenId);
     void cycleWindowPresetHeight(int delta, const QString& screenId);
     void adjustWindowHeight(qreal deltaPercent, const QString& screenId);
     void resetWindowHeights(const QString& screenId);
     /// Center the span of fully visible columns (niri center-visible-columns).
     void centerVisibleColumns(const QString& screenId);
+    /// Scroll the view along the strip by @p percent of the work area's MAIN
+    /// extent WITHOUT changing focus (Karousel scroll-left/right and its page
+    /// variants; niri has no equivalent). Positive is forward along the strip,
+    /// negative is back, clamped at both ends, and the view stays where it
+    /// lands: the strip's centering policy hands the view over to the pan
+    /// until the next focus change or centering verb takes it back (see
+    /// ScrollStrip's View detachment section). A percent that rounds to fewer
+    /// than one pixel reports no_movement; a pan already pinned at the end it
+    /// is asked to move toward reports no_target. The OSD names the two
+    /// refusals differently. Takes a percent rather than pixels because
+    /// the work area is resolved here and nowhere the shortcut layer can see.
+    void scrollViewByPercent(qreal percent, const QString& screenId);
     /// First/last non-minimized tile of the active column (niri
     /// focus-window-top/bottom).
     void focusWindowTop(const QString& screenId);
@@ -624,11 +652,14 @@ public:
     }
     /// Durable strip-structure snapshot: every LIVE strip (current states)
     /// plus the un-consumed mode-round-trip stash entries, keyed
-    /// "screenId|desktop|activity". Live wins on a key collision. The
+    /// "screenId|desktop|activity". On a key collision the live strip's
+    /// focus, view and axis win and the stash's not-yet-returned columns
+    /// are appended after the live ones (a merge, not a replacement). The
     /// daemon persists this blob through the WTA KConfig layer so a login
     /// restore rebuilds stacked columns (with each column's active tile,
     /// i.e. a tabbed column's shown tab), the strip focus, and the view
-    /// anchor instead of one default column per window. Per-tile height
+    /// anchor together with whether that anchor was an explicit pan (the
+    /// detach latch) instead of one default column per window. Per-tile height
     /// intents ride along; per-window minimum sizes do not — the client
     /// re-reports those. (engine_serialize.cpp)
     QJsonObject serializeStripState() const;
@@ -1276,17 +1307,17 @@ private:
     /// Effective per-screen values: the rule override when present, else the
     /// cached config default. Each accessor is a thin screenId wrapper over a
     /// map-taking overload, so a caller resolving several values for one
-    /// screen (layoutParamsForScreen resolves ten per relayout, and the open
+    /// screen (layoutParamsForScreen resolves eleven per relayout, and the open
     /// path four more) fetches the override map ONCE and threads it through
     /// instead of re-looking it up per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
     /// The six scrolling BEHAVIOUR toggles, rule-only per-screen keys layered
-    /// over the config-seeded members. Three of them (always-center-single-
-    /// column, respect-minimum-size and smart gaps) are consumed inside
-    /// layoutParamsForScreen and exist ONLY in map-taking form, since that is
-    /// the one call site and it has already fetched the map. The other three
-    /// (the straddler clamp, the open-path focus arm and the sticky gate) are
+    /// over the config-seeded members. Four of them (always-center-single-
+    /// column, respect-minimum-size, smart gaps and the straddler clamp) are
+    /// consumed inside layoutParamsForScreen and exist ONLY in map-taking
+    /// form, since that is the one call site and it has already fetched the
+    /// map. The other two (the open-path focus arm and the sticky gate) are
     /// consumed outside it and carry a screenId wrapper; the sticky gate also
     /// keeps a map-taking form, because the open path resolves several values
     /// for one screen off a single fetch.
@@ -1334,6 +1365,16 @@ private:
     /// as "pinned to a width" and gets the opposite of what the user chose.
     bool effectiveWidthClientDecides(const QString& screenId) const;
     bool effectiveWidthClientDecides(const QVariantMap& overrides) const;
+    /// The width resetStripToDefaults hands the strip for the screen whose
+    /// resolved @p overrides these are: params.defaultColumnWidth (which
+    /// already folds a rule's fraction in, rule > screen > global), or
+    /// std::nullopt when the effective verdict is "the client decides" and no
+    /// rule pins a width. The same two-term test the open path applies (minus
+    /// its tracker term, which only gates READING a client size; a reset
+    /// reads none). Map-taking only, like effectiveWidthClientDecides' inner
+    /// form, so the verb resolves the map once for both defaults it needs.
+    std::optional<ColumnWidth> resetDefaultColumnWidthFor(const QVariantMap& overrides,
+                                                          const ScrollLayoutParams& params) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QVariantMap& overrides) const;
     /// Height needs the work area AND the axis: the rule channel's bare

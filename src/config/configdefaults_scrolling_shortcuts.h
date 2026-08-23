@@ -3,26 +3,31 @@
 
 #pragma once
 
-#include "configdefaults_scrolling.h"
+#include "configdefaults_scrolling_behavior.h"
 
 namespace PlasmaZones {
 
-// Chain link 7: the Shortcuts.Scrolling chord defaults. Split out of
+// Chain link 8: the Shortcuts.Scrolling chord defaults. Split out of
 // configdefaults_scrolling.h to keep that file inside the size ceiling; the
-// scrolling engine's own Scrolling defaults stay there. Every accessor here
+// engine's own Scrolling defaults stay there (link 6) and its behaviour
+// tunables in configdefaults_scrolling_behavior.h (link 7). Every accessor here
 // reaches call sites through the ConfigDefaults leaf as before, so no consumer
 // changes.
-class ConfigDefaultsScrollingShortcuts : public ConfigDefaultsScrolling
+class ConfigDefaultsScrollingShortcuts : public ConfigDefaultsScrollingBehavior
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Shortcuts
     //
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
-    // Meta+Ctrl families in configdefaults.h. NOTE: the Meta+Alt family is
-    // SHARED with the layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/),
-    // cycle-in-zone (Meta+Alt+, .), and the quick-layout digit slots
-    // (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) —
+    // Meta+Ctrl families in configdefaults.h, with one deliberate exception:
+    // Equalize Column Widths is Meta+Ctrl+Shift+T, the Shift twin of Retile's
+    // Meta+Ctrl+T (see scrollingEqualizeColumnWidthsShortcut). NOTE: the
+    // Meta+Alt family is SHARED with the layouts pair (Meta+Alt+[ ]), the
+    // cheatsheet (Meta+Alt+/), cycle-in-zone (Meta+Alt+, .), the quick-layout
+    // digit slots (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) and every other
+    // Meta+Alt default in configdefaults.h (X, Space, Return, Escape and the
+    // Shift+Arrow move family) —
     // KGlobalAccel routes one action per chord, so every default here must be
     // unique across the WHOLE inheritance chain (test_scrolling_settings pins
     // this). Shift+symbol spellings are forbidden: see
@@ -226,6 +231,43 @@ public:
     static QString scrollingMoveToTilingShortcut()
     {
         return QString();
+    }
+    static QString scrollingViewPageBackShortcut()
+    {
+        // The view pan splits by input: the STEP is the wheel's (Meta+Shift+
+        // wheel, an effect-side axis shortcut mirroring Meta+wheel's column
+        // focus), and the PAGE is the keyboard's, the way PgUp/PgDn page
+        // where the wheel scrolls lines. A keypress is one deliberate act
+        // and can carry a whole viewport; a wheel notch is one of a stream
+        // and would overshoot. No keyboard step pair, for the same reason
+        // Meta+wheel's column focus has none: the wheel is a different input
+        // with a different feel, not a duplicate of the keys. Y is a free
+        // letter in the Meta+Alt pool (see the banner's externally-owned
+        // table); back and forward are the letter+Shift pair per the
+        // family's convention, and "back" is toward the strip's start
+        // whichever way the strip runs.
+        return QStringLiteral("Meta+Alt+Y");
+    }
+    static QString scrollingViewPageForwardShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+Y");
+    }
+    static QString scrollingEqualizeColumnWidthsShortcut()
+    {
+        // The Shift twin of Retile's Meta+Ctrl+T, deliberately outside the
+        // Meta+Alt family: both verbs re-flow the strip's widths, one back
+        // to the layout's defaults and the other to equal shares of the
+        // viewport, so they belong on one letter. Meta+Ctrl+Shift+T is not
+        // in the externally-owned table.
+        return QStringLiteral("Meta+Ctrl+Shift+T");
+    }
+    static QString scrollingMinimizeColumnWidthShortcut()
+    {
+        // Shift twin of E (grow into empty space): plain E gives the focused
+        // column every spare pixel on screen, Shift+E takes it to its
+        // narrowest. Opposed ends of the same axis, per the family's
+        // letter+Shift convention, and no new letter consumed.
+        return QStringLiteral("Meta+Alt+Shift+E");
     }
 };
 

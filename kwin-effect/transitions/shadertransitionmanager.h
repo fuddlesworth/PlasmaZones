@@ -33,14 +33,13 @@
 #include <unordered_map>
 
 #include "plasmazoneseffect/types.h"
+#include "compositor/effectlogging.h"
 
 namespace KWin {
 class EffectWindow;
 }
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 class PlasmaZonesEffect;
 

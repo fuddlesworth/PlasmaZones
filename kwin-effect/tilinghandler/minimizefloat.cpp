@@ -14,6 +14,7 @@
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/navigationhandler.h"
+#include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -32,8 +33,6 @@
 #include <chrono> // std::chrono::milliseconds for Effect::animationTime
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 static constexpr int kAutotileUnfloatRetryDelayMs = 250;
 static constexpr int kAutotileMaxUnfloatRetries = 3;

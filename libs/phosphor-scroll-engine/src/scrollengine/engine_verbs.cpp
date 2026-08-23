@@ -8,6 +8,8 @@
 
 #include "scrollverbresolve_p.h"
 
+#include <cmath>
+
 namespace PhosphorScrollEngine {
 
 // ── Scroll-specific vocabulary ──────────────────────────────────────────────
@@ -78,8 +80,12 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // every verb body in this file a one-liner. The names are part of the macro's
 // documented contract. P_SCROLL_VERB is #undef'd at the end of this file; the
 // tail note explains why P_SCROLL_RESOLVE deliberately is not.
-// Only the float-layer verbs at the tail are hand-expanded — their feedback
-// branches differ per arm, not just per outcome.
+// The hand-expanded verbs are the ones the macro cannot express:
+// consumeOrExpelWindow (two ops, one feedback), resetStripToDefaults (the
+// override map resolved once for two defaults), scrollViewByPercent (params
+// needed before the op), the windowed-fullscreen trio (background-context
+// guards) and the float-layer verbs at the tail (feedback branches differ per
+// arm, not just per outcome).
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume", true, QString());
@@ -147,6 +153,49 @@ void ScrollEngine::expandColumnToAvailableWidth(const QString& screenId)
     P_SCROLL_VERB(screenId, state->strip().expandActiveColumnToAvailableWidth(params), "resize", false, QString());
 }
 
+void ScrollEngine::equalizeVisibleColumnWidths(const QString& screenId)
+{
+    // "equalize" in the reason slot: the OSD's generic resize copy names one
+    // column, and this verb rewrote a group. The failure token stays the
+    // shared no_target.
+    P_SCROLL_VERB(screenId, state->strip().equalizeVisibleColumnWidths(params), "resize", false,
+                  QStringLiteral("equalize"));
+}
+
+void ScrollEngine::minimizeColumnWidth(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().minimizeActiveColumnWidth(params), "resize", false, QString());
+}
+
+void ScrollEngine::resetStripToDefaults(const QString& screenId)
+{
+    // "retile" rather than "resize": this is the scrolling arm of the
+    // mode-neutral Retile shortcut, and the OSD's retile copy is what the
+    // user pressed for. Both defaults are resolved here because the strip
+    // does not carry the display in params, and the width may be "the
+    // client decides", which has no value to hand down (see
+    // resetDefaultColumnWidthFor and resetToDefaults). Hand-expanded so the
+    // per-context override map is resolved ONCE for both of them, the
+    // file's resolve-once discipline; P_SCROLL_VERB's op expression would
+    // have each default re-fetch it.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("retile"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const QVariantMap overrides = overridesForScreen(screen);
+    const bool changed = state->strip().resetToDefaults(resetDefaultColumnWidthFor(overrides, params),
+                                                        effectiveDefaultColumnDisplay(overrides), params);
+    if (changed) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(changed, QStringLiteral("retile"), changed ? QString() : QStringLiteral("no_target"),
+                              sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+}
+
 void ScrollEngine::cycleWindowPresetHeight(int delta, const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().cycleActiveWindowPresetHeight(delta, params), "resize", false, QString());
@@ -167,6 +216,43 @@ void ScrollEngine::centerVisibleColumns(const QString& screenId)
     // "span" distinguishes the whole-group centering from centerColumn's
     // single-column copy in the OSD (both ride the "center" action).
     P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center", false, QStringLiteral("span"));
+}
+
+void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
+{
+    // Resolved by hand rather than through P_SCROLL_VERB: the pixel delta
+    // needs params BEFORE the op expression runs, and the macro only brings
+    // params into scope for the expression itself.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("scroll"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    // Against the MAIN extent, so a percent means the same thing on either
+    // axis and "100" is exactly one viewport, which is what the page variant
+    // asks for. Rounded, then refused if it collapses to nothing, under its
+    // OWN token: a 1% step on a tiny work area is not "the end of the
+    // strip", and the OSD names the two refusals differently. A non-finite
+    // percent reads as "nothing to move" rather than reaching qRound, the
+    // same guard the drag auto-scroll tick applies to its public qreal: no
+    // in-tree caller can pass one, but this is exported library API.
+    const int deltaPx = std::isfinite(percent) ? qRound(percent / 100.0 * params.axis.mainSize(params.workArea)) : 0;
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
+    const QString refusal = deltaPx == 0 ? QStringLiteral("no_movement") : QStringLiteral("no_target");
+    if (changed) {
+        // focusAfter=false for the same reason the sizing verbs pass it: a pan
+        // moves geometry and nothing else, and must not yank focus off a
+        // floating window.
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    // The active window is unchanged either way — that is the verb's whole
+    // point — so the target slot carries it back unchanged on success too.
+    Q_EMIT navigationFeedback(changed, QStringLiteral("scroll"),
+                              changed ? Detail::physicalTokenForMain(deltaPx > 0 ? 1 : -1, params.axis) : refusal,
+                              sourceWindow, changed ? sourceWindow : QString(), screen);
 }
 
 void ScrollEngine::focusWindowTop(const QString& screenId)

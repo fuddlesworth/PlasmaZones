@@ -9,6 +9,7 @@
 #include "config/settings.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/types/constants.h"
 #include "core/platform/logging.h"
@@ -61,10 +62,11 @@ PhosphorEngine::IPlacementEngine::LayoutSupport Daemon::layoutSupportForScreen(c
     // pointers and never returns nullptr for a routed screen (the inner
     // check above is cheap defence, not a contract). Fall back to
     // Placement — same Snapping fallback as currentModeFor, and snap's
-    // layouts are placement layouts. Note the three null-router fallbacks
+    // layouts are placement layouts. Note the four null-router fallbacks
     // in this file deliberately differ: isAutotileScreen probes the live
-    // engine, currentModeFor answers Snapping, this answers Placement —
-    // each is the safe default for its own consumers.
+    // engine, currentModeFor answers Snapping, this answers Placement and
+    // dragInsertSelectorForScreen answers false — each is the safe default
+    // for its own consumers.
     return PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
 }
 
@@ -464,30 +466,54 @@ HANDLE_AUTOTILE_ONLY(DecreaseMasterCount, decreaseMasterCount())
 
 void Daemon::handleRetile()
 {
-    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
-        return;
-    }
-    // Mirror every sister handler (HANDLE_AUTOTILE_ONLY at macros.h:29 and
-    // the master-ratio handlers): silently no-op when the focused screen
-    // isn't in autotile mode OR when its autotile-mode disable cascade
-    // trips. retile() itself is engine-global, but a user firing the
-    // shortcut from a Snapping/Scrolling screen (or from an
-    // autotile-disabled context) expects "nothing happens on the screen
-    // I'm focused on", not "every other autotile screen retiles". Fail
-    // closed on a null resolver — matches the rest of this file
-    // (handleSnap, handleFloat, master-ratio handlers); the resolver is
-    // null only inside the tiny shutdown window where every navigation
-    // handler should be silently inert anyway. A null focused screen
-    // (no resolvable focus) is treated the same as the macro at
-    // macros.h:29 does: silent no-op, NOT a fallthrough to the legacy
-    // engine-global retile. Without this symmetry, a user with no
-    // focused window — e.g. all windows minimised, or focus lost mid-
-    // session — would trigger a global retile across every autotile
-    // screen, ignoring the per-screen disable cascade.
+    // Mode-neutral: the one Retile chord re-applies whichever layout the
+    // focused screen is on. A null focused screen (no resolvable focus) is a
+    // silent no-op in EVERY arm, NOT a fallthrough to the legacy engine-global
+    // retile. Without this, a user with no focused window — all windows
+    // minimised, or focus lost mid-session — would trigger a global retile
+    // across every autotile screen, ignoring the per-screen disable cascade.
     const QString focusedScreen = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (focusedScreen.isEmpty()) {
         return;
     }
+    // Scrolling arm: every column back to the context's default width and
+    // display, every window back to the even split. Gated on the SCROLLING
+    // cascade, the way the autotile arm below gates on its own, and ahead of
+    // the autotile enabled check: a scrolling screen must re-flow whether or
+    // not any autotile screen exists in the session. The engine's own verb
+    // handles the empty-strip case (no_windows) and the OSD.
+    if (currentModeFor(focusedScreen) == PhosphorZones::AssignmentEntry::Scrolling) {
+        // The member is held as the engine base; the scrolling verbs live on
+        // the concrete type, the same cast scrolling_init.cpp's resolver does.
+        auto* scroll = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+        if (!scroll || isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Scrolling)) {
+            return;
+        }
+        // Membership, not just the router's verdict: the engine's screen
+        // resolver falls back to ANOTHER scrolling screen for an id it does
+        // not own (the same transient the master-ratio handlers guard
+        // against above), and a retile landing on the wrong monitor with
+        // that monitor's OSD is worse than a silent press.
+        if (!scroll->isActiveOnScreen(focusedScreen)) {
+            return;
+        }
+        scroll->resetStripToDefaults(focusedScreen);
+        return;
+    }
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    // Mirror every sister handler (HANDLE_AUTOTILE_ONLY in macros.h and
+    // the master-ratio handlers): silently no-op when the focused screen
+    // isn't in autotile mode OR when its autotile-mode disable cascade
+    // trips. retile() itself is engine-global, but a user firing the
+    // shortcut from a Snapping screen (or from an autotile-disabled
+    // context) expects "nothing happens on the screen I'm focused on", not
+    // "every other autotile screen retiles". Fail closed on a null resolver
+    // — matches the rest of this file (handleSnap, handleFloat,
+    // master-ratio handlers); the resolver is null only inside the tiny
+    // shutdown window where every navigation handler should be silently
+    // inert anyway.
     if (!isAutotileScreen(focusedScreen)) {
         return;
     }

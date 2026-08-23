@@ -39,9 +39,9 @@ inline QLatin1String kFocused()
 /// could run vertically.
 ///
 /// No schema version bump: this file's format is deliberately version-free
-/// and additive (see the header note), and three keys have already landed
-/// exactly this way — presetFraction, windowedFullscreen and
-/// unclaimedSessions. Absent-key-means-default IS the migration mechanism
+/// and additive (see the header note), and five keys have already landed
+/// exactly this way — presetFraction, windowedFullscreen, unclaimedSessions,
+/// viewDetached and blueprintCursor. Absent-key-means-default IS the migration mechanism
 /// here, and it is not the ad-hoc per-key migration the project rule forbids:
 /// that rule governs Settings/ConfigDefaults keys, which this is not.
 inline QLatin1String kAxis()
@@ -52,6 +52,14 @@ inline QLatin1String kAxis()
 inline QLatin1String kViewAnchor()
 {
     return QLatin1String("viewAnchor");
+}
+/// Whether that anchor was an explicit pan (ScrollStrip's View detachment
+/// section). ADDITIVE on the same terms as kAxis above, and absent reads
+/// false — which is what every pre-key blob means, since no session that
+/// wrote one could detach the view in the first place.
+inline QLatin1String kViewDetached()
+{
+    return QLatin1String("viewDetached");
 }
 /// How far the strip had worked through its template blueprint. ADDITIVE on
 /// the same terms as kAxis above, and absent reads 0 — which is exactly what a
@@ -174,7 +182,9 @@ ColumnWidth widthFromJson(const QJsonObject& obj, const QList<qreal>& legacyVoca
     w.kind = (kind == ColumnWidth::Fixed || kind == ColumnWidth::Preset) ? static_cast<ColumnWidth::Kind>(kind)
                                                                          : ColumnWidth::Proportion;
     w.proportion = qBound<qreal>(MinColumnWidthFraction, obj.value(kProportion()).toDouble(0.5), 1.0);
-    w.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
+    // Bounded above like every other Fixed producer (kMaxFixedExtentPx);
+    // relayout clamps to the work area anyway, so this is a belt.
+    w.fixedPx = qBound(0, obj.value(kFixedPx()).toInt(0), static_cast<int>(kMaxFixedExtentPx));
     if (obj.contains(kPresetFraction())) {
         w.presetFraction = qBound<qreal>(MinColumnWidthFraction, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
     } else {
@@ -210,7 +220,7 @@ WindowHeight heightFromJson(const QJsonObject& obj, const QList<qreal>& legacyVo
     // divide the auto-height share by zero-or-negative, and a negative
     // fixedPx/presetIdx indexes out of range.
     h.weight = qBound<qreal>(0.01, obj.value(kWeight()).toDouble(1.0), 100.0);
-    h.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
+    h.fixedPx = qBound(0, obj.value(kFixedPx()).toInt(0), static_cast<int>(kMaxFixedExtentPx));
     if (obj.contains(kPresetFraction())) {
         h.presetFraction = qBound<qreal>(MinWindowHeightFraction, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
     } else {
@@ -294,6 +304,7 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kColumns(), columns);
         obj.insert(kFocused(), stash.focusedWindowId);
         obj.insert(kViewAnchor(), stash.viewAnchor);
+        obj.insert(kViewDetached(), stash.viewDetached);
         obj.insert(kAxis(), static_cast<int>(stash.axis));
         obj.insert(kBlueprintCursor(), stash.blueprintCursor);
         return obj;
@@ -435,8 +446,8 @@ QJsonObject ScrollEngine::serializeStripState() const
         StashedStrip merged = it.value();
         // Live columns first: they are the strip as it stands, and the stash
         // holds only windows that have not come back to it. focusedWindowId,
-        // viewAnchor and the captured axis stay the LIVE ones for the same
-        // reason.
+        // the viewAnchor/viewDetached pair and the captured axis stay the LIVE
+        // ones for the same reason.
         const StashedStrip stash = prunedStashes.take(it.key());
         merged.columns += stash.columns;
         // The blueprint cursor is the one field where the STASH can outrank
@@ -524,6 +535,7 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         // wide enough for any real strip — it stops a hand-edited INT_MIN/MAX
         // from overflowing the viewOffset arithmetic it later feeds.
         stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
+        stash.viewDetached = obj.value(kViewDetached()).toBool(false);
         // Absent reads 0, which is what every pre-key blob means. Bounded for
         // the same boundary-hardening reason as the anchor: the cursor feeds
         // qMax against the live column count and then indexes a blueprint.

@@ -8,6 +8,7 @@
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -27,8 +28,6 @@
 #include <memory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // Upper bound on how long the effect waits for the daemon's endDrag reply.

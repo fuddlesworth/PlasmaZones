@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <core/renderviewport.h>
 #include <effect/effecthandler.h>
@@ -23,8 +24,6 @@
 #include <optional>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Surface shader (the window border / rounded-corner pack and any future surface

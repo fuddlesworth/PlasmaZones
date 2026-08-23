@@ -48,6 +48,7 @@
 #include <QMetaObject>
 #include <QMetaProperty>
 #include <QSet>
+#include <QSignalSpy>
 #include <QStringList>
 #include <QTest>
 #include <QVariantList>
@@ -88,6 +89,13 @@ public:
     void flush() override
     {
         Q_EMIT ready();
+    }
+
+    /// Drive one registered action the way the platform would: the registry
+    /// listens to activated() and dispatches to the owning handler.
+    void fire(const QString& id)
+    {
+        Q_EMIT activated(id);
     }
 };
 
@@ -292,12 +300,23 @@ private Q_SLOTS:
                                           QStringLiteral("layout_picker"), QStringLiteral("toggle_layout_lock"),
                                           QStringLiteral("quick_layout_1")};
         const QSet<QString> expectAll{QStringLiteral("resnap_to_new_layout"), QStringLiteral("snap_all_windows")};
+        // Retile acts on either engine mode and is a no-op on snapping, so it
+        // carries the mode-union tag; a retag back to "autotile" would hide
+        // the row on every scrolling screen with nothing else failing.
+        const QSet<QString> expectManaged{QStringLiteral("retile")};
 
         QHash<QString, QString> modeById;
+        QHash<QString, int> categoryOrderById;
+        QHash<QString, QString> descriptionById;
+        QHash<QString, QString> templatesDescriptionById;
         const QVariantList rows = manager.cheatsheetModel();
         for (const QVariant& v : rows) {
             const QVariantMap row = v.toMap();
-            modeById.insert(row.value(QStringLiteral("id")).toString(), row.value(QStringLiteral("mode")).toString());
+            const QString id = row.value(QStringLiteral("id")).toString();
+            modeById.insert(id, row.value(QStringLiteral("mode")).toString());
+            categoryOrderById.insert(id, row.value(QStringLiteral("categoryOrder")).toInt());
+            descriptionById.insert(id, row.value(QStringLiteral("description")).toString());
+            templatesDescriptionById.insert(id, row.value(QStringLiteral("templatesDescription")).toString());
         }
         // The quick-layout family compresses into one row keyed by its first
         // member, so quick_layout_1 stands in for the whole digit family.
@@ -320,7 +339,47 @@ private Q_SLOTS:
         };
         checkTag(expectLayouts, QStringLiteral("layouts"));
         checkTag(expectAll, QStringLiteral("all"));
+        checkTag(expectManaged, QStringLiteral("managed"));
+        // And the row moved to General (order 0) with the retag: a
+        // mode-neutral verb filed under an Autotile heading would read as
+        // autotile-only on the sheet whatever its tag says.
+        if (categoryOrderById.value(QStringLiteral("retile"), -1) != 0) {
+            failures.append(QStringLiteral("retile sits at category order %1, expected 0 (General)")
+                                .arg(categoryOrderById.value(QStringLiteral("retile"), -1)));
+        }
+        // And the row says what it does on a SCROLLING screen: the sheet
+        // shows templatesDescription there, so a dropped tooltip would leave
+        // the autotile wording on a screen where the verb resets the strip.
+        const QString retileTemplates = templatesDescriptionById.value(QStringLiteral("retile"));
+        if (retileTemplates.isEmpty() || retileTemplates == descriptionById.value(QStringLiteral("retile"))) {
+            failures.append(QStringLiteral("retile has no scrolling-screen wording of its own"));
+        }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
+    }
+
+    /// The two page verbs reach ScrollEngine::scrollViewByPercent through
+    /// ShortcutManager::scrollViewRequested with a literal whole viewport of
+    /// travel, back being negative: the same sign convention the wheel's
+    /// D-Bus path uses (delta × step), so the keyboard and the wheel agree on
+    /// which way "back" is. Pinned through the backend, not by calling the
+    /// handler, so the table row's wiring is what is tested.
+    void pageVerbsFireAWholeViewportWithTheWheelsPolarity()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings(nullptr);
+        ShortcutManager manager(&settings);
+        auto backend = std::make_unique<SilentBackend>();
+        SilentBackend* silent = backend.get();
+        manager.setBackendForTesting(std::move(backend));
+        manager.registerShortcuts();
+
+        QSignalSpy requested(&manager, &ShortcutManager::scrollViewRequested);
+        silent->fire(QLatin1String(PlasmaZones::ShortcutIds::kIdScrollViewPageBack));
+        QCOMPARE(requested.count(), 1);
+        QCOMPARE(requested.last().at(0).toInt(), -100);
+        silent->fire(QLatin1String(PlasmaZones::ShortcutIds::kIdScrollViewPageForward));
+        QCOMPARE(requested.count(), 2);
+        QCOMPARE(requested.last().at(0).toInt(), 100);
     }
 };
 

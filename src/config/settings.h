@@ -512,6 +512,8 @@ public:
                    setScrollingColumnWidthStepPercent NOTIFY scrollingColumnWidthStepPercentChanged)
     Q_PROPERTY(int scrollingWindowHeightStepPercent READ scrollingWindowHeightStepPercent WRITE
                    setScrollingWindowHeightStepPercent NOTIFY scrollingWindowHeightStepPercentChanged)
+    Q_PROPERTY(int scrollingViewScrollStepPercent READ scrollingViewScrollStepPercent WRITE
+                   setScrollingViewScrollStepPercent NOTIFY scrollingViewScrollStepPercentChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -646,6 +648,14 @@ public:
                    setScrollingMoveToFloatingShortcut NOTIFY scrollingMoveToFloatingShortcutChanged)
     Q_PROPERTY(QString scrollingMoveToTilingShortcut READ scrollingMoveToTilingShortcut WRITE
                    setScrollingMoveToTilingShortcut NOTIFY scrollingMoveToTilingShortcutChanged)
+    Q_PROPERTY(QString scrollingViewPageBackShortcut READ scrollingViewPageBackShortcut WRITE
+                   setScrollingViewPageBackShortcut NOTIFY scrollingViewPageBackShortcutChanged)
+    Q_PROPERTY(QString scrollingViewPageForwardShortcut READ scrollingViewPageForwardShortcut WRITE
+                   setScrollingViewPageForwardShortcut NOTIFY scrollingViewPageForwardShortcutChanged)
+    Q_PROPERTY(QString scrollingEqualizeColumnWidthsShortcut READ scrollingEqualizeColumnWidthsShortcut WRITE
+                   setScrollingEqualizeColumnWidthsShortcut NOTIFY scrollingEqualizeColumnWidthsShortcutChanged)
+    Q_PROPERTY(QString scrollingMinimizeColumnWidthShortcut READ scrollingMinimizeColumnWidthShortcut WRITE
+                   setScrollingMinimizeColumnWidthShortcut NOTIFY scrollingMinimizeColumnWidthShortcutChanged)
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
@@ -1486,6 +1496,8 @@ public:
     void setScrollingColumnWidthStepPercent(int percent);
     int scrollingWindowHeightStepPercent() const;
     void setScrollingWindowHeightStepPercent(int percent);
+    int scrollingViewScrollStepPercent() const;
+    void setScrollingViewScrollStepPercent(int percent);
 
     // Scrolling Shortcuts — PhosphorConfig::Store-backed.
     QString scrollingFocusColumnFirstShortcut() const;
@@ -1550,6 +1562,14 @@ public:
     void setScrollingMoveToFloatingShortcut(const QString& shortcut);
     QString scrollingMoveToTilingShortcut() const;
     void setScrollingMoveToTilingShortcut(const QString& shortcut);
+    QString scrollingViewPageBackShortcut() const;
+    void setScrollingViewPageBackShortcut(const QString& shortcut);
+    QString scrollingViewPageForwardShortcut() const;
+    void setScrollingViewPageForwardShortcut(const QString& shortcut);
+    QString scrollingEqualizeColumnWidthsShortcut() const;
+    void setScrollingEqualizeColumnWidthsShortcut(const QString& shortcut);
+    QString scrollingMinimizeColumnWidthShortcut() const;
+    void setScrollingMinimizeColumnWidthShortcut(const QString& shortcut);
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;
@@ -2124,8 +2144,8 @@ private:
 
     /// Shared writer for the three per-mode disable lists. Replaces the whole
     /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
-    /// Rule store — @p axisInt is a `DisableAxis` value (file-local enum
-    /// in settings.cpp; passed as an int so the header stays decoupled). Drops
+    /// Rule store — @p axisInt is a `DisableAxis` value (the enum in
+    /// settings/settings_detail.h; passed as an int so the header stays decoupled). Drops
     /// malformed composite entries, fires @p signalFn + @c settingsChanged
     /// only on a real (canonical-set) change.
     void writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,

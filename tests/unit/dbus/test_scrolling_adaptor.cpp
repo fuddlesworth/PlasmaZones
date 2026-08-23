@@ -8,12 +8,15 @@
  * The contract-sync test covers the XML's SHAPE only — that the declared
  * methods and signals exist with the right signatures. What it cannot check
  * is whether they do what their DocStrings promise, which is what this file
- * pins:
+ * pins. The wire VERBS (the wheel pair and the absolute setters) are pinned
+ * by test_scrolling_adaptor_verbs.cpp on the same fixture
+ * (scrollingadaptortestfixture.h); this file owns the read-side surface,
+ * the screen set, the relays and the teardown contract.
  *
- *  1. focusColumn refuses a screen the engine does not own, so a wheel event
- *     aimed at a non-scrolling monitor is never redirected onto the active
- *     scrolling one; and it maps its delta to the documented direction.
- *  2. visibleStripJson refuses the same way, and its gate is load-bearing:
+ *  1. (moved to test_scrolling_adaptor_verbs.cpp: focusColumn's gates and
+ *     direction mapping.)
+ *  2. visibleStripJson refuses a screen the engine does not own, and its
+ *     gate is load-bearing:
  *     a strip belonging to a sibling desktop context OUTLIVES the screen
  *     leaving the scrolling set, so only the gate keeps the preview empty.
  *  3. visibleStripJson emits the rects the XML documents, INCLUDING
@@ -45,11 +48,8 @@
  *     and its evict makes a rect-stable relayout re-emit — with a control
  *     first proving that same relayout is silent WITHOUT the evict. Its
  *     null-engine arm rides the item 10 sweep too.
- * 14. The four absolute setters share focusColumn's ownership gate, refuse
- *     out-of-range and non-finite values silently (inclusive at both bounds),
- *     and write the intent kind each form documents — width proportion
- *     exact, width/height px Fixed, height proportion a Preset anchor that
- *     relayout snaps to the height vocabulary.
+ * 14. (moved to test_scrolling_adaptor_verbs.cpp: the four absolute
+ *     setters' gates, range refusals and intent kinds.)
  * 15. blueprintProgressJson carries the same ownership gates, answers zeroes
  *     (not an empty object) for an owned screen with no blueprint, and its
  *     `used` counter SPENDS: it does not fall back when a column closes.
@@ -61,6 +61,8 @@
  *     the screens the engine owns. Nothing reaches the bus after clearEngine
  *     either, though that one is the relay's own null guard rather than the
  *     disconnect — see the note in testClearedEngine_stopsRelayingSignals.
+ * 18. (moved to test_scrolling_adaptor_verbs.cpp: scrollView's gates,
+ *     step arithmetic and repeat behaviour.)
  */
 
 #include <QTest>
@@ -72,74 +74,29 @@
 #include <QJsonObject>
 #include <QVariantMap>
 
-#include <limits>
-
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
-#include <PhosphorScrollEngine/ScrollState.h>
 
 #include "dbus/scrollingadaptor/scrollingadaptor.h"
+#include "scrollingadaptortestfixture.h"
 
 using namespace PlasmaZones;
 using PhosphorScrollEngine::ScrollEngine;
 
-class TestScrollingAdaptor : public QObject
+class TestScrollingAdaptor : public QObject, protected ScrollingAdaptorTestFixture
 {
     Q_OBJECT
 
 private Q_SLOTS:
     void init()
     {
-        // The two stubbed seams: no IWindowTrackingService (so window ids
-        // stay raw, uncanonicalized) and no ScreenManager (so geometry
-        // comes from the injected providers below instead of real outputs).
-        m_engine = new ScrollEngine(nullptr, nullptr);
-        // Headless geometry seam: without a work area the strip resolves no
-        // rects at all, and visibleStripJson would return "[]" for every
-        // screen — including the one it is supposed to describe.
-        //
-        // Neither provider is at the origin: a (0,0) work area would let a
-        // dropped origin-subtraction term pass unnoticed (x/1920 lands well
-        // outside 0..1). The two rects also differ, but which basis the
-        // payload normalizes against is NOT pinned here: every assertion in
-        // this file cross-checks the wire payload against the engine's own
-        // relative rects, so a swap to the available geometry would normalize
-        // against 760 instead of 800, stay inside 0..1, and agree with the
-        // engine either way. Known coverage gap, kept because an absolute
-        // expected value would have to be derived from a live run.
-        const auto available = [](const QString&) {
-            return QRect(1920, 40, 1200, 760);
-        };
-        const auto screen = [](const QString&) {
-            return QRect(1920, 0, 1200, 800);
-        };
-        m_engine->setScreenGeometryProviders(available, screen);
-        // Well-behaved-compositor echo, same as ScrollTestUtils'
-        // makeProviderEngine: every activation request is answered with a
-        // windowFocused report so the engine's pending-self-activation queue
-        // drains — without it the next simulated USER focus of that window is
-        // consumed as the missing echo.
-        connect(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_engine,
-                [this](const QString& windowId) {
-                    m_engine->windowFocused(windowId, m_engine->screenForTrackedWindow(windowId));
-                });
-        m_parent = new QObject(nullptr);
-        m_adaptor = new ScrollingAdaptor(m_engine, m_parent);
-        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        setUpFixture();
     }
 
     void cleanup()
     {
-        // Note the shape: this teardown always clears the engine BEFORE the
-        // adaptor dies, so the live-connection destruction order is the one
-        // path these tests never exercise.
-        m_adaptor->clearEngine();
-        delete m_parent;
-        m_parent = nullptr;
-        m_adaptor = nullptr;
-        delete m_engine;
-        m_engine = nullptr;
+        tearDownFixture();
     }
 
     // The XML promises an empty array for a screen with no strip or one that
@@ -403,176 +360,6 @@ private Q_SLOTS:
             collectRectMismatches(arr.at(i).toObject(), engineRects.at(i), i + 1, failures);
         }
         QVERIFY2(failures.isEmpty(), qPrintable(failures.join(QStringLiteral("; "))));
-    }
-
-    // focusColumn's own doc: gated on the engine owning the screen, because
-    // the engine's screen fallback would otherwise redirect a wheel event
-    // from a non-scrolling monitor onto the active scrolling one.
-    void testFocusColumn_ignoresForeignScreenAndBadDelta()
-    {
-        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
-        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
-
-        QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
-
-        m_adaptor->focusColumn(QStringLiteral("HDMI-2"), -1); // not ours
-        // Boundary hygiene, like the empty-screenId strip case: the ownership
-        // gate rejects "" on its own, so this arm does not discriminate the
-        // isEmpty check. It pins the documented answer, not the guard.
-        m_adaptor->focusColumn(QString(), -1); // no screen at all
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), 0); // not a direction
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), 2); // not a direction either
-        QCOMPARE(activateSpy.count(), 0);
-
-        // Positive control: the same call with a real screen and a real
-        // direction DOES move focus, so the refusals above discriminate.
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
-        QCOMPARE(activateSpy.count(), 1);
-    }
-
-    // Which WAY each delta goes, not just that something moved: -1 is left
-    // and +1 is right, per the XML's DocString.
-    void testFocusColumn_mapsDeltaToDirection()
-    {
-        QSignalSpy activateSpy(m_engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
-
-        // An empty strip has nothing to activate, so a well-formed call is
-        // still silent — the counts below start from a real zero.
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
-        QCOMPARE(activateSpy.count(), 0);
-
-        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
-        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
-        activateSpy.clear();
-
-        // app|b opened last and holds focus, so left lands on app|a.
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), -1);
-        QCOMPARE(activateSpy.count(), 1);
-        QCOMPARE(activateSpy.at(0).at(0).toString(), QStringLiteral("app|a"));
-
-        m_adaptor->focusColumn(QStringLiteral("DP-1"), 1);
-        QCOMPARE(activateSpy.count(), 2);
-        QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|b"));
-    }
-
-    // The absolute setters: focusColumn's ownership gate, silent range
-    // refusal against the ConfigDefaults bounds, and the intent each form
-    // actually writes (width proportion exact, width/height px Fixed, height
-    // proportion a Preset fraction anchor).
-    void testAbsoluteSetters_gateValidateAndApply()
-    {
-        using PhosphorScrollEngine::ColumnWidth;
-        using PhosphorScrollEngine::WindowHeight;
-        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
-        auto* state = static_cast<PhosphorScrollEngine::ScrollState*>(m_engine->stateForScreen(QStringLiteral("DP-1")));
-        QVERIFY(state);
-        const auto activeColumn = [state]() -> const PhosphorScrollEngine::Column& {
-            return state->strip().columns().at(state->strip().activeColumnIndex());
-        };
-
-        // Refusals: foreign screen, empty screen id (the file's boundary
-        // convention), below the proportion floor, above the ceiling, just
-        // outside each inclusive bound, and NaN (D-Bus type 'd' carries it,
-        // and an exclusion-form range test would wave it through) — none of
-        // them may disturb the default width intent. Full-value compare, not
-        // kind-only: a refusal that clamped instead of refusing would keep
-        // the kind while corrupting the value.
-        const ColumnWidth before = activeColumn().width;
-        m_adaptor->setColumnWidthProportion(QStringLiteral("HDMI-2"), 0.25);
-        m_adaptor->setColumnWidthProportion(QString(), 0.25);
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.01);
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.5);
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.049);
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.001);
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), std::numeric_limits<double>::quiet_NaN());
-        QCOMPARE(activeColumn().width, before);
-
-        // The bounds themselves are ACCEPTED (inclusive range): a `<` flipped
-        // to `<=` at either edge fails here.
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.05);
-        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
-        QCOMPARE(activeColumn().width.proportion, 0.05);
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.0);
-        QCOMPARE(activeColumn().width.proportion, 1.0);
-
-        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.25);
-        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
-        QCOMPARE(activeColumn().width.proportion, 0.25);
-
-        // Pixel form: out-of-range (including just-outside) refused with the
-        // full intent untouched; the bounds accepted; in-range writes Fixed.
-        // The foreign-screen arm is exercised on EVERY setter, not just the
-        // proportion one: the ownership gate is per-method code, and deleting
-        // it from one leaves the suite green if only a sibling pins it.
-        const ColumnWidth beforePx = activeColumn().width;
-        m_adaptor->setColumnWidthPixels(QStringLiteral("HDMI-2"), 640);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 50);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 99);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 10001);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 20000);
-        m_adaptor->setColumnWidthPixels(QString(), 640);
-        QCOMPARE(activeColumn().width, beforePx);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 100);
-        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Fixed);
-        QCOMPARE(activeColumn().width.fixedPx, 100);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 10000);
-        QCOMPARE(activeColumn().width.fixedPx, 10000);
-        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 640);
-        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Fixed);
-        QCOMPARE(activeColumn().width.fixedPx, 640);
-
-        // Height twins: px is Fixed, proportion is the Preset fraction
-        // anchor (heights have no exact-proportion kind).
-        const auto activeHeight = [&activeColumn]() -> const WindowHeight& {
-            const PhosphorScrollEngine::Column& col = activeColumn();
-            return col.tiles.at(col.activeTileIdx).height;
-        };
-        // Foreign-screen refusal + the same bound pins as the width twin: a
-        // `<` flipped to `<=` at either height bound was invisible before.
-        // Full-value compare, like the width arm and the proportion arm
-        // below: the starting kind happens to differ from the kind a clamp
-        // would write, so a kind-only check passes here today, but it stops
-        // discriminating the moment this block is reordered after one of the
-        // legs that leaves the height Fixed.
-        const WindowHeight beforePxRefusals = activeHeight();
-        m_adaptor->setWindowHeightPixels(QStringLiteral("HDMI-2"), 300);
-        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 50);
-        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 99);
-        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10001);
-        m_adaptor->setWindowHeightPixels(QString(), 300);
-        QCOMPARE(activeHeight(), beforePxRefusals);
-        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Auto);
-        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 100);
-        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
-        QCOMPARE(activeHeight().fixedPx, 100);
-        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10000);
-        QCOMPARE(activeHeight().fixedPx, 10000);
-        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
-        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
-        QCOMPARE(activeHeight().fixedPx, 300);
-        // Height-proportion refusals, full-value compare like the width arm
-        // (kind-only would miss a clamp that rewrote fixedPx), with the
-        // foreign screen, both out-of-range sides and NaN covered.
-        const WindowHeight beforeHeightRefusals = activeHeight();
-        m_adaptor->setWindowHeightProportion(QStringLiteral("HDMI-2"), 0.5);
-        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.01);
-        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 1.5);
-        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), std::numeric_limits<double>::quiet_NaN());
-        m_adaptor->setWindowHeightProportion(QString(), 0.5);
-        QCOMPARE(activeHeight(), beforeHeightRefusals);
-        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
-        // An OFF-VOCABULARY fraction is accepted and stored VERBATIM as the
-        // anchor — the setter is not exact and does not snap at store time;
-        // relayout snaps the anchor to the nearest effective height preset,
-        // per the XML DocString. 0.42 sits between the default vocabulary's
-        // 1/3 and 1/2 entries, so a setter that stored the nearest entry
-        // instead of the anchor would fail the exact compare below.
-        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.42);
-        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Preset);
-        QCOMPARE(activeHeight().presetFraction, 0.42);
-        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.5);
-        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Preset);
-        QCOMPARE(activeHeight().presetFraction, 0.5);
     }
 
     // Same ownership gates as focusColumn, plus the payload's mixed-vocabulary
@@ -1021,9 +808,6 @@ private:
         }
     }
 
-    ScrollEngine* m_engine = nullptr;
-    QObject* m_parent = nullptr;
-    ScrollingAdaptor* m_adaptor = nullptr;
     int m_propertiesChangedCount = 0;
 };
 

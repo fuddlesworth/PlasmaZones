@@ -36,6 +36,7 @@
 #include "compositor/scrolltabindicatorpainter.h"
 #include "handlers/dragtracker.h"
 #include "compositor/stripviewanimator.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -64,8 +65,6 @@
 #include <QJsonParseError>
 #include <QLoggingCategory>
 #include <QPalette>
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace PlasmaZones {
 

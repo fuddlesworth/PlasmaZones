@@ -17,6 +17,7 @@
 #include "shader_internal.h"
 #include "surface_fold.h"
 #include "types.h"
+#include "compositor/effectlogging.h"
 
 #include <core/rendertarget.h>
 #include <core/renderviewport.h>
@@ -43,8 +44,6 @@
 #include <epoxy/gl.h>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // (Re)allocate this window's composite / capture / per-pack buffer targets for the
 // current size, scale and chain, and drop every cache an allocation makes stale.

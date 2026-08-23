@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include "shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/WindowId.h>
@@ -35,8 +36,6 @@
 #include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,
                                                const QString& sourceZoneId, const QString& targetZoneId,

@@ -8,6 +8,7 @@
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 
 #include <PhosphorIdentity/WindowId.h>
@@ -24,8 +25,6 @@
 #include <QTimer>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // Pass over the windows on screens that left the managed set because the
 // DESKTOP (or activity) changed, not because autotile was turned off for

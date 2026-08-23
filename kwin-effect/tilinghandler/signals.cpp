@@ -10,6 +10,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/windowanimator.h"
 #include "handlers/navigationhandler.h"
+#include "compositor/effectlogging.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -35,8 +36,6 @@
 #include <utility> // std::as_const over the surviving minimize-float markers
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // The minimize/unminimize float state machine and its tuning constants live
 // in minimizefloat.cpp.

@@ -13,6 +13,7 @@
 #include "tilinghandler/tilinghandler.h"
 #include "shader_resolve.h"
 #include "window_query.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effectwindow.h>
 
@@ -27,8 +28,6 @@
 #include <optional>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 

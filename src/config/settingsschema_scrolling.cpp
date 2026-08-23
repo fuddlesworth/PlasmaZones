@@ -4,8 +4,9 @@
 // The scrolling half of the settings schema: the Scrolling knobs and
 // the Shortcuts.Scrolling chords. Split out of settingsschema.cpp for
 // file-size; the shared validator helpers live in settingsschema_p.h and the
-// two entry points are declared alongside every other appendXxxSchema in
-// settingsschema.h.
+// three entry points (appendScrollingSchema, appendScrollingZoneSelectorSchema,
+// appendScrollingShortcutsSchema) are declared alongside every other
+// appendXxxSchema in settingsschema.h.
 
 #include "settingsschema.h"
 
@@ -442,6 +443,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
+        {CD::viewScrollStepPercentKey(),
+         CD::scrollingViewScrollStepPercent(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::scrollingStepPercentMin(), CD::scrollingStepPercentMax())},
     };
 
     // ─── Edge auto-scroll (Scrolling.Behavior.DragScroll) ────────────────
@@ -581,6 +587,10 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::focusColumnRightOrFirstKey(), CD::scrollingFocusColumnRightOrFirstShortcut(), QMetaType::QString},
         {CD::moveToFloatingKey(), CD::scrollingMoveToFloatingShortcut(), QMetaType::QString},
         {CD::moveToTilingKey(), CD::scrollingMoveToTilingShortcut(), QMetaType::QString},
+        {CD::viewPageBackKey(), CD::scrollingViewPageBackShortcut(), QMetaType::QString},
+        {CD::viewPageForwardKey(), CD::scrollingViewPageForwardShortcut(), QMetaType::QString},
+        {CD::equalizeColumnWidthsKey(), CD::scrollingEqualizeColumnWidthsShortcut(), QMetaType::QString},
+        {CD::minimizeColumnWidthKey(), CD::scrollingMinimizeColumnWidthShortcut(), QMetaType::QString},
     };
 }
 

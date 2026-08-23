@@ -44,6 +44,7 @@ private Q_SLOTS:
     }
 
     void modeRoundTripRestoresFocusAndAnchor();
+    void persistedBlobCarriesTheViewDetachment();
     void presetIntentRoundTripsExactly();
     void stashedShapeOutranksTheOpenHeightRule();
     void legacyPresetIndexBlobResolvesAgainstEffectiveList();
@@ -118,6 +119,19 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     // with, so centering above must genuinely have moved it.
     QVERIFY2(anchorBefore != 0, "the centered anchor must differ from a fresh strip's, or the carry is unfalsifiable");
 
+    // The anchor's OWNER travels with it. Panning here rather than leaving the
+    // centered view alone, because the two halves fail independently: a stash
+    // that carried the position and dropped the detachment restores the view
+    // and then hands it straight back to the centering policy, which moves it
+    // on the first layout pass after the restore — a bug the anchor assertion
+    // at the tail cannot see, since it reads the model before that pass.
+    // Driven through the state's strip rather than scrollViewByPercent so
+    // the delta is an exact pixel count the tail can compare against; the
+    // stash reads the same model either way.
+    QVERIFY(before->strip().scrollViewBy(-20, ScrollTestUtils::engineParams()));
+    QVERIFY(before->strip().viewDetached());
+    const int pannedAnchorBefore = before->strip().viewAnchor();
+
     // Mode reassignment of the SAME context: teardown stashes the strip.
     engine->setActiveScreens({});
     QVERIFY(!engine->isWindowTracked(QStringLiteral("app|c")));
@@ -136,7 +150,73 @@ void TestScrollEnginePersistence::modeRoundTripRestoresFocusAndAnchor()
     QVERIFY(after);
     QCOMPARE(after->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(after->strip().activeWindowId(), QStringLiteral("app|c"));
-    QCOMPARE(after->strip().viewAnchor(), anchorBefore);
+    QCOMPARE(after->strip().viewAnchor(), pannedAnchorBefore);
+    QVERIFY(after->strip().viewDetached());
+}
+
+void TestScrollEnginePersistence::persistedBlobCarriesTheViewDetachment()
+{
+    // The PERSISTED half of what modeRoundTripRestoresFocusAndAnchor pins for
+    // the in-memory stash: serializeStripState writes the detach latch
+    // beside the anchor, restoreStripState reads it back, and a blob written
+    // before the key existed reads as attached. Deleting either the write or
+    // the read in engine_serialize.cpp left the mode round-trip test green,
+    // so this one drives the blob itself.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {kS1});
+    engine1->setCurrentDesktopForScreen(kS1, 1);
+    engine1->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine1->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    engine1->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+    // Wide enough that the strip overflows the viewport, or there is nothing
+    // to pan.
+    for (const char* id : {"app|a", "app|b", "app|c"}) {
+        engine1->windowFocused(QString::fromLatin1(id), kS1);
+        engine1->setColumnWidth(ColumnWidth::makeProportion(0.55), kS1);
+    }
+    engine1->scrollViewByPercent(-25, kS1);
+    ScrollState* before = stateFor(engine1, kS1);
+    QVERIFY(before);
+    QVERIFY(before->strip().viewDetached());
+    const int pannedAnchor = before->strip().viewAnchor();
+
+    const QJsonObject blob = engine1->serializeStripState();
+    // The key is pinned, not read off the blob: a stash leftover under a
+    // second key would otherwise hand the legacy arm below the wrong payload.
+    const QString key = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key));
+    QVERIFY(blob.value(key).toObject().value(QLatin1String("viewDetached")).toBool(false));
+
+    // Restored into a fresh engine, the same windows arriving under the same
+    // ids: the pan's position AND its ownership come back.
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {kS1});
+    engine2->setCurrentDesktopForScreen(kS1, 1);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine2->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    engine2->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+    ScrollState* restored = stateFor(engine2, kS1);
+    QVERIFY(restored);
+    QCOMPARE(restored->strip().activeWindowId(), QStringLiteral("app|c"));
+    QCOMPARE(restored->strip().viewAnchor(), pannedAnchor);
+    QVERIFY(restored->strip().viewDetached());
+
+    // A blob from before the key existed: absent reads as attached, and the
+    // anchor still restores (the two halves are independent).
+    QJsonObject legacy = blob;
+    QJsonObject payload = legacy.value(key).toObject();
+    payload.remove(QLatin1String("viewDetached"));
+    legacy.insert(key, payload);
+    ScrollEngine* engine3 = makeProviderEngine(&owner, {kS1});
+    engine3->setCurrentDesktopForScreen(kS1, 1);
+    engine3->restoreStripState(legacy);
+    engine3->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine3->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    engine3->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+    ScrollState* attached = stateFor(engine3, kS1);
+    QVERIFY(attached);
+    QCOMPARE(attached->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(!attached->strip().viewDetached());
 }
 
 void TestScrollEnginePersistence::presetIntentRoundTripsExactly()

@@ -8,6 +8,7 @@
 // the same position connectDragTracker always held.
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -29,7 +30,6 @@
 namespace PlasmaZones {
 
 // `lcEffect` is defined in plasmazoneseffect.cpp via Q_LOGGING_CATEGORY.
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void PlasmaZonesEffect::connectDragTracker()
 {

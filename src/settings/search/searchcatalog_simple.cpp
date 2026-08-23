@@ -100,9 +100,15 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingStickyWindows"),
                PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("desktops")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingColumnWidthStep"),
-               PhosphorI18n::tr("Width adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("width")});
+               PhosphorI18n::tr("Width adjustment step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("width"), PhosphorI18n::tr("shortcut")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHeightStep"),
-               PhosphorI18n::tr("Height adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("height")});
+               PhosphorI18n::tr("Height adjustment step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("height"), PhosphorI18n::tr("shortcut")});
+    addSetting(
+        search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingViewScrollStep"),
+        PhosphorI18n::tr("View scroll step"),
+        {PhosphorI18n::tr("step"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("view"), PhosphorI18n::tr("wheel")});
     // The shared Strip direction card's pair, mirrored here because the
     // simple page hosts the same card (anchors resolve per hosting page id).
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("stripDirection"),
@@ -127,7 +133,7 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusEnabled"),
-               PhosphorI18n::tr("Scroll columns with the mouse wheel"),
+               PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusInverted"),
                PhosphorI18n::tr("Invert wheel direction"), {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel")});

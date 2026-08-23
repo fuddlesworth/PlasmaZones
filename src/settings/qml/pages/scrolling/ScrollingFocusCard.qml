@@ -112,13 +112,13 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
-            title: i18n("Scroll columns with the mouse wheel")
+            title: i18n("Scroll the strip with the mouse wheel")
             searchAnchor: "wheelFocusEnabled"
-            description: i18n("Hold Meta and scroll to move column focus along the strip. When this is off, the compositor keeps the Meta+wheel shortcut.")
+            description: i18n("Hold Meta and scroll to move column focus along the strip, or Meta+Shift and scroll to move the view without changing focus. When this is off, the compositor keeps both wheel shortcuts.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingWheelFocusEnabled
-                accessibleName: i18n("Scroll columns with the mouse wheel")
+                accessibleName: i18n("Scroll the strip with the mouse wheel")
                 onToggled: function (newValue) {
                     appSettings.scrollingWheelFocusEnabled = newValue;
                 }
@@ -136,7 +136,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Invert wheel direction")
             searchAnchor: "wheelFocusInverted"
-            description: i18n("Scrolling down focuses the previous column instead of the next one.")
+            description: i18n("Scrolling down moves toward the start of the strip instead of the end, for both wheel shortcuts.")
             enabled: appSettings.scrollingWheelFocusEnabled
             visible: true
 

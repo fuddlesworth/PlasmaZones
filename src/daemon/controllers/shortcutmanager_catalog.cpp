@@ -60,6 +60,10 @@ using namespace ShortcutIds;
 //    layoutsAvailable). Covers the layout cycle pair, the picker, the
 //    layout lock, and the quick-layout digits — on a non-layout screen
 //    those keys answer with a "not available" OSD, so the sheet hides them.
+//  - "managed" for the engine-managed modes, autotile OR scrolling (one
+//    row today, Retile): it re-applies either engine's layout and is a
+//    hard no-op on snapping, so neither "all" nor one mode tag would tell
+//    the truth
 //  - toggle_autotile is the doorway INTO autotile → all modes, always shown
 // A row tagged "all" also has to READ mode-neutrally. A label that names
 // zones on a key which addresses columns in scrolling misinforms the reader
@@ -72,10 +76,11 @@ struct CatalogMeta
     // unallocated) to leave room for a new category between two existing ones
     // without renumbering the table. Gaps are not removed categories.
     int categoryOrder;
-    // "all" | "snapping" | "autotile" | "scrolling" | "layouts" — string form
-    // matches what the QML filter consumes; no enum round-trip needed. The
-    // last value is a capability tag (engine layoutSupport), not a mode;
-    // see the contract block above.
+    // "all" | "snapping" | "autotile" | "scrolling" | "layouts" | "managed" — string form
+    // matches what the QML filter consumes; no enum round-trip needed.
+    // "layouts" is a capability tag (engine layoutSupport), not a mode, and
+    // "managed" is the union of the two engine modes; see the contract
+    // block above.
     const char* mode;
     // Optional tr() disambiguation for the category word (e.g. the mode
     // name "Scrolling", whose bare source would otherwise inherit the
@@ -257,7 +262,15 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdDecreaseMasterRatio, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdIncreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
         add(kIdDecreaseMasterCount, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
-        add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "Autotile"), 9, "autotile");
+        // Mode-neutral since the scrolling arm landed, so it leaves the
+        // Autotile block for General: on a scrolling screen it re-flows the
+        // strip, and the Templates slot carries that wording the way it does
+        // for the layer-focus switch.
+        add(kIdRetile, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "managed", nullptr, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Re-applies the tiling algorithm to every window on the screen."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Puts every column back to the screen's default width and display, and every "
+                              "window back to an even share of its column."));
         // Every scrolling row carries an explanation: the column vocabulary
         // (consume, expel, grow) is opaque to anyone who has not used a
         // scrolling tiler before, and the sheet is where they look it up.
@@ -376,6 +389,22 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones",
                               "Returns the focused floating window to its column. Unlike the float toggle, "
                               "it never floats."));
+        // "Back" and "forward" rather than left/right: the strip can run
+        // either way, and these read correctly on a vertical one too.
+        add(kIdScrollViewPageBack, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Scrolls the view toward the start of the strip by a whole screen. "
+                              "Focus stays where it is."));
+        add(kIdScrollViewPageForward, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Scrolls the view toward the end of the strip by a whole screen. "
+                              "Focus stays where it is."));
+        add(kIdScrollEqualizeColumnWidths, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Gives every column fully on screen an equal share of the screen. Columns "
+                              "clipped at an edge are left alone."));
+        add(kIdScrollMinimizeColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Shrinks the focused column to the smallest size preset."));
         return m;
     }();
 
@@ -516,9 +545,9 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // default, any user rebind of either member uncompresses this pair for
     // good, where a digit or arrow family recompresses as soon as the rebind
     // still lands on its structural token. The one exception is a member
-    // whose default is empty — several verbs now SHIP unbound, and a user
-    // can clear a bound one — whose expectation is taken from the live
-    // binding instead; see addScrollPair below.
+    // whose default is empty — several verbs now SHIP unbound — for which no
+    // pair is listed at all: addScrollPair below skips the pair, and each
+    // member's own row renders whatever binding it has.
     const auto lastKeyOf = [](const QString& sequence) {
         // Normalize to PortableText first, exactly as the row builder above
         // does to the LIVE triggers before the compare. The defaults are

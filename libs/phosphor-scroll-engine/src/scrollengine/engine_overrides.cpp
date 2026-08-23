@@ -9,10 +9,11 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
-// Complete type needed for the qobject_cast in effectiveFocusNewWindows —
-// ScrollEngine.h forward declares IScrollSettings only. Included directly
-// rather than relied on through a unity batch neighbour (see the nounity
-// build's role in catching exactly this).
+// Complete type needed for the qobject_cast in effectiveFocusNewWindows.
+// ScrollEngine.h includes it already (for the kDragScroll* defaults), but it
+// is included directly here rather than relied on transitively, so a future
+// header trim cannot break the cast (the nounity build's role in catching
+// exactly this).
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
@@ -433,6 +434,18 @@ bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
     return effectiveWidthClientDecides(overridesForScreen(screenId));
 }
 
+std::optional<ColumnWidth> ScrollEngine::resetDefaultColumnWidthFor(const QVariantMap& overrides,
+                                                                    const ScrollLayoutParams& params) const
+{
+    // A rule's width outranks the kind (effectiveDefaultColumnWidth folds it
+    // in first), so only a ClientDecides verdict with NO rule width means
+    // "there is no default width to go back to".
+    if (effectiveWidthClientDecides(overrides) && !ruleColumnWidthFraction(overrides).has_value()) {
+        return std::nullopt;
+    }
+    return params.defaultColumnWidth;
+}
+
 bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) const
 {
     // Kind VALIDATION, not just a read: effectiveDefaultColumnWidth falls
@@ -594,15 +607,16 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overri
     };
     readInt(K::tabIndicatorGap(), params.gap, kMinTabIndicatorGap, kMaxTabIndicatorGap);
     readInt(K::tabIndicatorWidth(), params.width, kMinTabIndicatorWidth, kMaxTabIndicatorWidth);
-    // A belt at the library boundary. The rule cascade DOES range-check this
-    // upstream (layoutregistry_contextresolve.cpp checks it against the same
-    // Min/MaxTabIndicatorLengthRatio the descriptor validates), but this
-    // library is public API and an embedder can hand it an override map
-    // directly, where a zero or negative proportion would resolve the
-    // indicator to a sliver while every setting reports it on.
+    // Validate-then-fall-back like the two ints above, the one stance the
+    // whole function takes: an out-of-range proportion leaves the configured
+    // value alone rather than being clamped, so an embedder handing the
+    // library a garbage override (the rule cascade range-checks this upstream
+    // in layoutregistry_contextresolve.cpp, but the map is public API) gets
+    // the same answer for the length as for the gap and width.
     qreal length = 0.0;
-    if (overrideDouble(overrides, K::tabIndicatorLengthProportion(), length) && length > 0.0) {
-        params.lengthProportion = qBound(kMinTabIndicatorLengthProportion, length, kMaxTabIndicatorLengthProportion);
+    if (overrideDouble(overrides, K::tabIndicatorLengthProportion(), length)
+        && length >= kMinTabIndicatorLengthProportion && length <= kMaxTabIndicatorLengthProportion) {
+        params.lengthProportion = length;
     }
     // Validate-then-fall-back, the terms effectiveDefaultColumnDisplay uses:
     // a garbage override must leave the configured position alone rather than

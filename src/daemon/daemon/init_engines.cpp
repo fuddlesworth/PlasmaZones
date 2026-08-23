@@ -1207,6 +1207,22 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
+    // The wheel's view step reads ShortcutManager's narrow getter over
+    // Settings, where the other step percents live. m_shortcutManager is
+    // ctor-owned and never reset, so the capture outlives every adaptor this
+    // pass creates.
+    m_scrollingAdaptor->setViewScrollStepProvider([this]() {
+        return m_shortcutManager->scrollViewScrollStepPercent();
+    });
+    // The same per-context disable gate the keyboard scroll verbs pass
+    // through (scrolling_init.cpp's engineFor), so a context the user turned
+    // off cannot be panned or resized from the wheel or the bus. Installed
+    // unconditionally: the adaptor fails closed without it. The gate reads
+    // the resolver live, so a null resolver early in start-up refuses the
+    // way the keyboard path does.
+    m_scrollingAdaptor->setContextGateProvider([this](const QString& screenId) {
+        return isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Scrolling);
+    });
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
@@ -1236,7 +1252,8 @@ void Daemon::initEnginesAndWiring()
     // emptying half first, so on a single-screen tiling→scrolling flip the
     // effect saw enabledChanged(false) a full event-loop pass before the new
     // union and cancelled in-flight unfloat continuations mid-flip (the
-    // hazard tilingadaptor.h:100-108 documents). Anything that ever does
+    // hazard notifyEngineScreensChanged's doc in tilingadaptor.h documents).
+    // Anything that ever does
     // need a direct relay must route through notifyEngineScreensChanged.
     // Note for whoever wires one: ScrollEngine::enabledChanged carries no
     // wasDesktopSwitch suppression, which is harmless only while it stays

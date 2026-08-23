@@ -503,6 +503,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
+             {CD::scrollingBehaviorGroup(), CD::viewScrollStepPercentKey()},
              // Drag re-insert triggers (the Triggers card on this page).
              {CD::scrollingBehaviorGroup(), CD::triggersKey()},
              {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},

@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -36,8 +37,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 using ShaderInternal::injectKwinDefineAfterVersion;
 using ShaderInternal::kCustomColorsElementNames;

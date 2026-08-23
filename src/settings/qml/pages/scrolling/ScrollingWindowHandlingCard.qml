@@ -153,5 +153,27 @@ SettingsCard {
                 }
             }
         }
+
+        SettingsSeparator {}
+
+        SettingsRow {
+            title: i18n("View scroll step")
+            searchAnchor: "scrollingViewScrollStep"
+            description: i18n("How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the work area along the strip")
+
+            SettingsSlider {
+                accessibleName: i18n("View scroll step")
+                from: root._stepConsts.stepPercentMin
+                to: root._stepConsts.stepPercentMax
+                stepSize: 1
+                value: appSettings.scrollingViewScrollStepPercent
+                formatValue: function (v) {
+                    return Math.round(v) + "%";
+                }
+                onMoved: function (newValue) {
+                    appSettings.scrollingViewScrollStepPercent = Math.round(newValue);
+                }
+            }
+        }
     }
 }

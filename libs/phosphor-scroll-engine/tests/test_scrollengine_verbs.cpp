@@ -11,6 +11,7 @@
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
@@ -66,6 +67,10 @@ private Q_SLOTS:
     void focusWindowTopBottomWalkTheColumn();
     void absoluteWidthAndHeightIntents();
     void centerVisibleColumnsCentersOnceThenRefuses();
+    void scrollViewByPercentPansWithoutMovingFocus();
+    void scrollViewSurvivesALateStashClaim();
+    void edgeAutoScrollThenCancelKeepsTheScrolledView();
+    void equalizeAndMinimizeReportTheirFeedback();
     void everyVerbAnswersNoWindowsOnAnEmptyScreen();
     void moveToFloatingAndBackAnswersEveryPress();
     void switchFocusRoundTripsBetweenLayers();
@@ -334,6 +339,203 @@ void TestScrollEngineVerbs::centerVisibleColumnsCentersOnceThenRefuses()
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
 }
 
+void TestScrollEngineVerbs::scrollViewByPercentPansWithoutMovingFocus()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    // Three columns at 0.55 overflow the viewport, so there is somewhere to
+    // pan to; the last-opened window holds focus and the view sits at the
+    // strip's END (the minimum scroll that shows it), so the first pan that
+    // can succeed is the backward one.
+    for (const char* id : {"app|a", "app|b", "app|c"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.55), QStringLiteral("S1"));
+    }
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const auto params = ScrollTestUtils::engineParams();
+    const auto viewX = [&]() {
+        return state->strip().relayout(params).viewOffset;
+    };
+    const int before = viewX();
+    QVERIFY2(before > 0, "the view must start scrolled, or a backward pan has nowhere to go");
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    QSignalSpy placement(engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+    // The pan: by exactly the percent, reported as a "scroll" whose reason is
+    // the travel direction (the OSD's arrow), with focus untouched on both
+    // the model and the feedback's target slot. The anchor moved, so the
+    // persistence producer fires — the verb has no other emit path.
+    engine->scrollViewByPercent(-25, QStringLiteral("S1"));
+    QCOMPARE(viewX(), before - qRound(0.25 * ScrollTestUtils::kMainExtent));
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("scroll"));
+    QCOMPARE(feedback.last().at(2).toString(), Ax::navLead());
+    QCOMPARE(feedback.last().at(4).toString(), QStringLiteral("app|c"));
+    QCOMPARE(placement.count(), 1);
+
+    // The whole point, at the engine level: the pan survives the layout pass
+    // the engine itself runs. applyLayout ran inside the verb above, and the
+    // view is still where the pan put it.
+    engine->retile();
+    QCOMPARE(viewX(), before - qRound(0.25 * ScrollTestUtils::kMainExtent));
+    // And the retile neither moved focus nor handed the view back.
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(state->strip().viewDetached());
+
+    // A pan pinned at the end it is asked to move toward refuses with
+    // no_target and emits no placement change — there is nothing to save.
+    // The refusal leaves the latch as it found it: the view is still the
+    // user's.
+    engine->scrollViewByPercent(100, QStringLiteral("S1"));
+    engine->scrollViewByPercent(100, QStringLiteral("S1"));
+    const int placementAfterPin = placement.count();
+    engine->scrollViewByPercent(100, QStringLiteral("S1"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    QCOMPARE(placement.count(), placementAfterPin);
+    QVERIFY(state->strip().viewDetached());
+
+    // A percent too small to reach a pixel is a refusal too, not a success
+    // that moved nothing, and under its OWN token: the OSD must not call a
+    // step that rounded away "the end of the strip". 0.01% of the fixture's
+    // extent rounds to zero.
+    engine->scrollViewByPercent(-0.01, QStringLiteral("S1"));
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_movement"));
+    QCOMPARE(placement.count(), placementAfterPin);
+}
+
+void TestScrollEngineVerbs::scrollViewSurvivesALateStashClaim()
+{
+    // A stash entry (here the in-session mode round trip) lives until every
+    // stashed tile is claimed, and the restore re-asserts last time's focus
+    // and view on EVERY arrival so the burst lands anchored on the right
+    // window. Once the stashed focus has been claimed the restore has done
+    // its job: a tile that arrives later must not rewind a view the user has
+    // since panned, so the view handed back is the one from before THAT
+    // insert stole it.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    for (const char* id : {"app|a", "app|b", "app|c"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.55), QStringLiteral("S1"));
+    }
+    // Leave scrolling and come back: the strip is stashed with focus on c.
+    engine->setActiveScreens({});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    // Two of the three return, the focused one among them, so the restore
+    // has landed; b stays out.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(!state->strip().viewDetached());
+    // The user pans. The strip is two columns of 0.55, so there is room.
+    engine->scrollViewByPercent(-25, QStringLiteral("S1"));
+    QVERIFY(state->strip().viewDetached());
+    const int pannedAnchor = state->strip().viewAnchor();
+    // The straggler claims its stashed slot. Its insert steals focus and
+    // re-anchors; the user's focus and pan are handed straight back.
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCOMPARE(state->strip().columnCount(), 3);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+    QVERIFY(state->strip().viewDetached());
+    QCOMPARE(state->strip().viewAnchor(), pannedAnchor);
+}
+
+void TestScrollEngineVerbs::edgeAutoScrollThenCancelKeepsTheScrolledView()
+{
+    // The drag's edge auto-scroll is a scrollViewBy under the hood, so it
+    // detaches the view like the shortcut does. A CANCEL restores the dragged
+    // window to its slot without moving focus, so the pan holds through the
+    // next layout pass (the CHANGELOG's "stays where a drag scrolled it"). A
+    // drop is a focus change by construction (the dropped window takes
+    // focus) and so hands the view back to the policy, which is why this
+    // slot pins the cancel arm and not a drop.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    for (const char* id : {"app|a", "app|b", "app|c", "app|d"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.55), QStringLiteral("S1"));
+    }
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const auto params = ScrollTestUtils::engineParams();
+    const auto viewX = [&]() {
+        return state->strip().relayout(params).viewOffset;
+    };
+    // Focus the first column so the view sits at the strip's START and the
+    // trailing band has somewhere to scroll to.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    QCOMPARE(viewX(), 0);
+    // Drag a bystander (not the focused one), into the trailing band: first
+    // tick arms, the start delay expires, then ticks move the view.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("app|d"), QStringLiteral("S1")));
+    const QPoint band =
+        Ax::point(Ax::mainPos(ScrollTestUtils::defaultScreenRect()) + ScrollTestUtils::kMainExtent - 1, 300);
+    engine->dragAutoScrollTick(QStringLiteral("S1"), band, 0.016);
+    QTest::qWait(PhosphorEngine::IScrollSettings::kDragScrollDelayMsDefault + 20);
+    for (int i = 0; i < 40; ++i) {
+        engine->dragAutoScrollTick(QStringLiteral("S1"), band, 0.016);
+    }
+    const int scrolled = viewX();
+    QVERIFY2(scrolled > 0, "the auto-scroll must have moved the view");
+    QVERIFY(state->strip().viewDetached());
+
+    engine->cancelDragInsertPreview();
+    QCOMPARE(state->strip().columnCount(), 4);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+    QVERIFY(state->strip().viewDetached());
+    engine->retile();
+    QCOMPARE(viewX(), scrolled);
+}
+
+void TestScrollEngineVerbs::equalizeAndMinimizeReportTheirFeedback()
+{
+    // The OSD keys its copy on these tokens ("resize" with the "equalize"
+    // reason has its own line), so the engine-level contract is pinned here
+    // rather than only the strip math in test_scrollstrip_view.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    for (const char* id : {"app|a", "app|b"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+        engine->windowFocused(QString::fromLatin1(id), QStringLiteral("S1"));
+        engine->setColumnWidth(ColumnWidth::makeProportion(0.30), QStringLiteral("S1"));
+    }
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("equalize"));
+    // Already equal: the second press refuses under the generic token.
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+
+    engine->minimizeColumnWidth(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 3);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("resize"));
+    QCOMPARE(feedback.last().at(2).toString(), QString());
+    engine->minimizeColumnWidth(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 4);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+}
+
 void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
 {
     QObject owner;
@@ -353,8 +555,12 @@ void TestScrollEngineVerbs::everyVerbAnswersNoWindowsOnAnEmptyScreen()
     engine->moveFocusedToFloating(QStringLiteral("S1"));
     engine->moveFocusedToTiling(QStringLiteral("S1"));
     engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
+    engine->scrollViewByPercent(25, QStringLiteral("S1"));
+    engine->equalizeVisibleColumnWidths(QStringLiteral("S1"));
+    engine->minimizeColumnWidth(QStringLiteral("S1"));
+    engine->resetStripToDefaults(QStringLiteral("S1"));
 
-    QCOMPARE(feedback.count(), 10);
+    QCOMPARE(feedback.count(), 14);
     for (int i = 0; i < feedback.count(); ++i) {
         QCOMPARE(feedback.at(i).at(0).toBool(), false);
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_windows"));

@@ -3,6 +3,7 @@
 
 #include "navigationhandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -13,8 +14,6 @@
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 NavigationHandler::NavigationHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)

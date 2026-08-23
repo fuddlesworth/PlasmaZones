@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -21,8 +22,6 @@
 #include "handlers/screenchangehandler.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // A pending maximize morph whose size-landing commit arrives later than this

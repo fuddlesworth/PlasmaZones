@@ -59,6 +59,11 @@ public:
     /// of a ternary per call site.
     int scrollColumnWidthStepPercent() const;
     int scrollWindowHeightStepPercent() const;
+    /// Unlike its two siblings this one has no fire lambda behind it: the
+    /// view STEP is the wheel's, and the ScrollingAdaptor reads it through
+    /// the provider the daemon binds to this getter. It lives here with the
+    /// other two so every step percent has one home and one null defence.
+    int scrollViewScrollStepPercent() const;
 
 public Q_SLOTS:
     void registerShortcuts();
@@ -107,11 +112,13 @@ public:
      *   category (translated QString), categoryOrder (int),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
-     *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" —
-     *   which tiling mode the action is meaningful in; the overlay filters
-     *   on it. "layouts" is a capability tag rather than a mode: it marks
-     *   the layout-selection actions shown only when the screen's engine
-     *   provides layouts — see the catalog's contract block),
+     *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" |
+     *   "managed" — which tiling mode the action is meaningful in; the
+     *   overlay filters on it. "layouts" is a capability tag rather than a
+     *   mode: it marks the layout-selection actions shown only when the
+     *   screen's engine provides layouts. "managed" is the union of the two
+     *   engine modes, autotile or scrolling, for a row that acts on either
+     *   and is a no-op on snapping — see the catalog's contract block),
      *   description (translated QString — plain-prose explanation shown as
      *   the row's tooltip; always present, empty when the action needs none),
      *   templatesDescription (translated QString — Templates-capability
@@ -267,6 +274,14 @@ Q_SIGNALS:
     void scrollFocusColumnWrapRequested(int delta);
     /// true = move the focused window to the float layer, false = re-tile it.
     void scrollMoveToFloatRequested(bool floating);
+    /// Pan the strip view WITHOUT moving focus, by a signed PERCENT of the
+    /// work area's extent along the strip. The page pair carries a whole
+    /// viewport (100); negative is toward the strip's start. The step-sized
+    /// pan has no keyboard row (it is the wheel's), so no emitter carries
+    /// the step percent.
+    void scrollViewRequested(int deltaPercent);
+    void scrollEqualizeColumnWidthsRequested();
+    void scrollMinimizeColumnWidthRequested();
 
 private:
     struct Entry

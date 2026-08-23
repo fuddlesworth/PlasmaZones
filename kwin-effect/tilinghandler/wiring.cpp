@@ -9,6 +9,7 @@
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/snaphandler.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -24,8 +25,6 @@
 #include <QTimer>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // Bounded retry for the bring-up property fetches: enough attempts to ride

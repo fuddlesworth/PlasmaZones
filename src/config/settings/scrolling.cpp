@@ -27,12 +27,13 @@ namespace PlasmaZones {
 using settings_detail::clampColumnWidthForKind;
 using settings_detail::reseedColumnWidthForKind;
 
-// ISettings gives these two scrolling getters a defaulted body returning a
-// hardcoded `true`, so a stub or a partial implementer answers without
+// ISettings gives three scrolling getters a defaulted body returning a
+// hardcoded value, so a stub or a partial implementer answers without
 // reaching a Settings instance. That header cannot call ConfigDefaults (the
 // interface layer does not depend on the config layer), so the agreement is
-// pinned here, in a TU that sees both. See the note above the two defaults in
-// isettings.h.
+// pinned here, in a TU that sees both: two of the three just below, and the
+// drop-indicator default with its paint block further down. See the note
+// above the three defaults in isettings.h.
 static_assert(ConfigDefaults::scrollingTabIndicatorEnabled(),
               "ISettings::scrollingTabIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
@@ -575,6 +576,10 @@ P_STORE_GET(int, scrollingWindowHeightStepPercent, scrollingBehaviorGroup, windo
 P_STORE_SET_INT(setScrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey,
                 scrollingWindowHeightStepPercentChanged)
 
+P_STORE_GET(int, scrollingViewScrollStepPercent, scrollingBehaviorGroup, viewScrollStepPercentKey, int)
+P_STORE_SET_INT(setScrollingViewScrollStepPercent, scrollingBehaviorGroup, viewScrollStepPercentKey,
+                scrollingViewScrollStepPercentChanged)
+
 // ── Strip-mode selector (Scrolling.ZoneSelector) ────────────────────────────
 // The snapping selector's twin, whose accessors live in settings/uienums.cpp.
 // This family sits here instead, with the rest of the scrolling settings,
@@ -753,5 +758,17 @@ P_STORE_SET_STRING(setScrollingMoveToFloatingShortcut, shortcutsScrollingGroup, 
 P_STORE_GET(QString, scrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey, QString)
 P_STORE_SET_STRING(setScrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey,
                    scrollingMoveToTilingShortcutChanged)
+P_STORE_GET(QString, scrollingViewPageBackShortcut, shortcutsScrollingGroup, viewPageBackKey, QString)
+P_STORE_SET_STRING(setScrollingViewPageBackShortcut, shortcutsScrollingGroup, viewPageBackKey,
+                   scrollingViewPageBackShortcutChanged)
+P_STORE_GET(QString, scrollingViewPageForwardShortcut, shortcutsScrollingGroup, viewPageForwardKey, QString)
+P_STORE_SET_STRING(setScrollingViewPageForwardShortcut, shortcutsScrollingGroup, viewPageForwardKey,
+                   scrollingViewPageForwardShortcutChanged)
+P_STORE_GET(QString, scrollingEqualizeColumnWidthsShortcut, shortcutsScrollingGroup, equalizeColumnWidthsKey, QString)
+P_STORE_SET_STRING(setScrollingEqualizeColumnWidthsShortcut, shortcutsScrollingGroup, equalizeColumnWidthsKey,
+                   scrollingEqualizeColumnWidthsShortcutChanged)
+P_STORE_GET(QString, scrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey, QString)
+P_STORE_SET_STRING(setScrollingMinimizeColumnWidthShortcut, shortcutsScrollingGroup, minimizeColumnWidthKey,
+                   scrollingMinimizeColumnWidthShortcutChanged)
 
 } // namespace PlasmaZones

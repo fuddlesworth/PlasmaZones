@@ -19,6 +19,7 @@
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include "transitions/striptransitionmanager.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -40,8 +41,6 @@
 #include <algorithm>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // Human-readable KWin maximize mode for the tile-request log. The autotile

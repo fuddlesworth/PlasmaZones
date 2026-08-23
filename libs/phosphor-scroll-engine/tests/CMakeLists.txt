@@ -1,18 +1,18 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorScrollEngine unit tests, fourteen targets. Headless throughout: two
+# PhosphorScrollEngine unit tests, fifteen targets. Headless throughout: two
 # files drive the axis-free primitives directly (StripAxis and the park
-# decision, which take their axis as an argument and so need no fixture), two
-# exercise the pure strip model against the shared screen fixture, and ten
-# drive the engine through null (or stubbed) daemon dependencies and the
+# decision, which take their axis as an argument and so need no fixture),
+# three exercise the pure strip model against the shared screen fixture, and
+# ten drive the engine through null (or stubbed) daemon dependencies and the
 # geometry-provider seam. None needs a QPA platform, so
 # by convention the strip tests run APPLESS and the engine tests GUILESS
 # (they need an event dispatcher for the coalesced retile and the prunes'
 # deleteLater) — the convention lives in each file's *_MAIN macro; nothing
 # here enforces it.
 #
-# The twelve fixture-driven suites register TWICE, once per axis, via
+# The thirteen fixture-driven suites register TWICE, once per axis, via
 # pse_add_test. The two axis-free ones use pse_add_axis_free_test and register
 # once: the shared fixture HEADER still rides their target (the function adds
 # it to every target, and automoc produces nothing for it), but they never
@@ -114,6 +114,12 @@ pse_add_axis_free_test(test_scrollpark test_scrollpark.cpp
 target_include_directories(test_scrollpark PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
+# The strip's view ownership (the pan's detach latch and what re-attaches
+# it) and the group-width verbs (equalize, minimize, reset), placed in their
+# own file rather than grown into the over-ceiling ops suite. Same pure
+# model and the same screen constants, but no shared strip fixture: every
+# slot builds its own strip.
+pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)

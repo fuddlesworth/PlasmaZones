@@ -303,6 +303,9 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->decreaseMasterCountRequested();
      }},
+    // Mode-neutral since the scrolling arm landed (the catalog tags it
+    // "managed"); it stays in this block because its config key and
+    // accessor are still the autotile ones, which existing bindings name.
     {kIdRetile, &ConfigDefaults::autotileRetileShortcut, &Settings::autotileRetileShortcut,
      QT_TRANSLATE_NOOP("plasmazones", "Retile Windows"),
      [](ShortcutManager* sm) {
@@ -478,6 +481,32 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollMoveToFloatRequested(false);
      }},
+    // A literal 100: one viewport is one viewport, and a percent setting with
+    // a single meaningful value would be a setting for nothing. The STEP pan
+    // has no keyboard row — it is the wheel's (Meta+Shift+wheel, registered
+    // by the KWin effect and reading the view scroll step through the
+    // ScrollingAdaptor's provider), for the same reason Meta+wheel's column
+    // focus has no keyboard twin.
+    {kIdScrollViewPageBack, &ConfigDefaults::scrollingViewPageBackShortcut, &Settings::scrollingViewPageBackShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Scroll View Back a Page"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollViewRequested(-100);
+     }},
+    {kIdScrollViewPageForward, &ConfigDefaults::scrollingViewPageForwardShortcut,
+     &Settings::scrollingViewPageForwardShortcut, QT_TRANSLATE_NOOP("plasmazones", "Scroll View Forward a Page"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollViewRequested(100);
+     }},
+    {kIdScrollEqualizeColumnWidths, &ConfigDefaults::scrollingEqualizeColumnWidthsShortcut,
+     &Settings::scrollingEqualizeColumnWidthsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Equalize Column Widths"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollEqualizeColumnWidthsRequested();
+     }},
+    {kIdScrollMinimizeColumnWidth, &ConfigDefaults::scrollingMinimizeColumnWidthShortcut,
+     &Settings::scrollingMinimizeColumnWidthShortcut, QT_TRANSLATE_NOOP("plasmazones", "Minimize Column Width"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollMinimizeColumnWidthRequested();
+     }},
 
     // ─── Cheatsheet ────────────────────────────────────────────────────────
     {kIdToggleCheatsheet, &ConfigDefaults::toggleCheatsheetShortcut, &Settings::toggleCheatsheetShortcut,
@@ -576,6 +605,11 @@ int ShortcutManager::scrollWindowHeightStepPercent() const
 {
     return m_settings ? m_settings->scrollingWindowHeightStepPercent()
                       : ConfigDefaults::scrollingWindowHeightStepPercent();
+}
+
+int ShortcutManager::scrollViewScrollStepPercent() const
+{
+    return m_settings ? m_settings->scrollingViewScrollStepPercent() : ConfigDefaults::scrollingViewScrollStepPercent();
 }
 
 void ShortcutManager::registerShortcuts()

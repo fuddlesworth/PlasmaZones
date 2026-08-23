@@ -33,7 +33,7 @@ Item {
     // "rotate", "move", "span", "focus", "swap", "push", "restore", "float",
     // "snap", "cycle", "focus_master", "swap_master", "master_ratio",
     // "master_count", "retile", "resnap", "resize", "tabbed", "fullscreen",
-    // "consume", "expel", "center", "snap_assist", "snap_all", "swap_vs",
+    // "consume", "expel", "center", "scroll", "snap_assist", "snap_all", "swap_vs",
     // "rotate_vs", "layout" ("layout" is failure-only by producer contract;
     // see failureMessage).
     property string action: ""
@@ -375,7 +375,28 @@ Item {
             // collapse onto one no_target token at the producer, so the
             // copy stays count-neutral.
             return i18n("Already centered");
+        } else if (action === "scroll") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            // A step too small to reach a pixel (a 1% step on a tiny work
+            // area) is its own refusal, not the strip's end.
+            if (reason === "no_movement")
+                return i18n("The scroll step is too small to move the view");
+
+            // The pan is pinned at the strip's end in the pressed direction.
+            return i18n("Already at the end of the strip");
         } else if (action === "retile") {
+            // The scrolling arm of Retile reports through the engine's
+            // shared verb feedback, so it can refuse like any other strip
+            // verb: an empty strip, or columns already at their defaults.
+            // Neither is an error, and neither gets the error copy below.
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            if (reason === "no_target")
+                return i18n("Columns are already at their default sizes");
+
             return i18n("Could not refresh the layout");
         } else if (action === "focus_master") {
             // Unreachable today (the sole producer emits only no_windows);
@@ -518,6 +539,13 @@ Item {
         } else if (action === "retile") {
             return i18n("Layout refreshed");
         } else if (action === "resize") {
+            // "equalize" is the group-width verb's reason: it rewrote every
+            // fully visible column, so the single-target copy would
+            // understate it. The bare reason is every other width and height
+            // verb.
+            if (reason === "equalize")
+                return i18n("Column widths equalized");
+
             return i18nc("@info:status the window was resized", "Resized");
         } else if (action === "tabbed") {
             return i18n("Tabbed display toggled");
@@ -541,6 +569,11 @@ Item {
                 return i18n("Visible columns centered");
 
             return i18n("Column centered");
+        } else if (action === "scroll") {
+            // The reason is the travel direction, same as the focus arm, so
+            // the arrow points the way the view moved.
+            const scrollArrow = directionArrow(reason);
+            return glyphed(scrollArrow, i18nc("@info:status the strip view was scrolled without moving focus", "Scrolled"));
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
             return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));

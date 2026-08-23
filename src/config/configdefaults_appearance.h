@@ -5,7 +5,8 @@
 
 // NOTE ON THE INCLUDE SET: this is the FIRST link of the ConfigDefaults
 // inheritance chain, and the links below it (gaps → limits → shaders →
-// screens → scrolling → configdefaults.h) include only their parent — so
+// screens → scrolling → scrolling_behavior → scrolling_shortcuts →
+// configdefaults.h) include only their parent — so
 // this header deliberately hosts the Qt and project includes the WHOLE chain
 // consumes, not just what its own 300 lines read. Trimming an include that
 // looks unused here breaks a downstream link.

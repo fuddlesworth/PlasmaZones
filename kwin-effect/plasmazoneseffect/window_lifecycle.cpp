@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/WindowId.h>
@@ -24,8 +25,6 @@
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // Hard upper bound on first-frame open suppression. A window we expect to

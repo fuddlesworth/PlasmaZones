@@ -7,6 +7,7 @@
 #include "dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "snapassisthandler.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -32,8 +33,6 @@
 #include <memory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 static constexpr int kSnapMinimizeFloatDebounceMs = kSpuriousMinimizePairMs;
 static constexpr int kSnapUnfloatRetryDelayMs = 250;

@@ -16,6 +16,7 @@
 #include "tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -23,8 +24,6 @@
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejectedOnlyBecauseMinimized) const
 {

@@ -9,6 +9,7 @@
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 #include "tilinghandler/tilinghandler.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effect.h>
 #include <input_event.h>
@@ -21,10 +22,9 @@
 namespace PlasmaZones {
 
 // `lcEffect` is the canonical logging category for this plugin. The storage is
-// emitted here; sibling translation units in `plasmazoneseffect/*.cpp`
-// re-declare the category via `Q_DECLARE_LOGGING_CATEGORY(lcEffect)` in their
-// own namespace scope so they can log under the same name without each TU
-// emitting its own definition.
+// emitted here; every other translation unit in the effect declares it through
+// compositor/effectlogging.h so they can log under the same name without each
+// TU emitting its own definition.
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 
 // Opt-in window-classification diagnostics. Defaults to QtWarningMsg so the
