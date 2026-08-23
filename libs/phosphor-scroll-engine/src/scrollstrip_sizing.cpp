@@ -106,12 +106,16 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
         return false; // empty or fully minimized column: nothing to size
     }
     // Floor, the twin of the one adjustActiveWindowHeight applies across the
-    // strip: the engine's declared narrowest column (every OTHER producer of a
-    // width — the config read, the rule overrides, the preset list, the
-    // persisted blob — already clamps against it), raised to the column's own
-    // client minimum when minimum sizes are respected. Without it this verb
-    // was the one width producer that could walk a column down to a single
-    // pixel and commit that extent to the client.
+    // strip: the engine's declared narrowest column, raised to the column's
+    // own client minimum when minimum sizes are respected. Every producer that
+    // spells a width as a FRACTION already clamps against it (the config
+    // read's Proportion arm, the rule overrides, the preset list parser, the
+    // persisted blob), and without this the repeatable verb was the one that
+    // could walk a column down to a single pixel and commit that extent to the
+    // client. The px-valued spellings (the config read's Fixed arm, a px rule
+    // override, a client-supplied open or handoff width) still floor at 1 by
+    // design: those are one-shot values a user or a client asked for by
+    // number, not a key that repeats while held.
     const int fractionFloor = qMax(1, qRound(MinColumnWidthFraction * workW));
     const int floorPx = qBound(1, qMax(fractionFloor, columnMinExtentPx(*col, params)), workW);
     // Lowered to the current extent when the column already renders BELOW the
@@ -520,9 +524,11 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     //
     // The engine's own declared shortest tile is the floor under that, so the
     // verb cannot walk a window down to a single pixel with minimum sizes
-    // off — every other producer of a height (the config read, the rule
-    // overrides, the preset list, the persisted blob, the open rule) already
-    // clamps against MinWindowHeightFraction, and this one did not.
+    // off. Every producer that spells a height as a FRACTION already clamps
+    // against MinWindowHeightFraction (the config read's Proportion arm, the
+    // rule overrides, the preset list parser, the persisted blob, the open
+    // rule), and this one did not. The px-valued spellings floor at 1, the
+    // same deliberate split adjustActiveColumnWidth's floor documents.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
     const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
     const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);
