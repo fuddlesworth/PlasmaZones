@@ -1924,8 +1924,9 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # The offline pack validator's metadata lints. The bundled-pack gate
 # (shader_validate_animations) only proves the shipped packs are clean; this
 # builds deliberately-broken packs in a temp dir and asserts the diagnostic.
-# Compiles packvalidators.cpp straight in, the way the tool does, so it links
-# the same parsers and needs no glslang for the metadata paths it exercises.
+# Compiles the three validator arms straight in, the way the tool does, so it
+# links the same parsers and needs no glslang for the metadata paths it
+# exercises.
 #
 # The compositor-only bake cases DO need glslang and QSKIP without it, so this
 # target stays runnable on a machine that has none. That is the opposite of the
@@ -1933,7 +1934,9 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 # never silently lose coverage, while this target is also a developer's
 # inner-loop test.
 add_executable(test_pack_validators shadervalidate/test_pack_validators.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidators.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
 target_include_directories(test_pack_validators PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_pack_validators

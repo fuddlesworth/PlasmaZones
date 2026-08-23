@@ -945,7 +945,9 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # PhosphorAnimation for the animation effect parser + entry scaffold.
 add_executable(plasmazones-shader-validate
     shadervalidate/main.cpp
-    shadervalidate/packvalidators.cpp
+    shadervalidate/packvalidator_overlay.cpp
+    shadervalidate/packvalidator_animation.cpp
+    shadervalidate/packvalidator_surface.cpp
     shadervalidate/packvalidatorcommon.cpp
 )
 target_link_libraries(plasmazones-shader-validate
