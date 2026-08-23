@@ -441,44 +441,48 @@ vec4 surfaceColor(vec2 uv) {
 #endif
 }
 
-// The decoration chain's outer margin, expressed in the SAME card-space
-// units `surfaceColor()`'s `uv` takes — half-width per axis, so the halo
-// band spans `uv` in [-surfacePadRel(), 1 + surfacePadRel()].
+// How far the composited surface canvas extends PAST the card, in the SAME
+// card-space units `surfaceColor()`'s `uv` takes — half-width per axis, so
+// the canvas spans `uv` in [-surfacePadRel(), 1 + surfacePadRel()].
 //
-// A card-space mask built on the bare [0, 1] range clips the halo at the
-// frame edge, discarding the margin the compositor composited into
-// `uSurfaceLayer`. Widening the mask by this value lets it through, and
-// `surfaceColor()`'s unclamped `iLayerRectInTexture` remap resolves the
-// out-of-range `uv` into the band.
+// A card-space mask built on the bare [0, 1] range clips everything the
+// compositor composited outside the frame: the decoration chain's outer
+// margin (glow / motes halo) AND the window's own shadow band, both of
+// which live in `uSurfaceLayer`. Widening the mask by this value lets the
+// whole canvas through, and `surfaceColor()`'s unclamped
+// `iLayerRectInTexture` remap resolves the out-of-range `uv` into it.
 //
-// Derived from the two rect uniforms rather than pushed separately: both
-// describe the SAME inner rect, `iAnchorRectInTexture` within uTexture0's
-// expanded capture and `iLayerRectInTexture` within the layer canvas the
-// compositor padded by the margin. So `inner / rect.zw` recovers each
-// outer extent, and their difference is the two margins — the shadow inset
-// common to both cancels, leaving the padding alone. An unpadded window
-// carries canvas == expanded, hence equal rects and an exact zero, which
-// keeps its mask bit-identical to the un-widened form.
+// Derived from `iLayerRectInTexture` ALONE: that rect places the card
+// inside the layer canvas the compositor padded (expanded rect plus the
+// chain's outer margin), so `1 / rect.zw` is the canvas extent in card
+// units and half of the excess over 1 is the band per side. An earlier
+// form differenced it against `iAnchorRectInTexture` so the shadow inset
+// common to both cancelled, leaving the chain padding alone. That under-
+// widened the mask to frame + padding while the canvas (and every pack
+// drawing into it) runs to expanded + padding. The gap is the shadow
+// inset, which is a few px on an app window and a wide band on a Plasma
+// applet popup, where the decoration visibly cropped for the whole show /
+// hide leg. The band between frame and expanded is real composited
+// content, not smear, so it belongs inside the mask.
 //
-// Valid only for SURFACE-EXTENT packs, whose card space is the frame: there
-// both rects share the frame as inner rect, so the result is pad/frame in
-// the card units their masks use. An anchor-extent pack carries
-// `iAnchorRectInTexture == (0, 0, 1, 1)` (inner == expanded), so this would
-// return pad/expanded instead — a different unit that would under-widen its
-// mask. No anchor-extent pack calls this.
+// Valid only for SURFACE-EXTENT packs, whose card space is the frame:
+// there the layer rect's inner rect IS the frame, so the result is
+// band/frame in the card units their masks use. An anchor-extent pack
+// carries the expanded rect as its card (inner == expanded), so this would
+// return a different unit that under-widens its mask. No anchor-extent
+// pack calls this.
 vec2 surfacePadRel() {
 #ifdef PLASMAZONES_KWIN
     // No layer means no composited canvas, so `iLayerRectInTexture` carries
-    // nothing to difference against.
+    // nothing to measure; the mask stays at the bare card edge.
     if (iHasSurfaceLayer == 0) {
         return vec2(0.0);
     }
     vec2 layerSpan = max(iLayerRectInTexture.zw, vec2(1.0e-6));
-    vec2 anchorSpan = max(iAnchorRectInTexture.zw, vec2(1.0e-6));
     // max() against 0: a capture-scale clamp on a huge window can shrink the
-    // canvas below the expanded rect, and a negative pad would eat INTO the
-    // card rather than extend past it.
-    return max(0.5 * (1.0 / layerSpan - 1.0 / anchorSpan), vec2(0.0));
+    // canvas below the frame, and a negative band would eat INTO the card
+    // rather than extend past it.
+    return max(0.5 * (1.0 / layerSpan - 1.0), vec2(0.0));
 #else
     // Daemon path: the padded decoration chain is a compositor-side fold.
     return vec2(0.0);

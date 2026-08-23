@@ -15,6 +15,7 @@
 
 #include "shader_internal.h"
 #include "shader_resolve.h"
+#include "surface_fold.h"
 
 #include <QByteArray>
 #include <QLoggingCategory>
@@ -485,10 +486,45 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // paths never collide.
     int boundChannels = 0; // # of units we bound (for post-draw cleanup)
     constexpr int kSurfaceChannelBaseUnit = ShaderInternal::kSurfaceChannelBaseUnit;
+    // The region OffscreenData::paint scissors the present to. KWin's is right
+    // for a window nothing else is animating; the padded-present branch below
+    // widens it when a FOREIGN effect has clipped it.
+    KWin::Region drawRegion = deviceRegion;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
         const auto bit = m_windowDecorations.constFind(wid);
         if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
+            // FOREIGN ANIMATION on a PADDED chain. The only animation of ours that
+            // reaches a decorated window is a transition, and that path is excluded
+            // above, so a translation or a dimmed opacity in `data` here was put
+            // there by another effect in the paint chain: KWin's sliding-popups
+            // slide on a Plasma applet popup is the one that ships. That effect
+            // clips its window's paint region to the popup's EXPANDED rect
+            // (SlidingPopupsEffect::paintWindow, `effectiveRegion &=
+            // damagedLogicalArea`) and damages only that rect afterwards. An
+            // applet popup reports no shadow inset, so expanded == frame, and the
+            // region that reaches this draw scissors the padded present quad
+            // (apply()) back to the bare frame: the chain's outer margin (glow,
+            // motes halo) vanishes for the whole slide and pops back at rest. A
+            // normal window never sees this because nothing clips it.
+            //
+            // Widen the scissor by the padded band, translated by the foreign
+            // transform so it tracks the sliding quad, and damage the band at
+            // rest position so the next frame's scene repaint covers it (the
+            // foreign effect damages only its own clip rect). Gated on a live
+            // foreign transform on purpose: with KWin's untouched region the
+            // damage is the scene's and painting past it would overdraw windows
+            // above that did not repaint this frame. The transition path makes
+            // the same call with Region::infinite() and a full-output damage.
+            if (bit->outerPadding > 0
+                && (!qFuzzyIsNull(data.xTranslation()) || !qFuzzyIsNull(data.yTranslation()) || data.opacity() < 1.0)) {
+                const QRectF band = paddedBandRect(w, bit->outerPadding);
+                if (!band.isEmpty()) {
+                    drawRegion |= viewport.mapToDeviceCoordinatesAligned(
+                        KWin::RectF(band.translated(data.xTranslation(), data.yTranslation())));
+                    damagePaddedBand(w, bit->outerPadding);
+                }
+            }
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the
             // final slot to a high unit and point the present passthrough's uFinal
@@ -585,7 +621,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             reboundSnapshotUnit = true;
         }
     }
-    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, drawRegion, data);
 
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak
