@@ -410,8 +410,10 @@ private Q_SLOTS:
     /// bundled-pack gate cannot exercise this path at all — without this test
     /// the bake would be dead code that silently stops working.
     ///
-    /// This one really does invoke glslang, unlike the metadata-only tests
-    /// above.
+    /// This one really does compile, unlike the metadata-only tests above. It
+    /// bakes through QShaderBaker's vendored glslang and so needs no external
+    /// binary, which is why it carries no glslangValidatorPath guard — unlike
+    /// the compositor-only cases below, which shell out and do.
     void multipassBufferShadersAreCompiled()
     {
         QTemporaryDir tmp;

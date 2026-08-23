@@ -482,6 +482,18 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 // test_animation_shader_kwin_bake remains the additional driver-level check.
 // Daemon-capable packs get the full stage compile below.
 
+// COVERAGE BOUNDARY, so this is not read as more than it is: the source is
+// handed to glslang with the pack's own `#version 450` intact, while KWin's
+// generateCustomShader recompiles at the GL context's core version (140 on the
+// 6.7 path this dialect exists for). So a construct legal at 450 and illegal
+// at 140 still passes here and still fails live — which is the class the ARB
+// extension block in kwinDefineBlock was added to fix. Rewriting the version
+// line before the bake would close it, and would need a trial run against
+// every bundled compositor-only pack first, since it can only make the gate
+// stricter. What this gate does cover is everything a wrong version would not
+// have caught anyway: undeclared identifiers, type errors, bad swizzles, a
+// p_<id> the preamble never emitted.
+//
 // Assemble one stage of a COMPOSITOR-ONLY animation pack exactly as the
 // kwin-effect does (entry scaffold for the fragment, include expansion, the
 // p_<id> preamble, then the shared KWin define block after #version) and
@@ -676,8 +688,24 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
                      .arg(PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots);
     }
     for (const QJsonValue& v : declaredTextures) {
-        if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+        const QString texPath = v.toObject().value(QLatin1String("path")).toString();
+        if (texPath.isEmpty()) {
             lints << QStringLiteral("texture entry with empty `path` (dropped at load)");
+        } else {
+            // Confined and existence-checked like every SHADER path this
+            // validator reads. Without it a typo'd or escaping texture shipped
+            // as a green pack: the registry's traversal guard clears the path
+            // and the sampler falls back to transparent black, so the failure
+            // surfaces at the first live playback rather than in CI.
+            const auto confined = confinedPackPath(packDir, texPath);
+            if (!confined) {
+                lints << QStringLiteral(
+                             "texture path escapes the pack directory: %1 (rejected at load, sampler reads "
+                             "transparent)")
+                             .arg(texPath);
+            } else if (!QFile::exists(*confined)) {
+                lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(texPath);
+            }
         }
         // Wrap vocabulary lint — read RAW metadata: AnimationShaderEffect::fromJson
         // silently clears an invalid texture wrap to empty, so a lint over the
@@ -1103,8 +1131,23 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                      .arg(PhosphorSurfaceShaders::SurfaceShaderContract::kMaxUserTextureSlots);
     }
     for (const QJsonValue& v : declaredTextures) {
-        if (v.toObject().value(QLatin1String("path")).toString().isEmpty()) {
+        const QString texPath = v.toObject().value(QLatin1String("path")).toString();
+        if (texPath.isEmpty()) {
             lints << QStringLiteral("texture entry with empty `path` (dropped at load)");
+        } else {
+            // Same confinement and existence check the animation arm applies,
+            // and for the same reason: the registry clears a rejected texture
+            // path and the sampler falls back to transparent, so a typo ships
+            // green and fails at first paint.
+            const auto confined = confinedPackPath(packDir, texPath);
+            if (!confined) {
+                lints << QStringLiteral(
+                             "texture path escapes the pack directory: %1 (rejected at load, sampler reads "
+                             "transparent)")
+                             .arg(texPath);
+            } else if (!QFile::exists(*confined)) {
+                lints << QStringLiteral("texture missing: %1 (sampler reads transparent at load)").arg(texPath);
+            }
         }
         // Wrap vocabulary lint — read RAW metadata: SurfaceShaderEffect::fromJson
         // silently clears an invalid wrap to clamp, so a lint over the parsed
