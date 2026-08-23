@@ -114,7 +114,17 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     // pixel and commit that extent to the client.
     const int fractionFloor = qMax(1, qRound(MinColumnWidthFraction * workW));
     const int floorPx = qBound(1, qMax(fractionFloor, columnMinExtentPx(*col, params)), workW);
-    const int target = qBound(floorPx, current + qRound(deltaPercent / 100.0 * workW), workW);
+    // Lowered to the current extent when the column already renders BELOW the
+    // floor, so a shrink can never widen it. That state is ordinary, not
+    // pathological: every producer that clamps as a FRACTION resolves through
+    // proportionalPx (round(f * (work + gap)) - gap), which lands a gap's
+    // worth under fractionFloor's bare round(f * work) — minimizeActiveColumnWidth
+    // writing Proportion(MinColumnWidthFraction) is exactly such a column. A
+    // bare floorPx there would make the Shrink shortcut grow the column and
+    // report success. A grow press is unaffected: its target clears the
+    // current extent either way.
+    const int lowerPx = qMin(floorPx, current);
+    const int target = qBound(lowerPx, current + qRound(deltaPercent / 100.0 * workW), workW);
     if (target == current) {
         return false;
     }
@@ -515,7 +525,14 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
     const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
     const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);
-    const int target = qBound(floorPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
+    // Lowered to the current height when the tile already renders below the
+    // floor, the twin of the guard adjustActiveColumnWidth documents: the
+    // smallest LEGAL preset height resolves through proportionalPx to a gap's
+    // worth under fractionFloor, and a crowded column's Auto share can land
+    // under it too, so a bare floorPx would let a Shrink press grow the
+    // window.
+    const int lowerPx = qMin(floorPx, currentPx);
+    const int target = qBound(lowerPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
     if (target == currentPx) {
         return false;
     }
