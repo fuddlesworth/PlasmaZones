@@ -582,10 +582,10 @@ vec2 legTranslation(vec4 fromRect, vec4 toRect) {
 // perpendicular bow) scale that character by this, so they degrade to a
 // clean uniform morph on a stretch and keep their full look on a real slide.
 //
-// Only an exactly-still leg returns 0. Unlike legDirection this has no pixel
-// deadband, so a sub-pixel rigid residue still reads as travel and can
-// return a large share off motion smaller than legDirection accepts as an
-// axis. Such a leg does not normally play at all.
+// Unlike legDirection this has no pixel deadband, so a sub-pixel rigid
+// residue still reads as travel and can return a large share off motion
+// smaller than legDirection accepts as an axis. Such a leg does not normally
+// play at all.
 float legTravelShare(vec4 fromRect, vec4 toRect) {
     float moved = length(legTranslation(fromRect, toRect));
     float resized = length(toRect.zw - fromRect.zw);
@@ -595,10 +595,12 @@ float legTravelShare(vec4 fromRect, vec4 toRect) {
 // The leg's axis, as a unit vector. The rigid translation names it when the
 // window travelled; failing that the growth axis does, so an anchored
 // stretch still orients along the axis that actually changed rather than a
-// fabricated default. On that fallback the sign is the sign of the size
-// change, so a grow points away from the pinned edge and a shrink toward
-// it. Only a leg that neither moved nor resized falls through to the
-// downward default.
+// fabricated default. On that fallback the direction is a function of the
+// SIZE DELTA alone and knows nothing about which edge was held, so its sign
+// is per axis the sign of the size change: a grow points along the positive
+// axis and a shrink along the negative one, whichever edge stayed put. Only
+// a leg that neither moved nor resized falls through to the downward
+// default.
 //
 // The 1.0 thresholds are one square pixel — below that the vector is
 // rounding residue and normalize() would amplify it into a random axis.

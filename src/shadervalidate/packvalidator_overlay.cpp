@@ -71,17 +71,17 @@ int validatePack(const QString& packDir, QTextStream& out)
     {
         QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
         if (!metaFile.open(QIODevice::ReadOnly)) {
-            out << "  metadata.json  ERROR\n    cannot read " << metaFile.fileName() << ": " << metaFile.errorString()
-                << "\n";
+            out << name << "\n  metadata       ERROR\n    cannot read metadata.json: " << metaFile.errorString()
+                << "\n  → 1 error\n\n";
             return 1;
         }
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(metaFile.readAll(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            out << "  metadata.json  ERROR\n    "
+            out << name << "\n  metadata       ERROR\n    "
                 << (parseError.error != QJsonParseError::NoError ? parseError.errorString()
                                                                  : QStringLiteral("not a JSON object"))
-                << "\n";
+                << "\n  → 1 error\n\n";
             return 1;
         }
         rawRoot = doc.object();
@@ -205,12 +205,17 @@ int validatePack(const QString& packDir, QTextStream& out)
     // The GATE is raw for the same reason, and it has to be: parseShaderMetadata
     // sets info.isMultipass = false as its fail-closed response to an
     // unresolvable buffer entry, which is precisely the defect these lints
-    // report. Gating on the parsed flag meant the block was skipped for every
+    // report. Gating on the PARSED flag meant the block was skipped for every
     // pack that needed it and ran only for packs that were already fine.
-    const bool authorDeclaredMultipass = rawRoot.value(QLatin1String("multipass")).toBool(false)
-        || !rawRoot.value(QLatin1String("bufferShaders")).toArray().isEmpty()
-        || !rawRoot.value(QLatin1String("bufferShader")).toString().isEmpty();
-    if (authorDeclaredMultipass) {
+    //
+    // Raw `multipass` alone, and not "declares any bufferShaders": that key is
+    // the only thing parseShaderMetadata ever sets isMultipass TRUE from
+    // (:143), so reading it here opens the block for exactly the packs the
+    // runtime treats as multipass, including the ones whose parse then
+    // fail-closed. A pack that lists bufferShaders WITHOUT multipass is inert
+    // at runtime — the buffers are never resolved or baked — so linting its
+    // buffer list would fail a pack for a declaration nothing acts on.
+    if (rawRoot.value(QLatin1String("multipass")).toBool(false)) {
         const QJsonObject& root = rawRoot;
 
         const QJsonArray declared = root.value(QLatin1String("bufferShaders")).toArray();
@@ -418,21 +423,4 @@ int validatePack(const QString& packDir, QTextStream& out)
     return errors;
 }
 
-// Which of the compositor-only shared-helper samplers the (include-expanded)
-// fragment source references. shared/old_content.glsl,
-// shared/desktop_transition.glsl and shared/strip_transition.glsl declare
-// these binding-less, which the strict
-// SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
-// the binding-less-sampler diagnostic AND its source pulls one of these in,
-// the likely root cause is a metadata bug (missing compositor-only
-// appliesTo), not a GLSL bug, and deserves a hint that says so. The source
-// scan alone is NOT a lint: daemon-capable packs legitimately reference these
-// samplers inside `#ifdef PLASMAZONES_KWIN` branches, which the preprocessor
-// strips before they can fail the bake — hence the hint is gated on the
-// compile actually failing with glslang's binding diagnostic (which does not
-// echo the offending identifier, so the source scan supplies the name). The
-// combination is still heuristic — a pack whose OWN binding-less sampler
-// fails while a guarded compositor-sampler reference coexists would draw the
-// hint spuriously — which is why this stays an advisory hint appended to the
-// real compile error, never an error of its own.
 } // namespace PlasmaZones::ShaderValidate

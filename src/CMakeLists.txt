@@ -998,7 +998,7 @@ if(BUILD_TESTING)
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
     # the explicit --overlay/--animation/--surface directory arguments and
-    # derives include paths from them (packvalidators.cpp). The one host
+    # derives include paths from them (the packvalidator_* arms). The one host
     # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
     # `builtin:` buffer fallback resolves through QStandardPaths when a pack
     # names a builtin buffer whose sibling `../shared/` copy is missing —

@@ -262,8 +262,10 @@ public:
     /// Adjust the active column's width by @p deltaPercent of the work area's
     /// MAIN extent (niri set-column-width "+10%"/"-10%"). Measured from the
     /// RENDERED extent rather than the bare intent, and floored at the greater
-    /// of MinColumnWidthFraction and the column's own client minimum, so a
-    /// repeated shrink stops at the floor instead of burying an ever smaller
+    /// of MinColumnWidthFraction and the column's own client minimum (the
+    /// client half drops out while @c respectMinimumSize is off, the same way
+    /// it does for the height verb), so a repeated shrink stops at the floor
+    /// instead of burying an ever smaller
     /// intent under it. Refuses when the target lands on the current extent,
     /// so a column already rendering below the floor refuses a shrink rather
     /// than growing.

@@ -41,6 +41,18 @@ using PhosphorSurfaceShaders::SurfaceShaderRegistry;
 
 namespace PlasmaZones::ShaderValidate {
 
+// Validate one SURFACE pack directory (data/surface/*). Reproduces the surface
+// runtime's fragment assembly on the daemon (Qt-RHI) path — the pSurface entry
+// scaffold (an entry-only pack gets a generated main(); a pack with its own
+// main() passes through unchanged) + include expansion + the generated p_<id>
+// preamble — then bakes through headless glslang. Returns the error count.
+//
+// As with animation packs, the kwin-effect classic-GL branch
+// (`#define PLASMAZONES_KWIN`, default-block uniforms) is NOT baked here:
+// QShaderBaker compiles Vulkan-dialect GLSL and rejects default-block uniforms.
+// Baking the #else branch validates the daemon UBO contract in
+// surface_uniforms.glsl; the PLASMAZONES_KWIN plumbing is identical for every
+// pack and exercised by the live compositor compile.
 int validateSurfacePack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();

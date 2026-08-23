@@ -550,10 +550,12 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // MinWindowHeightFraction (the preset list parser, the per-screen preset
     // override list, the persisted blob's Preset arm, the open rule's height
     // fraction), and this one did not. Height has no Proportion spelling at
-    // all, and the rule channel's default window height is the one fraction
-    // that is NOT clamped: it commits straight to Fixed pixels with a 1px
-    // floor, like the px-valued spellings, the same deliberate split
-    // adjustActiveColumnWidth's floor documents.
+    // all. The rule channel's default window height is gated differently but
+    // to the same number: it is range-CHECKED at the rules boundary, where an
+    // out-of-range fraction is rejected outright rather than clamped, against
+    // PhosphorRules::MinColumnWidthRatio — the constant ScrollTypes.h keeps in
+    // sync with MinWindowHeightFraction. So the engine-side 1px floor it
+    // commits with is defensive on an already-gated value.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
     const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
     const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);

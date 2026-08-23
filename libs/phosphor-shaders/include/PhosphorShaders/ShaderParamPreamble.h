@@ -82,11 +82,12 @@ PHOSPHORSHADERS_EXPORT bool isValidParamId(const QString& id);
 /// If @p source has no `#version` line the block is prepended best-effort (such
 /// source is not valid GLSL anyway).
 ///
-/// The `#version` line is located by a line-anchored regex, which does NOT skip
-/// comments: a commented-out line whose non-whitespace prefix is `#version`,
-/// appearing before the real directive, would be matched. Such source is not
-/// valid GLSL either (`#version` must be the first non-comment token), so no
-/// well-formed pack can reach it. The compositor's
+/// The `#version` line is located by a line-anchored regex, which does NOT
+/// track block comments: a line whose non-whitespace prefix is `#version`
+/// INSIDE a `/* … */` block, appearing before the real directive, would be
+/// matched. (A `//`-commented line cannot match — its prefix is `//`.) Such
+/// source is not valid GLSL either, since `#version` must be the first
+/// non-comment token, so no well-formed pack can reach it. The compositor's
 /// `ShaderInternal::injectKwinDefineAfterVersion` runs a comment-aware walk
 /// instead, because the block it splices is the ABI switch itself and a pack
 /// that lost it would compile as the wrong dialect rather than fail.

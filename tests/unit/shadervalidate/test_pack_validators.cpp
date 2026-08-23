@@ -128,12 +128,18 @@ PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const 
     return result;
 }
 
+/// `multipass` is set because the buffer lints gate on it, matching the
+/// runtime: parseShaderMetadata takes isMultipass from this key alone, so a
+/// pack that lists bufferShaders without it is inert and its buffer list is
+/// never resolved. A fixture that omitted it would be asserting on a
+/// configuration nothing acts on.
 QJsonObject overlayPack(const QString& id)
 {
     QJsonObject obj;
     obj.insert(QStringLiteral("id"), id);
     obj.insert(QStringLiteral("name"), QStringLiteral("Test Overlay"));
     obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("zone.frag"));
+    obj.insert(QStringLiteral("multipass"), true);
     return obj;
 }
 

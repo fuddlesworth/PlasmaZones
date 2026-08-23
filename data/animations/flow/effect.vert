@@ -11,7 +11,7 @@
 // the window keeps deformation resolution constant regardless of zone
 // size, and lets this vertex stage displace each cell so the window
 // streams into its zone instead of sliding rigidly: the edge facing the
-// destination settles first, trailing rows lag by SPREAD and catch up.
+// destination settles first, trailing rows lag by `spread` and catch up.
 //
 // apply() emits texcoords relative to the destination FRAME (v = 0 at the
 // window's top before KWin's upload flip — see the re-flip note in main()).

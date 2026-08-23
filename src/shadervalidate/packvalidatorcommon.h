@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // Shared helpers for the shader-pack validators (plasmazones-shader-validate).
-// The per-mode validators (packvalidators.cpp) and the CLI entry point
-// (main.cpp) live in separate translation units to keep each file focused;
+// The per-mode validators (packvalidator_overlay/_animation/_surface.cpp) and
+// the CLI entry point (main.cpp) live in separate translation units to keep
+// each file focused;
 // this header exposes the pieces the validators share: the pack-path confine
 // guard, the param-type/pool bookkeeping, and the glslang compile+report path.
 

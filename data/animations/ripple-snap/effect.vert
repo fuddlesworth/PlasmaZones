@@ -51,9 +51,10 @@ void main() {
     // by half the size change while standing still, which would send the
     // wavefront across an axis nothing travelled along. legDirection falls
     // back to the growth axis, so a resize ripples along the axis that
-    // changed size. The sign is the sign of the size change, so a grow
-    // ripples from the edge that moved outward and a shrink from the edge
-    // opposite it. The wave is NOT damped for a resize the way the
+    // changed size. That fallback reads the size delta alone and cannot tell
+    // which edge was held, so the wavefront runs along the positive axis on a
+    // grow and the negative one on a shrink either way. The wave is NOT
+    // damped for a resize the way the
     // staggered packs are: `rect` below interpolates rigidly, so the ripple
     // is an arrival wobble on a window that has already settled uniformly,
     // never parts of one window arriving at different times.

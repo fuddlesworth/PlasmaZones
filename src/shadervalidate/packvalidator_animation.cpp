@@ -45,6 +45,23 @@ using PhosphorRendering::ShaderCompiler;
 
 namespace PlasmaZones::ShaderValidate {
 
+// Which of the compositor-only shared-helper samplers the (include-expanded)
+// fragment source references. shared/old_content.glsl,
+// shared/desktop_transition.glsl and shared/strip_transition.glsl declare
+// these binding-less, which the strict
+// SPIR-V bake rejects — so when a daemon-eligible pack's compile fails with
+// the binding-less-sampler diagnostic AND its source pulls one of these in,
+// the likely root cause is a metadata bug (missing compositor-only
+// appliesTo), not a GLSL bug, and deserves a hint that says so. The source
+// scan alone is NOT a lint: daemon-capable packs legitimately reference these
+// samplers inside `#ifdef PLASMAZONES_KWIN` branches, which the preprocessor
+// strips before they can fail the bake — hence the hint is gated on the
+// compile actually failing with glslang's binding diagnostic (which does not
+// echo the offending identifier, so the source scan supplies the name). The
+// combination is still heuristic — a pack whose OWN binding-less sampler
+// fails while a guarded compositor-sampler reference coexists would draw the
+// hint spuriously — which is why this stays an advisory hint appended to the
+// real compile error, never an error of its own.
 static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 {
     struct SamplerMatcher
@@ -70,22 +87,6 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
     }
     return used;
 }
-
-// Validate one ANIMATION pack directory (data/animations/*). Reproduces the
-// animation runtime's fragment assembly on the daemon (Qt-RHI) path — the entry
-// scaffold (pTransition / pIn+pOut, or a pass-through main()), the generated
-// p_<id> preamble, and include expansion — then bakes through headless glslang.
-// Returns the number of errors found.
-//
-// The kwin-effect classic-GL path (`#define PLASMAZONES_KWIN`, default-block
-// uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
-// rejects default-block uniforms, so the kwin branch needs a separate
-// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move /
-// strip / tab classes — see shaderEffectIsCompositorOnly) are authored against that kwin
-// dialect directly and never run on the daemon, so their stages are baked out
-// of process by bakeCompositorStage instead, through glslang in DEFAULT mode.
-// test_animation_shader_kwin_bake remains the additional driver-level check.
-// Daemon-capable packs get the full stage compile below.
 
 // COVERAGE BOUNDARY, so this is not read as more than it is: the source is
 // handed to glslang with the pack's own `#version 450` intact, while KWin's
@@ -154,6 +155,21 @@ static int bakeCompositorStage(QTextStream& out, const QString& packDir,
     return reportCompositorCompile(out, label, stage, src, tool);
 }
 
+// Validate one ANIMATION pack directory (data/animations/*). Reproduces the
+// animation runtime's fragment assembly on the daemon (Qt-RHI) path — the entry
+// scaffold (pTransition / pIn+pOut, or a pass-through main()), the generated
+// p_<id> preamble, and include expansion — then bakes through headless glslang.
+// Returns the number of errors found.
+//
+// The kwin-effect classic-GL path (`#define PLASMAZONES_KWIN`, default-block
+// uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
+// rejects default-block uniforms, so the kwin branch needs a separate
+// OpenGL-target compiler. Compositor-only packs (desktop / geometry / move /
+// strip / tab classes — see shaderEffectIsCompositorOnly) are authored against that kwin
+// dialect directly and never run on the daemon, so their stages are baked out
+// of process by bakeCompositorStage instead, through glslang in DEFAULT mode.
+// test_animation_shader_kwin_bake remains the additional driver-level check.
+// Daemon-capable packs get the full stage compile below.
 int validateAnimationPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -636,16 +652,4 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     return errors;
 }
 
-// Validate one SURFACE pack directory (data/surface/*). Reproduces the surface
-// runtime's fragment assembly on the daemon (Qt-RHI) path — the pSurface entry
-// scaffold (an entry-only pack gets a generated main(); a pack with its own
-// main() passes through unchanged) + include expansion + the generated p_<id>
-// preamble — then bakes through headless glslang. Returns the error count.
-//
-// As with animation packs, the kwin-effect classic-GL branch
-// (`#define PLASMAZONES_KWIN`, default-block uniforms) is NOT baked here:
-// QShaderBaker compiles Vulkan-dialect GLSL and rejects default-block uniforms.
-// Baking the #else branch validates the daemon UBO contract in
-// surface_uniforms.glsl; the PLASMAZONES_KWIN plumbing is identical for every
-// pack and exercised by the live compositor compile.
 } // namespace PlasmaZones::ShaderValidate
