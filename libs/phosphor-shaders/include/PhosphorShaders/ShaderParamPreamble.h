@@ -83,4 +83,23 @@ PHOSPHORSHADERS_EXPORT bool isValidParamId(const QString& id);
 /// source is not valid GLSL anyway).
 PHOSPHORSHADERS_EXPORT QString spliceAfterVersion(const QString& source, const QString& block);
 
+/// The preprocessor block that selects the COMPOSITOR branch of a pack's
+/// source, newline-terminated with @p eol and ready for `spliceAfterVersion`.
+///
+/// `#define PLASMAZONES_KWIN` is the ABI switch itself: the shared uniform
+/// headers key their default-block-uniform branch off it. The two ARB
+/// directives ride along because KWin 6.7's `generateCustomShader` recompiles
+/// custom effect shaders at GLSL `#version 140`, where the `layout(location =
+/// N)` qualifiers our vertex stages declare are illegal without them (NVIDIA
+/// error C7548). They are a harmless no-op in the fragment stage.
+///
+/// Shared because THREE places must agree on it exactly and they are in
+/// different link units: the compositor's own
+/// `ShaderInternal::injectKwinDefineAfterVersion` (which wraps this with the
+/// `#version`-finding walk), the offline validator's compositor bake, and the
+/// GPU bake test. A private copy in any of them turns the two checkers into
+/// gates that pass source the compositor would reject, or reject source it
+/// accepts — the exact failure a reproduce-the-runtime gate exists to rule out.
+PHOSPHORSHADERS_EXPORT QString kwinDefineBlock(const QString& eol = QStringLiteral("\n"));
+
 } // namespace PhosphorShaders

@@ -111,6 +111,13 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
     return out;
 }
 
+QString kwinDefineBlock(const QString& eol)
+{
+    return QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable") + eol
+        + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol
+        + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
+}
+
 QString spliceAfterVersion(const QString& source, const QString& block)
 {
     if (block.isEmpty()) {

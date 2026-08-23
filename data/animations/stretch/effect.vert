@@ -56,26 +56,42 @@ void main() {
 
     float tt = legProgress();
 
-    // Travel/perp basis. A degenerate move (pure resize) stretches
-    // vertically so it still reads.
-    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
-    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
-    vec2 travel = toC - fromC;
-    vec2 dir = (dot(travel, travel) > 1.0) ? normalize(travel) : vec2(0.0, 1.0);
+    // Travel/perp basis from the leg's RIGID translation, not its centre
+    // delta: a window pinned at one edge and grown moves its centre by half
+    // the size change while standing still. legDirection falls back to the
+    // growth axis, so an anchored stretch still orients along the axis that
+    // actually changed.
+    vec2 dir = legDirection(iFromRect, iToRect);
     vec2 perp = vec2(-dir.y, dir.x);
 
+    // Endpoint centres: the spring below carries the card's centre from one
+    // to the other, which stays correct for a resize (the centre genuinely
+    // does move when one edge is pinned) — it is only the DIRECTION and the
+    // stagger that must not be read off that motion.
+    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
+    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
+
+    // The staggered spring IS the stretch, and a stretch is a transit
+    // character: it describes a window being dragged taut behind its leading
+    // edge. An anchored resize has no leading edge to trail, and at full
+    // strength the stagger makes parts of one window reach their final extent
+    // at different times — a tear, not a stretch. Scale the stagger by the
+    // travel share so a pure resize springs uniformly (the back-ease bounce
+    // and the perpendicular squash both survive, since they ride the centre).
+    float spread = SPREAD * legTravelShare(iFromRect, iToRect);
+
     // Per-vertex staggered spring: leading edge (s = 1) starts at t = 0,
-    // trailing edge (s = 0) lags by SPREAD; each rides a back-ease that
+    // trailing edge (s = 0) lags by `spread`; each rides a back-ease that
     // overshoots once. The spread of progress across the window IS the
     // stretch.
     float s = clamp(dot(cuv - 0.5, dir) + 0.5, 0.0, 1.0);
-    float denom = max(1.0 - SPREAD, 1.0e-3);
-    float localLin = clamp((tt - (1.0 - s) * SPREAD) / denom, 0.0, 1.0);
+    float denom = max(1.0 - spread, 1.0e-3);
+    float localLin = clamp((tt - (1.0 - s) * spread) / denom, 0.0, 1.0);
     float e = backOut(localLin);
 
     // Window centre rides the same spring (sampled at the mid stagger) so
     // the perpendicular squash thins around a consistent axis.
-    float eC = backOut(clamp((tt - 0.5 * SPREAD) / denom, 0.0, 1.0));
+    float eC = backOut(clamp((tt - 0.5 * spread) / denom, 0.0, 1.0));
     vec2 centerPos = mix(fromC, toC, eC);
 
     // Per-vertex along-travel position (stretched), then thin perpendicular.

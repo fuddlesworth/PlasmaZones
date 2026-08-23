@@ -77,18 +77,16 @@ class TestAnimationShaderKwinBake : public QObject
         return eff;
     }
 
-    // Replicates the block ShaderInternal::injectKwinDefineAfterVersion splices in
-    // after #version on the KWin path (kwin-effect/plasmazoneseffect/
-    // shader_transitions.cpp is the source of truth). Equivalent to calling that
-    // helper for every bundled pack, which all lead with a bare `#version 450`;
-    // the ARB `: enable` directives select explicit-location layouts in the
-    // vertex stage and are no-ops in the fragment stage.
+    // The block ShaderInternal::injectKwinDefineAfterVersion splices in after
+    // #version on the KWin path. Taken from PhosphorShaders rather than spelled
+    // out here: the compositor's injector and the offline validator's
+    // compositor bake splice the SAME function, so this test cannot drift into
+    // accepting a dialect the compositor rejects. Equivalent to calling that
+    // injector for every bundled pack, which all lead with a bare
+    // `#version 450`.
     static QString kwinDefineBlock()
     {
-        return QStringLiteral(
-            "#extension GL_ARB_explicit_attrib_location : enable\n"
-            "#extension GL_ARB_separate_shader_objects : enable\n"
-            "#define PLASMAZONES_KWIN\n");
+        return PhosphorShaders::kwinDefineBlock();
     }
 
     QOffscreenSurface* m_surface = nullptr;

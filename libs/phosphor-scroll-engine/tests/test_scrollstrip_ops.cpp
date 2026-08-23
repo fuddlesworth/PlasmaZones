@@ -73,6 +73,7 @@ private Q_SLOTS:
     void widthPresetCycling();
     void widthAdjustByPercent();
     void sizeAdjustFloorsAtTheEngineMinimum();
+    void shrinkNeverGrowsFromBelowTheFloor();
     void maximizeColumnToggle();
     void expandToAvailableWidth();
     void windowHeights();
@@ -305,10 +306,18 @@ void TestScrollStripOps::sizeAdjustFloorsAtTheEngineMinimum()
     QVERIFY(everRefused); // the floor is a refusal, not a silent no-op success
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minMain);
 
+    bool crossRefused = false;
     for (int i = 0; i < 20; ++i) {
-        strip.adjustActiveWindowHeight(-25.0, params);
+        if (!strip.adjustActiveWindowHeight(-25.0, params)) {
+            crossRefused = true;
+        }
     }
+    QVERIFY(crossRefused);
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minCross);
+
+    // A press at the floor refuses rather than reporting a no-op success.
+    QVERIFY(!strip.adjustActiveColumnWidth(-25.0, params));
+    QVERIFY(!strip.adjustActiveWindowHeight(-25.0, params));
 
     // And growing back out of the floor moves on the FIRST press: the shrinks
     // stopped at the floor instead of burying an ever smaller intent under it.
@@ -316,6 +325,42 @@ void TestScrollStripOps::sizeAdjustFloorsAtTheEngineMinimum()
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minMain + 120);
     QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minCross + 80);
+}
+
+void TestScrollStripOps::shrinkNeverGrowsFromBelowTheFloor()
+{
+    // A column or tile can legitimately render BELOW the engine's fraction
+    // floor: every producer that clamps as a fraction resolves through
+    // proportionalPx (round(f * (work + gap)) - gap), a gap's worth under the
+    // bare round(f * work) the verbs floor at. A shrink press there must
+    // refuse, not snap the size UP and report success.
+    auto params = defaultParams();
+    params.respectMinimumSize = false;
+    params.presetColumnWidths.clear(); // so minimize takes the engine-floor arm
+    // A single-entry list AT the engine floor: parsePresets clamps a user's
+    // entries against exactly this value, so it is the shortest legal preset.
+    params.presetWindowHeights = {MinWindowHeightFraction};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    QVERIFY(strip.minimizeActiveColumnWidth(params));
+    const int minimized = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(minimized < qRound(MinColumnWidthFraction * Ax::mainLen(params.workArea)));
+    QVERIFY(!strip.adjustActiveColumnWidth(-25.0, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minimized);
+
+    // The smallest legal preset height is the cross-axis twin of that state.
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makePreset(MinWindowHeightFraction)));
+    const int shortest = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(shortest < qRound(MinWindowHeightFraction * Ax::crossLen(params.workArea)));
+    QVERIFY(!strip.adjustActiveWindowHeight(-25.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), shortest);
+
+    // Growing out of that under-floor state still moves on the first press.
+    QVERIFY(strip.adjustActiveColumnWidth(10.0, params));
+    QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
 }
 
 void TestScrollStripOps::maximizeColumnToggle()

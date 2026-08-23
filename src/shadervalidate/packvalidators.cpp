@@ -390,6 +390,57 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 // linted here; their compile coverage is test_animation_shader_kwin_bake.
 // Daemon-capable packs get the full stage compile below.
 
+// Assemble one stage of a COMPOSITOR-ONLY animation pack exactly as the
+// kwin-effect does (entry scaffold for the fragment, include expansion, the
+// p_<id> preamble, then the shared KWin define block after #version) and
+// compile it through glslangValidator. Returns 1 on failure, 0 on success.
+//
+// The splice order matters and mirrors the runtime: each spliceAfterVersion
+// lands its block immediately below #version, so splicing the preamble first
+// and the define block second leaves the define block ABOVE the preamble,
+// which is what the compositor produces (the preamble, then
+// injectKwinDefineAfterVersion).
+int bakeCompositorStage(QTextStream& out, const QString& packDir,
+                        const PhosphorAnimationShaders::AnimationShaderEffect& eff, const QString& path,
+                        const QString& label, const QString& stage, bool scaffold)
+{
+    const QString tool = glslangValidatorPath();
+    if (tool.isEmpty()) {
+        // Hard failure rather than a skip. The point of this gate is that a
+        // pack cannot reach a release uncompiled, and a quiet "no tool, no
+        // coverage" degrade is how 35 packs went unchecked in the first place.
+        // Only compositor-only packs reach here, so a pack tree containing
+        // none of them still validates on a machine without glslang.
+        out << "  " << label.leftJustified(15)
+            << "ERROR\n    neither glslangValidator nor glslang found on PATH; one of them is required to "
+               "compile compositor-only packs (install the glslang package)\n";
+        return 1;
+    }
+    if (!QFile::exists(path)) {
+        return 0; // an absent stage is already linted by the caller
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        out << "  " << label.leftJustified(15) << "ERROR\n    cannot read " << path << "\n";
+        return 1;
+    }
+    const QString raw = QString::fromUtf8(f.readAll());
+    const QString assembled = scaffold
+        ? PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
+                                              AnimationShaderRegistry::animationEntryCandidates())
+        : raw;
+    const QStringList includePaths = {QFileInfo(packDir).absolutePath() + QStringLiteral("/shared")};
+    QString err;
+    QString src = ShaderCompiler::expandSource(assembled, QFileInfo(path).absolutePath(), includePaths, &err);
+    if (src.isEmpty()) {
+        out << "  " << label.leftJustified(15) << "ERROR\n    include expansion failed: " << err << "\n";
+        return 1;
+    }
+    src = PhosphorShaders::spliceAfterVersion(src, AnimationShaderRegistry::paramPreamble(eff));
+    src = PhosphorShaders::spliceAfterVersion(src, PhosphorShaders::kwinDefineBlock());
+    return reportCompositorCompile(out, label, stage, src, tool);
+}
+
 int validateAnimationPack(const QString& packDir, QTextStream& out)
 {
     const QString name = QFileInfo(packDir).fileName();
@@ -679,7 +730,8 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // (default-block uniforms, unbound samplers) that the strict SPIR-V
     // target rejects by design, and the daemon never loads them.
     if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
-        out << "  " << fragLabel.leftJustified(15) << "SKIP (compositor-only pack; kwin-path GLSL)\n";
+        errors += bakeCompositorStage(out, packDir, eff, eff.fragmentShaderPath, fragLabel, QStringLiteral("frag"),
+                                      /*scaffold=*/true);
     } else if (QFile::exists(eff.fragmentShaderPath)) {
         QFile frag(eff.fragmentShaderPath);
         if (!frag.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -787,7 +839,20 @@ int validateAnimationPack(const QString& packDir, QTextStream& out)
     // animation vert — or a regression in the shared vert every pack inherits —
     // passes the shader_validate_bundled CI gate and only fails at runtime. The
     // sibling zone and surface validators have always baked their vert stage.
-    if (!PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+    if (PhosphorAnimationShaders::shaderEffectIsCompositorOnly(eff)) {
+        // A compositor-only pack's vert is the stage most likely to break: it
+        // is where the geometry-morph packs do their per-vertex work, and it
+        // is compiled on the KWin path ONLY, so nothing else in a headless run
+        // looks at it. Unlike the daemon vertex bake below, the p_<id> preamble
+        // IS spliced, because the compositor splices it for the vertex stage
+        // too (shader_textures.cpp) and vertex-driven packs read their params
+        // inside the PLASMAZONES_KWIN branch this bake takes.
+        if (!eff.vertexShaderPath.isEmpty() && QFile::exists(eff.vertexShaderPath)) {
+            errors += bakeCompositorStage(out, packDir, eff, eff.vertexShaderPath,
+                                          QFileInfo(eff.vertexShaderPath).fileName(), QStringLiteral("vert"),
+                                          /*scaffold=*/false);
+        }
+    } else {
         const QString animIncludeDir = QFileInfo(packDir).absolutePath() + QStringLiteral("/shared");
         QString vertPath = eff.vertexShaderPath;
         if (vertPath.isEmpty()) {
