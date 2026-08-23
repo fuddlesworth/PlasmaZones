@@ -321,7 +321,7 @@ private:
     // Snap-mode windows floated because they were minimized (mirrors
     // TilingHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
     // Deliberately NOT cleared on daemon restart, unlike the autotile twin
-    // (TilingHandler::onDaemonReady): the restore net in
+    // (TilingHandler::clearPerSessionDaemonState): the restore net in
     // commitUnminimizeUnfloat is snap's restart-recovery path, and it only
     // fires for windows still in this set — clearing on daemon-ready would
     // strand exactly the windows the net exists to recover.

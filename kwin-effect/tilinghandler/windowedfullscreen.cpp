@@ -131,8 +131,8 @@ void TilingHandler::restoreAllMonocleMaximized()
                 kw->maximize(KWin::MaximizeRestore);
                 // Same tracker re-seed as unmaximizeMonocleWindow, and more
                 // load-bearing here: the daemon-loss caller has no apply
-                // path left to heal a stale entry, and onDaemonReady keeps
-                // this map across the restart.
+                // path left to heal a stale entry, and neither the teardown nor
+                // drainDeadSessionState clears this map across the restart.
                 m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
             }
         }

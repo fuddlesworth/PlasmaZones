@@ -229,12 +229,43 @@ public:
     }
     void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
     void onDaemonReady();
+
+    /// Drop everything the DEAD daemon session owned, at the moment its
+    /// successor claims the bus name and before that successor can push
+    /// anything.
+    ///
+    /// Called from the serviceRegistered handler in lifecycle_wiring_daemon.cpp,
+    /// NOT from onDaemonReady, and the distinction is the whole point. A daemon
+    /// claims the well-known name in init(), long before it emits daemonReady at
+    /// the end of start() — and in between it lays out the restored strip and
+    /// pushes a tile batch and a tab-strip payload at an effect that has already
+    /// re-announced its windows. Draining at daemonReady therefore wiped state
+    /// the NEW session had just established. The tab-strip model survived that
+    /// (loadSettings replays it), but tiled membership has no replay: it re-arms
+    /// only on the next tile batch, and a restored strip that needs no relayout
+    /// sends none. With membership gone scrollManagedOutputFor answers null for
+    /// every column, prePaintScreen elects no tab-indicator anchor, and the pills
+    /// stay unpainted over a correct model until the user scrolls hard enough to
+    /// force a fresh batch. Draining at the name-claim edge closes that window:
+    /// the successor cannot have pushed yet, so nothing it sends is ever thrown
+    /// away.
+    ///
+    /// The serviceUnregistered teardown cannot be the sole drain site, and not
+    /// because it might be skipped: the daemon registers its name with the
+    /// default flags (no replacement, no queueing), so an owner change always
+    /// goes through the name being free and the teardown always fires on a
+    /// restart. The teardown drains a deliberately SMALLER set — the maps this
+    /// function clears have to keep answering for the whole daemon-down
+    /// interval (see clearPerSessionDaemonState). Everything the two have in
+    /// common is cleared idempotently here, so bring-up is authoritative on its
+    /// own rather than depending on what the teardown left behind.
+    void drainDeadSessionState();
+
     /// Drop every map whose contents belong to ONE daemon session.
     ///
-    /// Called by onDaemonReady, which is the only edge guaranteed to run: a
-    /// straight old→new daemon owner handover produces no serviceUnregistered
-    /// edge at all, so the teardown in lifecycle_wiring_daemon.cpp cannot be the
-    /// sole drain site. That teardown drains a DIFFERENT, deliberately smaller
+    /// Called by drainDeadSessionState, which owns the timing argument above.
+    /// The teardown in lifecycle_wiring_daemon.cpp cannot be the sole drain
+    /// site. That teardown drains a DIFFERENT, deliberately smaller
     /// set (the rule-visible inputs plus the compositor restores), because the
     /// maps here must keep answering for the daemon-down interval — a window's
     /// notified screen, its minimize-float ownership and its deferred routes all
@@ -303,10 +334,10 @@ public:
     /// (the snapshot is dropped either way).
     void restoreWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
     /// Bulk restore (daemon loss, effect unload, engine disable, and daemon
-    /// BRING-UP — a straight old-to-new daemon handover emits no
-    /// serviceUnregistered edge, so onDaemonReady drains the dead session's
-    /// holds too) — snapshot-and-clear then release each, the
-    /// restoreAllMonocleMaximized shape.
+    /// BRING-UP, where drainDeadSessionState releases the dead session's holds
+    /// again so the bring-up does not depend on what the teardown left) —
+    /// snapshot-and-clear then release each, the restoreAllMonocleMaximized
+    /// shape.
     void restoreAllWindowedFullscreen();
     /// Arm the clear-in-flight marker and dispatch Scrolling.
     /// clearWindowedFullscreen reply-gated: the error arm drops the marker
@@ -432,7 +463,7 @@ public:
     void voidInFlightScrollTabFetches();
     /// Drop every screen's tab model, hover, press latch and cursor
     /// override, and the painter's per-output state — for daemon loss (the
-    /// strips no longer exist), a daemon owner handover (onDaemonReady's
+    /// strips no longer exist), daemon bring-up (drainDeadSessionState's
     /// per-session drain) and effect teardown. GL-free: the painter retires
     /// its textures and frees them at the next GL-current point.
     void clearScrollTabState();
@@ -528,9 +559,10 @@ public:
 
     /// Drop the dead session's resolved scroll-behaviour map (all three
     /// per-screen sets plus the seeded flag). Shared by the serviceUnregistered teardown
-    /// (via clearScrollingScreensForTeardown) and by onDaemonReady, which a
-    /// straight old→new owner handover reaches WITHOUT any unregistered edge
-    /// having fired. Takes the crop set's repaint bookend itself — that set is
+    /// (via clearScrollingScreensForTeardown) and by drainDeadSessionState,
+    /// which repeats it at bring-up so the new session starts from a map it
+    /// published rather than one the teardown happened to leave.
+    /// Takes the crop set's repaint bookend itself — that set is
     /// painted state, so dropping it changes what the clip cuts. The axis set
     /// needs no bookend of its own: the paint path reads StripViewAnimator's
     /// per-output copy, which its own reset() drops on the same teardown.
@@ -618,12 +650,11 @@ public:
     ///    decorations down outright rather than sweeping them, which is why
     ///    the live chokepoint's SCHEDULED sweep would be wrong there (it would
     ///    re-create rule-matched decorations one turn after the teardown);
-    ///  - TilingHandler::onDaemonReady, whose own tail runs
-    ///    invalidateAllRuleCaches and scheduleBorderSweep. Bring-up needs the
-    ///    clear because a straight old→new owner handover emits no
-    ///    serviceUnregistered edge at all, so without it the seeded flag stays
-    ///    true over the dead daemon's map and the seeding edge can never fire
-    ///    again for the session.
+    ///  - TilingHandler::drainDeadSessionState, whose own tail runs
+    ///    invalidateAllRuleCaches and scheduleBorderSweep. Bring-up repeats the
+    ///    clear so the seeded flag can never arrive at the new session still
+    ///    true over the dead daemon's map, which would leave the seeding edge
+    ///    unable to fire again for the session.
     ///
     /// Clearing the seeded flag does NOT re-drive the rule admission: no
     /// getAllRules reply is coming with the daemon down, and the re-drive's
@@ -1013,7 +1044,7 @@ private:
     /// flips engine WITHIN the managed union transits no managedScreensChanged,
     /// so this re-announces the flipped screens' windows to hand them to the
     /// new engine. Pass @p announceFlipped false only for BRING-UP clears
-    /// (onDaemonReady), where the tracking maps are about to be reset and
+    /// (drainDeadSessionState), where the tracking maps are about to be reset and
     /// loadSettings owns the re-announce — announcing there desyncs the
     /// daemon's view from the effect's until that batch lands.
     void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
