@@ -46,12 +46,16 @@ void main() {
 
     float tt = legProgress();
 
-    // Travel/perp basis. A degenerate move (pure resize) ripples from the
-    // bottom edge so it still reads.
-    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
-    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
-    vec2 travel = toC - fromC;
-    vec2 dir = (dot(travel, travel) > 1.0) ? normalize(travel) : vec2(0.0, 1.0);
+    // Travel/perp basis from the leg's RIGID translation rather than its
+    // centre delta: a window pinned at one edge and grown moves its centre
+    // by half the size change while standing still, which would send the
+    // wavefront across an axis nothing travelled along. legDirection falls
+    // back to the growth axis, so a resize ripples from the edge that
+    // actually moved. The wave is NOT damped for a resize the way the
+    // staggered packs are: `rect` below interpolates rigidly, so the ripple
+    // is an arrival wobble on a window that has already settled uniformly,
+    // never parts of one window arriving at different times.
+    vec2 dir = legDirection(iFromRect, iToRect);
     vec2 perp = vec2(-dir.y, dir.x);
 
     // Rigid travel: accelerate into the zone so the arrival reads as a

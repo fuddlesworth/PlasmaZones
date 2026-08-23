@@ -50,10 +50,10 @@ void main() {
 
     // Travel direction in screen space (y-down). A degenerate move (pure
     // resize) defaults to downward so it still reads as a gentle settle.
-    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
-    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
-    vec2 travel = toC - fromC;
-    vec2 dir = (dot(travel, travel) > 1.0) ? normalize(travel) : vec2(0.0, 1.0);
+    // From the leg's RIGID translation, not its centre delta: a window
+    // pinned at one edge and grown moves its centre by half the size change
+    // while standing still, and reading that as travel staggers a stretch.
+    vec2 dir = legDirection(iFromRect, iToRect);
 
     // Phase along the travel axis: leading edge (toward the destination)
     // is 1, trailing edge is 0.
@@ -62,7 +62,11 @@ void main() {
     // Staggered local progress: the leading edge starts at t = 0, the
     // trailing edge lags by SPREAD, and each ramps to 1 with a smoothstep
     // settle. legProgress() keeps the direction correct on reverse legs.
-    const float SPREAD = 0.55;
+    // Scaled by how much of the leg is travel: the trailing lag is what
+    // makes a moving window flow, but on an anchored resize it only makes
+    // parts of one window reach their final extent at different times.
+    // A pure stretch therefore settles uniformly; a real slide is unchanged.
+    float SPREAD = 0.55 * legTravelShare(iFromRect, iToRect);
     float tt = legProgress();
     float startT = (1.0 - phase) * SPREAD;
     float localT = clamp((tt - startT) / max(1.0 - SPREAD, 1.0e-3), 0.0, 1.0);
