@@ -151,8 +151,13 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     }
     if (m_settings) {
         // Sole emitter of pendingChangesChanged for shader-tree edits: EVERY
-        // tree change (our own mutators, an external Discard/import/load) funnels
-        // through Settings::setShaderProfileTree → this NOTIFY. Because dirtiness
+        // tree change reaches this NOTIFY. Not all of them through the setter,
+        // though — our own mutators and the scoped Discard go through
+        // Settings::setShaderProfileTree, while a reload, a profile switch and a
+        // whole-tree Discard re-fire it from Settings' own notify-property loop
+        // (`shaderProfileTreeJson` carries this signal). What matters here is
+        // that this lambda is bound to the SIGNAL rather than to the setter, so
+        // it sees all of them either way. Because dirtiness
         // is now value-based (hasPendingChanges diffs live-vs-committed), the
         // lambda no longer distinguishes own-writes from reloads or touches any
         // flag — it just refreshes the cards and re-evaluates the dirty state.

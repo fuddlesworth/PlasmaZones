@@ -452,6 +452,8 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimatedBoxTrack.qml
         qml/pages/animations/AnimationEventCard.qml
         qml/pages/animations/AnimationEventCardWriters.qml
+        qml/pages/animations/AnimationEventCardShaderIo.qml
+        qml/pages/animations/AnimationEventCardTimingIo.qml
         qml/pages/animations/AnimationEventCardBanners.qml
         qml/pages/animations/AnimationEventCardList.qml
         qml/pages/animations/AnimationProfileEditor.qml

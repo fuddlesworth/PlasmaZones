@@ -1375,10 +1375,11 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the eight test executables below
+# Animations-controller sources shared by the ten test executables below
 # (page controller / QML contracts / profile-store sync / motion sets / presets /
-# shader overrides / group writes / suppression mirror). One list so a new
-# controller source file cannot silently miss one of the eight.
+# shader overrides / shader param writes / group writes / group write bounds /
+# suppression mirror). One list so a new controller source file cannot silently
+# miss one of the ten.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -1495,6 +1496,21 @@ target_link_libraries(test_animations_group_writes
 )
 add_test(NAME test_animations_group_writes COMMAND test_animations_group_writes)
 
+add_executable(test_animations_group_write_bounds
+    settings/pages/test_animations_group_write_bounds.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_group_write_bounds
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_group_write_bounds COMMAND test_animations_group_write_bounds)
+
 # Companion test executable: motion-set + pending-changes coverage.
 add_executable(test_animations_motion_sets
     settings/pages/test_animations_motion_sets.cpp
@@ -1545,6 +1561,47 @@ target_link_libraries(test_animations_shader_overrides
 )
 target_compile_definitions(test_animations_shader_overrides PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
+
+# Params-only shader writer + the group readers that answer what a path owns.
+# Split from test_animations_shader_overrides rather than added to it: that
+# file had reached 1110 lines against the 1150 hard ceiling, and this is a
+# coherent slice (pack-versus-parameters) on its own. Both sit well under the
+# target now.
+add_executable(test_animations_shader_param_writes
+    settings/pages/test_animations_shader_param_writes.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_shader_param_writes
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_shader_param_writes PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animations_shader_param_writes COMMAND test_animations_shader_param_writes)
+
+# The orphaned-parameter surface. Its own TU rather than more slots in the
+# param-writes file above: every slot here needs the POPULATED registry (the
+# predicate refuses to judge without one), which is a different fixture from
+# the one that file is built around.
+add_executable(test_animations_stale_params
+    settings/pages/test_animations_stale_params.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_stale_params
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+target_compile_definitions(test_animations_stale_params PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animations_stale_params COMMAND test_animations_stale_params)
 
 # Decoration page (per-surface DecorationProfileTree editor): reader /
 # mutator coverage for DecorationPageController — chain resolution,

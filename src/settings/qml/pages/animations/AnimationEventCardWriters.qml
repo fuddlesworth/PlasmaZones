@@ -18,10 +18,19 @@ import QtQuick
  * What is left here is genuinely the card's: while its own write is in flight,
  * the card must ignore the signals that write emits (`_committing` /
  * `_committingShader`), and afterwards it must refresh once. Neither means
- * anything C++-side. Every function below is therefore the same three lines —
- * latch, one controller call, unlatch and refresh — and each still exists
- * separately so `mirrorPaths` cannot be bypassed by a future call site reaching
- * a per-path mutator directly.
+ * anything C++-side. Every WRITER below is therefore the same shape — latch,
+ * one controller call, unlatch and refresh — and each still exists separately
+ * so `mirrorPaths` cannot be bypassed by a future call site reaching a per-path
+ * mutator directly. The shape is not identical across all of them: the timing
+ * writers refresh once and bump `_inheritRev`, while the shader writers refresh
+ * BOTH axes, because a shader write can change what the timing side inherits.
+ *
+ * The queries at the end of the file carry neither latch nor refresh, because
+ * none of them moves anything in the STORE for a signal to report.
+ * `_anyWritePathSupportsShaderLeg` and `_allWritePathsHold` are pure reads.
+ * `_refreshMirrorDivergence` is not — it assigns the card's `_mirrorsDiverged`
+ * and `_divergentPathCount` — but what it writes is view state the card owns,
+ * so it needs no latch either.
  *
  * The try/finally is not decoration. QML has no RAII, and a throw inside a
  * write (a Q_INVOKABLE argument conversion, or `settingsController` resolving
@@ -55,9 +64,10 @@ QtObject {
         card._committing = true;
         try {
             // Return whether the write landed (>= 0), like every sibling writer
-            // here. setOverrideMergedOnPaths returns -1 when it refuses (an async
-            // discard in flight); a caller must be able to tell that from a real
-            // commit instead of assuming success.
+            // here. -1 means the controller REFUSED and nothing was attempted,
+            // which is the one thing the card's latch should stop re-issuing; a
+            // partial failure toasts on its own and reports the count that did
+            // land, so the user can keep trying.
             return settingsController.animationsPage.setOverrideMergedOnPaths(card._writePaths, profile, curveFromCommit) >= 0;
         } finally {
             card._committing = false;
@@ -109,8 +119,11 @@ QtObject {
     // timing refresh is what re-derives the card's Override toggle, which
     // reports either axis.
     /// Set the shader override on every write path that can host a shader leg.
-    /// Reached from the param sliders, so this runs at drag rate — the
-    /// controller applies the whole group to one tree read and one write.
+    /// Reached from the PICKER, not from the param sliders: choosing a pack is
+    /// the one action that should stamp an id. The sliders go through
+    /// `_setShaderParamsOnAll` below, which is what leaves an inheriting
+    /// event's pack alone. The controller still applies the whole group to one
+    /// tree read and one write.
     ///
     /// False when the controller returned -1: an async discard owns the tree
     /// and it toasted the reason.
@@ -118,6 +131,27 @@ QtObject {
         card._committingShader = true;
         try {
             return settingsController.animationsPage.setShaderOverrideOnPaths(card._writePaths, effectId, params) >= 0;
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
+    /// Set the shader PARAMETERS on every write path, leaving each path's pack
+    /// exactly as stored.
+    ///
+    /// The param sliders use this rather than the setter above, and the
+    /// difference matters on a leaf that inherits its pack: the setter stamps
+    /// the id it is handed, which for an inheriting leaf is the id it inherited,
+    /// so one slider nudge used to pin the parent's pack as a direct override.
+    /// The leaf then stopped following the parent, and the parent's card raised
+    /// a "descendant shadows this parent" warning whose clear action deleted the
+    /// tweak that had just been made.
+    function _setShaderParamsOnAll(params) {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.setShaderParametersOnPaths(card._writePaths, params) >= 0;
         } finally {
             card._committingShader = false;
             card.refreshShaderFromTree();
@@ -146,6 +180,22 @@ QtObject {
     /// cleared, or -1 if a path refused (the controller's "async discard in
     /// flight" sentinel), which the caller must not read as a smaller
     /// successful clear.
+    /// Discard the orphaned parameter overrides below every write path.
+    ///
+    /// Returns the controller's count verbatim, including its -1 refusal, the
+    /// same way `_clearShaderOverrideDescendantsOnAll` below does — the caller
+    /// is a banner action, not a drag, so there is no latch to arm.
+    function _clearStaleParamDescendantsOnAll() {
+        card._committingShader = true;
+        try {
+            return settingsController.animationsPage.clearStaleParamDescendantsOnPaths(card._writePaths);
+        } finally {
+            card._committingShader = false;
+            card.refreshShaderFromTree();
+            card.refreshFromTree(true);
+        }
+    }
+
     function _clearShaderOverrideDescendantsOnAll() {
         card._committingShader = true;
         try {
@@ -157,8 +207,11 @@ QtObject {
         }
     }
 
-    // ── Read-only group queries ─────────────────────────────────────
-    // No latch and no refresh: these write nothing.
+    // ── Group queries ───────────────────────────────────────────────
+    // No latch and no refresh: none of these moves anything in the STORE. The
+    // first two are pure reads; `_refreshMirrorDivergence` at the end assigns
+    // two of the card's own view properties, which is why the group is not
+    // called read-only.
     /// True when ANY write path takes a shader leg. Gating a group mutation on
     /// the primary alone would skip a mirror that does support one, whose
     /// shader override would then survive the toggle and show as a divergence

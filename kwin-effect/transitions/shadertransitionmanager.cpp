@@ -49,7 +49,6 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
     // force the per-window query build.
     m_hasOpacityRules = false;
     m_hasWindowLayerRules = false;
-    m_hasAnimationShaderRules = false;
     for (const PhosphorRules::Rule& rule : m_ruleAnimationRules) {
         if (!rule.enabled) {
             continue;
@@ -59,11 +58,9 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
                 m_hasOpacityRules = true;
             } else if (action.type == PhosphorRules::ActionType::SetWindowLayer) {
                 m_hasWindowLayerRules = true;
-            } else if (action.type == PhosphorRules::ActionType::OverrideAnimationShader) {
-                m_hasAnimationShaderRules = true;
             }
         }
-        if (m_hasOpacityRules && m_hasWindowLayerRules && m_hasAnimationShaderRules) {
+        if (m_hasOpacityRules && m_hasWindowLayerRules) {
             break;
         }
     }

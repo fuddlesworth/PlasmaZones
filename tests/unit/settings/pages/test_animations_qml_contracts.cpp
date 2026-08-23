@@ -358,6 +358,91 @@ private Q_SLOTS:
                  "refreshFromTree's latch reset is no longer transition- and selfDriven-gated");
     }
 
+    /// The shader-ownership contracts that live ONLY in QML.
+    ///
+    /// None of these is reachable from C++. `setShaderOverrideOnPaths` receives
+    /// an already-chosen parameter map, so no controller-level slot can tell
+    /// "the card decided to carry the event's own values" from "the card decided
+    /// to carry nothing" — the decision itself is the thing under test, and it
+    /// is made here. The caption and the remove button's arm are the same shape:
+    /// derived properties feeding a label, with no observable that leaves the
+    /// QML layer. A source scrape is what is left, and this suite already keeps
+    /// one for exactly this hazard class two slots up.
+    void shaderOwnershipContractsHoldInTheQml()
+    {
+        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression wsRe(QStringLiteral("\\s+"));
+        const auto flattened = [](const QString& path) {
+            QString src = readFile(path);
+            src.remove(blockCommentRe);
+            src.remove(lineCommentRe);
+            return src.replace(wsRe, QStringLiteral(" "));
+        };
+
+        const QString cardPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
+        const QString editorPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationProfileEditor.qml");
+        const QString card = flattened(cardPath);
+        const QString editor = flattened(editorPath);
+        // Read failures first: without this every contains() below fails with a
+        // message about the contract rather than about the missing file.
+        QVERIFY2(!card.isEmpty(), qPrintable(QStringLiteral("could not read ") + cardPath));
+        QVERIFY2(!editor.isEmpty(), qPrintable(QStringLiteral("could not read ") + editorPath));
+
+        // (1) A promotion carries what the event STORES, never the resolved
+        // map. `currentShaderParams` is the resolved one, so on an event that
+        // tuned nothing it holds the ANCESTOR's values, and carrying it pins a
+        // frozen copy of them — severing the cascade this whole branch exists
+        // to preserve. Reading the stored map answers both cases at once:
+        // empty means there is nothing of this event's own to keep.
+        QVERIFY2(card.contains(QStringLiteral(
+                     "const ownParams = (root._primaryRawShader && root._primaryRawShader.parameters) || ({});")),
+                 "the promotion no longer sources its parameters from what the event STORES");
+        QVERIFY2(card.contains(QStringLiteral("const keepParams = sid.length > 0 && sid === "
+                                              "root.currentShaderEffectId && Object.keys(ownParams).length > 0;")),
+                 "the promotion test no longer requires the event to own parameters of its own");
+        QVERIFY2(card.contains(QStringLiteral("root._setShaderOverrideOnAll(sid, keepParams ? ownParams : ({}));")),
+                 "a promotion no longer carries the event's own params, or a switch no longer drops them");
+
+        // (2) The remove control's two inputs stay group-aware. The label names
+        // a pack only when EVERY path the click writes holds it, and the arm it
+        // takes keys on whether any path owns one at all — a per-path spelling
+        // would name one member's pack on a button that clears several.
+        QVERIFY2(card.contains(QStringLiteral("shaderPackRemovable: root._anyWritePathOwnsShaderPack")),
+                 "the remove button's arm is no longer chosen by the GROUP predicate");
+        QVERIFY2(card.contains(QStringLiteral("shaderPackNameIsExact: root._allWritePathsHoldShownPack")),
+                 "the remove button's label is no longer gated on every path holding the shown pack");
+
+        // (3) The refusal latch releases on pendingChangesChanged and on
+        // nothing else. It has to be that signal: the discard's terminal
+        // handler emits overrideChanged only for the files it actually
+        // restored, so a card none of those reach would stay latched for the
+        // rest of the session.
+        QVERIFY2(card.contains(QStringLiteral("function onPendingChangesChanged() { root._writesRefused = false; }")),
+                 "the refusal latch no longer releases on pendingChangesChanged alone");
+
+        // (4) The ownership caption's arms, in order. Ordering is the
+        // contract: owning a pack outranks owning only parameters, the
+        // orphaned-values spelling is nested INSIDE the params-only arm (a
+        // stale map IS a params-only map, so a sibling arm would let the two
+        // orderings disagree), and inherited-value is the fallthrough.
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsPack) return i18n(\"Overridden for this event\");")),
+                 "the caption's owned-pack arm changed");
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsParamsOnly) {")),
+                 "the caption's params-only arm is no longer the outer test");
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderParamsStale) return i18n(\"Following the inherited pack, "
+                                                "with saved settings that no longer apply\");")),
+                 "the caption's orphaned-parameters arm changed, or left the params-only arm");
+        QVERIFY2(editor.contains(QStringLiteral("return i18n(\"Following the inherited "
+                                                "pack, with settings of its own\");")),
+                 "the caption's params-only arm changed");
+        QVERIFY2(editor.contains(QStringLiteral("return i18n(\"Following the inherited value\");")),
+                 "the caption's inherited fallthrough changed");
+    }
+
     /// ShaderBrowserPage's `_typeCatalog` labels the shader browser's type
     /// axis, one entry per event class. There is no way to derive it from the
     /// C++ SSOT (ProfilePaths::allEventClassTokens) inside QML, so it is a

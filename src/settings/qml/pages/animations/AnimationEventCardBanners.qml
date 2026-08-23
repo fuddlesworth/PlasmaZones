@@ -33,6 +33,10 @@ ColumnLayout {
     required property bool timingEditorOpen
     /// Descendant shader overrides that shadow a parent-node card.
     required property int shadowingChildrenCount
+    /// How many events below this one kept parameter values authored against a
+    /// pack this parent no longer resolves. Distinct from the shadowing count
+    /// above: those override this parent's PACK, these still follow it.
+    required property int staleParamChildrenCount
     /// Mirror-divergence state, precomputed by the card.
     required property bool mirrorsDiverged
     required property int divergentPathCount
@@ -44,17 +48,19 @@ ColumnLayout {
 
     /// The shadowing warning's one-click remediation.
     signal clearShadowingRequested
+    signal clearStaleParamsRequested
 
     // Parent nodes show the fan-out note whenever the timing editor is open;
     // leaves show the inheritance breadcrumb until a direct override exists.
     readonly property bool _infoVisible: isParentNode ? timingEditorOpen : !overrideActive
     readonly property bool _shadowingVisible: isParentNode && shadowingChildrenCount > 0
+    readonly property bool _staleParamsVisible: isParentNode && staleParamChildrenCount > 0
     readonly property bool _currentVisible: !overrideActive
 
     spacing: Kirigami.Units.smallSpacing
     // An all-hidden ColumnLayout still occupies a spacing slot in the
     // card's column; collapse it outright when nothing is shown.
-    visible: _infoVisible || _shadowingVisible || mirrorsDiverged || _currentVisible
+    visible: _infoVisible || _shadowingVisible || _staleParamsVisible || mirrorsDiverged || _currentVisible
 
     // ── Inheritance info ──────────────────────────────────────────────
     Kirigami.InlineMessage {
@@ -95,6 +101,40 @@ ColumnLayout {
                 icon.name: "edit-clear-all"
                 onTriggered: {
                     root.clearShadowingRequested();
+                }
+            }
+        ]
+    }
+
+    // ── Orphaned parameter values (parent-node cards only) ────────────
+    // Surfaced HERE, at the parent, because switching this row's pack is what
+    // strands them, and the person who did that is standing at this card. They
+    // may never open the child's own card — setting a pack at a category level
+    // is precisely the act of not wanting to think about individual events.
+    //
+    // Deliberately NOT folded into the shadowing warning above. These events do
+    // not shadow this parent's pack, they FOLLOW it; only their parameter
+    // values are orphaned. Counting them there would make that warning's own
+    // sentence untrue, which is the conflation the params-only work exists to
+    // undo.
+    //
+    // Informational rather than a warning: nothing is broken, the events just
+    // render this pack's defaults. The action DISCARDS — switching this row
+    // back to the pack those values were authored against would revive them —
+    // so it says discard rather than clear or tidy.
+    Kirigami.InlineMessage {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        type: Kirigami.MessageType.Information
+        visible: root._staleParamsVisible
+        text: i18np("%n event below this one kept settings from a different shader pack, so they no longer apply.", "%n events below this one kept settings from a different shader pack, so they no longer apply.", root.staleParamChildrenCount)
+        actions: [
+            Kirigami.Action {
+                text: i18n("Discard those settings")
+                icon.name: "edit-clear-all"
+                onTriggered: {
+                    root.clearStaleParamsRequested();
                 }
             }
         ]
