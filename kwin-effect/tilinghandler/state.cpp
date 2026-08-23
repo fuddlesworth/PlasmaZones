@@ -370,7 +370,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // enumeration empty and releases nothing. Both such callers compensate
     // deliberately and say so at their own site — the bring-up fetch
     // (wiring.cpp) runs before any batch has populated the membership hash,
-    // and the daemon-handover path (tilinghandler.cpp) calls
+    // and the bring-up drain (drainDeadSessionState) calls
     // restoreAllWindowedFullscreen immediately BEFORE its
     // setScrollingScreens({}, false). A future announceFlipped=false caller
     // that can reach here with live membership must do the same, or resolve
@@ -559,7 +559,7 @@ void TilingHandler::clearActiveLayoutsForTeardown()
     // contract: both callers run invalidateAllRuleCaches (which drops the
     // verdicts these removals change, and carries the window-layer sweep)
     // immediately after, and each then rebuilds what those verdicts had baked
-    // into decorations its own way — onDaemonReady with scheduleBorderSweep,
+    // into decorations its own way — drainDeadSessionState with scheduleBorderSweep,
     // the serviceUnregistered teardown with clearAllDecorations, which tears
     // the decorations down outright and so needs no sweep. The re-slice does take
     // the SetOpacity repaint bookend, which neither caller covers on the
