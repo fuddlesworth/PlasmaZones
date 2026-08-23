@@ -112,37 +112,41 @@ RowLayout {
             // dialog's modality.
             if (root.picker.visible)
                 return;
-            var picker = root.picker;
+            // Captured once so the handlers below keep talking to the same
+            // dialog even if `root.picker` is re-pointed later. Named `dialog`
+            // rather than `picker` so it does not shadow `root.picker`, which
+            // reads as a use-before-declaration to the QML compiler.
+            const dialog = root.picker;
 
             function acceptedHandler() {
                 root._disconnectPending = null;
-                picker.accepted.disconnect(acceptedHandler);
-                picker.rejected.disconnect(rejectedHandler);
-                root.colorChosen(root._toHexArgb(picker.selectedColor));
+                dialog.accepted.disconnect(acceptedHandler);
+                dialog.rejected.disconnect(rejectedHandler);
+                root.colorChosen(root._toHexArgb(dialog.selectedColor));
             }
 
             function rejectedHandler() {
                 root._disconnectPending = null;
-                picker.accepted.disconnect(acceptedHandler);
-                picker.rejected.disconnect(rejectedHandler);
+                dialog.accepted.disconnect(acceptedHandler);
+                dialog.rejected.disconnect(rejectedHandler);
             }
 
-            picker.accepted.connect(acceptedHandler);
-            picker.rejected.connect(rejectedHandler);
+            dialog.accepted.connect(acceptedHandler);
+            dialog.rejected.connect(rejectedHandler);
             root._disconnectPending = function () {
                 // The page-level dialog can be destroyed before this control
                 // during a page teardown; a null picker has nothing left to
                 // disconnect.
-                if (!picker)
+                if (!dialog)
                     return;
-                picker.accepted.disconnect(acceptedHandler);
-                picker.rejected.disconnect(rejectedHandler);
+                dialog.accepted.disconnect(acceptedHandler);
+                dialog.rejected.disconnect(rejectedHandler);
             };
             // Seed imperatively: ColorDialog writes selectedColor itself
             // as the user drags, and that JS-side write would sever a
             // declarative binding after the first edit.
-            picker.selectedColor = swatch.color;
-            picker.open();
+            dialog.selectedColor = swatch.color;
+            dialog.open();
         }
     }
 
