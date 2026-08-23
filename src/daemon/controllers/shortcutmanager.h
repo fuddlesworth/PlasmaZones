@@ -107,9 +107,13 @@ public:
 
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
-     * one QVariantMap per row, sorted by display category:
+     * one QVariantMap per row, sorted by display category, then by authored
+     * row order within it:
      *   id (QString), label (translated QString),
      *   category (translated QString), categoryOrder (int),
+     *   rowOrder (int — the row's authoring position inside its category;
+     *   the in-category sort key, with 9000 pinning the digit families to
+     *   the end of their group),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
      *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" |
@@ -159,8 +163,9 @@ public:
      * portion of the registration surface, not all of it.
      *
      * The table is a file-local array with internal linkage, and
-     * cheatsheetModel() is a COMPRESSED view of it (an opposed pair collapses
-     * into a single row, so its second member has no row of its own). Neither
+     * cheatsheetModel() is a COMPRESSED view of it (a directional quad or a
+     * digit family collapses into a single row, so its later members have no
+     * rows of their own). Neither
      * can enumerate the registration surface, which the Shortcuts.Scrolling
      * parity check needs in order to compare it against the config schema.
      */

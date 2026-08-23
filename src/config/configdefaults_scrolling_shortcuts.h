@@ -20,9 +20,10 @@ public:
     // Scrolling Shortcuts
     //
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
-    // Meta+Ctrl families in configdefaults.h, with one deliberate exception:
-    // Equalize Column Widths is Meta+Ctrl+Shift+T, the Shift twin of Retile's
-    // Meta+Ctrl+T (see scrollingEqualizeColumnWidthsShortcut). NOTE: the
+    // Meta+Ctrl families in configdefaults.h, with two deliberate exceptions:
+    // Equalize Column Widths (Meta+Ctrl+Shift+T) and Reset Window Heights
+    // (Meta+Ctrl+Alt+T) are the Shift and Alt twins of Retile's Meta+Ctrl+T
+    // (see scrollingEqualizeColumnWidthsShortcut). NOTE: the
     // Meta+Alt family is SHARED with the layouts pair (Meta+Alt+[ ]), the
     // cheatsheet (Meta+Alt+/), cycle-in-zone (Meta+Alt+, .), the quick-layout
     // digit slots (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) and every other
@@ -118,19 +119,19 @@ public:
     }
     static QString scrollingCycleColumnWidthShortcut()
     {
-        // The letter pairs in this family follow one convention: a mnemonic
-        // letter for the primary action and Shift on the same letter for the
-        // opposed one (I/Shift+I consume/expel, W/Shift+W widen/narrow,
-        // D/Shift+D and H/Shift+H cycle forward/back). D as in the column's
-        // Dimensions, H is height. NOT R (niri's preset-width mnemonic):
-        // Spectacle owns the entire Meta-modified R family — see the
-        // externally-owned table in the section banner — and Meta+Alt+R was
-        // a live collision with its screen recording.
-        return QStringLiteral("Meta+Alt+D");
+        // The resize family splits by verb, symmetric across both axes:
+        // ADJUST pairs live on mnemonic letters (W/Shift+W width, H/Shift+H
+        // height, per the letter+Shift convention), and the preset CYCLES
+        // page on PgUp/PgDown — plain for the width axis, Shift for the
+        // height axis. NOT R (niri's preset-width mnemonic): Spectacle owns
+        // the entire Meta-modified R family — see the externally-owned table
+        // in the section banner — and Meta+Alt+R was a live collision with
+        // its screen recording.
+        return QStringLiteral("Meta+Alt+PgUp");
     }
     static QString scrollingCycleColumnWidthBackShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+D");
+        return QStringLiteral("Meta+Alt+PgDown");
     }
     static QString scrollingIncreaseColumnWidthShortcut()
     {
@@ -153,29 +154,33 @@ public:
     }
     static QString scrollingCycleWindowHeightShortcut()
     {
-        // NOT Meta+Alt+Shift+D: that slot is the width cycle's reverse
-        // (see scrollingCycleColumnWidthShortcut for the letter+Shift
-        // convention).
-        return QStringLiteral("Meta+Alt+H");
+        // Shift tier of the width cycle's PgUp/PgDown — see
+        // scrollingCycleColumnWidthShortcut for the resize family's split.
+        return QStringLiteral("Meta+Alt+Shift+PgUp");
     }
     static QString scrollingCycleWindowHeightBackShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+H");
+        return QStringLiteral("Meta+Alt+Shift+PgDown");
     }
     static QString scrollingIncreaseWindowHeightShortcut()
     {
-        // NOT Meta+Alt+Shift+= — Shift+symbol chords never fire on Wayland
-        // (see toggleCheatsheetShortcut). PgUp/PgDown are named keys and
-        // pair naturally with the height axis.
-        return QStringLiteral("Meta+Alt+PgUp");
+        // NOT Meta+Alt+= / Meta+Alt+- — Shift+symbol chords never fire on
+        // Wayland (see toggleCheatsheetShortcut). H for height, the adjust
+        // twin of W/Shift+W on the width axis.
+        return QStringLiteral("Meta+Alt+H");
     }
     static QString scrollingDecreaseWindowHeightShortcut()
     {
-        return QStringLiteral("Meta+Alt+PgDown");
+        return QStringLiteral("Meta+Alt+Shift+H");
     }
     static QString scrollingResetWindowHeightsShortcut()
     {
-        return QStringLiteral("Meta+Alt+0");
+        // The Alt twin of Retile's Meta+Ctrl+T, beside Equalize Column
+        // Widths' Shift twin (see scrollingEqualizeColumnWidthsShortcut):
+        // all three re-flow the strip's sizes, so they share the letter.
+        // NOT Meta+Alt+0 — that read as a tenth quick-layout digit beside
+        // Meta+Alt+1-9.
+        return QStringLiteral("Meta+Ctrl+Alt+T");
     }
     static QString scrollingCenterVisibleColumnsShortcut()
     {
@@ -257,8 +262,9 @@ public:
         // The Shift twin of Retile's Meta+Ctrl+T, deliberately outside the
         // Meta+Alt family: both verbs re-flow the strip's widths, one back
         // to the layout's defaults and the other to equal shares of the
-        // viewport, so they belong on one letter. Meta+Ctrl+Shift+T is not
-        // in the externally-owned table.
+        // viewport, so they belong on one letter (as does Reset Window
+        // Heights on the Alt twin — see scrollingResetWindowHeightsShortcut).
+        // Meta+Ctrl+Shift+T is not in the externally-owned table.
         return QStringLiteral("Meta+Ctrl+Shift+T");
     }
     static QString scrollingMinimizeColumnWidthShortcut()

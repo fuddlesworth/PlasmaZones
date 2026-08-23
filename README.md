@@ -183,7 +183,7 @@ Full first-run tour: **[Getting started →](https://phosphor-works.github.io/pl
 | Previous / next layout | `Meta+Alt+[` / `Meta+Alt+]` |
 | Open layout picker | `Meta+Alt+Space` |
 | Scrolling: consume / expel window | `Meta+Alt+I` / `Meta+Alt+Shift+I` |
-| Scrolling: cycle column width forward / back | `Meta+Alt+D` / `Meta+Alt+Shift+D` |
+| Scrolling: cycle column width forward / back | `Meta+Alt+PgUp` / `Meta+Alt+PgDown` |
 | Scrolling: windowed fullscreen | `Meta+Alt+Shift+F` |
 | Open shortcut cheatsheet | `Meta+Alt+/` |
 
