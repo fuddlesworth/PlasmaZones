@@ -159,9 +159,14 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
                 // later override onto the wrong buffer and corrupt the A→B→C
                 // chain rather than refuse it. Same contract the animation
                 // registry's equivalent block states.
-                qCWarning(lcShaderRegistry)
-                    << "Shader pack" << info.name << "declared a buffer shader outside its own directory —"
-                    << "dropping the whole bufferShaders list and disabling multipass";
+                // Names the actual cause: resolveWithinPack answers empty for an
+                // EMPTY entry too, before it reaches the traversal guard, and
+                // reporting that as a path escape sent readers looking for a
+                // `../` that was never there.
+                qCWarning(lcShaderRegistry) << "Shader pack" << info.name
+                                            << (name.isEmpty() ? "declared an empty buffer shader entry —"
+                                                               : "declared a buffer shader outside its own directory —")
+                                            << "dropping the whole bufferShaders list and disabling multipass";
                 info.bufferShaderPaths.clear();
                 info.isMultipass = false;
                 break;

@@ -17,6 +17,11 @@ FROM fedora:44
 # --- Plasma 6.7 / KWin 6.7 (spec: Fedora path) ---
 # Plus the package providing /usr/bin/dbus-run-session,
 # which cmake/PhosphorTestIsolation.cmake uses to give ctest a private session bus.
+# Plus glslang, which the shader_validate_animations test needs to compile the
+# compositor-only animation packs (plasmazones-shader-validate shells out to it;
+# that test FAILS rather than skips without it). Not a build dep, so it is
+# deliberately absent from the packaging specs this list was copied from --
+# those all configure with -DBUILD_TESTING=OFF, and this image does not.
 RUN dnf install -y --setopt=install_weak_deps=False \
         /usr/bin/wayland-scanner \
         cmake \
@@ -41,6 +46,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         libxkbcommon-devel \
         vulkan-loader-devel \
         vulkan-headers \
+        glslang \
         plasma-activities-devel \
         systemd-rpm-macros \
         /usr/bin/dbus-run-session \

@@ -96,8 +96,39 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     if (workW <= 0) {
         return false; // degenerate area: qBound(1, …, workW) would invert
     }
-    const int current = resolveColumnWidthPx(col->width, params);
-    const int target = qBound(1, current + qRound(deltaPercent / 100.0 * workW), workW);
+    // Measure from what is ON SCREEN, not from the bare intent: a column
+    // sitting at its minimum-size floor resolves to a narrower intent than it
+    // renders, and stepping from the intent would let a shrink write ever
+    // smaller values while nothing moved, so the matching grow presses then
+    // did nothing visible until they climbed back out of that hole.
+    const int current = columnExtentPx(*col, params);
+    if (current <= 0) {
+        return false; // empty or fully minimized column: nothing to size
+    }
+    // Floor, the twin of the one adjustActiveWindowHeight applies across the
+    // strip: the engine's declared narrowest column, raised to the column's
+    // own client minimum when minimum sizes are respected. Every producer that
+    // spells a width as a FRACTION already clamps against it (the config
+    // read's Proportion arm, the rule overrides, the preset list parser, the
+    // persisted blob), and without this the repeatable verb was the one that
+    // could walk a column down to a single pixel and commit that extent to the
+    // client. The px-valued spellings (the config read's Fixed arm, a px rule
+    // override, a client-supplied open or handoff width) still floor at 1 by
+    // design: those are one-shot values a user or a client asked for by
+    // number, not a key that repeats while held.
+    const int fractionFloor = qMax(1, qRound(MinColumnWidthFraction * workW));
+    const int floorPx = qBound(1, qMax(fractionFloor, columnMinExtentPx(*col, params)), workW);
+    // Lowered to the current extent when the column already renders BELOW the
+    // floor, so a shrink can never widen it. That state is ordinary, not
+    // pathological: every producer that clamps as a FRACTION resolves through
+    // proportionalPx (round(f * (work + gap)) - gap), which lands a gap's
+    // worth under fractionFloor's bare round(f * work) — minimizeActiveColumnWidth
+    // writing Proportion(MinColumnWidthFraction) is exactly such a column. A
+    // bare floorPx there would make the Shrink shortcut grow the column and
+    // report success. A grow press is unaffected: its target clears the
+    // current extent either way.
+    const int lowerPx = qMin(floorPx, current);
+    const int target = qBound(lowerPx, current + qRound(deltaPercent / 100.0 * workW), workW);
     if (target == current) {
         return false;
     }
@@ -175,7 +206,17 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     if (leftover <= 0) {
         return false;
     }
-    const int current = resolveColumnWidthPx(col->width, params);
+    // Measured from what is ON SCREEN, matching adjustActiveColumnWidth and
+    // matching `covered` above, which sums columnExtentPx. Stepping from the
+    // bare intent would mismatch the two: a column held at its client minimum
+    // resolves to a narrower intent than it renders, so target could land
+    // BELOW the rendered extent, leaving the screen unchanged while the verb
+    // reported success and buried the proportional anchor under a smaller
+    // Fixed value.
+    const int current = columnExtentPx(*col, params);
+    if (current <= 0) {
+        return false; // empty or fully minimized column: nothing to expand
+    }
     const int target = qMin(workW, current + leftover);
     if (target == current) {
         // Same pixels: rewriting the intent (a Proportion(1.0) becoming a
@@ -449,6 +490,18 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
+    // Tabbed columns have no per-tile height to adjust: relayout lays every
+    // visible tile out at the column's whole content rect and never reads
+    // Tile::height there, so the measured extent is the same on every press
+    // and a write would move nothing while the verb reported success forever.
+    // Refuse instead. setActiveWindowHeight and cycleActiveWindowPresetHeight
+    // deliberately do NOT carry this guard: they promise an INTENT change,
+    // which stays true while tabbed, and the restore and handoff paths write
+    // intent into tabbed columns on purpose.
+    const Column* activeCol = activeColumn();
+    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
+        return false;
+    }
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area: qBound(1, …, workH) would invert
@@ -482,15 +535,38 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // min size in the verb): without it a shrink below minHeight would
     // "succeed" here while relayout re-clamps, so every further press
     // reports success with nothing moving on screen. With
-    // respectMinimumSize off, relayout stops re-clamping too, so the floor
-    // drops to 1 — keeping it would invert the failure (the verb refusing a
-    // shrink relayout would happily apply).
+    // respectMinimumSize off, relayout stops re-clamping too, so the CLIENT
+    // half of the floor drops out (keeping it would invert the failure: the
+    // verb would refuse a shrink relayout would happily apply). The engine's
+    // own fraction floor, below, is what remains underneath.
     // minCross, matching the clamp relayout applies to this same value.
     // Capped at workH as well: a client cross-minimum LARGER than the work
     // area (reachable through a work-area shrink after the minimum was
     // recorded) would otherwise invert the qBound below (min > max is UB).
-    const int floorPx = params.respectMinimumSize ? qBound(1, tile->minCross(params.axis), workH) : 1;
-    const int target = qBound(floorPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
+    //
+    // The engine's own declared shortest tile is the floor under that, so the
+    // verb cannot walk a window down to a single pixel with minimum sizes
+    // off. The producers that spell a height as a FRACTION clamp against
+    // MinWindowHeightFraction (the preset list parser, the per-screen preset
+    // override list, the persisted blob's Preset arm, the open rule's height
+    // fraction), and this one did not. Height has no Proportion spelling at
+    // all. The rule channel's default window height is gated differently but
+    // to the same number: it is range-CHECKED at the rules boundary, where an
+    // out-of-range fraction is rejected outright rather than clamped, against
+    // PhosphorRules::MinColumnWidthRatio — the constant ScrollTypes.h keeps in
+    // sync with MinWindowHeightFraction. So the engine-side 1px floor it
+    // commits with is defensive on an already-gated value.
+    const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
+    const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
+    const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);
+    // Lowered to the current height when the tile already renders below the
+    // floor, the twin of the guard adjustActiveColumnWidth documents: the
+    // smallest LEGAL preset height resolves through proportionalPx to a gap's
+    // worth under fractionFloor, and a crowded column's Auto share can land
+    // under it too, so a bare floorPx would let a Shrink press grow the
+    // window.
+    const int lowerPx = qMin(floorPx, currentPx);
+    const int target = qBound(lowerPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
     if (target == currentPx) {
         return false;
     }

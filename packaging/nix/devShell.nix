@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # packaging/nix/devShell.nix — the `nix develop` environment. It is
@@ -11,6 +12,7 @@
   clang-tools,
   cmake-language-server,
   qt6,
+  glslang,
 }:
 
 mkShell {
@@ -24,6 +26,12 @@ mkShell {
     clang-tools           # clangd + clang-format
     cmake-language-server # CMake LSP
     qt6.qttools           # qdbus6, qmlformat, lupdate / lrelease
+    # Needed by the shader_validate_animations test, which shells out to it to
+    # compile the compositor-only animation packs and FAILS rather than skips
+    # when it is absent. It comes from the devShell rather than the package
+    # because the package builds with -DBUILD_TESTING=OFF, while the shellHook
+    # below tells developers to configure with it ON.
+    glslang
   ];
 
   shellHook = ''

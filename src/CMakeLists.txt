@@ -945,7 +945,9 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # PhosphorAnimation for the animation effect parser + entry scaffold.
 add_executable(plasmazones-shader-validate
     shadervalidate/main.cpp
-    shadervalidate/packvalidators.cpp
+    shadervalidate/packvalidator_overlay.cpp
+    shadervalidate/packvalidator_animation.cpp
+    shadervalidate/packvalidator_surface.cpp
     shadervalidate/packvalidatorcommon.cpp
 )
 target_link_libraries(plasmazones-shader-validate
@@ -965,7 +967,20 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
 # packs (data/overlays), animation packs (--animation, data/animations), and
 # surface packs (--surface, data/surface) are distinct authoring models with
-# different entry conventions, so each gets its own invocation.
+# different entry conventions, so each gets its own invocation. (The validator
+# also detects the model per pack now, so the flags are belt-and-braces here;
+# they pin each test to one model regardless of what a tree grows later.)
+#
+# REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
+# accepted) on PATH for shader_validate_animations.
+# Compositor-only animation packs (35 of the bundled 94, every desktop-* and the
+# geometry set) are classic-GL, which QShaderBaker's SPIR-V target rejects by
+# design, so they are compiled out of process through glslang's default
+# GLSL-semantics mode. That invocation FAILS rather than skips when the binary
+# is absent: those packs are compiled nowhere else in a headless run (the
+# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip
+# would put the gate back to lints-only for a third of the set. The other two
+# invocations need no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)
@@ -983,7 +998,7 @@ if(BUILD_TESTING)
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
     # the explicit --overlay/--animation/--surface directory arguments and
-    # derives include paths from them (packvalidators.cpp). The one host
+    # derives include paths from them (the packvalidator_* arms). The one host
     # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
     # `builtin:` buffer fallback resolves through QStandardPaths when a pack
     # names a builtin buffer whose sibling `../shared/` copy is missing —
