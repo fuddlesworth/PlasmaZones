@@ -1243,7 +1243,7 @@ private:
     bool hasWindowAppearanceDefault() const
     {
         return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar
-            || m_windowAppearanceDefault.showOpacityTint;
+            || m_windowAppearanceDefault.showOpacityTint || m_windowAppearanceDefault.anyKeepFloatingAbove();
     }
 
     /// True when the decoration profile tree could decorate some window (a
@@ -2206,6 +2206,15 @@ private:
     /// that was rule-held BEFORE its class mutated into a shielded one still
     /// drains its snapshot through the restore branch.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
+
+    /// The layer slot's config-side filler: true when @p windowId is floating
+    /// and the keep-floating-above toggle for the placement mode of the
+    /// window's SCREEN is on. The mode comes from the per-screen engine
+    /// discriminator the tiling handler holds (scrolling, else autotile-managed
+    /// is tiling, else snapping), because a floated window carries no mode of
+    /// its own. Consulted by reconcileRuleWindowLayer only when no
+    /// SetWindowLayer rule owns the window.
+    bool keepFloatingAboveDefault(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// One-shot fullscreen-at-open verdict for the OpenFullscreen rule:
     /// true fullscreens the opening window, false vetoes the app's own

@@ -83,7 +83,11 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     // the ~30-accessor rule query for sessions whose rules never touch the
     // layer (opacity/border-only rule sets included). A lingering snapshot
     // still falls through so the restore below drains it.
-    if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
+    // The per-mode keep-floating-above config default is the layer slot's
+    // config-side filler (rule slot ?? config default, the hideTitleBar shape),
+    // so it opens the gate the same way a layer rule does.
+    if (!m_shaderManager.hasWindowLayerRules() && !m_windowAppearanceDefault.anyKeepFloatingAbove()
+        && !m_ruleWindowLayerSnapshots.contains(windowId)) {
         return;
     }
     // Windowed-fullscreen tiles own their keep flags for the duration of
@@ -124,7 +128,16 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     // entirely and never enter the map.
     std::optional<QString> layer;
     if (!isRuleShieldedSurface(w)) {
-        layer = resolveWindowLayer(resolveRuleActions(w, windowId));
+        // Rule slot first (an explicit SetWindowLayer of any token, Normal and
+        // Below included, beats the config default), then the per-mode
+        // keep-floating-above default for a floated window. hasWindowLayerRules
+        // gates the rule query so a default-only session never builds it.
+        if (m_shaderManager.hasWindowLayerRules()) {
+            layer = resolveWindowLayer(resolveRuleActions(w, windowId));
+        }
+        if (!layer && keepFloatingAboveDefault(windowId, w)) {
+            layer = QString(PhosphorRules::WindowLayerToken::Above);
+        }
     }
     const auto it = m_ruleWindowLayerSnapshots.find(windowId);
     if (!layer) {
@@ -158,6 +171,27 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     const bool below = (*layer == PhosphorRules::WindowLayerToken::Below);
     kw->setKeepAbove(above);
     kw->setKeepBelow(below);
+}
+
+bool PlasmaZonesEffect::keepFloatingAboveDefault(const QString& windowId, KWin::EffectWindow* w) const
+{
+    const WindowAppearanceDefault& def = m_windowAppearanceDefault;
+    if (!def.anyKeepFloatingAbove() || !isWindowFloating(windowId)) {
+        return false;
+    }
+    // Screen mode from the tiling handler's per-screen sets: a scrolling
+    // screen is a managed screen also in the scrolling set, any other
+    // managed screen is autotile, and an unmanaged screen is snapping. The
+    // FloatingCache only ever holds windows an engine floated, so a screen
+    // with placement disabled contributes no floats to begin with.
+    const QString screenId = getWindowScreenId(w, windowId);
+    if (m_tilingHandler->isScrollingScreen(screenId)) {
+        return def.keepFloatingAboveScrolling;
+    }
+    if (m_tilingHandler->isManagedScreen(screenId)) {
+        return def.keepFloatingAboveTiling;
+    }
+    return def.keepFloatingAboveSnapping;
 }
 
 void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::EffectWindow* w)

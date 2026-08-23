@@ -88,6 +88,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Keep floating windows above")
+            searchAnchor: "autotileKeepFloatingAbove"
+            description: i18n("Stack windows you float above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.")
+
+            SettingsSwitch {
+                checked: appSettings.autotileKeepFloatingAbove
+                accessibleName: i18n("Keep floating windows above")
+                onToggled: function (newValue) {
+                    appSettings.autotileKeepFloatingAbove = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Sticky windows")
             searchAnchor: "stickyWindows"
             description: i18n("How to handle windows that appear on all desktops")

@@ -339,6 +339,9 @@ void SettingsAdaptor::initializeRegistryScrolling()
     REGISTER_COLOR_SETTING("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
                            setScrollingDropIndicatorBorderColor)
     if (concrete) {
+        // Effect-only consumer (reconcileRuleWindowLayer): keep scroll-floated
+        // windows stacked above the strip. Concrete because no daemon reader exists.
+        REGISTER_CONCRETE_BOOL("scrollingKeepFloatingAbove", scrollingKeepFloatingAbove, setScrollingKeepFloatingAbove)
         REGISTER_RAW_THEME_COLOR("scrollingDropIndicatorColorRaw", concrete, concrete, scrollingDropIndicatorColorRaw,
                                  setScrollingDropIndicatorColorRaw)
         REGISTER_RAW_THEME_COLOR("scrollingDropIndicatorBorderColorRaw", concrete, concrete,

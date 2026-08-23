@@ -741,6 +741,9 @@ private Q_SLOTS:
         const auto* restoreFloated = findKey(schema, group, ConfigDefaults::restoreFloatedOnLoginKey());
         QVERIFY(restoreFloated);
         QCOMPARE(restoreFloated->defaultValue.toBool(), ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin());
+        const auto* keepAbove = findKey(schema, group, ConfigDefaults::keepFloatingAboveKey());
+        QVERIFY(keepAbove);
+        QCOMPARE(keepAbove->defaultValue.toBool(), ConfigDefaults::scrollingKeepFloatingAbove());
 
         // The drag-insert pair. Every other key in the group is pinned
         // above, and these two were the only ones that were not.

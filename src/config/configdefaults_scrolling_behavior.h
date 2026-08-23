@@ -176,6 +176,13 @@ public:
     {
         return true;
     }
+    /// Keep a scroll-floated window stacked above the strip. The scroll twin
+    /// of autotileKeepFloatingAbove, read by the KWin effect only. The literal
+    /// matches the autotile canonical's value for the same reason as above.
+    static constexpr bool scrollingKeepFloatingAbove()
+    {
+        return false;
+    }
     /// Percent of the work-area extent one increase/decrease shortcut press
     /// moves a column width or window height. Daemon-side only: the engine
     /// receives an already-computed delta, so these never enter

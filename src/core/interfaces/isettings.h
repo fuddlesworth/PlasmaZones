@@ -735,6 +735,8 @@ Q_SIGNALS:
     void restoreWindowsToZonesOnLoginChanged();
     void snappingRestoreFloatedWindowsOnLoginChanged();
     void autotileRestoreFloatedWindowsOnLoginChanged();
+    void snappingKeepFloatingAboveChanged();
+    void autotileKeepFloatingAboveChanged();
     void snapUnfloatFallbackToZoneChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
@@ -1031,6 +1033,7 @@ Q_SIGNALS:
     void scrollingRespectMinimumSizeChanged();
     void scrollingRestoreStripsOnLoginChanged();
     void scrollingRestoreFloatedWindowsOnLoginChanged();
+    void scrollingKeepFloatingAboveChanged();
     void scrollingColumnWidthStepPercentChanged();
     void scrollingWindowHeightStepPercentChanged();
     void scrollingViewScrollStepPercentChanged();

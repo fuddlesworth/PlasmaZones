@@ -354,6 +354,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreOnUnsnapKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreOnLoginKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::keepFloatingAboveKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::unfloatFallbackToZoneKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::stickyWindowHandlingKey()},
              // The default snapping layout. No editor row exists for it on this
@@ -384,6 +385,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingBehaviorGroup(), CD::focusNewWindowsKey()},
              {CD::tilingBehaviorGroup(), CD::focusFollowsMouseKey()},
              {CD::tilingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::tilingBehaviorGroup(), CD::keepFloatingAboveKey()},
              {CD::tilingGapsGroup(), CD::smartGapsKey()},
          }},
         {QStringLiteral("tiling-algorithm"),
@@ -501,6 +503,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::respectMinimumSizeKey()},
              {CD::scrollingBehaviorGroup(), CD::restoreOnLoginKey()},
              {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::scrollingBehaviorGroup(), CD::keepFloatingAboveKey()},
              {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
              {CD::scrollingBehaviorGroup(), CD::viewScrollStepPercentKey()},

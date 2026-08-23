@@ -194,6 +194,16 @@ public:
     {
         return autotileRestoreFloatedWindowsOnLogin();
     }
+    // Keep a FLOATED window stacked above the windows the mode places. Per-engine
+    // like the restore toggle above; snapping delegates to the autotile canonical.
+    static bool autotileKeepFloatingAbove()
+    {
+        return false;
+    }
+    static bool snappingKeepFloatingAbove()
+    {
+        return autotileKeepFloatingAbove();
+    }
     static bool snapUnfloatFallbackToZone()
     {
         return false;

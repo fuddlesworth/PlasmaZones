@@ -24,6 +24,7 @@
  */
 
 #include <QTest>
+#include <QSignalSpy>
 #include <QColor>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -727,6 +728,82 @@ private Q_SLOTS:
 
         Settings settings;
         QCOMPARE(settings.autotileOverflowBehavior(), PhosphorTiles::AutotileOverflowBehavior::Unlimited);
+    }
+
+    // =========================================================================
+    // Per-mode keep-floating-above: three independent slots (one per engine,
+    // the float-is-per-mode invariant), each defaulting off, each round-
+    // tripping through its own group, and each emitting its own signal only
+    // on a real change. Presence after a default-equal write is deliberately
+    // NOT asserted (sparse persistence deletes default-equal keys).
+    // =========================================================================
+
+    void testKeepFloatingAbove_defaultsOffPerMode()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QCOMPARE(settings.snappingKeepFloatingAbove(), ConfigDefaults::snappingKeepFloatingAbove());
+        QCOMPARE(settings.autotileKeepFloatingAbove(), ConfigDefaults::autotileKeepFloatingAbove());
+        QCOMPARE(settings.scrollingKeepFloatingAbove(), ConfigDefaults::scrollingKeepFloatingAbove());
+        QVERIFY(!settings.snappingKeepFloatingAbove());
+        QVERIFY(!settings.autotileKeepFloatingAbove());
+        QVERIFY(!settings.scrollingKeepFloatingAbove());
+    }
+
+    void testKeepFloatingAbove_snappingRoundTripsIndependently()
+    {
+        IsolatedConfigGuard guard;
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::snappingKeepFloatingAboveChanged);
+            settings.setSnappingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            settings.setSnappingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(!settings.autotileKeepFloatingAbove());
+            QVERIFY(!settings.scrollingKeepFloatingAbove());
+            settings.save();
+        }
+        Settings reloaded;
+        QVERIFY(reloaded.snappingKeepFloatingAbove());
+        QVERIFY(!reloaded.autotileKeepFloatingAbove());
+        QVERIFY(!reloaded.scrollingKeepFloatingAbove());
+    }
+
+    void testKeepFloatingAbove_autotileRoundTripsIndependently()
+    {
+        IsolatedConfigGuard guard;
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::autotileKeepFloatingAboveChanged);
+            settings.setAutotileKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(!settings.snappingKeepFloatingAbove());
+            QVERIFY(!settings.scrollingKeepFloatingAbove());
+            settings.save();
+        }
+        Settings reloaded;
+        QVERIFY(reloaded.autotileKeepFloatingAbove());
+        QVERIFY(!reloaded.snappingKeepFloatingAbove());
+        QVERIFY(!reloaded.scrollingKeepFloatingAbove());
+    }
+
+    void testKeepFloatingAbove_scrollingRoundTripsIndependently()
+    {
+        IsolatedConfigGuard guard;
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::scrollingKeepFloatingAboveChanged);
+            settings.setScrollingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(!settings.snappingKeepFloatingAbove());
+            QVERIFY(!settings.autotileKeepFloatingAbove());
+            settings.save();
+        }
+        Settings reloaded;
+        QVERIFY(reloaded.scrollingKeepFloatingAbove());
+        QVERIFY(!reloaded.snappingKeepFloatingAbove());
+        QVERIFY(!reloaded.autotileKeepFloatingAbove());
     }
 };
 

@@ -318,6 +318,28 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Per-mode keep-floating-above (the window LAYER's config default). Same
+    // type-guard + change-detect + sweep pattern; the sweep's
+    // updateAllDecorations runs reconcileRuleWindowLayer for EVERY window on
+    // every desktop, so a toggle applies or restores the layer in one pass.
+    const auto loadKeepFloatingAbove = [this](const QString& name, bool WindowAppearanceDefault::* field) {
+        loadSettingAsync(name, [this, field](const QVariant& v) {
+            if (v.typeId() != QMetaType::Bool) {
+                return;
+            }
+            const bool b = v.toBool();
+            if (m_windowAppearanceDefault.*field != b) {
+                m_windowAppearanceDefault.*field = b;
+                scheduleBorderSweep();
+            }
+        });
+    };
+    loadKeepFloatingAbove(QStringLiteral("snappingKeepFloatingAbove"),
+                          &WindowAppearanceDefault::keepFloatingAboveSnapping);
+    loadKeepFloatingAbove(QStringLiteral("autotileKeepFloatingAbove"),
+                          &WindowAppearanceDefault::keepFloatingAboveTiling);
+    loadKeepFloatingAbove(QStringLiteral("scrollingKeepFloatingAbove"),
+                          &WindowAppearanceDefault::keepFloatingAboveScrolling);
     // Plain opacity+tint layer (the border's opacity analogue) — same
     // change-detect + sweep pattern as the border keys above.
     loadSettingAsync(QStringLiteral("showWindowOpacityTint"), [this](const QVariant& v) {

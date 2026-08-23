@@ -294,6 +294,10 @@ public:
     // FLOATED (unsnapped / untiled) window to its previous position on reopen.
     P_CONFIG_KEY(restoreFloatedOnLoginKey, "RestoreFloatedOnLogin")
     P_CONFIG_KEY(unfloatFallbackToZoneKey, "UnfloatFallbackToZone")
+    // Shared by Snapping.Behavior.WindowHandling, Tiling.Behavior and
+    // Scrolling.Behavior: stack the mode's floated windows above the windows it
+    // places (keep-above, applied by the KWin effect beneath any SetWindowLayer rule).
+    P_CONFIG_KEY(keepFloatingAboveKey, "KeepFloatingAbove")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")

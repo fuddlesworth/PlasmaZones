@@ -66,6 +66,16 @@ void SettingsAdaptor::initializeRegistrySnapping()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
+#define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
+    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
+        return concrete->getter();                                                                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
+        concrete->setter(v.toBool());                                                                                  \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
+
 #define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -238,6 +248,9 @@ void SettingsAdaptor::initializeRegistrySnapping()
 
     // Snapping shortcuts (concrete Settings only)
     if (concrete) {
+        // Effect-only consumer (reconcileRuleWindowLayer): keep snap-floated
+        // windows stacked above the zones. Concrete because no daemon reader exists.
+        REGISTER_CONCRETE_BOOL("snappingKeepFloatingAbove", snappingKeepFloatingAbove, setSnappingKeepFloatingAbove)
         // Snap to zone by number shortcuts
         REGISTER_CONCRETE_STRING("snapToZone1Shortcut", snapToZone1Shortcut, setSnapToZone1Shortcut)
         REGISTER_CONCRETE_STRING("snapToZone2Shortcut", snapToZone2Shortcut, setSnapToZone2Shortcut)

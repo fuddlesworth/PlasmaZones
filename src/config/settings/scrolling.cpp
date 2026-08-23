@@ -568,6 +568,10 @@ P_STORE_GET(bool, scrollingRestoreFloatedWindowsOnLogin, scrollingBehaviorGroup,
 P_STORE_SET_BOOL(setScrollingRestoreFloatedWindowsOnLogin, scrollingBehaviorGroup, restoreFloatedOnLoginKey,
                  scrollingRestoreFloatedWindowsOnLoginChanged)
 
+P_STORE_GET(bool, scrollingKeepFloatingAbove, scrollingBehaviorGroup, keepFloatingAboveKey, bool)
+P_STORE_SET_BOOL(setScrollingKeepFloatingAbove, scrollingBehaviorGroup, keepFloatingAboveKey,
+                 scrollingKeepFloatingAboveChanged)
+
 P_STORE_GET(int, scrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey, int)
 P_STORE_SET_INT(setScrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey,
                 scrollingColumnWidthStepPercentChanged)

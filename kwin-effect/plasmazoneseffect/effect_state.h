@@ -65,6 +65,18 @@ struct WindowAppearanceDefault
     double opacity = 1.0;
     double tintStrength = 0.0;
     QString tintColor;
+    // Keep-floating-above per placement mode (Snapping.Behavior.WindowHandling /
+    // Tiling.Behavior / Scrolling.Behavior KeepFloatingAbove). Fills the window
+    // LAYER slot with "above" for a floated window on a screen running that
+    // mode when no SetWindowLayer rule owns it; see reconcileRuleWindowLayer.
+    bool keepFloatingAboveSnapping = false;
+    bool keepFloatingAboveTiling = false;
+    bool keepFloatingAboveScrolling = false;
+
+    bool anyKeepFloatingAbove() const
+    {
+        return keepFloatingAboveSnapping || keepFloatingAboveTiling || keepFloatingAboveScrolling;
+    }
 };
 
 /// Debounced frame-geometry shadow push state per window. The window pointer

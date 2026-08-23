@@ -148,6 +148,9 @@ void SettingsAdaptor::initializeRegistryAutotile()
     // Autotile core settings (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_BOOL("autotileEnabled", autotileEnabled, setAutotileEnabled)
+        // Effect-only consumer (reconcileRuleWindowLayer): keep autotile-floated
+        // windows stacked above the tiles. Concrete because no daemon reader exists.
+        REGISTER_CONCRETE_BOOL("autotileKeepFloatingAbove", autotileKeepFloatingAbove, setAutotileKeepFloatingAbove)
         REGISTER_CONCRETE_STRING("defaultAutotileAlgorithm", defaultAutotileAlgorithm, setDefaultAutotileAlgorithm)
         REGISTER_CONCRETE_DOUBLE("autotileSplitRatio", autotileSplitRatio, setAutotileSplitRatio)
         REGISTER_CONCRETE_INT("autotileMasterCount", autotileMasterCount, setAutotileMasterCount)
