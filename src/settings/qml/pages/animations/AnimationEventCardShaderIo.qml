@@ -68,18 +68,47 @@ QtObject {
         card._noteWriteResult(card._setShaderParamsOnAll(next));
     }
 
-    /// Whether this event stores parameter values of its OWN, as opposed to
-    /// resolving an ancestor's. Distinct from `_ownsShaderParamsOnly`, which is
-    /// additionally false when this event owns its pack — here the question is
-    /// only about the parameter map.
-    function _ownsAnyShaderParams() {
-        const own = card._primaryRawShader && card._primaryRawShader.parameters;
-        return Boolean(own) && Object.keys(own).length > 0;
+    /// Whether EVERY write path is already showing @p defaults and owns no
+    /// parameters of its own — i.e. whether a Reset would change nothing that
+    /// anyone can see, anywhere in the group.
+    ///
+    /// Asked of the GROUP, not the primary, because the write it gates is a
+    /// group write. Deciding from the primary alone would let a Reset skip
+    /// while a mirror sat on tuned values, leaving the group split behind a
+    /// banner that promises the next change reaches all of it. The sibling
+    /// no-op guard in `onShaderEffectActivated` refuses the same shortcut for
+    /// the same reason.
+    ///
+    /// Two tree reads per path, on a discrete button click over a group that is
+    /// two paths today. Deliberately not on the drag path.
+    function _groupIsAtPackDefaults(defaults) {
+        const paths = card._writePaths;
+        for (var i = 0; i < paths.length; ++i) {
+            const raw = settingsController.animationsPage.rawShaderProfile(paths[i]);
+            const own = raw && raw.parameters;
+            if (own && Object.keys(own).length > 0)
+                return false;
+            const resolved = settingsController.animationsPage.resolvedShaderProfile(paths[i]);
+            const inherited = (resolved && resolved.parameters) || ({});
+            // Overlaid rather than compared directly: parameters reach a resolve
+            // only from a stored override, so a path inheriting nothing resolves
+            // an EMPTY map while its rows already render the pack's defaults.
+            if (!shaderIo._sameParamValues(defaults, Object.assign({}, defaults, inherited)))
+                return false;
+        }
+        return true;
     }
 
     /// Flat value-equality over two parameter maps. Parameter values are
     /// scalars (numbers, bools, strings, colors), so a key-wise `!==` is the
     /// whole comparison; there is no nested structure to recurse into.
+    ///
+    /// Strict `!==` means two spellings of the same COLOUR compare unequal — a
+    /// pack's schema default is typically `#RRGGBB` while the picker persists
+    /// `#AARRGGBB`. That direction is safe: the comparison degrades to "not
+    /// equal", and every caller treats not-equal as "write", which is the
+    /// conservative arm. Do not add normalisation without re-checking who
+    /// depends on the strictness.
     function _sameParamValues(a, b) {
         const left = a || {};
         const right = b || {};

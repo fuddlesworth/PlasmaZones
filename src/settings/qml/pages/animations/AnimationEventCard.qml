@@ -415,8 +415,8 @@ Item {
     function _writeAllShaderParams() {
         return shaderIo._writeAllShaderParams.apply(shaderIo, arguments);
     }
-    function _ownsAnyShaderParams() {
-        return shaderIo._ownsAnyShaderParams.apply(shaderIo, arguments);
+    function _groupIsAtPackDefaults() {
+        return shaderIo._groupIsAtPackDefaults.apply(shaderIo, arguments);
     }
     function _sameParamValues() {
         return shaderIo._sameParamValues.apply(shaderIo, arguments);
@@ -1131,22 +1131,17 @@ Item {
                     // showing values that no longer describe anything stored.
                     const resolvedNow = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
                     const resolvedParams = (resolvedNow && resolvedNow.parameters) || ({});
-                    // Compared as an EFFECTIVE set, not as the stored one.
-                    // Parameters reach a resolve only from a stored override —
-                    // the built-in per-event default contributes an effectId and
-                    // nothing else — so an event whose cascade stores none
-                    // resolves an empty map while every row already renders the
-                    // pack's own default. Comparing that empty map directly
-                    // against the full defaults map fails on the key count alone
-                    // and would send exactly the untouched event this guard
-                    // exists for down the writing path. Overlaying what IS
-                    // resolved onto the defaults answers the question actually
-                    // being asked — is what the user sees already the default
-                    // everywhere — and it stays right for a PARTIAL ancestor map
-                    // too, where a key-count comparison is wrong in both
-                    // directions.
-                    const effectiveParams = Object.assign({}, defaults, resolvedParams);
-                    if (!root._ownsAnyShaderParams() && root._sameParamValues(defaults, effectiveParams)) {
+                    // Asked of the whole GROUP, because the write below is a
+                    // group write. Parameters reach a resolve only from a stored
+                    // override — the built-in per-event default contributes an
+                    // effectId and nothing else — so a path inheriting nothing
+                    // resolves an EMPTY map while its rows already render the
+                    // pack's own defaults. `_groupIsAtPackDefaults` overlays
+                    // what each path resolves onto the defaults and compares
+                    // that, which answers the question actually being asked and
+                    // stays right for a partial ancestor map, where comparing
+                    // the stored map directly is wrong in both directions.
+                    if (root._groupIsAtPackDefaults(defaults)) {
                         root.refreshShaderFromTree();
                         return;
                     }
