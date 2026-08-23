@@ -370,6 +370,22 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";
 
+        // Drop the dead session's state HERE, not at daemonReady. The daemon
+        // claims the name in init() and emits daemonReady only at the end of
+        // start(), and in between it restores its strip and pushes a tile batch
+        // and a tab-strip payload at an effect that has already re-announced its
+        // windows. Draining at daemonReady discarded those pushes; tiled
+        // membership in particular has no replay to restore it, so the tab
+        // indicators kept a correct model with no anchor to blit it against
+        // until the next relayout. This edge is the last moment at which
+        // everything the effect holds is provably the OLD session's. See
+        // TilingHandler::drainDeadSessionState.
+        //
+        // It is also the edge that always fires: a straight old→new owner
+        // handover produces no serviceUnregistered edge, which is why the
+        // teardown above cannot be the sole drain site.
+        m_tilingHandler->drainDeadSessionState();
+
         // DO NOT set m_daemonGate.serviceRegistered = true here.
         // The daemon registers its D-Bus service name in init(), BEFORE start()
         // runs heavy initialization and BEFORE the event loop begins. Keep the

@@ -229,12 +229,38 @@ public:
     }
     void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
     void onDaemonReady();
+
+    /// Drop everything the DEAD daemon session owned, at the moment its
+    /// successor claims the bus name and before that successor can push
+    /// anything.
+    ///
+    /// Called from the serviceRegistered handler in lifecycle_wiring_daemon.cpp,
+    /// NOT from onDaemonReady, and the distinction is the whole point. A daemon
+    /// claims the well-known name in init(), long before it emits daemonReady at
+    /// the end of start() — and in between it lays out the restored strip and
+    /// pushes a tile batch and a tab-strip payload at an effect that has already
+    /// re-announced its windows. Draining at daemonReady therefore wiped state
+    /// the NEW session had just established. The tab-strip model survived that
+    /// (loadSettings replays it), but tiled membership has no replay: it re-arms
+    /// only on the next tile batch, and a restored strip that needs no relayout
+    /// sends none. With membership gone scrollManagedOutputFor answers null for
+    /// every column, prePaintScreen elects no tab-indicator anchor, and the pills
+    /// stay unpainted over a correct model until the user scrolls hard enough to
+    /// force a fresh batch. Draining at the name-claim edge closes that window:
+    /// the successor cannot have pushed yet, so nothing it sends is ever thrown
+    /// away.
+    ///
+    /// The edge is also the only one guaranteed to run. A straight old→new owner
+    /// handover produces no serviceUnregistered edge, so the teardown in
+    /// lifecycle_wiring_daemon.cpp cannot be the sole drain site; a new owner
+    /// always produces a serviceRegistered one.
+    void drainDeadSessionState();
+
     /// Drop every map whose contents belong to ONE daemon session.
     ///
-    /// Called by onDaemonReady, which is the only edge guaranteed to run: a
-    /// straight old→new daemon owner handover produces no serviceUnregistered
-    /// edge at all, so the teardown in lifecycle_wiring_daemon.cpp cannot be the
-    /// sole drain site. That teardown drains a DIFFERENT, deliberately smaller
+    /// Called by drainDeadSessionState, which owns the timing argument above.
+    /// The teardown in lifecycle_wiring_daemon.cpp cannot be the sole drain
+    /// site. That teardown drains a DIFFERENT, deliberately smaller
     /// set (the rule-visible inputs plus the compositor restores), because the
     /// maps here must keep answering for the daemon-down interval — a window's
     /// notified screen, its minimize-float ownership and its deferred routes all

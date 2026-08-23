@@ -1017,14 +1017,14 @@ void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wind
     m_effect->updateAllDecorations();
 }
 
-void TilingHandler::onDaemonReady()
+void TilingHandler::drainDeadSessionState()
 {
-    // Connect BEFORE querying: a screensChanged emitted after the daemon
-    // serves Properties.Get but before our AddMatch lands would be both lost
-    // and unable to bump the generation guard. Connect-then-query is
-    // strictly sound — a signal lost pre-AddMatch implies the Get (served
-    // after the change) already returns the new set.
-    connectSignals();
+    // Everything in this function describes the daemon session that just
+    // ended. It runs on the successor's name-claim edge, before that successor
+    // has emitted daemonReady and therefore before it can have pushed a single
+    // signal — see the header for why draining any later destroyed the new
+    // session's own state.
+    //
     // The scrolling set is a pure discriminator with no lifecycle attached,
     // so clear the DEAD session's snapshot before loadSettings re-queries:
     // an errored/timed-out Properties.Get (daemon still starting, or one
@@ -1099,13 +1099,9 @@ void TilingHandler::onDaemonReady()
     // daemon would otherwise pass its generation gate and reinstate a
     // screen set the new daemon never published.
     ++m_screensSignalGeneration;
-    // No m_initialScreenQueryPending write here: loadSettings() below arms it
-    // for its query and the reply clears it — a false store first was dead.
-    loadSettings();
-    // Everything below the bring-up-only work above is the per-session drain,
-    // which lives in one named function so the list has a single home (see the
-    // header for the paired invariant and for why the serviceUnregistered
-    // teardown deliberately drains a smaller set).
+    // The per-session drain lives in one named function so the list has a
+    // single home (see the header for the paired invariant and for why the
+    // serviceUnregistered teardown deliberately drains a smaller set).
     clearPerSessionDaemonState();
     // Paired with the tiled-membership clear inside that drain: every memoised
     // rule verdict was resolved against the dead session's IsTiled membership.
@@ -1113,6 +1109,25 @@ void TilingHandler::onDaemonReady()
     // The cache clear alone revives nothing — an IsTiled-keyed border or
     // opacity rule is baked into the decoration at build time.
     m_effect->scheduleBorderSweep();
+}
+
+void TilingHandler::onDaemonReady()
+{
+    // The dead session's state is already gone: drainDeadSessionState ran on
+    // the serviceRegistered edge, which precedes this signal by the whole of
+    // the daemon's start(). Nothing here may re-clear it — the new daemon has
+    // been pushing since it claimed the name, and this is where that push is
+    // completed rather than discarded.
+    //
+    // Connect BEFORE querying: a screensChanged emitted after the daemon
+    // serves Properties.Get but before our AddMatch lands would be both lost
+    // and unable to bump the generation guard. Connect-then-query is
+    // strictly sound — a signal lost pre-AddMatch implies the Get (served
+    // after the change) already returns the new set.
+    connectSignals();
+    // No m_initialScreenQueryPending write here: loadSettings() arms it for
+    // its query and the reply clears it — a false store first was dead.
+    loadSettings();
 
     // Re-send the effect's pre-autotile geometry cache to the freshly
     // (re)connected daemon as a backstop. storePreTileGeometry lands in the
