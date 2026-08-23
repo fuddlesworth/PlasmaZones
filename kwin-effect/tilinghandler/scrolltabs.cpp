@@ -987,9 +987,11 @@ void TilingHandler::voidInFlightScrollTabFetches()
     // Bumped at DISPATCH by the fetches themselves, so this is only for the
     // daemon-loss edge, where no re-dispatch follows: a reply the dead daemon
     // sent just before dropping its name must not re-install its payload
-    // after the teardown cleared it. NOT called from the per-session drain
-    // on bring-up, which runs AFTER loadSettings dispatched the replay and
-    // would void it.
+    // after the teardown cleared it. NOT called from the per-session drain,
+    // which has nothing left to void: the teardown edge already voided the
+    // dead daemon's in-flight replies, and the drain runs on the successor's
+    // name-claim edge, before loadSettings dispatches the replay this would
+    // otherwise discard.
     ++m_scrollTabStripsQueryGeneration;
     ++m_scrollTabOverridesQueryGeneration;
 }

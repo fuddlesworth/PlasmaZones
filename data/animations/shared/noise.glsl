@@ -190,11 +190,12 @@ float boundaryMask(vec2 uv) {
 // and the sub-pixel outside half is ordinary edge AA, not a halo.
 //
 // `pad` widens the accepted range to [-pad, 1 + pad] per axis so a
-// surface-extent pack keeps the decoration chain's outer margin — the halo
-// the compositor composited into the padded uSurfaceLayer canvas, which
-// surfaceColor() resolves for uv outside [0, 1] — instead of cropping it at
-// the frame edge. Pass surfacePadRel() (card-space, frame-anchored, so it
-// pairs with the anchor-space uv here); an unpadded window carries vec2(0)
+// surface-extent pack keeps everything the compositor composited into the
+// uSurfaceLayer canvas past the frame — the window's shadow band and the
+// decoration chain's outer margin, which surfaceColor() resolves for uv
+// outside [0, 1] — instead of cropping it at the frame edge. Pass
+// surfacePadRel() (card-space, frame-anchored, so it pairs with the
+// anchor-space uv here); a window with no surface layer carries vec2(0)
 // and the crop is bit-identical to the bare [0, 1] form.
 float boundaryMaskAA(vec2 uv, vec2 pad) {
     vec2 fw = max(fwidth(uv), vec2(1.0e-5));

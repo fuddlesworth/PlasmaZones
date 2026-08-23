@@ -1160,8 +1160,8 @@ void PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap()
         // last-painted alpha forever once the rule leaves the evaluator, unless
         // something damages it. The daemon-LOSS caller happens to be covered
         // (its clearAllDecorations tears down the tint layer), but the bring-up
-        // caller is not: a straight old→new owner handover emits no
-        // serviceUnregistered edge, so decorations are still live there. This
+        // caller is not: it runs on the successor's name-claim edge, where the
+        // decorations have already been rebuilt or never torn down. This
         // is the one repaint this path owns; borders and rule verdicts remain
         // the callers' invalidateAllRuleCaches + scheduleBorderSweep. The
         // "after" term is kept for symmetry with the admission pass's gate;

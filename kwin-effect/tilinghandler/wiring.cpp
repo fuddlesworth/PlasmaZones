@@ -162,7 +162,7 @@ void TilingHandler::loadSettings()
                     QStringList screens = reply.value().variant().toStringList();
                     // The ENTIRE published set, not a diff. The raw replace
                     // is safe only because removals are covered elsewhere:
-                    // onDaemonReady's clears (and, when the daemon exits
+                    // drainDeadSessionState's clears (and, when the daemon exits
                     // outright, the serviceUnregistered teardown) already
                     // reset the per-window tracking before loadSettings
                     // re-queries, so there is never a carried-over screen for

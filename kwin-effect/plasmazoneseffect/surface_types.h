@@ -712,6 +712,18 @@ struct WindowDecoration
     /// screen level; removeWindowDecoration disconnects.
     QRectF lastPaddedGeo;
     QMetaObject::Connection paddedGeoConnection;
+    /// Where drawWindow last painted the padded band under a FOREIGN paint
+    /// transform (KWin's sliding-popups slide, a stock fade), and the opacity
+    /// it painted it at. Null rect when the last draw carried no foreign
+    /// transform. drawWindow widens its scissor and damages only on a frame
+    /// where this CHANGES: a foreign effect that holds a static transform for
+    /// many frames (windowaperture while Peek at Desktop is held, the
+    /// translucency effect's inactive dim) would otherwise re-damage the band
+    /// every frame and drive a repaint loop at the refresh rate. The previous
+    /// band is what the next change frame damages so the slide leaves no
+    /// trail behind it.
+    QRectF lastForeignBand;
+    double lastForeignOpacity = 1.0;
     /// Clears SurfaceMultipassState::captureValid when the window's own content
     /// changes, so the fold re-captures. Connected for EVERY decorated window
     /// (not just padded ones); disconnected by removeWindowDecoration.
