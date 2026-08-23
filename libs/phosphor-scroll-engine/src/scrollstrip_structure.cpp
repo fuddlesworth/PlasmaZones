@@ -414,11 +414,16 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
             // pan latched before the removal is over.
             m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
             noteActiveColumnChanged();
-        } else if (m_viewAnchor < 0 || m_viewAnchor + colMain > viewMain) {
-            // The newly-focused column is (partly) out of view — scroll it
-            // in per the centering policy. A fully visible column stays put
-            // even if that leaves empty strip on the right; the next focus
-            // change reclaims it.
+        } else if (!m_viewDetached && (m_viewAnchor < 0 || m_viewAnchor + colMain > viewMain)) {
+            // The active column is (partly) out of view — scroll it in per
+            // the centering policy. A fully visible column stays put even if
+            // that leaves empty strip on the right; the next focus change
+            // reclaims it. Not while the view is DETACHED: this branch also
+            // runs when a bystander closed and focus never moved, and a pan
+            // that deliberately scrolled the focused column off the viewport
+            // is exactly the view the latch exists to keep. When the active
+            // column itself vanished, noteActiveColumnChanged above already
+            // cleared the latch, so the re-anchor still lands for that case.
             reanchorAfterFocusChange(prevIdx, oldViewOffset, params);
         }
     }

@@ -10,6 +10,7 @@
 #include "compositor/windowanimator.h"
 #include "shader_resolve.h"
 #include "window_query.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -31,8 +32,6 @@
 #include <memory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
 {

@@ -4,6 +4,7 @@
 #include "windowanimator.h"
 
 #include "plasmazoneseffect/shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/Curve.h>
 
@@ -16,8 +17,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // ═══════════════════════════════════════════════════════════════════════
 // Configuration

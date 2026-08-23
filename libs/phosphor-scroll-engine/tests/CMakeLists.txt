@@ -115,9 +115,10 @@ target_include_directories(test_scrollpark PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/.
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 # The strip's view ownership (the pan's detach latch and what re-attaches
-# it) and the group-width verbs (equalize, minimize, reset), split out of
-# the ops suite once that file passed the size ceiling. Same pure model,
-# no shared fixture: every slot builds its own strip.
+# it) and the group-width verbs (equalize, minimize, reset), placed in their
+# own file rather than grown into the over-ceiling ops suite. Same pure
+# model and the same screen constants, but no shared strip fixture: every
+# slot builds its own strip.
 pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)

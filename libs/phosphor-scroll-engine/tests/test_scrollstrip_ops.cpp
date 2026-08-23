@@ -9,8 +9,11 @@
 // over the same threeColumns fixture; splitting by operation family would
 // duplicate the fixture and the declaration-order table of contents below is
 // what keeps the length navigable. The view-ownership slots (the pan's detach
-// latch) and the group-width verbs live in test_scrollstrip_view.cpp, which
-// needs no shared fixture. The ENGINE-level behaviour is already split across
+// latch) and the group-width verbs were placed in test_scrollstrip_view.cpp
+// from the start rather than grown into this file; only the pan's own
+// delta-clamp slot below predates that file. The view suite shares the
+// screen fixture's constants but no strip fixture: every slot there builds
+// its own strip. The ENGINE-level behaviour is already split across
 // the sibling test_scrollengine_* files (deliberately uncounted here: the
 // split grows, and a stale number reads as a claim about coverage).
 

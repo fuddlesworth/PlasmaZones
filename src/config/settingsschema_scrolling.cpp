@@ -4,8 +4,9 @@
 // The scrolling half of the settings schema: the Scrolling knobs and
 // the Shortcuts.Scrolling chords. Split out of settingsschema.cpp for
 // file-size; the shared validator helpers live in settingsschema_p.h and the
-// two entry points are declared alongside every other appendXxxSchema in
-// settingsschema.h.
+// three entry points (appendScrollingSchema, appendScrollingZoneSelectorSchema,
+// appendScrollingShortcutsSchema) are declared alongside every other
+// appendXxxSchema in settingsschema.h.
 
 #include "settingsschema.h"
 

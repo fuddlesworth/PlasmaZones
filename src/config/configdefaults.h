@@ -544,7 +544,7 @@ public:
         return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
     // Autotile inner/outer gaps are unified with snapping — see innerGap() /
-    // outerGap*() above. Tiling reads the same shared accessors; no autotile-
+    // outerGap*() in configdefaults_gaps.h. Tiling reads the same shared accessors; no autotile-
     // specific gap defaults remain.
     static constexpr bool autotileFocusNewWindows()
     {
@@ -1012,7 +1012,7 @@ public:
         // pair; = and - are the KDE-wide count/zoom-adjust idiom.
         //
         // ACCEPTED EXCEPTION to the letters-only rule the scrolling family
-        // follows (configdefaults_scrolling.h): on layouts where "=" itself
+        // follows (configdefaults_scrolling_shortcuts.h): on layouts where "=" itself
         // is a shifted key (German among them) this chord is dead until the
         // user rebinds. The unshifted-symbol idiom is kept anyway because
         // +/- is what every KDE count control ships, and the scrolling rule
@@ -1143,8 +1143,9 @@ static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidt
                   && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
               "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
 // The strip selector's ranged defaults. Asserted HERE rather than in
-// configdefaults_scrolling_behavior.h because link 7 of that file's include chain
-// cannot see the shared Min/Max accessors (its own section banner says so) —
+// configdefaults_scrolling_behavior.h because that header is link 7 of the
+// include chain and cannot see the shared Min/Max accessors (its own section
+// banner says so) —
 // same placement rationale as the quick-size pair above.
 static_assert(ConfigDefaults::scrollingZoneSelectorTriggerDistance() >= ConfigDefaults::triggerDistanceMin()
                   && ConfigDefaults::scrollingZoneSelectorTriggerDistance() <= ConfigDefaults::triggerDistanceMax(),

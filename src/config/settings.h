@@ -2144,8 +2144,8 @@ private:
 
     /// Shared writer for the three per-mode disable lists. Replaces the whole
     /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
-    /// Rule store — @p axisInt is a `DisableAxis` value (file-local enum
-    /// in settings.cpp; passed as an int so the header stays decoupled). Drops
+    /// Rule store — @p axisInt is a `DisableAxis` value (the enum in
+    /// settings/settings_detail.h; passed as an int so the header stays decoupled). Drops
     /// malformed composite entries, fires @p signalFn + @c settingsChanged
     /// only on a real (canonical-set) change.
     void writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,

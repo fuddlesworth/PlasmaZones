@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -38,7 +39,6 @@ namespace PlasmaZones {
 
 // `lcEffect` is defined in plasmazoneseffect.cpp via Q_LOGGING_CATEGORY. Re-declare
 // here so this TU can log under the same category without re-defining storage.
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // Constructor wiring, decomposed from the PlasmaZonesEffect ctor along its
 // original comment seams. Called from the ctor shell (lifecycle.cpp) in this

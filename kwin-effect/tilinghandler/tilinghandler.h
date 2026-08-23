@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
-// and the implementation is already partitioned across this directory
-// (tiling.cpp, state.cpp, wiring.cpp, windowedfullscreen.cpp,
-// pretilegeometry.cpp, floatcleanup.cpp) — every one of those TUs calls back
+// and the implementation is already partitioned across the dozen TUs in this
+// directory (tiling.cpp, tilinghandler.cpp, state.cpp, wiring.cpp, signals.cpp,
+// windowedfullscreen.cpp, pretilegeometry.cpp, floatcleanup.cpp,
+// minimizefloat.cpp, outputchange.cpp, screenschanged.cpp, scrolltabs.cpp) —
+// every one of those TUs calls back
 // through this single declaration, which C++ requires to be whole. Most of the
 // length is the per-member invariant prose the split files depend on: the
 // per-session daemon state (managed/scrolling/axis sets and their teardown
@@ -33,7 +35,6 @@
 #include <QString>
 #include <QStringList>
 #include <QVariant>
-#include <QVector>
 
 #include <cstdint>
 
@@ -332,9 +333,10 @@ public:
     void setScrollingFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
-    // Meta+wheel column focus configuration. Disabling genuinely releases
-    // the axis chords back to the compositor (updateScrollWheelShortcuts'
-    // want predicate); inverting flips the wheel direction.
+    // Wheel configuration for BOTH wheel quads (Meta+wheel column focus and
+    // Meta+Shift+wheel view scroll). Disabling genuinely releases the axis
+    // chords back to the compositor (updateScrollWheelShortcuts' want
+    // predicate); inverting flips the wheel direction for both.
     void setWheelFocusEnabled(bool enabled);
     void setWheelFocusInverted(bool inverted);
 
@@ -518,7 +520,7 @@ public:
         // and a stale vertical-axis entry answers Vertical for a screen the
         // new daemon may lay out horizontally.
         clearScrollEffectBehaviourForTeardown();
-        // Release Meta+wheel with the dead session (no repaint interplay,
+        // Release both wheel quads with the dead session (no repaint interplay,
         // unlike the border sweep this path deliberately skips): a consumed
         // axis chord with no daemon to serve it would just eat input.
         updateScrollWheelShortcuts();
@@ -544,10 +546,10 @@ public:
     /// guarantee, so between them m_scrollingScreens can transiently name a
     /// screen the union has already dropped; answering true there stamped
     /// Mode "scrolling" for an unmanaged screen and forwarded focusColumn to
-    /// an engine that no longer owns it. Note it does NOT un-consume
-    /// Meta+wheel: updateScrollWheelShortcuts keys registration on the RAW
-    /// m_scrollingScreens, so KWin still swallows the chord in that window;
-    /// the wheel handler simply no-ops instead of acting.
+    /// an engine that no longer owns it. Note it does NOT un-consume the
+    /// wheel quads: updateScrollWheelShortcuts keys registration on the RAW
+    /// m_scrollingScreens, so KWin still swallows the chords in that window;
+    /// the wheel triggers simply no-op instead of acting.
     bool isScrollingScreen(const QString& screenId) const
     {
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
@@ -629,8 +631,9 @@ public:
     /// Instead the clear re-slices the rule sets in place, through
     /// PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap: every rule
     /// whose match references Field::ActiveLayout comes back OUT of the five
-    /// effect-bound sets (the three exclusion slices and the shader manager's
-    /// effect-rule set). Leaving them in was the defect — the rule sets
+    /// effect-bound sets (the three exclusion slices, the shader manager's
+    /// effect-rule set and its effect-verdict set). Leaving them in was the
+    /// defect — the rule sets
     /// survive daemon loss on purpose, but they were filled while the map was
     /// seeded, and an unstamped ActiveLayout reads as an ENGAGED empty string,
     /// so a negated leaf over-matches EVERY window for the whole daemon-down
@@ -1446,9 +1449,10 @@ private:
     /// True when NO screen can focus-follow-mouse: both global settings off
     /// AND the daemon's resolved scrolling set empty.
     ///
-    /// The ONE spelling of that condition. It has three consumers — the
-    /// handleCursorMoved bail and the two setting-writer latch clears — plus
-    /// the applyScrollEffectBehaviour tail, and while they were spelled
+    /// The ONE spelling of that condition. It has five consumers — the
+    /// handleCursorMoved bail, the two setting-writer latch clears, the
+    /// applyScrollEffectBehaviour tail and the teardown clear — and while
+    /// they were spelled
     /// separately the bail read only the two globals, so a rule that turned
     /// FFM on for a screen was defeated before the per-screen read ever ran
     /// (the rule could turn the behaviour OFF but never ON).
@@ -1461,7 +1465,7 @@ private:
     {
         return !m_focusFollowsMouse && !m_scrollingFocusFollowsMouse && m_scrollFocusFollowsMouseScreens.isEmpty();
     }
-    // ── Meta+wheel column focus ──
+    // ── Wheel quads (Meta+wheel column focus, Meta+Shift+wheel view scroll) ──
     bool m_wheelFocusEnabled = true;
     bool m_wheelFocusInverted = false;
     // ── Border state — uses shared BorderState from compositor-common ──

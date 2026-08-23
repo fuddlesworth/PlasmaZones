@@ -7,6 +7,7 @@
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
 #include "transitionpasshelpers.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -31,8 +32,6 @@
 // pipeline (read → entry-point scaffold → include expansion → param preamble →
 // KWin define → generateCustomShader) only serves this question, so it lives here.
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)
 {

@@ -62,10 +62,11 @@ PhosphorEngine::IPlacementEngine::LayoutSupport Daemon::layoutSupportForScreen(c
     // pointers and never returns nullptr for a routed screen (the inner
     // check above is cheap defence, not a contract). Fall back to
     // Placement — same Snapping fallback as currentModeFor, and snap's
-    // layouts are placement layouts. Note the three null-router fallbacks
+    // layouts are placement layouts. Note the four null-router fallbacks
     // in this file deliberately differ: isAutotileScreen probes the live
-    // engine, currentModeFor answers Snapping, this answers Placement —
-    // each is the safe default for its own consumers.
+    // engine, currentModeFor answers Snapping, this answers Placement and
+    // dragInsertSelectorForScreen answers false — each is the safe default
+    // for its own consumers.
     return PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
 }
 
@@ -502,7 +503,7 @@ void Daemon::handleRetile()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
         return;
     }
-    // Mirror every sister handler (HANDLE_AUTOTILE_ONLY at macros.h:29 and
+    // Mirror every sister handler (HANDLE_AUTOTILE_ONLY in macros.h and
     // the master-ratio handlers): silently no-op when the focused screen
     // isn't in autotile mode OR when its autotile-mode disable cascade
     // trips. retile() itself is engine-global, but a user firing the

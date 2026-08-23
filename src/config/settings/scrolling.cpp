@@ -27,12 +27,13 @@ namespace PlasmaZones {
 using settings_detail::clampColumnWidthForKind;
 using settings_detail::reseedColumnWidthForKind;
 
-// ISettings gives these two scrolling getters a defaulted body returning a
-// hardcoded `true`, so a stub or a partial implementer answers without
+// ISettings gives three scrolling getters a defaulted body returning a
+// hardcoded value, so a stub or a partial implementer answers without
 // reaching a Settings instance. That header cannot call ConfigDefaults (the
 // interface layer does not depend on the config layer), so the agreement is
-// pinned here, in a TU that sees both. See the note above the two defaults in
-// isettings.h.
+// pinned here, in a TU that sees both: two of the three just below, and the
+// drop-indicator default with its paint block further down. See the note
+// above the three defaults in isettings.h.
 static_assert(ConfigDefaults::scrollingTabIndicatorEnabled(),
               "ISettings::scrollingTabIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),

@@ -181,8 +181,10 @@ void TestScrollEnginePersistence::persistedBlobCarriesTheViewDetachment()
     const int pannedAnchor = before->strip().viewAnchor();
 
     const QJsonObject blob = engine1->serializeStripState();
-    QVERIFY(!blob.isEmpty());
-    const QString key = blob.keys().first();
+    // The key is pinned, not read off the blob: a stash leftover under a
+    // second key would otherwise hand the legacy arm below the wrong payload.
+    const QString key = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key));
     QVERIFY(blob.value(key).toObject().value(QLatin1String("viewDetached")).toBool(false));
 
     // Restored into a fresh engine, the same windows arriving under the same

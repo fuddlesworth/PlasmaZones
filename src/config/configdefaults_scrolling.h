@@ -289,8 +289,9 @@ public:
     // The geometry keys (Enabled, HideWhenSingleTab, PlaceWithinColumn, Gap,
     // Width, LengthProportion, Position) reach the LGPL engine through
     // IScrollSettings because they change the resolved column rect. The paint
-    // keys (Style, GapsBetweenTabs, CornerRadius, the three colours) never
-    // enter the engine — the daemon reads them straight onto the overlay.
+    // keys (Style, GapsBetweenTabs, CornerRadius, the three colours and the
+    // five font keys) never enter the engine — the daemon reads them straight
+    // onto the overlay.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Master switch. Off, the indicator hides and stays hidden until

@@ -147,6 +147,22 @@ inline constexpr QLatin1String FontUnderline("fontUnderline");
 inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 }
 
+/// Keys of the scrolling BEHAVIOUR map that crosses the daemon → KWin effect
+/// boundary on org.plasmazones.Scrolling (scrollEffectBehaviour /
+/// scrollEffectBehaviourChanged): three already-resolved screen-id lists, the
+/// per-context focus-follows-mouse and crop-straddlers rule slots and the
+/// vertical-axis MEMBERSHIP (a screen in the list runs its strip vertically;
+/// absence means horizontal). The daemon's ScrollingAdaptor produces the map
+/// and the effect's TilingHandler reads it; one home for the spellings, on
+/// ScrollTabKey's terms, so a rename is a compile error on both sides rather
+/// than a lookup that silently misses its diagnostic label. The XML DocString
+/// in dbus/org.plasmazones.Scrolling.xml repeats them as prose only.
+namespace ScrollBehaviourKey {
+inline constexpr QLatin1String FocusFollowsMouse("focusFollowsMouse");
+inline constexpr QLatin1String CropStraddlers("cropStraddlers");
+inline constexpr QLatin1String VerticalAxis("verticalAxis");
+}
+
 /// Tab keys on the STRIP PREVIEW payload — the per-tile description of the
 /// tab indicator its column draws, so a preview of the strip shows a tabbed
 /// column as tabbed instead of as a plain window.

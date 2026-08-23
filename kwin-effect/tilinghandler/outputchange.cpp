@@ -9,6 +9,7 @@
 
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/snaphandler.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -29,8 +30,6 @@
 #include <memory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 {

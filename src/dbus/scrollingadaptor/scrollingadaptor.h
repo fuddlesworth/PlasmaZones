@@ -5,6 +5,8 @@
 
 #include "plasmazones_export.h"
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QString>
@@ -101,21 +103,19 @@ public:
     void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens,
                                   const QStringList& verticalAxisScreens);
 
-    /// Wire keys of the @ref scrollEffectBehaviour map, in one place for the
-    /// DAEMON side (this adaptor and its tests). They are not shared with the
-    /// compositor: the KWin effect is a separate module that does not link
-    /// this library and spells all three literals itself when it reads the map
-    /// (kwin-effect/tilinghandler/state.cpp), and the XML DocString spells
-    /// them a third time. A rename is therefore an edit here, an edit in the
-    /// effect and an edit in the XML — the same kept-in-sync-BY-HAND rule the
-    /// presetVocabularyJson payload keys follow (scrollingadaptor.cpp).
+    /// Wire keys of the @ref scrollEffectBehaviour map. The spellings live in
+    /// PhosphorProtocol::Service::ScrollBehaviourKey, shared with the KWin
+    /// effect's reader (kwin-effect/tilinghandler/state.cpp) so a rename is a
+    /// compile error on both sides; these accessors keep the daemon-side
+    /// callers (this adaptor and its tests) on QString. The XML DocString
+    /// spells them as prose only.
     static QString focusFollowsMouseKey()
     {
-        return QStringLiteral("focusFollowsMouse");
+        return PhosphorProtocol::Service::ScrollBehaviourKey::FocusFollowsMouse;
     }
     static QString cropStraddlersKey()
     {
-        return QStringLiteral("cropStraddlers");
+        return PhosphorProtocol::Service::ScrollBehaviourKey::CropStraddlers;
     }
     /// Membership, not a per-screen value: a screen IN this list runs its
     /// strip vertically, and absence means horizontal. Membership keeps the
@@ -123,7 +123,7 @@ public:
     /// absent key and an empty list mean the same safe thing.
     static QString verticalAxisKey()
     {
-        return QStringLiteral("verticalAxis");
+        return PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
     }
 
     /// Clear the engine pointer during shutdown (same late-D-Bus-call

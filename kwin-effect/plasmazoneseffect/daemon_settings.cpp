@@ -8,6 +8,7 @@
 #include "handlers/snaphandler.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -27,8 +28,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // Duplicated from daemon's configkeys.h — effect cannot include daemon headers

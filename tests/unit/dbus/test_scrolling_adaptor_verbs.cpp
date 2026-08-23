@@ -185,8 +185,11 @@ private Q_SLOTS:
         // Positive control, driven TWICE: one call is one step of 25% of the
         // fixture's 1200px extent (a backward pan GROWS the active-relative
         // anchor), and a second notch is a second step, not a re-read of the
-        // first. The 1200 is the fixture's available extent, which pins that
-        // the step is measured against the work area rather than the strip.
+        // first. The 1200 is the fixture's main-axis extent, which pins that
+        // the step is measured against the viewport rather than the strip
+        // (the fixture's available and screen rects share that extent, so
+        // work area versus screen is not what this number discriminates;
+        // the engine's own verbs test pins the work-area basis).
         // Focus stays on app|c throughout, and every call reports itself.
         const int step = qRound(0.25 * 1200);
         m_adaptor->scrollView(QStringLiteral("DP-1"), -1);

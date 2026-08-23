@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "tilinghandler.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include "plasmazoneseffect/plasmazoneseffect.h"
@@ -30,9 +31,6 @@
 #include <QtMath>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
-Q_DECLARE_LOGGING_CATEGORY(lcEffectDiag)
 
 TilingHandler::TilingHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)

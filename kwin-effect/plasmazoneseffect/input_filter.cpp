@@ -4,6 +4,7 @@
 #include "input_filter.h"
 #include "plasmazoneseffect.h"
 #include "tilinghandler/tilinghandler.h"
+#include "compositor/effectlogging.h"
 
 #include <input_event.h>
 #include <pointer_input.h>
@@ -14,8 +15,6 @@
 
 #include <cmath>
 #include <optional>
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace PlasmaZones {
 

@@ -4,9 +4,10 @@
 // The strip's VIEW ownership and the width re-flow verbs: who owns the view
 // anchor after a pan (the detach latch), which verbs hand it back to the
 // centering policy, and the three verbs that rewrite several column widths
-// at once (equalize, minimize, reset). Split out of test_scrollstrip_ops,
-// which owns the per-operation surface over one shared fixture; every slot
-// here builds its own strip, so nothing was lost in the move.
+// at once (equalize, minimize, reset). Placed in its own file rather than
+// grown into test_scrollstrip_ops, which owns the per-operation surface over
+// one shared strip fixture and already carries a file-size exception; every
+// slot here builds its own strip against the shared screen constants.
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
@@ -159,11 +160,35 @@ void TestScrollStripView::viewDetachmentEndsAtFocusAndAtBothCenteringVerbs()
     // wants can be the one the pan happens to have landed on, and a verb that
     // answered "nothing to do" while leaving the view detached would strand
     // the latch where no later verb obviously clears it.
+    // The detached-but-already-centered state is built on purpose: centering
+    // once (which moves, and re-attaches on the moving path) and then panning
+    // forward and back by the same step lands the anchor exactly where the
+    // policy wants it while the pan's latch is set. Only a clear placed
+    // ABOVE the no-move bail survives the verb that then refuses; a clear
+    // below it would leave every assertion here green while stranding the
+    // latch. The MIDDLE column is centered: a centered end column sits
+    // outside the scroll range, where scrollViewBy's delta clamp refuses to
+    // retrace a step (it never pushes an out-of-range view further out).
     ScrollStrip settled;
     pan(settled);
+    QVERIFY(settled.focusColumn(1, params));
     settled.centerActiveColumn(params);
-    QVERIFY(!settled.centerActiveColumn(params)); // no-op second time
     QVERIFY(!settled.viewDetached());
+    QVERIFY(settled.scrollViewBy(-1, params));
+    QVERIFY(settled.scrollViewBy(1, params));
+    QVERIFY(settled.viewDetached());
+    QVERIFY(!settled.centerActiveColumn(params)); // nothing to move
+    QVERIFY(!settled.viewDetached());
+    ScrollStrip settledSpan;
+    pan(settledSpan);
+    QVERIFY(settledSpan.focusColumn(1, params));
+    settledSpan.centerVisibleColumns(params);
+    QVERIFY(!settledSpan.viewDetached());
+    QVERIFY(settledSpan.scrollViewBy(-1, params));
+    QVERIFY(settledSpan.scrollViewBy(1, params));
+    QVERIFY(settledSpan.viewDetached());
+    QVERIFY(!settledSpan.centerVisibleColumns(params)); // nothing to move
+    QVERIFY(!settledSpan.viewDetached());
 
     // The two halves of a dying screen, which pull opposite ways on purpose.
     ScrollLayoutParams degenerate = params;
@@ -258,13 +283,23 @@ void TestScrollStripView::minimizeColumnWidthTakesTheSmallestPreset()
     // Already there: refuses.
     QVERIFY(!strip.minimizeActiveColumnWidth(params));
 
-    // Refusal is by RESOLVED pixels, not intent: a Proportion that renders
+    // Refusal is by RENDERED pixels, not intent: a Proportion that renders
     // to the same extent as the smallest preset is already minimized, and
     // rewriting it would move nothing while reporting success.
     ScrollStrip same;
     QVERIFY(
         same.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(1.0 / 3.0), ColumnDisplay::Normal, params));
     QVERIFY(!same.minimizeActiveColumnWidth(params));
+    // The same refusal when the column's MINIMUM SIZE already pins it at or
+    // above the smallest preset: the floor is what renders (equalize's
+    // reason), so rewriting the intent would move nothing on screen, and a
+    // first press that reported success for that would be a no-op with an
+    // OSD. The minimum is set on both axes so it binds on either arm.
+    ScrollStrip floored;
+    QVERIFY(floored.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(floored.setWindowMinimumSize(QStringLiteral("a"), 600, 600));
+    QVERIFY(!floored.minimizeActiveColumnWidth(params));
+    QCOMPARE(floored.columns().at(0).width, kHalf);
 
     // No vocabulary at all: the engine floor, as a Proportion.
     ScrollLayoutParams noPresets = params;
@@ -410,6 +445,19 @@ void TestScrollStripView::viewDetachmentEndsWhenAStructuralChangeMovesFocus()
     QVERIFY(bystanderAlways.viewDetached());
     QVERIFY(bystanderAlways.removeWindow(QStringLiteral("a"), always));
     QVERIFY(!bystanderAlways.viewDetached());
+    //    And under Never with the focused column deliberately PANNED PARTLY
+    //    OFF the viewport (fillAndPan leaves the last column clipped by the
+    //    pan): the removal's scroll-it-in arm would re-anchor exactly the
+    //    view the user just made, and focus never moved, so the latch holds
+    //    and the anchor is untouched. When the focused column itself goes,
+    //    arm 1 above, the re-anchor still lands.
+    ScrollStrip clippedNever;
+    fillAndPan(clippedNever, never);
+    const int clippedAnchor = clippedNever.viewAnchor();
+    QVERIFY(clippedNever.removeWindow(QStringLiteral("a"), never));
+    QCOMPARE(clippedNever.activeWindowId(), QStringLiteral("c"));
+    QVERIFY(clippedNever.viewDetached());
+    QCOMPARE(clippedNever.viewAnchor(), clippedAnchor);
 
     // 4. takeWindow of the focused window moves focus without the refocus
     //    policy, and still re-attaches.
@@ -652,6 +700,19 @@ void TestScrollStripView::resetToDefaultsClearsThePreMaximizeSlot()
     QVERIFY(!strip.resetToDefaults(params.defaultColumnWidth, ColumnDisplay::Normal, params));
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(strip.columns().at(0).width, ColumnWidth::makeProportion(0.5));
+
+    // Under "the client decides" (no default width) the reset leaves widths
+    // alone, so a maximized column STAYS maximized and its slot must survive
+    // with it: the next un-maximize hands back the width the user had, not
+    // the half-width fallback.
+    ScrollStrip clientSized;
+    QVERIFY(
+        clientSized.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
+    QVERIFY(clientSized.toggleMaximizeActiveColumn(params)); // slot = 0.3
+    QVERIFY(!clientSized.resetToDefaults(std::nullopt, ColumnDisplay::Normal, params));
+    QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeProportion(1.0));
+    QVERIFY(clientSized.toggleMaximizeActiveColumn(params));
+    QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeProportion(0.3));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripView)

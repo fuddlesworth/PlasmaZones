@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include "shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
@@ -30,8 +31,6 @@
 // texture) still lives. See the member docs in plasmazoneseffect.h.
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 // A spectrum that has not changed for this long is treated as silence: the

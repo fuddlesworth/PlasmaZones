@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -24,9 +25,6 @@
 #include "window_query.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
-Q_DECLARE_LOGGING_CATEGORY(lcEffectDiag)
 
 namespace {
 // Record a filter rejection: when @p out is non-null, store @p reason into it.

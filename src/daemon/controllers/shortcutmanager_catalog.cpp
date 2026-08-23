@@ -545,9 +545,9 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // default, any user rebind of either member uncompresses this pair for
     // good, where a digit or arrow family recompresses as soon as the rebind
     // still lands on its structural token. The one exception is a member
-    // whose default is empty — several verbs now SHIP unbound, and a user
-    // can clear a bound one — whose expectation is taken from the live
-    // binding instead; see addScrollPair below.
+    // whose default is empty — several verbs now SHIP unbound — for which no
+    // pair is listed at all: addScrollPair below skips the pair, and each
+    // member's own row renders whatever binding it has.
     const auto lastKeyOf = [](const QString& sequence) {
         // Normalize to PortableText first, exactly as the row builder above
         // does to the LIVE triggers before the compare. The defaults are

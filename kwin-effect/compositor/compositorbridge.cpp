@@ -3,6 +3,7 @@
 
 #include "compositorbridge.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <QLoggingCategory>
 
@@ -15,8 +16,6 @@
 #include <workspace.h>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 using namespace PhosphorCompositor;
 

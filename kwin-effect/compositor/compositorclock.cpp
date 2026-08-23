@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "compositorclock.h"
+#include "compositor/effectlogging.h"
 
 #include <core/output.h>
 #include <effect/effecthandler.h>
@@ -13,8 +14,6 @@
 #include <chrono>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 CompositorClock::CompositorClock(KWin::LogicalOutput* output)
     : m_output(output)

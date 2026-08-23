@@ -14,6 +14,7 @@
 
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -28,8 +29,6 @@
 #include <QScopeGuard>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Monocle helpers

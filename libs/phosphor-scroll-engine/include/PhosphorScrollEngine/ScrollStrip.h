@@ -47,11 +47,14 @@ namespace PhosphorScrollEngine {
 /// that function documents. `equalizeVisibleColumnWidths` detaches too: it
 /// positions the group edge to edge on purpose, and a policy that re-centered
 /// the active column afterwards would hand a second press a different group.
-/// The next focus change, or either centering verb,
-/// re-attaches it and the policy takes the view back. Detachment travels with the anchor through the
-/// mode-round-trip stash and the persisted blob for the same reason the anchor
-/// does: restoring the position while dropping the detachment hands the view
-/// straight back to the policy that would move it.
+/// Any focus-driven or structural re-anchor (every reanchorAfterFocusChange
+/// caller: the focus and move verbs, the inserts, an active column that
+/// vanished), the Always policy's own re-centering, or either centering verb
+/// re-attaches it and the policy takes the view back. A bystander's removal
+/// that leaves focus where it was does not. Detachment travels with the
+/// anchor through the mode-round-trip stash and the persisted blob for the
+/// same reason the anchor does: restoring the position while dropping the
+/// detachment hands the view straight back to the policy that would move it.
 ///
 /// ## Naming exemption
 ///
@@ -286,7 +289,10 @@ public:
     bool equalizeVisibleColumnWidths(const ScrollLayoutParams& params);
     /// The active column at its narrowest: the smallest preset, or
     /// MinColumnWidthFraction when the preset list is empty (Karousel
-    /// minimize-width). Refuses when already there.
+    /// minimize-width; the empty-list arm is reachable only from a test or an
+    /// embedder, since the engine never hands down an empty vocabulary).
+    /// Refuses when already there, measured in RENDERED pixels so a column
+    /// whose minimum size already pins it at or above the target refuses too.
     bool minimizeActiveColumnWidth(const ScrollLayoutParams& params);
     /// Every column back to @p defaultWidth and @p defaultDisplay, and every
     /// tile back to the even auto-split: the scrolling half of the Retile

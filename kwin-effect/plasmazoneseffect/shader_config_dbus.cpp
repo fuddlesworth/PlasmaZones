@@ -8,6 +8,7 @@
 
 #include "compositor/windowanimator.h"
 #include "tilinghandler/tilinghandler.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -49,8 +50,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 

@@ -23,6 +23,7 @@
 #include "compositor/scrollbehaviourparse.h"
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -30,7 +31,6 @@
 #include <effect/effectwindow.h>
 
 #include <QAction>
-#include <QDBusArgument>
 #include <QDBusVariant>
 #include <QHash>
 #include <QList>
@@ -41,8 +41,6 @@
 #include <optional>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void TilingHandler::clearTiledTracking()
 {
@@ -155,11 +153,13 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     const auto toSet = [&parseWarnings](const QVariant& raw, QLatin1StringView key) {
         return ScrollBehaviourParse::parseScreenIdList(raw, key, parseWarnings);
     };
-    const QSet<QString> ffm =
-        toSet(behaviour.value(QStringLiteral("focusFollowsMouse")), QLatin1String("focusFollowsMouse"))
-            .value_or(QSet<QString>());
-    const QSet<QString> crop = toSet(behaviour.value(QStringLiteral("cropStraddlers")), QLatin1String("cropStraddlers"))
-                                   .value_or(QSet<QString>());
+    // One spelling per key, shared with the daemon's producer through
+    // PhosphorProtocol, so the lookup and its diagnostic label cannot drift.
+    using PhosphorProtocol::Service::ScrollBehaviourKey::CropStraddlers;
+    using PhosphorProtocol::Service::ScrollBehaviourKey::FocusFollowsMouse;
+    using PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
+    const QSet<QString> ffm = toSet(behaviour.value(FocusFollowsMouse), FocusFollowsMouse).value_or(QSet<QString>());
+    const QSet<QString> crop = toSet(behaviour.value(CropStraddlers), CropStraddlers).value_or(QSet<QString>());
     // Membership: a screen IN the list runs its strip vertically. An ABSENT
     // key reads as an empty set, which means horizontal everywhere — that is
     // what the daemon publishes on a session with no vertical strip.
@@ -172,8 +172,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // rest of the session with no batch coming to correct it, and the last
     // good membership is a strictly better guess than the historical default.
     const QSet<QString> verticalAxis =
-        toSet(behaviour.value(QStringLiteral("verticalAxis")), QLatin1String("verticalAxis"))
-            .value_or(m_scrollVerticalAxisScreens);
+        toSet(behaviour.value(VerticalAxis), VerticalAxis).value_or(m_scrollVerticalAxisScreens);
     // The parser collects rather than logs (it is a headless-tested pure
     // function); the warnings reach the journal here, once per apply.
     for (const QString& warning : std::as_const(parseWarnings)) {
@@ -186,7 +185,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // global setting there.
     m_scrollEffectBehaviourSeeded = true;
     m_scrollFocusFollowsMouseScreens = ffm;
-    // Fourth site of the ffmOffEverywhere predicate: this write is what can
+    // One of the five ffmOffEverywhere sites: this write is what can
     // take the LAST focus-follows-mouse screen away while both globals were
     // already off, and handleCursorMoved's bail (the latch's only other
     // disarm) sits behind the very predicate that just went true — so a latch
@@ -585,7 +584,7 @@ void TilingHandler::updateScrollWheelShortcuts()
         // would run inside whatever emitted the mode change. The sub-turn
         // window before the deferred delete lands is benign — KWin APPENDS
         // duplicate registrations and matches the FIRST, and a still-live
-        // doomed action drives the same wheelFocusColumn as its replacement.
+        // doomed action drives the same trigger as its replacement.
         for (QAction* action : std::as_const(m_scrollWheelActions)) {
             action->deleteLater();
         }

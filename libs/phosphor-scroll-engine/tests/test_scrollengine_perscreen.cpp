@@ -1027,9 +1027,9 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
     settings->tabIndicatorLengthProportion = 0.5;
     ScrollEngine* engine = makeEngine(&owner, settings);
 
-    // Length: a legal fraction lands; zero and negative leave the configured
-    // value alone (they would resolve the indicator to a sliver while every
-    // setting still reported it on), and above 1.0 clamps rather than falls back.
+    // Length: a legal fraction lands; zero, negative and above 1.0 all leave
+    // the configured value alone (a sliver would resolve the indicator to
+    // nothing while every setting still reported it on).
     QVariantMap m;
     m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 0.25);
     engine->applyPerScreenConfig(kS1, m);
@@ -1043,9 +1043,12 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsGarbageNumericOverrides()
     engine->applyPerScreenConfig(kS1, m);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.5);
 
+    // Over the ceiling falls back the same way as under the floor: the
+    // length is validate-then-fall-back like the gap and width below, not
+    // clamped, so one stance covers every key in the resolver.
     m.insert(ScrollPerScreenKeys::tabIndicatorLengthProportion(), 4.0);
     engine->applyPerScreenConfig(kS1, m);
-    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 1.0);
+    QCOMPARE(engine->tabIndicatorParamsForScreen(kS1).lengthProportion, 0.5);
 
     // Gap and width are bounded at this boundary too: an out-of-range override
     // leaves the configured value rather than feeding the reservation

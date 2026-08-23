@@ -158,6 +158,7 @@ set(plasmazones_effect_SRCS
     # transitively via PhosphorCompositor::PhosphorCompositor's PhosphorIdentity link.
     compositor/compositorbridge.cpp
     compositor/compositorbridge.h
+    compositor/effectlogging.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro

@@ -7,6 +7,7 @@
 #include "plasmazoneseffect/shader_internal.h"
 #include "shadertransitionmanager.h"
 #include "transitionpasshelpers.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -33,8 +34,6 @@
 // (the strip contract's uStrip / iStripMotion / iStripRect instead of the
 // desktop's two samplers and iSwitchDelta).
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledShader(const QString& effectId)
 {

@@ -9,6 +9,7 @@
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/windowanimator.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -45,8 +46,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void PlasmaZonesEffect::slotDaemonReady()
 {

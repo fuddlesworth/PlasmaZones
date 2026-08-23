@@ -7,10 +7,12 @@
 //
 // One case per key, and each *OverrideIsPerScreen case drives TWO screens
 // off the same engine: the screen carrying the override and a screen
-// carrying none. That pairing is the point. (The two rejection cases at the
-// end — the out-of-range width rule and the wrong-typed overrides — are
-// single-screen by nature: they assert a value is REFUSED, so there is no
-// override side for a pairing to discriminate.) An assertion on the overridden screen alone passes
+// carrying none. That pairing is the point. (Two rejection cases — the
+// out-of-range width rule and the wrong-typed overrides — are single-screen
+// by nature: they assert a value is REFUSED, so there is no override side
+// for a pairing to discriminate. The retile case between them is a third
+// shape: both screens carry an override and the discriminator is a rule
+// width against none.) An assertion on the overridden screen alone passes
 // just as happily when the engine reads the global everywhere, which is the
 // exact regression these keys keep having — an effective* call site quietly
 // reverting to the member read, with the suite still green because nothing
@@ -405,6 +407,8 @@ void TestScrollEngineBehaviour::retileKeepsClientDecidedWidthsUnlessARulePinsOne
     engine->setColumnWidth(ColumnWidth::makeProportion(0.5), kS1);
     engine->windowFocused(QStringLiteral("app|b"), kS2);
     engine->setColumnWidth(ColumnWidth::makeProportion(0.5), kS2);
+    QCOMPARE(engine->visibleTileRects(kS1).size(), 1);
+    QCOMPARE(engine->visibleTileRects(kS2).size(), 1);
     QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS1).first()), kMainExtent / 2);
     QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS2).first()), kMainExtent / 2);
 
@@ -414,12 +418,15 @@ void TestScrollEngineBehaviour::retileKeepsClientDecidedWidthsUnlessARulePinsOne
     // nothing else off its default the verb reports no_target rather than a
     // success that changed nothing.
     engine->resetStripToDefaults(kS1);
+    QCOMPARE(engine->visibleTileRects(kS1).size(), 1);
     QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS1).first()), kMainExtent / 2);
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("retile"));
     QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
 
     // ClientDecides with a rule width: the rule's width is the default.
     engine->resetStripToDefaults(kS2);
+    QCOMPARE(engine->visibleTileRects(kS2).size(), 1);
     QCOMPARE(Ax::mainLen(engine->visibleTileRects(kS2).first()), qRound(0.75 * kMainExtent));
     QCOMPARE(feedback.last().at(0).toBool(), true);
 }

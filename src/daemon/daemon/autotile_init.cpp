@@ -165,11 +165,16 @@ void Daemon::initializeAutotile()
                                                  &ShortcutManager::decreaseMasterCountRequested, this, [this]() {
                                                      handleDecreaseMasterCount();
                                                  });
-        m_autotileShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::retileRequested, this,
-                                                 [this]() {
-                                                     handleRetile();
-                                                 });
     }
+    // Retile is MODE-NEUTRAL (handleRetile routes by the focused screen's
+    // mode: scrolling resets the strip, autotile re-applies the algorithm),
+    // so its wire sits outside the engine guard: the scrolling arm must not
+    // depend on the autotile engine existing. Tracked with the autotile
+    // handles all the same, so the re-init disconnect above covers it.
+    m_autotileShortcutConnections << connect(m_shortcutManager.get(), &ShortcutManager::retileRequested, this,
+                                             [this]() {
+                                                 handleRetile();
+                                             });
 }
 
 void Daemon::handleTilingModeToggle()

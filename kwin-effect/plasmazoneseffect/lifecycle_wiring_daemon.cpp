@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 #include "compositor/stripviewanimator.h"
 #include "input_filter.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -26,7 +27,6 @@ namespace PlasmaZones {
 
 // `lcEffect` is defined in plasmazoneseffect.cpp via Q_LOGGING_CATEGORY. Re-declare
 // here so this TU can log under the same category without re-defining storage.
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // Daemon-facing half of the constructor wiring, split from
 // lifecycle_wiring.cpp by concern (that file keeps the rendering/timer/

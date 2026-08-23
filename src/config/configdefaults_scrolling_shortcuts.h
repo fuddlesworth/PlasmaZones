@@ -20,10 +20,14 @@ public:
     // Scrolling Shortcuts
     //
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
-    // Meta+Ctrl families in configdefaults.h. NOTE: the Meta+Alt family is
-    // SHARED with the layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/),
-    // cycle-in-zone (Meta+Alt+, .), and the quick-layout digit slots
-    // (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) —
+    // Meta+Ctrl families in configdefaults.h, with one deliberate exception:
+    // Equalize Column Widths is Meta+Ctrl+Shift+T, the Shift twin of Retile's
+    // Meta+Ctrl+T (see scrollingEqualizeColumnWidthsShortcut). NOTE: the
+    // Meta+Alt family is SHARED with the layouts pair (Meta+Alt+[ ]), the
+    // cheatsheet (Meta+Alt+/), cycle-in-zone (Meta+Alt+, .), the quick-layout
+    // digit slots (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) and every other
+    // Meta+Alt default in configdefaults.h (X, Space, Return, Escape and the
+    // Shift+Arrow move family) —
     // KGlobalAccel routes one action per chord, so every default here must be
     // unique across the WHOLE inheritance chain (test_scrolling_settings pins
     // this). Shift+symbol spellings are forbidden: see

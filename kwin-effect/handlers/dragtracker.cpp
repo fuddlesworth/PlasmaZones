@@ -3,14 +3,13 @@
 
 #include "dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 DragTracker::DragTracker(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)

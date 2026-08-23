@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h> // shaderEffectAppliesToEventPath (peek suppression gate)
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -49,7 +50,6 @@ namespace PlasmaZones {
 
 // `lcEffect` is defined in plasmazoneseffect.cpp via Q_LOGGING_CATEGORY. Re-declare
 // here so this TU can log under the same category without re-defining storage.
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()

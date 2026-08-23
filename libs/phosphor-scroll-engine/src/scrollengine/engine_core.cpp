@@ -547,6 +547,15 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
             stash[colIdx].activeWindowId = windowId;
         }
     };
+    // Captured BEFORE the insert, for the view re-assert below: whether the
+    // stashed focus has already been claimed (so the restore has landed once
+    // already), and the view the user had at this moment, which is the view
+    // to hand back once the insert has stolen it. Read before commitClaim
+    // renames the focus slot and before this arrival joins the consumed set.
+    const bool focusRestoredEarlier = m_stripStashConsumed.value(key).contains(stashStrip.focusedWindowId);
+    const QString focusBeforeInsert = state->strip().activeWindowId();
+    const int anchorBeforeInsert = state->strip().viewAnchor();
+    const bool detachedBeforeInsert = state->strip().viewDetached();
     const StashedColumn& sc = stash.at(colIdx);
     bool inserted = false;
     // A stashed sibling already present re-locates the live column — the
@@ -623,13 +632,28 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // restoreViewAnchor's contract; later structural inserts re-clamp as the
     // strip grows (insertWindowAt's anchor re-clamp).
     //
-    // Re-asserted on EVERY arrival once the focused window is on the strip,
-    // not only on the arrival that IS it: inserts steal focus (both insert
-    // verbs above make the arriving tile active and reanchor) and so does the
-    // tab re-assertion, so a later arrival would otherwise leave the restore
-    // anchored on an arbitrary window — the regression the stash exists to
-    // fix. focusWindow is a no-op once the state already matches.
-    if (!stashStrip.focusedWindowId.isEmpty() && state->strip().containsWindow(stashStrip.focusedWindowId)) {
+    // Re-asserted on EVERY arrival of the restore burst once the focused
+    // window is on the strip, not only on the arrival that IS it: inserts
+    // steal focus (both insert verbs above make the arriving tile active and
+    // reanchor) and so does the tab re-assertion, so a later arrival would
+    // otherwise leave the restore anchored on an arbitrary window — the
+    // regression the stash exists to fix. focusWindow is a no-op once the
+    // state already matches.
+    //
+    // But only UNTIL the stashed focus has been claimed once. A stash entry
+    // lives until every listed tile is claimed, and a same-app window can
+    // claim a slot hours later; replaying last session's focus and anchor
+    // over a view the user has since moved would rewind them to a strip they
+    // left long ago. From then on the view to hand back is the one the user
+    // had before THIS insert stole it, which is the same job for a late
+    // arrival as the stash did for the burst.
+    if (focusRestoredEarlier) {
+        if (!focusBeforeInsert.isEmpty() && state->strip().containsWindow(focusBeforeInsert)) {
+            state->strip().focusWindow(focusBeforeInsert, params);
+            state->strip().restoreViewAnchor(anchorBeforeInsert, params);
+            state->strip().setViewDetached(detachedBeforeInsert);
+        }
+    } else if (!stashStrip.focusedWindowId.isEmpty() && state->strip().containsWindow(stashStrip.focusedWindowId)) {
         state->strip().focusWindow(stashStrip.focusedWindowId, params);
         // The anchor is main-axis pixels, so it only means anything if it was
         // captured on THIS axis. Replaying one from the other axis scrolls the
@@ -937,7 +961,8 @@ void ScrollEngine::refreshConfigFromSettings()
         m_defaultColumnWidth = ColumnWidth::makeProportion(qBound<qreal>(MinColumnWidthFraction, widthValue, 1.0));
     }
     const int display = settings->scrollingDefaultColumnDisplay();
-    m_defaultColumnDisplay = (display == 1) ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
+    m_defaultColumnDisplay =
+        (display == static_cast<int>(ColumnDisplay::Tabbed)) ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
 
     // Default window height: the config vocabulary IS WindowHeight::Kind
     // (Auto/Fixed/Preset, see DefaultHeightKind), so a guarded cast is fine.

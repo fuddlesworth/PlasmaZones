@@ -8,10 +8,13 @@
 // ScrollEngine — the column vocabulary (including the group-width verbs,
 // equalize and minimize), the view page pan, the edge-stop/wrap focus
 // variants, the top/bottom window focus, and the one-way float verbs. The
-// GENERIC directional move/focus/swap chords, the mode-neutral
-// floating/tiling focus switch and the mode-neutral Retile are not here:
-// they route through the generic navigation handlers (navigation.cpp),
-// which reach the scroll engine via ScreenModeRouter.
+// GENERIC directional move/focus/swap chords and the mode-neutral
+// floating/tiling focus switch are not here: they route through the generic
+// navigation handlers (navigation.cpp), which reach the scroll engine via
+// ScreenModeRouter. Nor is the mode-neutral Retile: Daemon::handleRetile
+// (navigation.cpp) picks the scrolling arm by the router's mode verdict and
+// reaches the engine directly, and its wire lives in autotile_init.cpp
+// beside the other Retile arm's handles.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"

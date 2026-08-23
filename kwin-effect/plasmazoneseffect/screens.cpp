@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -34,8 +35,6 @@
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) const
 {

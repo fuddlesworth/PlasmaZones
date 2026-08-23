@@ -100,9 +100,11 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingStickyWindows"),
                PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("desktops")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingColumnWidthStep"),
-               PhosphorI18n::tr("Width adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("width")});
+               PhosphorI18n::tr("Width adjustment step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("width"), PhosphorI18n::tr("shortcut")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingWindowHeightStep"),
-               PhosphorI18n::tr("Height adjustment step"), {PhosphorI18n::tr("step"), PhosphorI18n::tr("height")});
+               PhosphorI18n::tr("Height adjustment step"),
+               {PhosphorI18n::tr("step"), PhosphorI18n::tr("height"), PhosphorI18n::tr("shortcut")});
     addSetting(
         search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingViewScrollStep"),
         PhosphorI18n::tr("View scroll step"),

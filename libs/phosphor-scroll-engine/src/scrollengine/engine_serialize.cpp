@@ -39,9 +39,9 @@ inline QLatin1String kFocused()
 /// could run vertically.
 ///
 /// No schema version bump: this file's format is deliberately version-free
-/// and additive (see the header note), and three keys have already landed
-/// exactly this way — presetFraction, windowedFullscreen and
-/// unclaimedSessions. Absent-key-means-default IS the migration mechanism
+/// and additive (see the header note), and five keys have already landed
+/// exactly this way — presetFraction, windowedFullscreen, unclaimedSessions,
+/// viewDetached and blueprintCursor. Absent-key-means-default IS the migration mechanism
 /// here, and it is not the ad-hoc per-key migration the project rule forbids:
 /// that rule governs Settings/ConfigDefaults keys, which this is not.
 inline QLatin1String kAxis()
@@ -182,7 +182,9 @@ ColumnWidth widthFromJson(const QJsonObject& obj, const QList<qreal>& legacyVoca
     w.kind = (kind == ColumnWidth::Fixed || kind == ColumnWidth::Preset) ? static_cast<ColumnWidth::Kind>(kind)
                                                                          : ColumnWidth::Proportion;
     w.proportion = qBound<qreal>(MinColumnWidthFraction, obj.value(kProportion()).toDouble(0.5), 1.0);
-    w.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
+    // Bounded above like every other Fixed producer (kMaxFixedExtentPx);
+    // relayout clamps to the work area anyway, so this is a belt.
+    w.fixedPx = qBound(0, obj.value(kFixedPx()).toInt(0), static_cast<int>(kMaxFixedExtentPx));
     if (obj.contains(kPresetFraction())) {
         w.presetFraction = qBound<qreal>(MinColumnWidthFraction, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
     } else {
@@ -218,7 +220,7 @@ WindowHeight heightFromJson(const QJsonObject& obj, const QList<qreal>& legacyVo
     // divide the auto-height share by zero-or-negative, and a negative
     // fixedPx/presetIdx indexes out of range.
     h.weight = qBound<qreal>(0.01, obj.value(kWeight()).toDouble(1.0), 100.0);
-    h.fixedPx = qMax(0, obj.value(kFixedPx()).toInt(0));
+    h.fixedPx = qBound(0, obj.value(kFixedPx()).toInt(0), static_cast<int>(kMaxFixedExtentPx));
     if (obj.contains(kPresetFraction())) {
         h.presetFraction = qBound<qreal>(MinWindowHeightFraction, obj.value(kPresetFraction()).toDouble(0.5), 1.0);
     } else {

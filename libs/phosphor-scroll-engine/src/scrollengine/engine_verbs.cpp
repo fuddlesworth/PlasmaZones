@@ -8,6 +8,8 @@
 
 #include "scrollverbresolve_p.h"
 
+#include <cmath>
+
 namespace PhosphorScrollEngine {
 
 // ── Scroll-specific vocabulary ──────────────────────────────────────────────
@@ -78,8 +80,12 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // every verb body in this file a one-liner. The names are part of the macro's
 // documented contract. P_SCROLL_VERB is #undef'd at the end of this file; the
 // tail note explains why P_SCROLL_RESOLVE deliberately is not.
-// Only the float-layer verbs at the tail are hand-expanded — their feedback
-// branches differ per arm, not just per outcome.
+// The hand-expanded verbs are the ones the macro cannot express:
+// consumeOrExpelWindow (two ops, one feedback), resetStripToDefaults (the
+// override map resolved once for two defaults), scrollViewByPercent (params
+// needed before the op), the windowed-fullscreen trio (background-context
+// guards) and the float-layer verbs at the tail (feedback branches differ per
+// arm, not just per outcome).
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().consumeWindowIntoColumn(params), "consume", true, QString());
@@ -168,11 +174,26 @@ void ScrollEngine::resetStripToDefaults(const QString& screenId)
     // user pressed for. Both defaults are resolved here because the strip
     // does not carry the display in params, and the width may be "the
     // client decides", which has no value to hand down (see
-    // resetDefaultColumnWidthFor and resetToDefaults).
-    P_SCROLL_VERB(screenId,
-                  state->strip().resetToDefaults(resetDefaultColumnWidthFor(screen, params),
-                                                 effectiveDefaultColumnDisplay(screen), params),
-                  "retile", false, QString());
+    // resetDefaultColumnWidthFor and resetToDefaults). Hand-expanded so the
+    // per-context override map is resolved ONCE for both of them, the
+    // file's resolve-once discipline; P_SCROLL_VERB's op expression would
+    // have each default re-fetch it.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("retile"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const QVariantMap overrides = overridesForScreen(screen);
+    const bool changed = state->strip().resetToDefaults(resetDefaultColumnWidthFor(overrides, params),
+                                                        effectiveDefaultColumnDisplay(overrides), params);
+    if (changed) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(changed, QStringLiteral("retile"), changed ? QString() : QStringLiteral("no_target"),
+                              sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
 void ScrollEngine::cycleWindowPresetHeight(int delta, const QString& screenId)
@@ -212,8 +233,11 @@ void ScrollEngine::scrollViewByPercent(qreal percent, const QString& screenId)
     // axis and "100" is exactly one viewport, which is what the page variant
     // asks for. Rounded, then refused if it collapses to nothing, under its
     // OWN token: a 1% step on a tiny work area is not "the end of the
-    // strip", and the OSD names the two refusals differently.
-    const int deltaPx = qRound(percent / 100.0 * params.axis.mainSize(params.workArea));
+    // strip", and the OSD names the two refusals differently. A non-finite
+    // percent reads as "nothing to move" rather than reaching qRound, the
+    // same guard the drag auto-scroll tick applies to its public qreal: no
+    // in-tree caller can pass one, but this is exported library API.
+    const int deltaPx = std::isfinite(percent) ? qRound(percent / 100.0 * params.axis.mainSize(params.workArea)) : 0;
     const QString sourceWindow = state->strip().activeWindowId();
     const bool changed = deltaPx != 0 && state->strip().scrollViewBy(deltaPx, params);
     const QString refusal = deltaPx == 0 ? QStringLiteral("no_movement") : QStringLiteral("no_target");

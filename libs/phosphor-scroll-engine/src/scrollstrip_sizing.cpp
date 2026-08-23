@@ -114,7 +114,8 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
     if (!col) {
         return false;
     }
-    // Degenerate work area, the same bail its three sibling width verbs take.
+    // Degenerate work area, the same bail its sibling width verbs (cycle,
+    // adjust, equalize, minimize) take.
     // This one writes PERSISTED intent: with a zero main extent the
     // full-width compare below reads true for anything, and the branch would
     // overwrite the column's stored width with a half-work-area proportion
@@ -246,18 +247,18 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     }
     int pool = usable;
     int free = n;
-    for (bool settled = false; !settled;) {
-        settled = true;
-        if (free == 0) {
-            break;
-        }
+    // Each round pins every free column whose floor exceeds the current
+    // share; a round that pins nothing means the remaining shares clear
+    // their floors, and a round that pins the last free column ends it.
+    for (bool pinned = true; pinned && free > 0;) {
+        pinned = false;
         const int share = pool / free;
         for (int k = 0; k < n; ++k) {
             if (!floorBound.at(k) && extents.at(k) > share) {
                 floorBound[k] = true;
                 pool -= extents.at(k);
                 --free;
-                settled = false;
+                pinned = true;
             }
         }
     }
@@ -342,8 +343,15 @@ bool ScrollStrip::minimizeActiveColumnWidth(const ScrollLayoutParams& params)
     const ColumnWidth target = presets.isEmpty()
         ? ColumnWidth::makeProportion(MinColumnWidthFraction)
         : ColumnWidth::makePreset(*std::min_element(presets.cbegin(), presets.cend()));
-    // Resolved-pixel compare, toggleMaximizeActiveColumn's reason.
-    if (resolveColumnWidthPx(col->width, params) == resolveColumnWidthPx(target, params)) {
+    // RENDERED-pixel compare, equalizeVisibleColumnWidths' reason: what the
+    // user sees is columnExtentPx, the intent raised to the column's minimum
+    // size floor. A column whose floor already sits at or above the smallest
+    // preset would move nothing on screen if the intent were rewritten, and
+    // the verb would report success for a no-op (then refuse the second
+    // press). Comparing the floored target against the floored current width
+    // makes the first press refuse too.
+    const int floorPx = columnMinExtentPx(*col, params);
+    if (columnExtentPx(*col, params) == qMax(resolveColumnWidthPx(target, params), floorPx)) {
         return false;
     }
     col->width = target;
@@ -384,8 +392,14 @@ bool ScrollStrip::resetToDefaults(const std::optional<ColumnWidth>& defaultWidth
         }
     }
     // Nothing is maximized once every column is at the default, so the slot
-    // would otherwise hand a stale intent to the next un-maximize.
-    m_preMaximizeColumnIdx = -1;
+    // would otherwise hand a stale intent to the next un-maximize. Only when
+    // widths were actually rewritten: under "the client decides" the widths
+    // stay as they are, a maximized column stays maximized, and clearing the
+    // slot would make the next un-maximize fall back to the half-width
+    // proportion instead of the width the user had before.
+    if (defaultWidth) {
+        m_preMaximizeColumnIdx = -1;
+    }
     return changed;
 }
 

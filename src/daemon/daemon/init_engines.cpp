@@ -1252,7 +1252,8 @@ void Daemon::initEnginesAndWiring()
     // emptying half first, so on a single-screen tiling→scrolling flip the
     // effect saw enabledChanged(false) a full event-loop pass before the new
     // union and cancelled in-flight unfloat continuations mid-flip (the
-    // hazard tilingadaptor.h:100-108 documents). Anything that ever does
+    // hazard notifyEngineScreensChanged's doc in tilingadaptor.h documents).
+    // Anything that ever does
     // need a direct relay must route through notifyEngineScreensChanged.
     // Note for whoever wires one: ScrollEngine::enabledChanged carries no
     // wasDesktopSwitch suppression, which is harmless only while it stays

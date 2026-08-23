@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is just past the 1150 hard
+// FILE-SIZE EXCEPTION (sanctioned): this file is well past the 1150 hard
 // ceiling. The case for it: the shortcut-invariant guards (duplicate
-// defaults, Shift+symbol spellings, the schema/manager parity derivations)
-// and the scrolling schema guards read each other's fixtures and pin the
+// defaults, Shift+symbol spellings, the advertised-chord value pins) and the
+// scrolling schema guards read each other's fixtures and pin the
 // SAME defaults table, so a split would duplicate the advertised-chord
 // pins across two files and let them drift apart — the exact defect class
 // this suite exists to prevent. The tab-label typography guards belong to
@@ -205,7 +205,7 @@ private Q_SLOTS:
         QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1String("; "))));
     }
 
-    /// The specific chords the CHANGELOG and README advertise, plus the
+    /// The specific chords the CHANGELOG advertises, plus the
     /// ships-unbound set, pinned by VALUE. The structural guards above
     /// cannot see a retune that moves an advertised default (or binds a
     /// deliberately-unbound verb) while staying unique and parseable — this
@@ -626,8 +626,10 @@ private Q_SLOTS:
     /// above: both preset indices and the fixed window height. Both ends of
     /// every range are pinned, and the width and height twins are pinned
     /// identically so neither can quietly lose a bound the other keeps.
-    /// The three view bools ship their ConfigDefaults default here too, since
-    /// nothing else in the group's schema declaration pins them.
+    /// The group's bools (the two wheel toggles, always-center, crop
+    /// straddlers and the mode's enabled flag) ship their ConfigDefaults
+    /// default here too, since nothing else in the group's schema
+    /// declaration pins them.
     void scrollingNumericRangesClamp()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
@@ -661,11 +663,20 @@ private Q_SLOTS:
         const auto* wheelInverted = findKey(schema, group, ConfigDefaults::wheelFocusInvertedKey());
         QVERIFY(wheelInverted);
         QCOMPARE(wheelInverted->defaultValue.toBool(), ConfigDefaults::scrollingWheelFocusInverted());
+        const auto* alwaysCenter = findKey(schema, group, ConfigDefaults::alwaysCenterSingleColumnKey());
+        QVERIFY(alwaysCenter);
+        QCOMPARE(alwaysCenter->defaultValue.toBool(), ConfigDefaults::scrollingAlwaysCenterSingleColumn());
+        const auto* cropStraddlers = findKey(schema, group, ConfigDefaults::cropStraddlersKey());
+        QVERIFY(cropStraddlers);
+        QCOMPARE(cropStraddlers->defaultValue.toBool(), ConfigDefaults::scrollingCropStraddlers());
+        const auto* enabled = findKey(schema, group, ConfigDefaults::enabledKey());
+        QVERIFY(enabled);
+        QCOMPARE(enabled->defaultValue.toBool(), ConfigDefaults::scrollingEnabled());
     }
 
     /// Scrolling.Behavior schema guards: the sticky enum falls back to its
-    /// default (validIntOr, matching the file's enum convention), the two
-    /// adjust-step percents clamp into their declared range (clampInt — a
+    /// default (validIntOr, matching the file's enum convention), the three
+    /// step percents clamp into their declared range (clampInt — a
     /// numeric range, not an enum), and every key ships the ConfigDefaults
     /// default.
     void scrollingBehaviorSchemaValidates()
@@ -723,8 +734,8 @@ private Q_SLOTS:
         QVERIFY(restoreFloated);
         QCOMPARE(restoreFloated->defaultValue.toBool(), ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin());
 
-        // The drag-insert pair this PR added. Every other key in the group is
-        // pinned above, and these two were the only ones that were not.
+        // The drag-insert pair. Every other key in the group is pinned
+        // above, and these two were the only ones that were not.
         const auto* toggle = findKey(schema, group, ConfigDefaults::toggleActivationKey());
         QVERIFY(toggle);
         QCOMPARE(toggle->defaultValue.toBool(), ConfigDefaults::scrollingDragInsertToggle());
@@ -1296,8 +1307,9 @@ private Q_SLOTS:
             QSignalSpy valueSpy(&settings, &Settings::scrollingDefaultColumnWidthValueChanged);
             // Emit-ORDER pin: at kindChanged emission time the store must
             // already read the NEW kind while the value still holds the
-            // SEED (the flip is announced BEFORE any coercion) — reverting
-            // the pass-5 hoist fails this on every coercing row.
+            // SEED (the flip is announced BEFORE any coercion) — moving the
+            // kindChanged emit below the coercion fails this on every
+            // coercing row.
             const qreal seededValue = settings.scrollingDefaultColumnWidthValue();
             bool orderOk = true;
             const auto orderConn = QObject::connect(
@@ -1405,7 +1417,9 @@ private Q_SLOTS:
         QFETCH(double, expected);
 
         TestHelpers::IsolatedConfigGuard guard;
-        const QString configFile = guard.configPath() + QStringLiteral("/plasmazones/config.json");
+        // The accessor follows $XDG_CONFIG_HOME at runtime, which is what the
+        // guard redirects, so this is the file Settings itself writes.
+        const QString configFile = ConfigDefaults::configFilePath();
         {
             // Materialise a real config file, then hand-edit the pair into it
             // exactly as a user or a shared blob could. Going through the
@@ -1423,7 +1437,7 @@ private Q_SLOTS:
             root = QJsonDocument::fromJson(file.readAll()).object();
             file.close();
         }
-        root[QStringLiteral("_version")] = ConfigSchemaVersion;
+        root[ConfigDefaults::versionKey()] = ConfigSchemaVersion;
 
         QJsonObject group = root.value(ConfigDefaults::scrollingGroup()).toObject();
         group[ConfigDefaults::defaultColumnWidthKindKey()] = kind;

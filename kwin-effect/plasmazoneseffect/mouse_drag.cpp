@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/StaggerTimer.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -17,8 +18,6 @@
 #include "handlers/snaphandler.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
