@@ -27,7 +27,8 @@ Item {
     id: root
 
     /// Catalog rows from ShortcutManager::cheatsheetModel(): one object per
-    /// shortcut with id, label, category, categoryOrder, triggers (list of
+    /// shortcut with id, label, category, categoryOrder, rowOrder (the
+    /// in-category sort position, already applied to the model), triggers (list of
     /// display strings), assigned (bool), mode
     /// ("all"|"snapping"|"autotile"|"scrolling"|"layouts"|"managed"), and description (translated
     /// plain-prose explanation for the row tooltip; empty when the action

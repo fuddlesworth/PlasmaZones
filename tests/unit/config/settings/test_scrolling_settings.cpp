@@ -218,8 +218,10 @@ private Q_SLOTS:
         // Promoted to the mode-neutral shortcut group when every engine
         // gained the verb; the chord itself is unchanged.
         QCOMPARE(ConfigDefaults::switchFocusFloatTilingShortcut(), QStringLiteral("Meta+Alt+X"));
-        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+D"));
-        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+Shift+D"));
+        // The preset cycles page on the paging keys, plain for the width
+        // axis and Shift for the height axis.
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+PgUp"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+PgDown"));
         QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
         // The rest of the CHANGELOG's advertised-by-value chords: the
         // consume/expel pair, the column-width and window-height pairs and
@@ -229,8 +231,14 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingExpelWindowShortcut(), QStringLiteral("Meta+Alt+Shift+I"));
         QCOMPARE(ConfigDefaults::scrollingIncreaseColumnWidthShortcut(), QStringLiteral("Meta+Alt+W"));
         QCOMPARE(ConfigDefaults::scrollingDecreaseColumnWidthShortcut(), QStringLiteral("Meta+Alt+Shift+W"));
-        QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightShortcut(), QStringLiteral("Meta+Alt+H"));
-        QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+H"));
+        // The height ADJUST pair mirrors the width one on its own letter.
+        QCOMPARE(ConfigDefaults::scrollingIncreaseWindowHeightShortcut(), QStringLiteral("Meta+Alt+H"));
+        QCOMPARE(ConfigDefaults::scrollingDecreaseWindowHeightShortcut(), QStringLiteral("Meta+Alt+Shift+H"));
+        QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightShortcut(), QStringLiteral("Meta+Alt+Shift+PgUp"));
+        QCOMPARE(ConfigDefaults::scrollingCycleWindowHeightBackShortcut(), QStringLiteral("Meta+Alt+Shift+PgDown"));
+        // Off Meta+Alt+0, where it read as a tenth quick-layout digit; now
+        // the Alt twin of Retile's T beside Equalize's Shift twin.
+        QCOMPARE(ConfigDefaults::scrollingResetWindowHeightsShortcut(), QStringLiteral("Meta+Ctrl+Alt+T"));
         QCOMPARE(ConfigDefaults::scrollingToggleWindowedFullscreenShortcut(), QStringLiteral("Meta+Alt+Shift+F"));
         // The no-focus PAGE pan, on a free letter of the Meta+Alt pool. The
         // step pan is the wheel's (Meta+Shift+wheel, an effect-side axis
