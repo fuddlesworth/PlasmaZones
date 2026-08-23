@@ -655,8 +655,14 @@ Item {
         // Discrete (a combo activation or the curve dialog accepting), so a
         // refused write leaves the editor showing a curve that never reached
         // disk with no later tick to correct it. Restore the stored state.
+        //
+        // selfDriven, like every other refresh this card drives itself. Without
+        // it the refresh would clear `_writesRefused` — the very latch that
+        // just refused this write — and would take the close-the-editor branch
+        // if the discard has already emptied the store, folding the timing
+        // editor away under the user who just picked the curve.
         if (root._writesRefused) {
-            root.refreshFromTree();
+            root.refreshFromTree(true);
             return;
         }
 
@@ -1109,12 +1115,23 @@ Item {
                     // creating ownership is exactly what randomize is for. A
                     // guard in the shared writer would make it a silent no-op.
                     //
-                    // The refresh is not optional. The editor assigns the
-                    // default map onto its own `shaderParams` (aliased onto
-                    // this card's `currentShaderParams`) BEFORE emitting, so
-                    // returning without it would leave the parameter rows
+                    // The comparison reads the tree, NOT `currentShaderParams`.
+                    // That property is an alias onto the editor's own
+                    // `shaderParams`, and the editor assigns the default map to
+                    // it BEFORE emitting this signal — so comparing against it
+                    // would compare `defaults` with itself, come back true
+                    // every time, and collapse this guard into "the event owns
+                    // no parameters". Reset would then be a silent no-op on
+                    // every inheriting event, including the one case that must
+                    // still write: an ancestor whose parameters are tuned away
+                    // from the pack defaults.
+                    //
+                    // The refresh is not optional either, for the same staging
+                    // reason: returning without it leaves the parameter rows
                     // showing values that no longer describe anything stored.
-                    if (!root._ownsAnyShaderParams() && root._sameParamValues(defaults, root.currentShaderParams)) {
+                    const resolvedNow = settingsController.animationsPage.resolvedShaderProfile(root.eventPath);
+                    const resolvedParams = (resolvedNow && resolvedNow.parameters) || ({});
+                    if (!root._ownsAnyShaderParams() && root._sameParamValues(defaults, resolvedParams)) {
                         root.refreshShaderFromTree();
                         return;
                     }

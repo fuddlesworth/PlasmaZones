@@ -236,9 +236,12 @@ public:
     /// @return true on a successful disk write.
     Q_INVOKABLE bool setOverride(const QString& path, const QVariantMap& profileJson);
 
-    /// Delete the override file at @p path. Emits `overrideChanged(path)`
-    /// when a file actually existed and was removed. Same path validation
-    /// as `setOverride`. @return true when a file was removed.
+    /// Delete the override file at @p path. Same path validation as
+    /// `setOverride`. Emits `overrideChanged(path)` when the file was removed
+    /// AND when it was found already gone (it existed a moment earlier, so the
+    /// registry may still hold the vanished entry); a FAILED removal emits
+    /// neither, the file being still there.
+    /// @return true only when this call did the removing.
     Q_INVOKABLE bool clearOverride(const QString& path);
 
     /// Clear every per-event override file (each built-in event path falls back
@@ -285,54 +288,16 @@ public:
     // every call — which is precisely why anything here must read it once and
     // pass it down rather than call that accessor in a loop. And each is now
     // directly testable without driving QML.
-    //
-    // The tree is not memoised ON PURPOSE, and the reason is worth writing down
-    // because the cost is real: a rebuild is a store read, a QVariantMap →
-    // QJsonObject conversion, a parse and a prune walk, and a card refresh
-    // takes several of them. The obvious memo — cache the tree, invalidate on
-    // `ISettings::shaderProfileTreeChanged` — is UNSAFE. That signal has
-    // exactly one emit site, `Settings::setShaderProfileTree`, so it fires when
-    // this process writes the tree and at no other time: a config reload, a
-    // settings-profile switch, or an edit arriving from outside would all leave
-    // the memo serving a tree that no longer exists, and every card would then
-    // render shader state that is simply wrong. Reading fresh is
-    // unconditionally correct, which is worth more than the rebuild.
-    //
-    // `m_treeDirtyCache` is memoised on that same signal and is safe, but not
-    // by the same argument: it also invalidates on baseline capture, and a
-    // stale dirty VERDICT self-corrects on the next write, where a stale TREE
-    // would be shown to the user. A future memo needs an invalidation set that
-    // covers every path the store can move under it, not just this one signal.
+    // Why it is not memoised is in animationspagecontroller_groupwrites.cpp.
     //
     // What deliberately stays in the card: the `_committing` /
     // `_committingShader` re-entrancy latches and the refresh that follows a
     // group write. Those are view state about which signals the card should
     // ignore while its own write is in flight, and they mean nothing here.
     //
-    // None of these caps `paths.size()`, and none needs to. Each DEDUPLICATES
-    // its list on entry (distinctPaths). Invalid entries differ per writer:
-    // clearFieldOnPaths, divergentPathCount, the four shader group writers
-    // (setShaderOverrideOnPaths, setShaderParametersOnPaths,
-    // clearShaderOverrideOnPaths, clearShaderOverrideDescendantsOnPaths) and
-    // the group readers (shaderOverrideDescendantCountForPaths,
-    // anyPathOwnsShaderPack, anyPathSupportsShaderLeg) all SKIP a non-built-in
-    // path — the last of those three through `supportsShaderLeg`, whose
-    // supported set is built entirely from ProfilePaths constants and so cannot
-    // contain one, rather than through an isValidEventPath call of its own —
-    // while setOverrideMergedOnPaths forwards it to writeOverrideFileOnly,
-    // which rejects it, so that path is absent from the returned count and the
-    // call toasts — a caller bug surfaces instead of being silently dropped.
-    // allPathsHoldShaderEffect is the one that neither skips nor counts: it
-    // RETURNS FALSE on an invalid path, because "every path holds this id"
-    // cannot be true of a path that cannot hold anything. Either way the WORK is
-    // bounded by `ProfilePaths::allBuiltInPaths()` rather than by the
-    // caller's list — a repeat costs nothing and an unrecognised entry costs
-    // one lookup, never a disk read or a shader-tree rebuild. The dedup
-    // matters because QML builds a group as `[eventPath].concat(mirrorPaths)`
-    // and does not dedupe. (The scoped reverts declared elsewhere in this
-    // header — clearOverridesUnder / clearOverridesForPaths — do NOT dedupe;
-    // they are safe against duplicates anyway because the second visit to a
-    // path classifies as Absent and is skipped.)
+    // How each writer treats an invalid entry, and why none of them caps
+    // `paths.size()`, is in animationspagecontroller_groupwrites.cpp beside the
+    // dedup it describes.
 
     /// Merge @p fields into the stored override at every path in @p rawPaths and
     /// write each result back.
@@ -343,18 +308,15 @@ public:
     /// leaf, and a caller that replaced the whole map would drop them the
     /// moment the user nudged Duration.
     ///
-    /// Survival is of the SANITIZED form, not of the bytes on disk: the base is
-    /// read through `rawProfile`, so a hand-edited out-of-range minDistance or
-    /// an unknown sequenceMode enumerator is normalised by an unrelated Duration
-    /// nudge. No resolved value changes, because the sanitizer mirrors what the
-    /// daemon's own parser would have made of the same file, but the rewrite is
-    /// real. clearFieldOnPaths states the same effect for its own rewrite pass.
+    /// Survival is of the SANITIZED form: the base comes from `rawProfile`, so
+    /// a hand-edited out-of-range value is normalised by an unrelated Duration
+    /// nudge. No resolved value changes — the sanitizer mirrors the daemon's own
+    /// parser — but the rewrite is real. clearFieldOnPaths says the same.
     ///
-    /// @p fields is ALLOWLISTED: only the six keys named above plus curve and
-    /// duration are merged, and any other key is dropped with a warning rather
-    /// than written. A stray key would otherwise land in the user's profile
-    /// file and stay there until some later write happened to rewrite the
-    /// object.
+    /// @p fields is ALLOWLISTED to six keys — the four named above plus curve
+    /// and duration — because a stray one would land in the user's profile file
+    /// and stay until some later write rewrote the object. Values are bounded
+    /// as well; see `boundedWrittenMap`.
     ///
     /// @p curveFromCommit distinguishes the two things a caller can mean about
     /// the curve, which a plain map cannot express. An INVALID or NULL QVariant
@@ -418,9 +380,8 @@ public:
     /// write. The empty string is the engaged-empty "None" sentinel, which is
     /// a real stored value and distinct from carrying no override at all.
     ///
-    /// FALSE when nothing was compared, the same way an empty list is false. A
-    /// group whose every member was skipped as non-supporting has tested no
-    /// path, and "every path already carries this effect" must not come back
+    /// FALSE when nothing was compared, as an empty list is: a group whose
+    /// every member was skipped has tested no path, and the answer must not be
     /// true off the back of zero comparisons.
     Q_INVOKABLE bool allPathsHoldShaderEffect(const QStringList& rawPaths, const QString& effectId) const;
 
@@ -432,12 +393,11 @@ public:
     /// The whole group is applied to ONE tree read and written back ONCE, so a
     /// card cannot observe a half-written group, and a drag over a shader
     /// parameter costs one settings write per tick rather than one per path.
-    /// @return the number of paths written, or -1 from either of TWO refusals.
-    /// An async discard owning the tree is the first, and it toasts. An
-    /// @p effectId that `acceptableShaderEffectId` rejects — over-length,
-    /// NUL-bearing, carrying a path separator, or naming no installed pack — is
-    /// the second, and it does NOT toast: it is a caller bug rather than
-    /// something the user did, so it warns to the log and nothing else.
+    /// @return the number of paths written, or -1 from either of TWO refusals:
+    /// an async discard owning the tree, which toasts, or an @p effectId that
+    /// `acceptableShaderEffectId` rejects (over-length, NUL-bearing, carrying a
+    /// separator, or naming no installed pack), which does NOT — that is a
+    /// caller bug rather than something the user did, so it only warns.
     /// @p parameters is BOUNDED rather than validated against the pack's
     /// schema: an over-long key or string value is dropped, and the map is
     /// capped in size. Which parameter ids a pack declares is not checked here,
@@ -498,10 +458,9 @@ public:
     /// walk; `rawShaderProfile` is not memoised), and a card called it once per
     /// write path inside a refresh that runs at drag rate. That is precisely
     /// the read-in-a-loop shape the block comment above forbids.
-    /// @return the number of DISTINCT shadowing descendants, unioned across the
-    /// group rather than summed, so a descendant shared by two paths in the
-    /// list counts once. 0 when there is no ISettings. Never negative: this
-    /// reads and cannot be refused.
+    /// @return the number of DISTINCT shadowing descendants, UNIONED across the
+    /// group rather than summed, so one shared by two paths counts once. 0 with
+    /// no ISettings, never negative: this reads and cannot be refused.
     Q_INVOKABLE int shaderOverrideDescendantCountForPaths(const QStringList& rawPaths) const;
 
     /// True when at least ONE path in @p rawPaths directly owns a shader pack,
@@ -529,10 +488,9 @@ public:
     /// is an explicit "None" that BLOCKS inheritance.
     /// One tree read and one write for the whole group, like its setter twin.
     ///
-    /// Deliberately does NOT skip a path that cannot host a shader leg, which
-    /// its setter twin does. Clearing is idempotent and converges toward a
-    /// clean tree, and such an entry can exist — from an import, or from a path
-    /// that lost leg support after it was written — so refusing to clear it
+    /// Deliberately does NOT skip a path with no shader leg, which its setter
+    /// twin does: such an entry can exist (an import, or a path that lost leg
+    /// support after it was written), clearing is idempotent, and refusing
     /// would strand it with nothing able to remove it.
     /// @return the number of paths whose override was removed, or -1 if the
     /// call was refused because an async discard owns the tree (it toasts).
@@ -558,12 +516,10 @@ public:
     /// The curve counts only when @p compareCurve is true, which the caller
     /// sets false in simple mode: there is no curve control there, so no edit
     /// could converge a divergent curve and counting it would latch the banner
-    /// on permanently. The motion-set fields do not count, because the merged
-    /// writer preserves each path's own for any field the caller does not name,
-    /// and no caller names one today — the card sends duration, or a curve, and
-    /// nothing else. A caller that did name one would converge that field while
-    /// this measure kept reporting 0 for it, so the two would have to be
-    /// brought back into step together.
+    /// on permanently. The motion-set fields do not count: the merged writer
+    /// preserves each path's own for any field the caller does not name, and no
+    /// caller names one today. One that did would converge that field while
+    /// this kept reporting 0, so the two would have to move together.
     ///
     /// The shader axis is compared only for paths that can host a shader leg. A
     /// non-supporting path always stores nothing on that axis, so comparing its
@@ -712,12 +668,11 @@ public:
     /// disabled all popups" stick even when a parent assigns a shader. Emits
     /// `pendingChangesChanged()` whenever the call actually changed state.
     ///
-    /// NOT Q_INVOKABLE, and neither are the three per-path shader operations
-    /// below. QML goes through the `*OnPaths` group forms exclusively, and the
-    /// group-writes block above depends on that: one tree read, one write back,
-    /// one broadcast for a whole mirror group, which a per-path call reachable
-    /// from a delegate would quietly defeat by writing N times. These remain
-    /// public for the group writers that build on them and for tests.
+    /// NOT Q_INVOKABLE, nor are the three per-path shader operations below.
+    /// QML uses the `*OnPaths` group forms exclusively, and the group-writes
+    /// contract depends on that: one tree read and one broadcast per group,
+    /// which a delegate-reachable per-path call would defeat by writing N
+    /// times. Public for the group writers built on them, and for tests.
     bool setShaderOverride(const QString& path, const QString& effectId, const QVariantMap& parameters);
 
     /// Remove the shader override at @p path; ancestors take over via
@@ -734,15 +689,11 @@ public:
     /// `ShaderProfileTree::resolve` and the parent's value never
     /// reaches runtime even though the UI control shows it set.
     ///
-    /// "Deeper" is a STRING PREFIX, which is narrower than the cascade the
-    /// resolver walks. `ProfilePaths::parentPath` sends every category root up
-    /// to the bare literal `global`, and `global` is a prefix of nothing — so
-    /// `window`, `popup`, `osd` and their kin genuinely resolve THROUGH the
-    /// global node while none of them counts as its descendant here. Passing
-    /// `global` therefore always answers 0, however many category-level
-    /// overrides exist. Inert today because no card is built for the global
-    /// node, and the QML documents the same gap from its side; it would have to
-    /// be revisited before one is.
+    /// "Deeper" is a STRING PREFIX, narrower than the cascade the resolver
+    /// walks: `parentPath` sends every category root to the bare literal
+    /// `global`, which is a prefix of nothing, so passing `global` always
+    /// answers 0 however many category overrides exist. Inert today — no card
+    /// is built for the global node — but it would have to be revisited first.
     int shaderOverrideDescendantCount(const QString& path) const;
 
     /// Clear every shader override whose path is strictly DEEPER than
@@ -841,22 +792,23 @@ public:
     void forgetCachedOverrideFiles();
 
 Q_SIGNALS:
-    /// Emitted on any successful set/clearOverride, and — with an EMPTY path —
-    /// from `forgetCachedOverrideFiles` as a tree-wide reload broadcast when
-    /// somebody outside this controller wrote to the profiles directory. A
-    /// consumer must therefore treat an empty path as "re-read everything"
-    /// rather than indexing into it. Otherwise @p path is the
-    /// affected event path.
+    /// Emitted whenever this controller's view of a path changed — wider than
+    /// "a write succeeded", since it includes an override found ALREADY GONE
+    /// (the registry may still serve the vanished file). With an EMPTY path it
+    /// is the tree-wide reload broadcast from `forgetCachedOverrideFiles`, so a
+    /// consumer must treat empty as "re-read everything" rather than indexing
+    /// into it. Otherwise @p path is the affected event path.
     void overrideChanged(const QString& path);
 
     /// Emitted on any successful add/removeUserPreset.
     void userPresetsChanged();
 
-    /// Emitted on set/clearShaderOverride AND on any full settings
-    /// reload (`ISettings::shaderProfileTreeChanged`). The path-agnostic
-    /// emission on reload is the cheapest way to refresh every visible
-    /// event card after Discard / Settings::load() — diffing the tree
-    /// would be more expensive than just rebinding.
+    /// Emitted on set/clearShaderOverride and on every write of the tree
+    /// through `Settings::setShaderProfileTree` — the sole emitter of
+    /// `ISettings::shaderProfileTreeChanged`, which Discard's revert also goes
+    /// through. NOT on a plain settings reload; nothing re-emits it on load.
+    /// Path-agnostic because diffing the tree to find what moved would cost
+    /// more than letting every visible card rebind.
     void shaderProfileChanged(const QString& path);
 
     /// Re-emit of `AnimationShaderRegistry::effectsChanged` so QML can

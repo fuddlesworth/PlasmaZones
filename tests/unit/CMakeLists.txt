@@ -1375,10 +1375,11 @@ target_link_libraries(test_tiling_algorithm_controller PRIVATE Qt6::Test Qt6::Co
 target_compile_definitions(test_tiling_algorithm_controller PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_tiling_algorithm_controller COMMAND test_tiling_algorithm_controller)
 
-# Animations-controller sources shared by the nine test executables below
+# Animations-controller sources shared by the ten test executables below
 # (page controller / QML contracts / profile-store sync / motion sets / presets /
-# shader overrides / shader param writes / group writes / suppression mirror).
-# One list so a new controller source file cannot silently miss one of the nine.
+# shader overrides / shader param writes / group writes / group write bounds /
+# suppression mirror). One list so a new controller source file cannot silently
+# miss one of the ten.
 set(_animations_ctrl_SRCS
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/pages/animationspagecontroller_shaders.cpp
@@ -1494,6 +1495,21 @@ target_link_libraries(test_animations_group_writes
         plasmazones_core
 )
 add_test(NAME test_animations_group_writes COMMAND test_animations_group_writes)
+
+add_executable(test_animations_group_write_bounds
+    settings/pages/test_animations_group_write_bounds.cpp
+    ${_animations_ctrl_SRCS}
+)
+target_link_libraries(test_animations_group_write_bounds
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::Gui
+        PhosphorAnimation::PhosphorAnimation
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_animations_group_write_bounds COMMAND test_animations_group_write_bounds)
 
 # Companion test executable: motion-set + pending-changes coverage.
 add_executable(test_animations_motion_sets

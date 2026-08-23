@@ -7,9 +7,11 @@
 // files (animationspagecontroller.cpp and its _overrides / _shaders / _paths /
 // _groupwrites siblings). Covers the shader-effect / parameter / shader-profile conversions
 // those TUs hand to QML, the override-file read and normalisation
-// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, readProfileJson,
-// sanitizedProfileMap, profileToVariantMap,
-// mergeMissingFields, fillLibraryDefaults), and the two path helpers
+// (JsonNameKey, JsonEffectIdKey, JsonShaderParametersKey, kMaxProfileReadBytes,
+// readProfileJson, sanitizedProfileMap, profileToVariantMap,
+// mergeMissingFields, fillLibraryDefaults), the Q_INVOKABLE-boundary bound on
+// what a caller's map may carry to disk (kMaxWrittenMap*, boundedWrittenMap),
+// and the two path helpers
 // (humanizeSegment, collectShaderOverrideDescendants). Inline definitions here ensure every TU
 // gets its own copy without relying on unity-build TU merging for cross-TU
 // linkage.

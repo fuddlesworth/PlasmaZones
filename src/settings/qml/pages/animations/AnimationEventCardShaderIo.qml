@@ -68,17 +68,6 @@ QtObject {
         card._noteWriteResult(card._setShaderParamsOnAll(next));
     }
 
-    /// Batch write — randomize and reset roll N values that should land as one
-    /// `setShaderParametersOnPaths` round-trip rather than N of them.
-    ///
-    /// The `effectId` check here is a non-empty test in practice, NOT the
-    /// stale-effect guard `_writeShaderParam` carries. Both call sites pass
-    /// `card.currentShaderEffectId` itself and the editor computes and re-emits
-    /// the map synchronously in the same handler, so there is no asynchronous
-    /// gap for the id to go stale across. It is kept because the empty case is
-    /// real (no pack resolved, nothing to write) and because a future payload
-    /// that DOES carry a snapshotted id should find the comparison already
-    /// here rather than have to reintroduce it.
     /// Whether this event stores parameter values of its OWN, as opposed to
     /// resolving an ancestor's. Distinct from `_ownsShaderParamsOnly`, which is
     /// additionally false when this event owns its pack — here the question is
@@ -105,6 +94,17 @@ QtObject {
         return true;
     }
 
+    /// Batch write — randomize and reset roll N values that should land as one
+    /// `setShaderParametersOnPaths` round-trip rather than N of them.
+    ///
+    /// The `effectId` check here is a non-empty test in practice, NOT the
+    /// stale-effect guard `_writeShaderParam` carries. Both call sites pass
+    /// `card.currentShaderEffectId` itself and the editor computes and re-emits
+    /// the map synchronously in the same handler, so there is no asynchronous
+    /// gap for the id to go stale across. It is kept because the empty case is
+    /// real (no pack resolved, nothing to write) and because a future payload
+    /// that DOES carry a snapshotted id should find the comparison already
+    /// here rather than have to reintroduce it.
     function _writeAllShaderParams(effectId, allParams) {
         if (!effectId || effectId !== card.currentShaderEffectId)
             return;

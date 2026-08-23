@@ -599,8 +599,21 @@ private Q_SLOTS:
                  "a group of only non-shader-leg paths reported holding a pack it never compared");
     }
 
-    /// The group readers refuse an unrecognised path rather than treating it as
-    /// a path that happens to store nothing.
+    /// The group readers answer safely for an unrecognised path.
+    ///
+    /// Be precise about what is PINNED here and what is merely stated, so this
+    /// block is not mistaken for mutation-proven throughout. Only the
+    /// `allPathsHoldShaderEffect` assertion fails if its `isValidEventPath`
+    /// gate is deleted — with the gate gone the bogus path is skipped as
+    /// non-supporting, `compared` is already true from the valid path, and the
+    /// reader wrongly returns true. The next three would pass with their gates
+    /// removed as well, because each already skips or short-circuits on an
+    /// unknown path by another route, and `anyPathSupportsShaderLeg` has no
+    /// such gate at all — it answers from the membership set alone. They are
+    /// kept as statements of the contract.
+    ///
+    /// The no-ISettings tail IS load-bearing: deleting any of those early
+    /// returns dereferences a null settings pointer.
     void groupReadersRejectAnInvalidPath()
     {
         ControllerFixture fx;
@@ -663,9 +676,9 @@ private Q_SLOTS:
         QVERIFY(!c.allPathsHoldShaderEffect(group, QStringLiteral("pixelate")));
     }
 
-    /// Descendant clears sum across the group. Pinned alongside the refusal
-    /// case below, which is the half that actually needs the sentinel.
-    void clearShaderOverrideDescendantsOnPaths_sumsAcrossTheGroup()
+    /// Descendant clears cover every parent in the group. Pinned alongside the
+    /// refusal case below, which is the half that actually needs the sentinel.
+    void clearShaderOverrideDescendantsOnPaths_coversEveryParentInTheGroup()
     {
         ControllerFixture fx;
         [[maybe_unused]] auto& [guard, settings, registry, c] = fx;

@@ -31,6 +31,24 @@
 
 namespace PlasmaZones {
 
+// WHY THE SHADER TREE IS NOT MEMOISED, since the cost is real enough that
+// someone will try. A rebuild is a store read, a QVariantMap to QJsonObject
+// conversion, a parse and a prune walk, and one card refresh takes several of
+// them. The obvious memo — cache the tree, invalidate on
+// ISettings::shaderProfileTreeChanged — is UNSAFE. That signal has exactly one
+// emit site, Settings::setShaderProfileTree, so it fires when this process
+// writes the tree and at no other time: a config reload, a settings-profile
+// switch, or an edit arriving from outside would each leave the memo serving a
+// tree that no longer exists, and every card would render shader state that is
+// simply wrong. Reading fresh is unconditionally correct, which is worth more
+// than the rebuild.
+//
+// m_treeDirtyCache is memoised on that same signal and is safe, but not by the
+// same argument: it also invalidates on baseline capture, and a stale dirty
+// VERDICT self-corrects on the next write where a stale TREE would be shown to
+// the user. A future memo needs an invalidation set covering every path the
+// store can move under it, not just this one signal.
+
 using namespace animations_controller_detail;
 
 namespace {
@@ -73,6 +91,30 @@ QByteArray comparableStateKey(const QVariantMap& profile, const QVariantMap& sha
 /// header calls free. Most writers run it as their first statement;
 /// `applyShaderGroupWrite` runs it after its refusal gates instead, so a call
 /// that is going to be refused does not pay for a list it will not use.
+// None of these caps `paths.size()`, and none needs to. Each DEDUPLICATES
+// its list on entry (distinctPaths). Invalid entries differ per writer:
+// clearFieldOnPaths, divergentPathCount, the four shader group writers
+// (setShaderOverrideOnPaths, setShaderParametersOnPaths,
+// clearShaderOverrideOnPaths, clearShaderOverrideDescendantsOnPaths) and
+// the group readers (shaderOverrideDescendantCountForPaths,
+// anyPathOwnsShaderPack, anyPathSupportsShaderLeg) all SKIP a non-built-in
+// path — the last through `supportsShaderLeg`, whose supported set is built
+// from ProfilePaths constants and so cannot contain one, rather than
+// through an isValidEventPath call — while setOverrideMergedOnPaths
+// forwards it to writeOverrideFileOnly,
+// which rejects it, so that path is absent from the returned count and the
+// call toasts — a caller bug surfaces instead of being silently dropped.
+// allPathsHoldShaderEffect is the one that neither skips nor counts: it
+// RETURNS FALSE on an invalid path, because "every path holds this id"
+// cannot be true of a path that cannot hold anything. Either way the WORK is
+// bounded by `ProfilePaths::allBuiltInPaths()` rather than by the
+// caller's list — a repeat costs nothing and an unrecognised entry costs
+// one lookup, never a disk read or a shader-tree rebuild. The dedup
+// matters because QML builds a group as `[eventPath].concat(mirrorPaths)`
+// and does not dedupe. (The scoped reverts declared elsewhere in this
+// header — clearOverridesUnder / clearOverridesForPaths — do NOT dedupe;
+// they are safe against duplicates anyway because the second visit to a
+// path classifies as Absent and is skipped.)
 QStringList distinctPaths(const QStringList& paths)
 {
     QStringList out;
@@ -139,19 +181,26 @@ int AnimationsPageController::setOverrideMergedOnPaths(const QStringList& rawPat
         QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval),
         QLatin1String(PhosphorAnimation::Profile::JsonFieldPresetName),
     };
-    // Keys are allowlisted, VALUES are bounded. The allowlist alone left
-    // `presetName` free to carry an arbitrarily long string straight to disk,
-    // and a profile file pushed past the read cap is skipped whole on the way
-    // back in — so the card would render every field as inherited while
-    // `hasOverride` still reported true, until some later write repaired it.
-    const QVariantMap boundedFields = boundedWrittenMap(fields, QLatin1String("setOverrideMergedOnPaths"));
+    // ALLOWLIST FIRST, then bound the survivors. Order matters: bounding first
+    // would let junk keys consume the entry cap, and because a QVariantMap
+    // iterates in sorted key order, 256 keys sorting before "curve" would make
+    // the cap stop before the user's real edit was ever reached — dropping it
+    // with one generic warning where the allowlist would have discarded the
+    // junk for free. Allowlisting first caps the map at six by construction, so
+    // only the key- and value-length bounds still have work to do.
     QVariantMap acceptedFields;
-    for (auto it = boundedFields.constBegin(); it != boundedFields.constEnd(); ++it) {
+    for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
         if (knownFields.contains(it.key()))
             acceptedFields.insert(it.key(), it.value());
         else
             qCWarning(lcConfig) << "setOverrideMergedOnPaths: dropping unknown profile field" << it.key();
     }
+    // Keys are allowlisted, VALUES are bounded. The allowlist alone left
+    // `presetName` free to carry an arbitrarily long string straight to disk,
+    // and a profile file pushed past the read cap is skipped whole on the way
+    // back in — so the card would render every field as inherited while
+    // `hasOverride` still reported true, until some later write repaired it.
+    acceptedFields = boundedWrittenMap(acceptedFields, QLatin1String("setOverrideMergedOnPaths"));
 
     // Every path's stored profile is read BEFORE the first write. `setOverride`
     // invalidates the whole disk memo, so reading inside the write loop would
@@ -684,11 +733,12 @@ bool AnimationsPageController::anyPathOwnsShaderPack(const QStringList& rawPaths
             continue;
         if (!tree.hasOverride(path))
             continue;
-        // By value, not by reference: `directOverride` returns a ShaderProfile
-        // BY VALUE, so binding a reference to a member of that temporary lives
-        // only as long as the full expression. It is correct today through
-        // lifetime extension, and it would break silently the moment anything
-        // is inserted between the call and the member access.
+        // By value, not by reference. Lifetime extension DOES cover a reference
+        // bound to a member subobject of a prvalue in an initialisation, so the
+        // reference form was correct — but it is a rule easy to lose in a
+        // refactor (grow the initialiser a call in between, or have
+        // `directOverride` start returning a reference, and it stops holding).
+        // The copy is one refcount bump and depends on nothing.
         const std::optional<QString> id = tree.directOverride(path).effectId;
         // Engaged AND non-empty. The engaged-empty sentinel is an explicit
         // "no shader here", not a pack this event owns.
