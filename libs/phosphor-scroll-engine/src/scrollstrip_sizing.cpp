@@ -509,9 +509,10 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // min size in the verb): without it a shrink below minHeight would
     // "succeed" here while relayout re-clamps, so every further press
     // reports success with nothing moving on screen. With
-    // respectMinimumSize off, relayout stops re-clamping too, so the floor
-    // drops to 1 — keeping it would invert the failure (the verb refusing a
-    // shrink relayout would happily apply).
+    // respectMinimumSize off, relayout stops re-clamping too, so the CLIENT
+    // half of the floor drops out — keeping it would invert the failure (the
+    // verb refusing a shrink relayout would happily apply). What is left
+    // underneath is the engine's own fraction floor, below.
     // minCross, matching the clamp relayout applies to this same value.
     // Capped at workH as well: a client cross-minimum LARGER than the work
     // area (reachable through a work-area shrink after the minimum was
