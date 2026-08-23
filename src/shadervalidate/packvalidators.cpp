@@ -206,25 +206,56 @@ int validatePack(const QString& packDir, QTextStream& out)
     // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
     // clears bufferShaderPaths when a declared buffer is missing, so a lint reading
     // the parsed values would silently pass an author error the runtime hid.
-    if (info.isMultipass) {
+    //
+    // The GATE is raw for the same reason, and it has to be: parseShaderMetadata
+    // sets info.isMultipass = false as its fail-closed response to an
+    // unresolvable buffer entry, which is precisely the defect these lints
+    // report. Gating on the parsed flag meant the block was skipped for every
+    // pack that needed it and ran only for packs that were already fine.
+    const bool authorDeclaredMultipass = rawRoot.value(QLatin1String("multipass")).toBool(false)
+        || !rawRoot.value(QLatin1String("bufferShaders")).toArray().isEmpty()
+        || !rawRoot.value(QLatin1String("bufferShader")).toString().isEmpty();
+    if (authorDeclaredMultipass) {
         const QJsonObject& root = rawRoot;
 
-        QStringList bufferNames;
         const QJsonArray declared = root.value(QLatin1String("bufferShaders")).toArray();
-        for (const QJsonValue& v : declared) {
-            if (!v.toString().isEmpty()) {
+        QStringList bufferNames;
+        if (declared.isEmpty()) {
+            // The implicit fallback keys off the RAW array being absent, the
+            // way parseShaderMetadata's bufferShadersDeclared does. Keying it
+            // off the non-empty SUBSET instead made `"bufferShaders": [""]`
+            // lint a buffer.frag the runtime never looks at, while saying
+            // nothing about the empty entry that is the actual defect.
+            bufferNames << root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
+        } else {
+            for (const QJsonValue& v : declared) {
                 bufferNames << v.toString();
             }
         }
-        if (bufferNames.isEmpty()) {
-            bufferNames << root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
-        }
         for (const QString& bufName : bufferNames) {
+            if (bufName.isEmpty()) {
+                // resolveWithinPack returns empty for an empty name before it
+                // reaches the traversal guard, and the caller treats an empty
+                // resolve as fail-closed: it clears the WHOLE bufferShaderPaths
+                // list and turns multipass off for the entire pack. Silent
+                // without this lint, and the warning the runtime does log
+                // misattributes it to a path escape.
+                lints << QStringLiteral(
+                    "empty bufferShaders entry (resolves empty at load, which drops the whole bufferShaders "
+                    "list and disables multipass for the pack)");
+                continue;
+            }
             const auto confined = confinedPackPath(packDir, bufName);
             if (!confined) {
-                lints << QStringLiteral("multipass buffer shader path escapes the pack directory: %1").arg(bufName);
+                lints << QStringLiteral(
+                             "multipass buffer shader path escapes the pack directory: %1 (drops the "
+                             "whole bufferShaders list and disables multipass for the pack)")
+                             .arg(bufName);
             } else if (!QFile::exists(*confined)) {
-                lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
+                lints << QStringLiteral(
+                             "multipass buffer shader missing: %1 (drops the whole bufferShaders list "
+                             "and disables multipass for the pack)")
+                             .arg(bufName);
             }
         }
 
@@ -247,6 +278,47 @@ int validatePack(const QString& packDir, QTextStream& out)
                          .arg(PhosphorShaders::kMinBufferScale)
                          .arg(PhosphorShaders::kMaxBufferScale)
                          .arg(rawScale);
+        }
+
+        // Wrap/filter vocabulary and alignment, the lints the animation and
+        // surface arms already carry. This arm needs them MOST: normalizeWrapMode
+        // and normalizeFilterMode map an unrecognised token to clamp/linear with
+        // no warning at any layer, and parseShaderMetadata pads a short array
+        // with the single-value default and trims a long one, also silently. The
+        // sibling runtimes at least log.
+        const auto lintTokens = [&lints](const QJsonArray& arr, const QString& field, bool wrap) {
+            for (const QJsonValue& v : arr) {
+                const QString tok = v.toString();
+                const bool ok =
+                    wrap ? PhosphorShaders::isValidWrapToken(tok) : PhosphorShaders::isValidFilterToken(tok);
+                if (!tok.isEmpty() && !ok) {
+                    lints << QStringLiteral("%1 value '%2' not in vocabulary (coerced at load)").arg(field, tok);
+                }
+            }
+        };
+        const QJsonArray wrapsArr = root.value(QLatin1String("bufferWraps")).toArray();
+        const QJsonArray filtersArr = root.value(QLatin1String("bufferFilters")).toArray();
+        lintTokens(wrapsArr, QStringLiteral("bufferWraps"), true);
+        lintTokens(filtersArr, QStringLiteral("bufferFilters"), false);
+        const auto lintLength = [&lints, &declared](const QJsonArray& arr, const QString& field) {
+            if (!arr.isEmpty() && arr.size() != declared.size()) {
+                lints << QStringLiteral(
+                             "%1 has %2 entries for %3 buffer shaders (aligned positionally; "
+                             "surplus dropped and missing entries fall back at load)")
+                             .arg(field)
+                             .arg(static_cast<int>(arr.size()))
+                             .arg(static_cast<int>(declared.size()));
+            }
+        };
+        lintLength(wrapsArr, QStringLiteral("bufferWraps"));
+        lintLength(filtersArr, QStringLiteral("bufferFilters"));
+        const QString singleWrap = root.value(QLatin1String("bufferWrap")).toString();
+        if (!singleWrap.isEmpty() && !PhosphorShaders::isValidWrapToken(singleWrap)) {
+            lints << QStringLiteral("bufferWrap value '%1' not in vocabulary (coerced at load)").arg(singleWrap);
+        }
+        const QString singleFilter = root.value(QLatin1String("bufferFilter")).toString();
+        if (!singleFilter.isEmpty() && !PhosphorShaders::isValidFilterToken(singleFilter)) {
+            lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (coerced at load)").arg(singleFilter);
         }
     }
     if (!QFile::exists(info.sourcePath)) {
@@ -1052,6 +1124,13 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
         for (const QJsonValue& v : declaredBuffers) {
             const QString bufName = v.toString();
             if (bufName.isEmpty()) {
+                // fromJson SKIPS an empty entry while bufferWraps and
+                // bufferFilters keep every entry in place, and those arrays are
+                // positionally aligned with this one — so one empty entry shifts
+                // every later pass's wrap and filter override by one, silently.
+                lints << QStringLiteral(
+                    "empty bufferShaders entry (dropped at load, which shifts the bufferWraps and bufferFilters "
+                    "alignment for every later pass)");
                 continue;
             }
             if (SurfaceShaderRegistry::isBuiltinBufferShader(bufName)) {
@@ -1068,21 +1147,55 @@ int validateSurfacePack(const QString& packDir, QTextStream& out)
                 lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
             }
         }
-        // bufferWraps / bufferFilters are positionally aligned to bufferShaders;
-        // surplus entries beyond the buffer count are never indexed by the
-        // consumer at load (the runtime reads only up to the buffer count), so
-        // flag a length mismatch the author likely did not intend.
+        // The runtime caps buffer passes and drops the surplus with only a
+        // journal warning, the same "runtime hid the author error" class the
+        // sibling arms lint.
+        if (declaredBuffers.size() > PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses) {
+            lints << QStringLiteral("too many buffer shaders: %1 declared, cap is %2 (surplus dropped at load)")
+                         .arg(static_cast<int>(declaredBuffers.size()))
+                         .arg(PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferPasses);
+        }
+        // bufferWraps / bufferFilters are positionally aligned to bufferShaders
+        // and lossy in BOTH directions at load: a longer array is trimmed and a
+        // shorter one is padded with the single-value default, neither with a
+        // warning. Flag any mismatch, matching the animation arm, rather than
+        // surplus alone — a short array is the likelier authoring slip.
         const auto lintBufferArrayLen = [&](QLatin1String key) {
-            const int extra = doc.object().value(key).toArray().size() - declaredBuffers.size();
-            if (extra > 0) {
-                lints << QStringLiteral("%1 has %2 more entr%3 than buffer shaders (surplus ignored at load)")
+            const QJsonArray arr = doc.object().value(key).toArray();
+            if (!arr.isEmpty() && arr.size() != declaredBuffers.size()) {
+                lints << QStringLiteral(
+                             "%1 has %2 entries for %3 buffer shaders (aligned positionally; "
+                             "surplus dropped and missing entries fall back at load)")
                              .arg(QString(key))
-                             .arg(extra)
-                             .arg(extra == 1 ? QStringLiteral("y") : QStringLiteral("ies"));
+                             .arg(static_cast<int>(arr.size()))
+                             .arg(static_cast<int>(declaredBuffers.size()));
             }
         };
         lintBufferArrayLen(QLatin1String("bufferWraps"));
         lintBufferArrayLen(QLatin1String("bufferFilters"));
+        // Vocabulary, on all four spellings. validatedWrap / validatedFilter
+        // clear an unrecognised token to empty with a journal warning only.
+        const auto lintSurfaceTokens = [&lints, &doc](QLatin1String key, bool wrap) {
+            for (const QJsonValue& v : doc.object().value(key).toArray()) {
+                const QString tok = v.toString();
+                const bool ok = wrap ? PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(tok)
+                                     : PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(tok);
+                if (!tok.isEmpty() && !ok) {
+                    lints << QStringLiteral("%1 value '%2' not in vocabulary (cleared at load)").arg(QString(key), tok);
+                }
+            }
+        };
+        lintSurfaceTokens(QLatin1String("bufferWraps"), true);
+        lintSurfaceTokens(QLatin1String("bufferFilters"), false);
+        const QString singleWrap = doc.object().value(QLatin1String("bufferWrap")).toString();
+        if (!singleWrap.isEmpty() && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidWrapToken(singleWrap)) {
+            lints << QStringLiteral("bufferWrap value '%1' not in vocabulary (cleared at load)").arg(singleWrap);
+        }
+        const QString singleFilter = doc.object().value(QLatin1String("bufferFilter")).toString();
+        if (!singleFilter.isEmpty()
+            && !PhosphorSurfaceShaders::SurfaceShaderContract::isValidFilterToken(singleFilter)) {
+            lints << QStringLiteral("bufferFilter value '%1' not in vocabulary (cleared at load)").arg(singleFilter);
+        }
         const double rawScale = doc.object().value(QLatin1String("bufferScale")).toDouble(1.0);
         if (rawScale < PhosphorShaders::kMinBufferScale || rawScale > PhosphorShaders::kMaxBufferScale) {
             lints << QStringLiteral("bufferScale out of range [%1, %2]: %3 (clamped at load)")

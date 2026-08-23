@@ -92,6 +92,51 @@ PackResult validate(const QTemporaryDir& tmp, const QString& name, const QJsonOb
     return result;
 }
 
+/// The overlay twin of `validate`. Writes the pack plus a trivial zone
+/// fragment and every buffer pass it declares, so the metadata lints under
+/// test are the only thing that can fail. The buffer stages are written from
+/// the DECLARED names, empty ones skipped, which is what lets the
+/// empty-entry case exercise the lint rather than a missing file.
+PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata)
+{
+    const QString dir = tmp.filePath(name);
+    QDir().mkpath(dir);
+    QFile meta(dir + QStringLiteral("/metadata.json"));
+    if (!meta.open(QIODevice::WriteOnly)) {
+        return {};
+    }
+    meta.write(QJsonDocument(metadata).toJson());
+    meta.close();
+
+    const auto writeStage = [&dir](const QString& file) {
+        QFile f(dir + QLatin1Char('/') + file);
+        if (f.open(QIODevice::WriteOnly)) {
+            f.write("vec4 pZone(vec2 uv) { return vec4(0.0); }\n");
+        }
+    };
+    writeStage(QStringLiteral("zone.frag"));
+    for (const QJsonValue& v : metadata.value(QLatin1String("bufferShaders")).toArray()) {
+        if (!v.toString().isEmpty()) {
+            writeStage(v.toString());
+        }
+    }
+
+    PackResult result;
+    QTextStream stream(&result.report);
+    result.errors = PlasmaZones::ShaderValidate::validatePack(dir, stream);
+    stream.flush();
+    return result;
+}
+
+QJsonObject overlayPack(const QString& id)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("id"), id);
+    obj.insert(QStringLiteral("name"), QStringLiteral("Test Overlay"));
+    obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("zone.frag"));
+    return obj;
+}
+
 QJsonObject basePack(const QString& id)
 {
     QJsonObject obj;
@@ -702,6 +747,60 @@ private Q_SLOTS:
 
         QVERIFY(r.errors > 0);
         QVERIFY(r.report.contains(QStringLiteral("geometryGrid is negative")));
+    }
+
+    /// The buffer lints the OVERLAY arm was missing while both siblings had
+    /// them. This arm needed them most: the overlay runtime coerces an unknown
+    /// wrap or filter token, and pads or trims a misaligned array, with no
+    /// warning at ANY layer, where the animation and surface runtimes at least
+    /// log. Every case here is silent without the lint.
+    void overlayBufferLintsCoverTheSilentlyCoercedFields()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        // An empty entry is the worst of them: resolveWithinPack answers empty
+        // before the traversal guard, and the caller reads that as fail-closed,
+        // clearing the whole list and turning multipass off for the pack.
+        {
+            QJsonObject obj = overlayPack(QStringLiteral("ov-empty"));
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral(""), QStringLiteral("pass0.frag")});
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-empty"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("empty bufferShaders entry")), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("disables multipass")), qPrintable(r.report));
+            // And it must NOT report the implicit buffer.frag, which the
+            // runtime never looks at once the array is declared. That wrong
+            // diagnostic is what the old filtered-list fallback produced.
+            QVERIFY2(!r.report.contains(QStringLiteral("multipass buffer shader missing: buffer.frag")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = overlayPack(QStringLiteral("ov-vocab"));
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("pass0.frag")});
+            obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("wrapp")});
+            obj.insert(QStringLiteral("bufferFilters"), QJsonArray{QStringLiteral("bilinear")});
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-vocab"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("bufferWraps value 'wrapp'")), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferFilters value 'bilinear'")), qPrintable(r.report));
+        }
+        {
+            // Short, not surplus: the likelier authoring slip, and the one the
+            // surface arm's old surplus-only lint drew nothing for.
+            QJsonObject obj = overlayPack(QStringLiteral("ov-short"));
+            obj.insert(QStringLiteral("bufferShaders"),
+                       QJsonArray{QStringLiteral("pass0.frag"), QStringLiteral("pass1.frag")});
+            obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("clamp")});
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-short"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("bufferWraps has 1 entries for 2 buffer shaders")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = overlayPack(QStringLiteral("ov-single"));
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("pass0.frag")});
+            obj.insert(QStringLiteral("bufferWrap"), QStringLiteral("tile"));
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-single"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("bufferWrap value 'tile'")), qPrintable(r.report));
+        }
     }
 };
 
