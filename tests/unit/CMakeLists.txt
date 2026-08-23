@@ -952,10 +952,11 @@ add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
 # #version 450) fails CI instead of silently breaking the daemon's
 # overlay-surface animation path. Pinned by the canonical UBO declaration in
 # data/animations/shared/animation_uniforms.glsl. Compositor-only packs are
-# excluded (their source is kwin classic-GL by design) and covered by
-# test_animation_shader_kwin_bake, which needs a desktop-GL 4.5 context and
-# QSKIPs headless — a GPU-less CI run leaves them uncovered. Fragment-stage
-# coverage lives in test_animation_shader_preamble_bake.
+# excluded here (their source is kwin classic-GL by design). They are compiled
+# headlessly by the shader_validate_animations gate, which shells out to
+# glslang, and additionally by test_animation_shader_kwin_bake where a
+# desktop-GL 4.5 context exists (it QSKIPs headless). Fragment-stage coverage
+# lives in test_animation_shader_preamble_bake.
 add_executable(test_animation_shader_bake ui/shaders/test_animation_shader_bake.cpp)
 target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering)
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
@@ -994,8 +995,9 @@ add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
 # End-to-end: every daemon-eligible built-in animation shader must still bake
 # once its generated `#define p_<id> ...` preamble is spliced in — proving the
 # generated accessors compile against the real animation UBO. Compositor-only
-# packs are excluded here; test_animation_shader_kwin_bake covers them where a
-# desktop-GL 4.5 context exists (it QSKIPs headless).
+# packs are excluded here. The shader_validate_animations gate compiles them
+# headlessly through glslang, and test_animation_shader_kwin_bake covers them
+# again where a desktop-GL 4.5 context exists (it QSKIPs headless).
 add_executable(test_animation_shader_preamble_bake ui/shaders/test_animation_shader_preamble_bake.cpp)
 target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
@@ -1916,15 +1918,25 @@ add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # shadervalidate/ - Offline Pack Validator Tests
-#   test_pack_validators: metadata lints + the multipass buffer-pass bake
+#   test_pack_validators: metadata lints, authoring-model detection, and the
+#   multipass + compositor-only bakes
 # ═══════════════════════════════════════════════════════════════════════════════
 # The offline pack validator's metadata lints. The bundled-pack gate
 # (shader_validate_animations) only proves the shipped packs are clean; this
 # builds deliberately-broken packs in a temp dir and asserts the diagnostic.
-# Compiles packvalidators.cpp straight in, the way the tool does, so it links
-# the same parsers and needs no glslang for the metadata paths it exercises.
+# Compiles the three validator arms straight in, the way the tool does, so it
+# links the same parsers and needs no glslang for the metadata paths it
+# exercises.
+#
+# The compositor-only bake cases DO need glslang and QSKIP without it, so this
+# target stays runnable on a machine that has none. That is the opposite of the
+# shader_validate_animations gate, which fails instead: the gate is what must
+# never silently lose coverage, while this target is also a developer's
+# inner-loop test.
 add_executable(test_pack_validators shadervalidate/test_pack_validators.cpp
-               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidators.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_overlay.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_animation.cpp
+               ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidator_surface.cpp
                ${CMAKE_SOURCE_DIR}/src/shadervalidate/packvalidatorcommon.cpp)
 target_include_directories(test_pack_validators PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_pack_validators

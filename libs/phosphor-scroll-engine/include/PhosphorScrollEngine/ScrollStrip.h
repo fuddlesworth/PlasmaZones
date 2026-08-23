@@ -260,7 +260,15 @@ public:
     /// a preset.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
     /// Adjust the active column's width by @p deltaPercent of the work area's
-    /// MAIN extent (niri set-column-width "+10%"/"-10%").
+    /// MAIN extent (niri set-column-width "+10%"/"-10%"). Measured from the
+    /// RENDERED extent rather than the bare intent, and floored at the greater
+    /// of MinColumnWidthFraction and the column's own client minimum (the
+    /// client half drops out while @c respectMinimumSize is off, the same way
+    /// it does for the height verb), so a repeated shrink stops at the floor
+    /// instead of burying an ever smaller
+    /// intent under it. Refuses when the target lands on the current extent,
+    /// so a column already rendering below the floor refuses a shrink rather
+    /// than growing.
     bool adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
@@ -315,7 +323,13 @@ public:
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
     /// Adjust the active tile's height by @p deltaPercent of the work area's
-    /// CROSS extent.
+    /// CROSS extent. The current height is read off a fresh relayout, since an
+    /// Auto tile only gets a pixel value from the whole column distribution,
+    /// and the result is floored the way adjustActiveColumnWidth floors its
+    /// width (MinWindowHeightFraction, raised to the client minimum while
+    /// @c respectMinimumSize is on). Refuses on a TABBED column: relayout lays
+    /// every tile out at the column's content rect and never reads the height
+    /// intent there, so the write would move nothing.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Back to the even auto-split for EVERY tile in the active column.
     bool resetActiveColumnHeights();

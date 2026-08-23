@@ -47,13 +47,23 @@ void main() {
     // texcoords on upload; re-apply the flip, same as flow).
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
 
-    // Travel direction in screen space (y-down). A degenerate move (pure
-    // resize) defaults to downward so it still reads as a gentle settle.
-    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
-    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
-    vec2 travel = toC - fromC;
-    vec2 dir = (dot(travel, travel) > 1.0) ? normalize(travel) : vec2(0.0, 1.0);
+    // Travel direction in screen space (y-down), from the leg's RIGID
+    // translation rather than its centre delta — an anchored stretch moves
+    // the centre by half the size change while the window itself stays put,
+    // and reading that as travel pours a window that never went anywhere.
+    // legDirection falls back to the growth axis, then to downward.
+    vec2 dir = legDirection(iFromRect, iToRect);
     vec2 perp = vec2(-dir.y, dir.x);
+
+    // How much of this leg is actually travel. The pour is a TRANSIT
+    // character: lanes lag each other and bow apart because the window is
+    // crossing a distance. On an anchored resize there is no crossing, and
+    // at full strength the lanes reach their final extent at different
+    // moments while the bow throws them sideways — the window tears into
+    // strips and re-converges instead of resizing. Scaling the three transit
+    // terms by the travel share degrades the pack to a clean uniform morph
+    // on a pure stretch and leaves a real slide untouched.
+    float travelShare = legTravelShare(iFromRect, iToRect);
 
     // Phase along the travel axis: leading edge (toward the destination)
     // is 1, trailing edge is 0.
@@ -73,8 +83,8 @@ void main() {
     // stream stagger pushed startT past 1 for high-hash lanes and those
     // strips froze at the OLD rect when the animation ended, popping to the
     // destination at teardown.
-    float spread = clamp(p_spread, 0.0, 0.8);
-    float laneLag = clamp(p_streamLag, 0.0, 1.0) * (1.0 - spread) * 0.4;
+    float spread = clamp(p_spread, 0.0, 0.8) * travelShare;
+    float laneLag = clamp(p_streamLag, 0.0, 1.0) * travelShare * (1.0 - spread) * 0.4;
     float tt = legProgress();
     float startT = (1.0 - phase) * spread + lh * laneLag;
     float localT = clamp((tt - startT) / max(1.0 - spread - laneLag, 1.0e-3), 0.0, 1.0);
@@ -87,7 +97,7 @@ void main() {
     vec2 toPos = iToRect.xy + cuv * iToRect.zw;
     vec2 delta = (fromPos - toPos) * (1.0 - e);
     float mid = e * (1.0 - e) * 4.0;
-    delta += perp * (lh - 0.5) * 2.0 * max(p_bow, 0.0) * mid;
+    delta += perp * (lh - 0.5) * 2.0 * max(p_bow, 0.0) * travelShare * mid;
 
     vTexCoord = cuv;
     vFlow = vec4(cuv, e, lh);

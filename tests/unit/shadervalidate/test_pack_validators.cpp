@@ -8,9 +8,13 @@
 // undetected. These tests build deliberately-broken packs in a temp dir and
 // assert the diagnostic.
 //
-// Mostly metadata lints, plus the multipass buffer-pass bake. That bake has
-// no other coverage at all: no bundled animation pack is multipass, so the
-// CI gate walks straight past it and the stage would rot unnoticed.
+// Mostly metadata lints, plus two bakes that the bundled-pack gate cannot
+// exercise on its own. The multipass buffer pass has no other coverage at all
+// (no bundled animation pack is multipass, so the CI gate walks straight past
+// it). The COMPOSITOR-ONLY bake has the opposite problem: a third of the
+// bundled packs take it, but a test over shipped packs can only show that
+// clean source passes, never that broken source is caught, and that path used
+// to be a silent skip.
 
 #include <QtTest>
 
@@ -26,6 +30,7 @@
 
 #include <PhosphorAnimation/ProfilePaths.h>
 
+#include "shadervalidate/packvalidatorcommon.h"
 #include "shadervalidate/packvalidators.h"
 
 namespace {
@@ -85,6 +90,57 @@ PackResult validate(const QTemporaryDir& tmp, const QString& name, const QJsonOb
     result.errors = PlasmaZones::ShaderValidate::validateAnimationPack(dir, stream);
     stream.flush();
     return result;
+}
+
+/// The overlay twin of `validate`. Writes the pack plus a trivial zone
+/// fragment and every buffer pass it declares, so the metadata lints under
+/// test are the only thing that can fail. The buffer stages are written from
+/// the DECLARED names, empty ones skipped, which is what lets the
+/// empty-entry case exercise the lint rather than a missing file.
+PackResult validateOverlay(const QTemporaryDir& tmp, const QString& name, const QJsonObject& metadata)
+{
+    const QString dir = tmp.filePath(name);
+    QDir().mkpath(dir);
+    QFile meta(dir + QStringLiteral("/metadata.json"));
+    if (!meta.open(QIODevice::WriteOnly)) {
+        return {};
+    }
+    meta.write(QJsonDocument(metadata).toJson());
+    meta.close();
+
+    const auto writeStage = [&dir](const QString& file) {
+        QFile f(dir + QLatin1Char('/') + file);
+        if (f.open(QIODevice::WriteOnly)) {
+            f.write("vec4 pZone(vec2 uv) { return vec4(0.0); }\n");
+        }
+    };
+    writeStage(QStringLiteral("zone.frag"));
+    for (const QJsonValue& v : metadata.value(QLatin1String("bufferShaders")).toArray()) {
+        if (!v.toString().isEmpty()) {
+            writeStage(v.toString());
+        }
+    }
+
+    PackResult result;
+    QTextStream stream(&result.report);
+    result.errors = PlasmaZones::ShaderValidate::validatePack(dir, stream);
+    stream.flush();
+    return result;
+}
+
+/// `multipass` is set because the buffer lints gate on it, matching the
+/// runtime: parseShaderMetadata takes isMultipass from this key alone, so a
+/// pack that lists bufferShaders without it is inert and its buffer list is
+/// never resolved. A fixture that omitted it would be asserting on a
+/// configuration nothing acts on.
+QJsonObject overlayPack(const QString& id)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("id"), id);
+    obj.insert(QStringLiteral("name"), QStringLiteral("Test Overlay"));
+    obj.insert(QStringLiteral("fragmentShader"), QStringLiteral("zone.frag"));
+    obj.insert(QStringLiteral("multipass"), true);
+    return obj;
 }
 
 QJsonObject basePack(const QString& id)
@@ -360,8 +416,10 @@ private Q_SLOTS:
     /// bundled-pack gate cannot exercise this path at all — without this test
     /// the bake would be dead code that silently stops working.
     ///
-    /// This one really does invoke glslang, unlike the metadata-only tests
-    /// above.
+    /// This one really does compile, unlike the metadata-only tests above. It
+    /// bakes through QShaderBaker's vendored glslang and so needs no external
+    /// binary, which is why it carries no glslangValidatorPath guard — unlike
+    /// the compositor-only cases below, which shell out and do.
     void multipassBufferShadersAreCompiled()
     {
         QTemporaryDir tmp;
@@ -460,6 +518,228 @@ private Q_SLOTS:
                             + r.report));
     }
 
+    /// The authoring model is DETECTED from the pack's sibling shared/ dir.
+    ///
+    /// This is the guard on a diagnostic that used to be actively misleading:
+    /// the model was a flag with --overlay silently the default, so validating
+    /// an animation pack without remembering --animation ran the ZONE checks
+    /// over it and reported two errors ("rename it to zone.vert", "Include not
+    /// found: common.glsl") that described nothing wrong with the pack.
+    ///
+    /// Each marker is asserted through a pack laid out the way the real trees
+    /// are (a `shared/` dir beside the pack, not inside it), because the lookup
+    /// is relative to the pack's PARENT — a detector that searched the pack dir
+    /// itself would find nothing and silently fall back to overlay for
+    /// everything, which is the exact bug this replaced.
+    void authoringModelIsDetectedFromTheSharedMarker()
+    {
+        using PlasmaZones::ShaderValidate::detectPackModel;
+        using PlasmaZones::ShaderValidate::PackModel;
+
+        struct Case
+        {
+            const char* marker;
+            PackModel expected;
+        };
+        const QList<Case> cases = {
+            {"animation_uniforms.glsl", PackModel::Animation},
+            {"surface_uniforms.glsl", PackModel::Surface},
+            {"common.glsl", PackModel::Overlay},
+        };
+
+        for (const Case& c : cases) {
+            QTemporaryDir tmp;
+            QVERIFY(tmp.isValid());
+            const QString sharedDir = tmp.filePath(QStringLiteral("shared"));
+            QVERIFY(QDir().mkpath(sharedDir));
+            QFile marker(sharedDir + QLatin1Char('/') + QLatin1String(c.marker));
+            QVERIFY(marker.open(QIODevice::WriteOnly));
+            marker.close();
+
+            const QString pack = tmp.filePath(QStringLiteral("some-pack"));
+            QVERIFY(QDir().mkpath(pack));
+
+            const std::optional<PackModel> got = detectPackModel(pack);
+            QVERIFY2(got.has_value(), c.marker);
+            QVERIFY2(*got == c.expected, c.marker);
+        }
+    }
+
+    /// A pack tree with no shared/ marker is reported as UNDETECTED rather than
+    /// guessed at. The caller turns that into the overlay fallback plus a
+    /// message telling the author to pass a flag, which is honest; silently
+    /// picking a model would put back the wrong-validator diagnostics.
+    void aPackWithNoSharedMarkerIsNotDetected()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString pack = tmp.filePath(QStringLiteral("orphan-pack"));
+        QVERIFY(QDir().mkpath(pack));
+        QVERIFY(!PlasmaZones::ShaderValidate::detectPackModel(pack).has_value());
+
+        // A shared/ dir that exists but holds none of the three markers is the
+        // same answer, not a crash or an accidental match on the first entry.
+        const QString sharedDir = tmp.filePath(QStringLiteral("shared"));
+        QVERIFY(QDir().mkpath(sharedDir));
+        QFile stray(sharedDir + QStringLiteral("/unrelated.glsl"));
+        QVERIFY(stray.open(QIODevice::WriteOnly));
+        stray.close();
+        QVERIFY(!PlasmaZones::ShaderValidate::detectPackModel(pack).has_value());
+    }
+
+    /// End to end over the REAL trees: every bundled pack must detect as the
+    /// family it actually belongs to. The synthetic cases above pin the lookup
+    /// rule, but only this catches a tree being reorganised (or a marker header
+    /// renamed) out from under it, which would send a whole directory to the
+    /// wrong validator.
+    void everyBundledTreeDetectsAsItsOwnFamily()
+    {
+        using PlasmaZones::ShaderValidate::detectPackModel;
+        using PlasmaZones::ShaderValidate::PackModel;
+
+        struct Tree
+        {
+            const char* path;
+            PackModel expected;
+        };
+        const QList<Tree> trees = {
+            {P_SOURCE_DIR "/data/animations", PackModel::Animation},
+            {P_SOURCE_DIR "/data/surface", PackModel::Surface},
+            {P_SOURCE_DIR "/data/overlays", PackModel::Overlay},
+        };
+
+        // `continue`, not QSKIP: QSKIP returns from the whole test function, so
+        // one absent tree would abandon the other two silently — and a tree
+        // going missing because it was renamed is exactly what this slot is
+        // meant to catch. A run with no tree at all is skipped after the loop.
+        int treesSeen = 0;
+        for (const Tree& tree : trees) {
+            QDir root(QLatin1String(tree.path));
+            if (!root.exists()) {
+                continue;
+            }
+            ++treesSeen;
+            int checked = 0;
+            const QStringList subdirs = root.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            for (const QString& sub : subdirs) {
+                const QString packDir = root.filePath(sub);
+                // Only real packs; `shared/` is a sibling helper dir, not a pack.
+                if (!QFile::exists(packDir + QStringLiteral("/metadata.json"))) {
+                    continue;
+                }
+                const std::optional<PackModel> got = detectPackModel(packDir);
+                QVERIFY2(got.has_value(), qPrintable(packDir));
+                QVERIFY2(*got == tree.expected, qPrintable(packDir));
+                ++checked;
+            }
+            QVERIFY2(checked > 0, tree.path);
+        }
+        if (treesSeen == 0) {
+            QSKIP("no bundled pack tree found — running outside source tree");
+        }
+    }
+
+    /// A COMPOSITOR-ONLY pack's stages are compiled, not skipped. This path had
+    /// no coverage of any kind: the validator printed
+    /// "SKIP (compositor-only pack; kwin-path GLSL)" for 35 of the 94 bundled
+    /// animation packs (every desktop-* transition and the whole geometry set),
+    /// and the only thing that ever compiled them, the GPU bake test, QSKIPs
+    /// without a desktop GL 4.5 context, which is exactly the headless CI case.
+    /// So a broken compositor-only pack passed every gate and failed at the
+    /// live compositor.
+    ///
+    /// Both directions are asserted. A test that only checked the clean pack
+    /// would still pass if the bake were quietly turned back into a skip, which
+    /// is the regression worth catching.
+    void compositorOnlyPackStagesAreCompiled()
+    {
+        if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {
+            QSKIP("glslangValidator not on PATH");
+        }
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        // "geometry" alone is compositor-only (no "appearance"), the same
+        // shape the bundled morph packs declare.
+        QJsonObject clean = basePack(QStringLiteral("kwin-clean"));
+        clean.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("geometry")}));
+        const PackResult ok = validate(tmp, QStringLiteral("kwin-clean"), clean);
+        QCOMPARE(ok.errors, 0);
+        // The stage was actually compiled rather than waved through.
+        QVERIFY2(ok.report.contains(QStringLiteral("OK (compositor)")), qPrintable(ok.report));
+        QVERIFY2(!ok.report.contains(QStringLiteral("SKIP")), qPrintable(ok.report));
+
+        // The same pack with a GLSL error in the body must fail. Written
+        // against the KWIN branch specifically: an undeclared identifier is
+        // rejected by any dialect, so this fails for the one reason under test
+        // (the stage got compiled) and not because of a dialect mismatch.
+        QJsonObject broken = basePack(QStringLiteral("kwin-broken"));
+        broken.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("geometry")}));
+        const QString dir = tmp.filePath(QStringLiteral("kwin-broken"));
+        QDir().mkpath(dir);
+        QFile frag(dir + QStringLiteral("/effect.frag"));
+        QVERIFY(frag.open(QIODevice::WriteOnly));
+        frag.write("vec4 pTransition(vec2 uv, float t) { return vec4(notADeclaredThing); }\n");
+        frag.close();
+        const PackResult bad = validate(tmp, QStringLiteral("kwin-broken"), broken, /*writeFragment=*/false);
+        QVERIFY2(bad.errors > 0, qPrintable(bad.report));
+        QVERIFY2(bad.report.contains(QStringLiteral("ERROR (compositor)")), qPrintable(bad.report));
+        QVERIFY2(bad.report.contains(QStringLiteral("notADeclaredThing")), qPrintable(bad.report));
+    }
+
+    /// A compositor-only pack's VERTEX stage is compiled too. It is the stage
+    /// the geometry packs do their per-vertex work in and the one the daemon
+    /// never touches, so it is both the likeliest to break and the least
+    /// covered. Unlike the daemon vertex bake, the p_<id> preamble is spliced
+    /// here, matching the compositor: a vertex-driven pack reading its params
+    /// must compile, not fail on an undeclared identifier.
+    void compositorOnlyVertexStageIsCompiledWithParams()
+    {
+        if (PlasmaZones::ShaderValidate::glslangValidatorPath().isEmpty()) {
+            QSKIP("glslangValidator not on PATH");
+        }
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        if (!linkSharedIncludes(tmp))
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        QJsonObject obj = basePack(QStringLiteral("kwin-vert"));
+        obj.insert(QStringLiteral("appliesTo"), toArray({QStringLiteral("geometry")}));
+        obj.insert(QStringLiteral("vertexShader"), QStringLiteral("effect.vert"));
+        QJsonObject param;
+        param.insert(QStringLiteral("id"), QStringLiteral("amount"));
+        param.insert(QStringLiteral("type"), QStringLiteral("float"));
+        param.insert(QStringLiteral("default"), 1.0);
+        obj.insert(QStringLiteral("parameters"), QJsonArray{param});
+
+        const QString dir = tmp.filePath(QStringLiteral("kwin-vert"));
+        QDir().mkpath(dir);
+        QFile vert(dir + QStringLiteral("/effect.vert"));
+        QVERIFY(vert.open(QIODevice::WriteOnly));
+        vert.write(
+            "#version 450\n"
+            "#include <animation_uniforms.glsl>\n"
+            "layout(location = 0) in vec2 position;\n"
+            "uniform mat4 modelViewProjectionMatrix;\n"
+            "void main() {\n"
+            "    gl_Position = modelViewProjectionMatrix * vec4(position * p_amount, 0.0, 1.0);\n"
+            "}\n");
+        vert.close();
+
+        const PackResult r = validate(tmp, QStringLiteral("kwin-vert"), obj);
+        QCOMPARE(r.errors, 0);
+        // The two substring checks below are each satisfiable by the FRAGMENT
+        // stage's own line, so they cannot on their own tell a compiled vertex
+        // stage from a skipped one. This is the assertion that can: a bake
+        // quietly turned back into a skip prints SKIP, and nothing else here
+        // does.
+        QVERIFY2(!r.report.contains(QStringLiteral("SKIP")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("effect.vert")), qPrintable(r.report));
+        QVERIFY2(r.report.contains(QStringLiteral("OK (compositor)")), qPrintable(r.report));
+    }
+
     /// geometryGrid clamps to 0 at load, so a negative value disables the
     /// grid indistinguishably from never declaring it.
     void negativeGeometryGridIsLinted()
@@ -475,6 +755,60 @@ private Q_SLOTS:
 
         QVERIFY(r.errors > 0);
         QVERIFY(r.report.contains(QStringLiteral("geometryGrid is negative")));
+    }
+
+    /// The buffer lints the OVERLAY arm was missing while both siblings had
+    /// them. This arm needed them most: the overlay runtime coerces an unknown
+    /// wrap or filter token, and pads or trims a misaligned array, with no
+    /// warning at ANY layer, where the animation and surface runtimes at least
+    /// log. Every case here is silent without the lint.
+    void overlayBufferLintsCoverTheSilentlyCoercedFields()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+
+        // An empty entry is the worst of them: resolveWithinPack answers empty
+        // before the traversal guard, and the caller reads that as fail-closed,
+        // clearing the whole list and turning multipass off for the pack.
+        {
+            QJsonObject obj = overlayPack(QStringLiteral("ov-empty"));
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral(""), QStringLiteral("pass0.frag")});
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-empty"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("empty bufferShaders entry")), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("disables multipass")), qPrintable(r.report));
+            // And it must NOT report the implicit buffer.frag, which the
+            // runtime never looks at once the array is declared. That wrong
+            // diagnostic is what the old filtered-list fallback produced.
+            QVERIFY2(!r.report.contains(QStringLiteral("multipass buffer shader missing: buffer.frag")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = overlayPack(QStringLiteral("ov-vocab"));
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("pass0.frag")});
+            obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("wrapp")});
+            obj.insert(QStringLiteral("bufferFilters"), QJsonArray{QStringLiteral("bilinear")});
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-vocab"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("bufferWraps value 'wrapp'")), qPrintable(r.report));
+            QVERIFY2(r.report.contains(QStringLiteral("bufferFilters value 'bilinear'")), qPrintable(r.report));
+        }
+        {
+            // Short, not surplus: the likelier authoring slip, and the one the
+            // surface arm's old surplus-only lint drew nothing for.
+            QJsonObject obj = overlayPack(QStringLiteral("ov-short"));
+            obj.insert(QStringLiteral("bufferShaders"),
+                       QJsonArray{QStringLiteral("pass0.frag"), QStringLiteral("pass1.frag")});
+            obj.insert(QStringLiteral("bufferWraps"), QJsonArray{QStringLiteral("clamp")});
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-short"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("bufferWraps has 1 entries for 2 buffer shaders")),
+                     qPrintable(r.report));
+        }
+        {
+            QJsonObject obj = overlayPack(QStringLiteral("ov-single"));
+            obj.insert(QStringLiteral("bufferShaders"), QJsonArray{QStringLiteral("pass0.frag")});
+            obj.insert(QStringLiteral("bufferWrap"), QStringLiteral("tile"));
+            const PackResult r = validateOverlay(tmp, QStringLiteral("ov-single"), obj);
+            QVERIFY2(r.report.contains(QStringLiteral("bufferWrap value 'tile'")), qPrintable(r.report));
+        }
     }
 };
 

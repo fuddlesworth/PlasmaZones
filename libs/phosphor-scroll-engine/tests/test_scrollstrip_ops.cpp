@@ -72,6 +72,8 @@ private Q_SLOTS:
     void moveColumnToFirstLast();
     void widthPresetCycling();
     void widthAdjustByPercent();
+    void sizeAdjustFloorsAtTheEngineMinimum();
+    void shrinkNeverGrowsFromBelowTheFloor();
     void maximizeColumnToggle();
     void expandToAvailableWidth();
     void windowHeights();
@@ -276,6 +278,89 @@ void TestScrollStripOps::widthAdjustByPercent()
     // Clamped at the work area's MAIN extent.
     QVERIFY(strip.adjustActiveColumnWidth(500.0, params));
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), Ax::mainLen(params.workArea));
+}
+
+void TestScrollStripOps::sizeAdjustFloorsAtTheEngineMinimum()
+{
+    // Repeated shrink presses must stop at the engine's declared minimums
+    // (5% of the work area on each axis) rather than walking a column or a
+    // tile down to a single pixel and committing that extent to the client.
+    // Minimum sizes are switched OFF here, the arm that has no client floor
+    // to fall back on.
+    auto params = defaultParams();
+    params.respectMinimumSize = false;
+    const int minMain = qRound(MinColumnWidthFraction * Ax::mainLen(params.workArea)); // 60
+    const int minCross = qRound(MinWindowHeightFraction * Ax::crossLen(params.workArea)); // 40
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    // Twenty presses of -25% would reach 1px without the floor.
+    bool everRefused = false;
+    for (int i = 0; i < 20; ++i) {
+        if (!strip.adjustActiveColumnWidth(-25.0, params)) {
+            everRefused = true;
+        }
+    }
+    QVERIFY(everRefused); // the floor is a refusal, not a silent no-op success
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minMain);
+
+    bool crossRefused = false;
+    for (int i = 0; i < 20; ++i) {
+        if (!strip.adjustActiveWindowHeight(-25.0, params)) {
+            crossRefused = true;
+        }
+    }
+    QVERIFY(crossRefused);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minCross);
+
+    // A press at the floor refuses rather than reporting a no-op success.
+    QVERIFY(!strip.adjustActiveColumnWidth(-25.0, params));
+    QVERIFY(!strip.adjustActiveWindowHeight(-25.0, params));
+
+    // And growing back out of the floor moves on the FIRST press: the shrinks
+    // stopped at the floor instead of burying an ever smaller intent under it.
+    QVERIFY(strip.adjustActiveColumnWidth(10.0, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minMain + 120);
+    QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minCross + 80);
+}
+
+void TestScrollStripOps::shrinkNeverGrowsFromBelowTheFloor()
+{
+    // A column or tile can legitimately render BELOW the engine's fraction
+    // floor: every producer that clamps as a fraction resolves through
+    // proportionalPx (round(f * (work + gap)) - gap), a gap's worth under the
+    // bare round(f * work) the verbs floor at. A shrink press there must
+    // refuse, not snap the size UP and report success.
+    auto params = defaultParams();
+    params.respectMinimumSize = false;
+    params.presetColumnWidths.clear(); // so minimize takes the engine-floor arm
+    // A single-entry list AT the engine floor: parsePresets clamps a user's
+    // entries against exactly this value, so it is the shortest legal preset.
+    params.presetWindowHeights = {MinWindowHeightFraction};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+
+    QVERIFY(strip.minimizeActiveColumnWidth(params));
+    const int minimized = Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(minimized < qRound(MinColumnWidthFraction * Ax::mainLen(params.workArea)));
+    QVERIFY(!strip.adjustActiveColumnWidth(-25.0, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), minimized);
+
+    // The smallest legal preset height is the cross-axis twin of that state.
+    QVERIFY(strip.setActiveWindowHeight(WindowHeight::makePreset(MinWindowHeightFraction)));
+    const int shortest = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(shortest < qRound(MinWindowHeightFraction * Ax::crossLen(params.workArea)));
+    QVERIFY(!strip.adjustActiveWindowHeight(-25.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), shortest);
+
+    // Growing out of that under-floor state still moves on the first press.
+    QVERIFY(strip.adjustActiveColumnWidth(10.0, params));
+    QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
 }
 
 void TestScrollStripOps::maximizeColumnToggle()
@@ -570,11 +655,13 @@ void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
     // HONEST SCOPE, so this test is not read as more coverage than it is:
     // an inverted qBound only ABORTS through Q_ASSERT(!(max < min)), which
     // is compiled out of a release build — there qBound(1, px, 0) quietly
-    // yields 1. So deleting resolveColumnWidthPx's guard (or
-    // adjustActiveColumnWidth's, which then returns false anyway) is caught
-    // in a DEBUG build only. The height arm is the one release-detectable
-    // kill: without adjustActiveWindowHeight's workH<=0 guard the adjuster
-    // resolves 0px, targets 1px, and reports a change instead of refusing.
+    // yields 1. So deleting resolveColumnWidthPx's guard (or either
+    // adjuster's own degenerate-area bail) is not release-detectable here at
+    // all: on a null work area every column resolves to zero extent and drops
+    // out of the relayout, so the width verb refuses at its current<=0 bail
+    // and the height verb refuses because the active tile resolved to
+    // nothing. What this slot pins is the OBSERVABLE contract — neither
+    // adjuster reports a change, and nothing aborts — not any one guard.
     ScrollLayoutParams dead;
     dead.workArea = QRect();
     dead.gap = 10;
