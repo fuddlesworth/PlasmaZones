@@ -492,8 +492,9 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     KWin::Region drawRegion = deviceRegion;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
-        const auto bit = m_windowDecorations.constFind(wid);
-        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
+        // Mutable: the foreign-transform branch below records what it painted.
+        const auto bit = m_windowDecorations.find(wid);
+        if (bit != m_windowDecorations.end() && bit->shaderApplied) {
             // FOREIGN ANIMATION on a PADDED chain. The only animation of ours that
             // reaches a decorated window is a transition, and that path is excluded
             // above, so a translation or a dimmed opacity in `data` here was put
@@ -509,21 +510,46 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             // normal window never sees this because nothing clips it.
             //
             // Widen the scissor by the padded band, translated by the foreign
-            // transform so it tracks the sliding quad, and damage the band at
-            // rest position so the next frame's scene repaint covers it (the
-            // foreign effect damages only its own clip rect). Gated on a live
-            // foreign transform on purpose: with KWin's untouched region the
-            // damage is the scene's and painting past it would overdraw windows
-            // above that did not repaint this frame. The transition path makes
-            // the same call with Region::infinite() and a full-output damage.
-            if (bit->outerPadding > 0
-                && (!qFuzzyIsNull(data.xTranslation()) || !qFuzzyIsNull(data.yTranslation()) || data.opacity() < 1.0)) {
-                const QRectF band = paddedBandRect(w, bit->outerPadding);
-                if (!band.isEmpty()) {
-                    drawRegion |= viewport.mapToDeviceCoordinatesAligned(
-                        KWin::RectF(band.translated(data.xTranslation(), data.yTranslation())));
+            // transform so it tracks the sliding quad, and damage three rects
+            // so the next frame's scene repaint covers them (the foreign effect
+            // damages only its own clip rect): the band as painted THIS frame,
+            // so it is recomposited in proper z-order and cleared once the
+            // quad moves on; the band as painted LAST frame, so a slide leaves
+            // no trail outside the rest band; and the band at rest, for the
+            // frame the transform ends on. Gated on a live foreign transform on
+            // purpose: with KWin's untouched region the damage is the scene's
+            // and painting past it would overdraw windows above that did not
+            // repaint this frame. The transition path makes the same call with
+            // Region::infinite() and a full-output damage.
+            //
+            // Acts only on a frame where the transform CHANGED. A foreign
+            // effect can hold one still for many frames (windowaperture while
+            // Peek at Desktop is held, the translucency effect's inactive dim),
+            // and damaging on every such frame would schedule the next frame
+            // from inside this one: a repaint loop at the refresh rate with the
+            // overdraw above on every tick. The change frame damages the band,
+            // the next frame recomposites it in z-order, and the held frames
+            // after that read the buffer like a window at rest.
+            if (bit->outerPadding > 0) {
+                const bool foreign =
+                    !qFuzzyIsNull(data.xTranslation()) || !qFuzzyIsNull(data.yTranslation()) || data.opacity() < 1.0;
+                const QRectF band = foreign
+                    ? paddedBandRect(w, bit->outerPadding).translated(data.xTranslation(), data.yTranslation())
+                    : QRectF();
+                const bool changed =
+                    band != bit->lastForeignBand || !qFuzzyCompare(data.opacity(), bit->lastForeignOpacity);
+                if (changed && KWin::effects) {
+                    if (!band.isEmpty()) {
+                        drawRegion |= viewport.mapToDeviceCoordinatesAligned(KWin::RectF(band));
+                        KWin::effects->addRepaint(KWin::RectF(band));
+                    }
+                    if (!bit->lastForeignBand.isEmpty()) {
+                        KWin::effects->addRepaint(KWin::RectF(bit->lastForeignBand));
+                    }
                     damagePaddedBand(w, bit->outerPadding);
                 }
+                bit->lastForeignBand = band;
+                bit->lastForeignOpacity = data.opacity();
             }
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the

@@ -455,7 +455,14 @@ vec4 surfaceColor(vec2 uv) {
 // Derived from `iLayerRectInTexture` ALONE: that rect places the card
 // inside the layer canvas the compositor padded (expanded rect plus the
 // chain's outer margin), so `1 / rect.zw` is the canvas extent in card
-// units and half of the excess over 1 is the band per side. An earlier
+// units and half of the excess over 1 is the band per side. That halving
+// assumes the excess sits evenly on both sides of the card. The chain
+// padding does, and an applet popup has no shadow, but an app window's
+// shadow inset is usually deeper below the frame than above it, so the
+// symmetric value under-widens the deeper side by half the difference
+// and over-widens the other. The over-widened side reads the canvas's
+// transparent edge texel (clamp-to-edge), so that half costs nothing;
+// the under-widened side clips the outermost few px of shadow. An earlier
 // form differenced it against `iAnchorRectInTexture` so the shadow inset
 // common to both cancelled, leaving the chain padding alone. That under-
 // widened the mask to frame + padding while the canvas (and every pack
@@ -465,12 +472,15 @@ vec4 surfaceColor(vec2 uv) {
 // hide leg. The band between frame and expanded is real composited
 // content, not smear, so it belongs inside the mask.
 //
-// Valid only for SURFACE-EXTENT packs, whose card space is the frame:
-// there the layer rect's inner rect IS the frame, so the result is
-// band/frame in the card units their masks use. An anchor-extent pack
-// carries the expanded rect as its card (inner == expanded), so this would
-// return a different unit that under-widens its mask. No anchor-extent
-// pack calls this.
+// The result is in the caller's own card units whichever extent it draws
+// at, because the compositor places the card of THAT extent in the layer
+// rect: the frame for a surface-extent pack, the expanded rect for an
+// anchor-extent one (paint_shader_window.cpp derives the rect from
+// `transition.surfaceExtent`). So a surface-extent pack gets band/frame
+// and an anchor-extent pack would get pad/expanded, each the unit its
+// mask takes. Only surface-extent packs call this today, since an
+// anchor-extent pack's card already spans the shadow and only the chain
+// padding lies past it.
 vec2 surfacePadRel() {
 #ifdef PLASMAZONES_KWIN
     // No layer means no composited canvas, so `iLayerRectInTexture` carries
