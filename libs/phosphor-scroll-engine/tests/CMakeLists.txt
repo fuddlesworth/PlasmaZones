@@ -120,6 +120,11 @@ pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 # model and the same screen constants, but no shared strip fixture: every
 # slot builds its own strip.
 pse_add_test(test_scrollstrip_view test_scrollstrip_view.cpp)
+# The repeatable size verbs' refusal contract (the client-minimum floor, the
+# tabbed refusal, the grow budget), likewise kept out of the over-ceiling ops
+# suite. Every slot builds its own strip and asserts geometry, not just the
+# verb's bool.
+pse_add_test(test_scrollstrip_sizing test_scrollstrip_sizing.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)

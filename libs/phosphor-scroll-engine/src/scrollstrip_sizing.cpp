@@ -206,7 +206,17 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     if (leftover <= 0) {
         return false;
     }
-    const int current = resolveColumnWidthPx(col->width, params);
+    // Measured from what is ON SCREEN, matching adjustActiveColumnWidth and
+    // matching `covered` above, which sums columnExtentPx. Stepping from the
+    // bare intent would mismatch the two: a column held at its client minimum
+    // resolves to a narrower intent than it renders, so target could land
+    // BELOW the rendered extent, leaving the screen unchanged while the verb
+    // reported success and buried the proportional anchor under a smaller
+    // Fixed value.
+    const int current = columnExtentPx(*col, params);
+    if (current <= 0) {
+        return false; // empty or fully minimized column: nothing to expand
+    }
     const int target = qMin(workW, current + leftover);
     if (target == current) {
         // Same pixels: rewriting the intent (a Proportion(1.0) becoming a
@@ -480,6 +490,18 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
+    // Tabbed columns have no per-tile height to adjust: relayout lays every
+    // visible tile out at the column's whole content rect and never reads
+    // Tile::height there, so the measured extent is the same on every press
+    // and a write would move nothing while the verb reported success forever.
+    // Refuse instead. setActiveWindowHeight and cycleActiveWindowPresetHeight
+    // deliberately do NOT carry this guard: they promise an INTENT change,
+    // which stays true while tabbed, and the restore and handoff paths write
+    // intent into tabbed columns on purpose.
+    const Column* activeCol = activeColumn();
+    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
+        return false;
+    }
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area: qBound(1, …, workH) would invert
@@ -524,11 +546,14 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     //
     // The engine's own declared shortest tile is the floor under that, so the
     // verb cannot walk a window down to a single pixel with minimum sizes
-    // off. Every producer that spells a height as a FRACTION already clamps
-    // against MinWindowHeightFraction (the config read's Proportion arm, the
-    // rule overrides, the preset list parser, the persisted blob, the open
-    // rule), and this one did not. The px-valued spellings floor at 1, the
-    // same deliberate split adjustActiveColumnWidth's floor documents.
+    // off. The producers that spell a height as a FRACTION clamp against
+    // MinWindowHeightFraction (the preset list parser, the per-screen preset
+    // override list, the persisted blob's Preset arm, the open rule's height
+    // fraction), and this one did not. Height has no Proportion spelling at
+    // all, and the rule channel's default window height is the one fraction
+    // that is NOT clamped: it commits straight to Fixed pixels with a 1px
+    // floor, like the px-valued spellings, the same deliberate split
+    // adjustActiveColumnWidth's floor documents.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
     const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
     const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);

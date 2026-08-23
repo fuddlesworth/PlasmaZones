@@ -655,11 +655,13 @@ void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
     // HONEST SCOPE, so this test is not read as more coverage than it is:
     // an inverted qBound only ABORTS through Q_ASSERT(!(max < min)), which
     // is compiled out of a release build — there qBound(1, px, 0) quietly
-    // yields 1. So deleting resolveColumnWidthPx's guard (or
-    // adjustActiveColumnWidth's, which then returns false anyway) is caught
-    // in a DEBUG build only. The height arm is the one release-detectable
-    // kill: without adjustActiveWindowHeight's workH<=0 guard the adjuster
-    // resolves 0px, targets 1px, and reports a change instead of refusing.
+    // yields 1. So deleting resolveColumnWidthPx's guard (or either
+    // adjuster's own degenerate-area bail) is not release-detectable here at
+    // all: on a null work area every column resolves to zero extent and drops
+    // out of the relayout, so the width verb refuses at its current<=0 bail
+    // and the height verb refuses because the active tile resolved to
+    // nothing. What this slot pins is the OBSERVABLE contract — neither
+    // adjuster reports a change, and nothing aborts — not any one guard.
     ScrollLayoutParams dead;
     dead.workArea = QRect();
     dead.gap = 10;
