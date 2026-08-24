@@ -245,6 +245,10 @@ public:
                    setSnappingRestoreFloatedWindowsOnLogin NOTIFY snappingRestoreFloatedWindowsOnLoginChanged)
     Q_PROPERTY(bool autotileRestoreFloatedWindowsOnLogin READ autotileRestoreFloatedWindowsOnLogin WRITE
                    setAutotileRestoreFloatedWindowsOnLogin NOTIFY autotileRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(bool snappingKeepFloatingAbove READ snappingKeepFloatingAbove WRITE setSnappingKeepFloatingAbove NOTIFY
+                   snappingKeepFloatingAboveChanged)
+    Q_PROPERTY(bool autotileKeepFloatingAbove READ autotileKeepFloatingAbove WRITE setAutotileKeepFloatingAbove NOTIFY
+                   autotileKeepFloatingAboveChanged)
     Q_PROPERTY(bool snapUnfloatFallbackToZone READ snapUnfloatFallbackToZone WRITE setSnapUnfloatFallbackToZone NOTIFY
                    snapUnfloatFallbackToZoneChanged)
     Q_PROPERTY(bool autoAssignAllLayouts READ autoAssignAllLayouts WRITE setAutoAssignAllLayouts NOTIFY
@@ -515,6 +519,8 @@ public:
                    setScrollingRestoreStripsOnLogin NOTIFY scrollingRestoreStripsOnLoginChanged)
     Q_PROPERTY(bool scrollingRestoreFloatedWindowsOnLogin READ scrollingRestoreFloatedWindowsOnLogin WRITE
                    setScrollingRestoreFloatedWindowsOnLogin NOTIFY scrollingRestoreFloatedWindowsOnLoginChanged)
+    Q_PROPERTY(bool scrollingKeepFloatingAbove READ scrollingKeepFloatingAbove WRITE setScrollingKeepFloatingAbove
+                   NOTIFY scrollingKeepFloatingAboveChanged)
     Q_PROPERTY(int scrollingColumnWidthStepPercent READ scrollingColumnWidthStepPercent WRITE
                    setScrollingColumnWidthStepPercent NOTIFY scrollingColumnWidthStepPercentChanged)
     Q_PROPERTY(int scrollingWindowHeightStepPercent READ scrollingWindowHeightStepPercent WRITE
@@ -1056,6 +1062,10 @@ public:
     void setSnappingRestoreFloatedWindowsOnLogin(bool restore) override;
     bool autotileRestoreFloatedWindowsOnLogin() const override;
     void setAutotileRestoreFloatedWindowsOnLogin(bool restore) override;
+    bool snappingKeepFloatingAbove() const override;
+    void setSnappingKeepFloatingAbove(bool keep) override;
+    bool autotileKeepFloatingAbove() const override;
+    void setAutotileKeepFloatingAbove(bool keep) override;
     bool snapUnfloatFallbackToZone() const override;
     void setSnapUnfloatFallbackToZone(bool enabled) override;
     bool autoAssignAllLayouts() const override;
@@ -1507,6 +1517,8 @@ public:
     void setScrollingRestoreStripsOnLogin(bool restore);
     bool scrollingRestoreFloatedWindowsOnLogin() const override;
     void setScrollingRestoreFloatedWindowsOnLogin(bool restore) override;
+    bool scrollingKeepFloatingAbove() const override;
+    void setScrollingKeepFloatingAbove(bool keep) override;
     int scrollingColumnWidthStepPercent() const;
     void setScrollingColumnWidthStepPercent(int percent);
     int scrollingWindowHeightStepPercent() const;

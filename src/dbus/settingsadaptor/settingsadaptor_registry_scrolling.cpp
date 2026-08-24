@@ -258,13 +258,17 @@ void SettingsAdaptor::initializeRegistryScrolling()
     };
     m_schemas[QStringLiteral("scrollingTemplateOrder")] = QStringLiteral("stringlist");
 
-    // The scrolling twin of the snap / autotile restore-floated pair, plus the
-    // tab-strip toggle. All three are ISettings virtuals with defaults, so they
-    // register through the interface like their snap / autotile counterparts
-    // rather than inside the concrete-Settings block below, where a
-    // non-Settings backend would lose the keys entirely.
+    // The scrolling twins of the snap / autotile restore-floated and
+    // keep-floating-above pairs, plus the tab-strip toggle. All four are
+    // ISettings virtuals with defaults, so they register through the
+    // interface like their snap / autotile counterparts rather than inside
+    // the concrete-Settings block below, where a non-Settings backend would
+    // lose the keys entirely.
     REGISTER_BOOL_SETTING("scrollingRestoreFloatedWindowsOnLogin", scrollingRestoreFloatedWindowsOnLogin,
                           setScrollingRestoreFloatedWindowsOnLogin)
+    // Effect-only consumer (reconcileRuleWindowLayer): keep scroll-floated
+    // windows stacked above the strip.
+    REGISTER_BOOL_SETTING("scrollingKeepFloatingAbove", scrollingKeepFloatingAbove, setScrollingKeepFloatingAbove)
     REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
     REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
                           setScrollingDropIndicatorEnabled)
@@ -654,7 +658,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                setScrollingRespectMinimumSize)
         REGISTER_CONCRETE_BOOL("scrollingRestoreStripsOnLogin", scrollingRestoreStripsOnLogin,
                                setScrollingRestoreStripsOnLogin)
-        // scrollingRestoreFloatedWindowsOnLogin is registered in the ISettings section above.
+        // scrollingRestoreFloatedWindowsOnLogin and scrollingKeepFloatingAbove are
+        // registered in the ISettings section above.
         REGISTER_CONCRETE_INT("scrollingColumnWidthStepPercent", scrollingColumnWidthStepPercent,
                               setScrollingColumnWidthStepPercent)
         REGISTER_CONCRETE_INT("scrollingWindowHeightStepPercent", scrollingWindowHeightStepPercent,

@@ -4,12 +4,12 @@
 #pragma once
 
 // Validator helpers shared between settingsschema.cpp and the per-domain
-// schema TUs split out of it (settingsschema_scrolling.cpp). A helper lives
-// here when it is reusable ACROSS DOMAINS, so the next domain TU to need it
-// finds it instead of copying it. canonicalProportionList is here on that
-// basis — both its current users are scrolling preset lists, but nothing
-// about it is scrolling-specific. Helpers genuinely tied to one domain stay
-// in that TU's anonymous namespace.
+// schema TUs split out of it (settingsschema_scrolling.cpp,
+// settingsschema_tiling.cpp). A helper lives here when it is reusable ACROSS
+// DOMAINS, so the next domain TU to need it finds it instead of copying it.
+// canonicalProportionList is here on that basis — both its current users are
+// scrolling preset lists, but nothing about it is scrolling-specific.
+// Helpers genuinely tied to one domain stay in that TU's anonymous namespace.
 //
 // Each helper returns a function object with the same shape as
 // PhosphorConfig::KeyDef::validator.
@@ -87,6 +87,22 @@ inline auto canonicalFontFamily(int maxLength)
         const QString trimmed = v.toString().trimmed();
         return trimmed.size() > maxLength ? QString() : trimmed;
     };
+}
+
+/// Normalize a comma-joined list: split, trim each entry, drop empties,
+/// drop duplicates, rejoin. Shared by every setting whose wire format is a
+/// comma-separated list: the three picker orders (snapping layout, tiling
+/// algorithm, scrolling template, in settingsschema.cpp) and the tiling
+/// locked-screens list (settingsschema_tiling.cpp).
+inline QVariant canonicalCommaList(const QVariant& v)
+{
+    QStringList parts = v.toString().split(QLatin1Char(','));
+    for (auto& s : parts) {
+        s = s.trimmed();
+    }
+    parts.removeAll(QString());
+    parts.removeDuplicates();
+    return QVariant(parts.join(QLatin1Char(',')));
 }
 
 /// How many entries a canonicalized preset list may keep. Same size-cap

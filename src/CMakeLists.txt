@@ -119,6 +119,7 @@ set(plasmazones_core_SRCS
     config/settingsschema.cpp
     config/settingsschema_p.h
     config/settingsschema_scrolling.cpp
+    config/settingsschema_tiling.cpp
     config/settingsschemachoices.h
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h

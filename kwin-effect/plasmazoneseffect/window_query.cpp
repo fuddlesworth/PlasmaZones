@@ -273,10 +273,11 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // Stacking / accessory flags read straight off EffectWindow. Always engaged
     // when the window exists, like the other bool flags above.
     //
-    // keepAbove / keepBelow are substituted with the window's pre-rule
+    // keepAbove / keepBelow are substituted with the window's pre-write
     // snapshot by the caller's applyOwnLayerFlags pass when a SetWindowLayer
-    // rule owns the window — see window_filtering.cpp — so a `WHEN KeepAbove`
-    // predicate never reads its own rule's effect. A MANUAL keep-above toggle
+    // rule or the keep-floating-above default owns the window — see
+    // window_filtering.cpp — so a `WHEN KeepAbove` predicate never reads its
+    // own rule's effect. A MANUAL keep-above toggle
     // (window menu) has no cache-invalidation edge, deliberately: routing it
     // through invalidateRuleCacheForStateChange would re-run the layer
     // reconcile and instantly re-assert the rule over the user's toggle,

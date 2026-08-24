@@ -1,18 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// SANCTIONED FILE-SIZE EXCEPTION. This TU sits just past the 1150-line
-// ceiling and stays whole deliberately: it is a flat sequence of one
-// appendXxxSchema function per config domain plus the validator helpers
-// several of them share — most file-local (canonicalCommaList,
-// sanitizePerAlgorithmSettings, validStringOr), two at namespace scope
-// because the scrolling TU shares them too (canonicalThemeFallbackColor,
-// canonicalTriggerList). The three domains big enough to carry their own
-// weight are already split (settingsschema_scrolling.cpp's three entry
-// points); each remaining function is well under a hundred lines, and moving
-// one out drags its shared helpers into a header for a single consumer. When
-// a domain grows past that, split it the way scrolling was — do not grow
-// this banner's scope instead.
+// FILE SIZE: this TU sits in the 1000-1150 grace band and stays whole
+// deliberately: it is a flat sequence of one appendXxxSchema function per
+// config domain plus the validator helpers several of them share — one
+// file-local (validStringOr), the rest at namespace scope in settingsschema_p.h
+// or declared in settingsschema.h because the per-domain TUs share them too
+// (canonicalCommaList, canonicalThemeFallbackColor, canonicalTriggerList).
+// The domains big enough to carry their own weight are already split
+// (settingsschema_scrolling.cpp's three entry points and
+// settingsschema_tiling.cpp's one); every remaining function is under ninety
+// lines, and moving one out drags its helpers into a header for a single
+// consumer. When a domain grows past that, split it the way scrolling and
+// tiling were — do not let this file cross the 1150 ceiling instead.
 
 #include "settingsschema.h"
 
@@ -24,7 +24,6 @@
 #include "configdefaults.h"
 #include "configmigration.h"
 #include <PhosphorRules/ActionParams.h>
-#include <PhosphorTileEngine/AutotileConfig.h>
 #include "core/types/enums.h"
 
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -72,8 +71,10 @@ PhosphorConfig::Schema buildSettingsSchema()
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
 // the same function-object type as KeyDef::validator. The ones the scrolling
-// TU shares live in settingsschema_p.h; the rest are local to this file.
+// and tiling TUs share live in settingsschema_p.h; the rest are local to this
+// file.
 
+using SchemaValidators::canonicalCommaList;
 using SchemaValidators::canonicalFontFamily;
 using SchemaValidators::clampDouble;
 using SchemaValidators::clampInt;
@@ -95,21 +96,6 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
         }
         return fallback;
     };
-}
-
-/// Normalize a comma-joined list: split, trim each entry, drop empties,
-/// drop duplicates, rejoin. Shared by every setting whose wire format is a
-/// comma-separated list: the three picker orders (snapping layout, tiling
-/// algorithm, scrolling template) and the tiling locked-screens list.
-QVariant canonicalCommaList(const QVariant& v)
-{
-    QStringList parts = v.toString().split(QLatin1Char(','));
-    for (auto& s : parts) {
-        s = s.trimmed();
-    }
-    parts.removeAll(QString());
-    parts.removeDuplicates();
-    return QVariant(parts.join(QLatin1Char(',')));
 }
 
 /// Both this cap and Settings::MaxTriggersPerAction resolve to
@@ -139,8 +125,9 @@ QVariant canonicalThemeFallbackColor(const QVariant& v)
 /// every write so the flush loop enforces the cap even when the setter
 /// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 /// Namespace scope (declared in settingsschema.h): shared with
-/// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
-/// scrolling drag-insert trigger list.
+/// settingsschema_scrolling.cpp and settingsschema_tiling.cpp, whose
+/// Scrolling.Behavior and Tiling.Behavior groups carry the drag-insert
+/// trigger lists.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -190,19 +177,6 @@ QVariant canonicalTriggerList(const QVariant& v)
     }
     return QVariant(out);
 }
-
-namespace {
-
-/// Canonicalize a per-algorithm settings map: round-trip through
-/// @c AutotileConfig so each algorithm's settings are validated against
-/// its schema and unknown keys are dropped. Idempotent:
-/// @c perAlgoToVariantMap(perAlgoFromVariantMap(x)) == perAlgoToVariantMap(perAlgoFromVariantMap(it)).
-QVariant sanitizePerAlgorithmSettings(const QVariant& v)
-{
-    return QVariant(PhosphorTileEngine::AutotileConfig::perAlgoToVariantMap(
-        PhosphorTileEngine::AutotileConfig::perAlgoFromVariantMap(v.toMap())));
-}
-} // namespace
 
 // ─── Shaders ────────────────────────────────────────────────────────────────
 // Controls: frame rate, plus the full audio-spectrum parameter set in the
@@ -946,6 +920,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
         {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
         {CD::restoreFloatedOnLoginKey(), CD::snappingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
+        {CD::keepFloatingAboveKey(), CD::snappingKeepFloatingAbove(), QMetaType::Bool},
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
         {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool},
@@ -955,112 +930,6 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
         {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
         {CD::triggersKey(), CD::snapAssistTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
-    };
-}
-
-// ─── Autotiling ─────────────────────────────────────────────────────────────
-// Tiling.* has three sub-groups: Algorithm, Behavior, Gaps. Plus the top-level
-// Tiling.Enabled toggle. (The Appearance.{Colors,Decorations,Borders} groups
-// that used to live here are gone — window border and title-bar appearance moved
-// to the top-level mode-neutral Windows config group, see appendWindowsSchema.)
-// PerAlgorithmSettings is a JSON-encoded QVariantMap;
-// LockedScreens is a comma list; DragInsert triggers are a JSON list.
-
-void appendAutotilingSchema(PhosphorConfig::Schema& schema)
-{
-    using CD = ConfigDefaults;
-
-    schema.groups[CD::tilingGroup()] = {
-        {CD::enabledKey(), CD::autotileEnabled(), QMetaType::Bool},
-    };
-
-    schema.groups[CD::tilingAlgorithmGroup()] = {
-        {CD::defaultKey(), CD::defaultAutotileAlgorithm(), QMetaType::QString},
-        {CD::splitRatioKey(),
-         CD::autotileSplitRatio(),
-         QMetaType::Double,
-         {},
-         clampDouble(CD::autotileSplitRatioMin(), CD::autotileSplitRatioMax())},
-        {CD::splitRatioStepKey(),
-         CD::autotileSplitRatioStep(),
-         QMetaType::Double,
-         {},
-         clampDouble(CD::autotileSplitRatioStepMin(), CD::autotileSplitRatioStepMax())},
-        {CD::masterCountKey(),
-         CD::autotileMasterCount(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileMasterCountMin(), CD::autotileMasterCountMax())},
-        {CD::maxWindowsKey(),
-         CD::autotileMaxWindows(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::autotileMaxWindowsMin(), CD::autotileMaxWindowsMax())},
-        {CD::perAlgorithmSettingsKey(),
-         CD::autotilePerAlgorithmSettings(),
-         QMetaType::QVariantMap,
-         {},
-         sanitizePerAlgorithmSettings},
-    };
-
-    schema.groups[CD::tilingBehaviorGroup()] = {
-        {CD::insertPositionKey(),
-         CD::autotileInsertPosition(),
-         QMetaType::Int,
-         {},
-         validIntOr({static_cast<int>(AutotileInsertPosition::End),
-                     static_cast<int>(AutotileInsertPosition::AfterFocused),
-                     static_cast<int>(AutotileInsertPosition::AsMaster)},
-                    CD::autotileInsertPosition()),
-         intChoices({{static_cast<int>(AutotileInsertPosition::End), "end"_L1},
-                     {static_cast<int>(AutotileInsertPosition::AfterFocused), "afterFocused"_L1},
-                     {static_cast<int>(AutotileInsertPosition::AsMaster), "asMaster"_L1}})},
-        {CD::focusNewWindowsKey(), CD::autotileFocusNewWindows(), QMetaType::Bool},
-        {CD::focusFollowsMouseKey(), CD::autotileFocusFollowsMouse(), QMetaType::Bool},
-        {CD::respectMinimumSizeKey(), CD::autotileRespectMinimumSize(), QMetaType::Bool},
-        {CD::restoreFloatedOnLoginKey(), CD::autotileRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
-        {CD::stickyWindowHandlingKey(),
-         CD::autotileStickyWindowHandling(),
-         QMetaType::Int,
-         {},
-         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                     static_cast<int>(StickyWindowHandling::RestoreOnly),
-                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
-                    CD::autotileStickyWindowHandling()),
-         intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
-                     {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
-                     {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
-        {CD::dragBehaviorKey(),
-         CD::autotileDragBehavior(),
-         QMetaType::Int,
-         {},
-         validIntOr({static_cast<int>(AutotileDragBehavior::Float), static_cast<int>(AutotileDragBehavior::Reorder)},
-                    CD::autotileDragBehavior()),
-         intChoices({{static_cast<int>(AutotileDragBehavior::Float), "float"_L1},
-                     {static_cast<int>(AutotileDragBehavior::Reorder), "reorder"_L1}})},
-        {CD::overflowBehaviorKey(),
-         CD::autotileOverflowBehavior(),
-         QMetaType::Int,
-         {},
-         validIntOr(
-             {static_cast<int>(AutotileOverflowBehavior::Float), static_cast<int>(AutotileOverflowBehavior::Unlimited)},
-             CD::autotileOverflowBehavior()),
-         intChoices({{static_cast<int>(AutotileOverflowBehavior::Float), "float"_L1},
-                     {static_cast<int>(AutotileOverflowBehavior::Unlimited), "unlimited"_L1}})},
-        {CD::lockedScreensKey(), CD::autotileLockedScreens(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
-        {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
-        {CD::releaseGraceMsKey(),
-         CD::autotileDragInsertGraceMs(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
-    };
-
-    // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. The shared
-    // inner/outer gaps live in the top-level Gaps group (appendGapsSchema).
-    schema.groups[CD::tilingGapsGroup()] = {
-        {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
     };
 }
 

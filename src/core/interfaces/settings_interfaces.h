@@ -515,6 +515,18 @@ public:
     virtual void setSnappingRestoreFloatedWindowsOnLogin(bool restore) = 0;
     virtual bool autotileRestoreFloatedWindowsOnLogin() const = 0;
     virtual void setAutotileRestoreFloatedWindowsOnLogin(bool restore) = 0;
+    /// Keep a FLOATED window stacked above the windows the mode places. The
+    /// same per-engine split as the restore pair above: snap-floated and
+    /// autotile-floated windows are gated independently (the scrolling twin is
+    /// the defaulted virtual on ISettings). No daemon reader: the KWin effect
+    /// pulls the pair across the settings wire and fills the window-layer slot
+    /// for a floated window when no SetWindowLayer rule owns it. On the
+    /// interface rather than concrete-only so the D-Bus registry can register
+    /// the keys through it and a non-Settings backend keeps them.
+    virtual bool snappingKeepFloatingAbove() const = 0;
+    virtual void setSnappingKeepFloatingAbove(bool keep) = 0;
+    virtual bool autotileKeepFloatingAbove() const = 0;
+    virtual void setAutotileKeepFloatingAbove(bool keep) = 0;
     /// When a window that was never snapped (no pre-float zone to return to) is
     /// unfloated (Meta+F), snap it to a fallback zone (last-used → first-empty →
     /// first zone) instead of leaving it floating. Default off: unfloat with no

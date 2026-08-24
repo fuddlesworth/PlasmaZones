@@ -21,9 +21,12 @@
  *     "#AARRGGBB" or the empty follow-the-system sentinel; the legacy
  *     "accent" token snaps to the sentinel.
  *  8. Decorations.Performance -- absent-group defaults and reset() round-trip.
+ *  9. Per-mode keep-floating-above -- three independent bool slots: defaults,
+ *     change-gated signals, and save/reload round trips in both directions.
  */
 
 #include <QTest>
+#include <QSignalSpy>
 #include <QColor>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -727,6 +730,99 @@ private Q_SLOTS:
 
         Settings settings;
         QCOMPARE(settings.autotileOverflowBehavior(), PhosphorTiles::AutotileOverflowBehavior::Unlimited);
+    }
+
+    // =========================================================================
+    // Per-mode keep-floating-above: three independent slots (one per engine,
+    // the float-is-per-mode invariant), each defaulting off, each round-
+    // tripping through its own group, and each emitting its own signal only
+    // on a real change (every arm re-sets the same value and expects no second
+    // emit). Presence after a default-equal write is deliberately NOT asserted
+    // (sparse persistence deletes default-equal keys); the snapping arm instead
+    // pins that a false written over a persisted true survives that deletion.
+    // =========================================================================
+
+    void testKeepFloatingAbove_defaultsOffPerMode()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        QCOMPARE(settings.snappingKeepFloatingAbove(), ConfigDefaults::snappingKeepFloatingAbove());
+        QCOMPARE(settings.autotileKeepFloatingAbove(), ConfigDefaults::autotileKeepFloatingAbove());
+        QCOMPARE(settings.scrollingKeepFloatingAbove(), ConfigDefaults::scrollingKeepFloatingAbove());
+        QVERIFY(!settings.snappingKeepFloatingAbove());
+        QVERIFY(!settings.autotileKeepFloatingAbove());
+        QVERIFY(!settings.scrollingKeepFloatingAbove());
+    }
+
+    void testKeepFloatingAbove_snappingRoundTripsIndependently()
+    {
+        IsolatedConfigGuard guard;
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::snappingKeepFloatingAboveChanged);
+            settings.setSnappingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            settings.setSnappingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(!settings.autotileKeepFloatingAbove());
+            QVERIFY(!settings.scrollingKeepFloatingAbove());
+            QVERIFY(settings.save());
+        }
+        {
+            Settings reloaded;
+            QVERIFY(reloaded.snappingKeepFloatingAbove());
+            QVERIFY(!reloaded.autotileKeepFloatingAbove());
+            QVERIFY(!reloaded.scrollingKeepFloatingAbove());
+            // Writing the default back over a persisted true: the change is
+            // announced, and sparse persistence dropping the now-default-equal
+            // key must read back as false, not as the stale true.
+            QSignalSpy spy(&reloaded, &Settings::snappingKeepFloatingAboveChanged);
+            reloaded.setSnappingKeepFloatingAbove(false);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(reloaded.save());
+        }
+        Settings back;
+        QVERIFY(!back.snappingKeepFloatingAbove());
+    }
+
+    void testKeepFloatingAbove_autotileRoundTripsIndependently()
+    {
+        IsolatedConfigGuard guard;
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::autotileKeepFloatingAboveChanged);
+            settings.setAutotileKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            settings.setAutotileKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(!settings.snappingKeepFloatingAbove());
+            QVERIFY(!settings.scrollingKeepFloatingAbove());
+            QVERIFY(settings.save());
+        }
+        Settings reloaded;
+        QVERIFY(reloaded.autotileKeepFloatingAbove());
+        QVERIFY(!reloaded.snappingKeepFloatingAbove());
+        QVERIFY(!reloaded.scrollingKeepFloatingAbove());
+    }
+
+    void testKeepFloatingAbove_scrollingRoundTripsIndependently()
+    {
+        IsolatedConfigGuard guard;
+        {
+            Settings settings;
+            QSignalSpy spy(&settings, &Settings::scrollingKeepFloatingAboveChanged);
+            settings.setScrollingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            settings.setScrollingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(!settings.snappingKeepFloatingAbove());
+            QVERIFY(!settings.autotileKeepFloatingAbove());
+            QVERIFY(settings.save());
+        }
+        Settings reloaded;
+        QVERIFY(reloaded.scrollingKeepFloatingAbove());
+        QVERIFY(!reloaded.snappingKeepFloatingAbove());
+        QVERIFY(!reloaded.autotileKeepFloatingAbove());
     }
 };
 
