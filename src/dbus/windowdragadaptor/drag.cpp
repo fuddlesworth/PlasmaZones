@@ -566,17 +566,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         return;
     }
 
-    // Kept for the grace-expiry replay (see armGraceExpiry), which re-runs
-    // this tick's inputs once the release grace has run out.
-    m_lastTickCursorX = cursorX;
-    m_lastTickCursorY = cursorY;
-    m_lastTickModifiers = modifiers;
-    m_lastTickMouseButtons = mouseButtons;
-    // beginDrag starts the clock before any tick can arrive; the guard only
-    // keeps a tick on an unstarted clock (nothing legitimate) from reading
-    // an undefined elapsed value.
-    const qint64 nowMs = m_dragClock.isValid() ? m_dragClock.elapsed() : 0;
-
     // Parse modifiers early — needed for both retrigger check and normal processing.
     // KWin Effect provides modifiers via the mouseChanged signal.
     Qt::KeyboardModifiers mods;
@@ -586,6 +575,23 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // Fallback: try Qt query (may not work on Wayland without focus)
         mods = QGuiApplication::queryKeyboardModifiers();
     }
+
+    // Kept for the grace-expiry replay (see armGraceExpiry), which re-runs
+    // this tick's inputs once the release grace has run out.
+    //
+    // Records the RESOLVED modifiers rather than the raw argument. A
+    // mouse-button-only trigger arrives with modifiers == 0, and the fallback
+    // above turns that into whatever the keyboard held at the time; replaying
+    // the raw 0 would re-run the fallback at EXPIRY time and read the keyboard
+    // as it is then, which is a different tick's state, not this one's.
+    m_lastTickCursorX = cursorX;
+    m_lastTickCursorY = cursorY;
+    m_lastTickModifiers = static_cast<int>(mods);
+    m_lastTickMouseButtons = mouseButtons;
+    // beginDrag starts the clock before any tick can arrive; the guard only
+    // keeps a tick on an unstarted clock (nothing legitimate) from reading
+    // an undefined elapsed value.
+    const qint64 nowMs = m_dragClock.isValid() ? m_dragClock.elapsed() : 0;
 
     // Always-active bit: derived per-tick from the activation cache so the
     // bypass path (autotile-only, never goes through dragStarted) can't carry
@@ -615,7 +621,15 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // deactivate-while-held, where a grace would prolong the suppression the
     // user just ended. Off in those modes the resolver still tracks the
     // last-held stamp (grace 0) so a later mode read starts from fresh data.
-    const bool activationHoldMode = m_settings && !m_settings->toggleActivation() && !alwaysActiveOnDrag;
+    // Also gated on the drag actually being on the snap path. On an
+    // engine-owned or snap-disabled screen the graced value reaches
+    // prepareHandlerContext, which returns null there, so arming would
+    // schedule a replay whose only work is to walk back out through that same
+    // gate. The policy is re-latched per screen crossing, so this tracks the
+    // cursor rather than being a beginDrag snapshot. Drag re-insert, the arm
+    // that DOES matter on those screens, is scoped by its own engine lookup.
+    const bool onSnapPath = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::None;
+    const bool activationHoldMode = m_settings && onSnapPath && !m_settings->toggleActivation() && !alwaysActiveOnDrag;
     const HoldGraceDecision activationGrace = resolveHoldGrace(
         rawTriggerHeld, nowMs, m_activationLastHeldMs, activationHoldMode ? m_settings->dragActivationGraceMs() : 0);
     m_activationLastHeldMs = activationGrace.nextLastHeldMs;
