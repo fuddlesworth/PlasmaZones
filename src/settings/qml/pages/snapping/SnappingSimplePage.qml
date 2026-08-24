@@ -81,6 +81,27 @@ SettingsFlickable {
                     activeDescription: i18n("Hold a modifier or mouse button while dragging to hide the zone overlay")
                 }
 
+                SettingsSeparator {
+                    enabled: !alwaysActivateSwitch.checked && !appSettings.toggleActivation
+                }
+
+                // Simple mode gets this row because the bug it fixes is most
+                // likely to bite exactly the user who never opens the advanced
+                // page: the trigger above is often a mouse button, and it lifts
+                // before the drop. Gated on the toggleActivation SETTING rather
+                // than on a switch, since simple mode does not show one.
+                TriggerGraceRow {
+                    title: i18n("Release grace period")
+                    searchAnchor: "simpleReleaseGracePeriod"
+                    description: i18n("How long the zones stay up after you let go of the trigger, so a window dropped just after letting go still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+                    accessibleName: i18n("Release grace period for showing zones")
+                    enabled: !alwaysActivateSwitch.checked && !appSettings.toggleActivation
+                    minMs: root.settingsBridge.triggerGraceMsMin
+                    maxMs: root.settingsBridge.triggerGraceMsMax
+                    graceMs: appSettings.dragActivationGraceMs
+                    onGraceModified: value => appSettings.dragActivationGraceMs = value
+                }
+
                 SettingsSeparator {}
 
                 SettingsRow {

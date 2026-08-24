@@ -125,7 +125,10 @@ public:
         QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
     Q_PROPERTY(
         bool zoneSpanToggleMode READ zoneSpanToggleMode WRITE setZoneSpanToggleMode NOTIFY zoneSpanToggleModeChanged)
+    Q_PROPERTY(int zoneSpanGraceMs READ zoneSpanGraceMs WRITE setZoneSpanGraceMs NOTIFY zoneSpanGraceMsChanged)
     Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY toggleActivationChanged)
+    Q_PROPERTY(int dragActivationGraceMs READ dragActivationGraceMs WRITE setDragActivationGraceMs NOTIFY
+                   dragActivationGraceMsChanged)
     Q_PROPERTY(bool snappingEnabled READ snappingEnabled WRITE setSnappingEnabled NOTIFY snappingEnabledChanged)
 
     // Display settings
@@ -255,6 +258,7 @@ public:
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
                    snapAssistTriggersChanged)
+    Q_PROPERTY(int snapAssistGraceMs READ snapAssistGraceMs WRITE setSnapAssistGraceMs NOTIFY snapAssistGraceMsChanged)
 
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
@@ -378,6 +382,8 @@ public:
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(bool autotileDragInsertToggle READ autotileDragInsertToggle WRITE setAutotileDragInsertToggle NOTIFY
                    autotileDragInsertToggleChanged)
+    Q_PROPERTY(int autotileDragInsertGraceMs READ autotileDragInsertGraceMs WRITE setAutotileDragInsertGraceMs NOTIFY
+                   autotileDragInsertGraceMsChanged)
     // The scrolling drag-insert pair sits HERE, beside its autotile twin,
     // rather than under the Scrolling banner below — the two features are
     // maintained in lockstep (same rationale as their ConfigDefaults
@@ -386,6 +392,8 @@ public:
                    setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
     Q_PROPERTY(bool scrollingDragInsertToggle READ scrollingDragInsertToggle WRITE setScrollingDragInsertToggle NOTIFY
                    scrollingDragInsertToggleChanged)
+    Q_PROPERTY(int scrollingDragInsertGraceMs READ scrollingDragInsertGraceMs WRITE setScrollingDragInsertGraceMs NOTIFY
+                   scrollingDragInsertGraceMsChanged)
 
     // Scrolling Settings (Scrolling)
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
@@ -881,8 +889,12 @@ public:
     void setZoneSpanTriggers(const QVariantList& triggers) override;
     bool zoneSpanToggleMode() const override;
     void setZoneSpanToggleMode(bool enable) override;
+    int zoneSpanGraceMs() const override;
+    void setZoneSpanGraceMs(int ms) override;
     bool toggleActivation() const override;
     void setToggleActivation(bool enable) override;
+    int dragActivationGraceMs() const override;
+    void setDragActivationGraceMs(int ms) override;
     bool snappingEnabled() const override;
     void setSnappingEnabled(bool enabled) override;
 
@@ -1065,6 +1077,8 @@ public:
     void setSnapAssistEnabled(bool enabled) override;
     QVariantList snapAssistTriggers() const override;
     void setSnapAssistTriggers(const QVariantList& triggers) override;
+    int snapAssistGraceMs() const override;
+    void setSnapAssistGraceMs(int ms) override;
     QString defaultLayoutId() const override;
     void setDefaultLayoutId(const QString& layoutId) override;
     bool suppressDefaultLayoutAssignment() const override;
@@ -1320,12 +1334,16 @@ public:
     void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
     bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
+    int autotileDragInsertGraceMs() const override;
+    void setAutotileDragInsertGraceMs(int ms) override;
 
     // Beside the autotile twin on purpose — see the Q_PROPERTY note above.
     QVariantList scrollingDragInsertTriggers() const override;
     void setScrollingDragInsertTriggers(const QVariantList& triggers) override;
     bool scrollingDragInsertToggle() const override;
     void setScrollingDragInsertToggle(bool enable) override;
+    int scrollingDragInsertGraceMs() const override;
+    void setScrollingDragInsertGraceMs(int ms) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Settings (IScrollSettings + Scrolling group)

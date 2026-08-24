@@ -33,7 +33,10 @@
 #include <QJsonObject>
 #include <QVariantMap>
 
+#include <iterator>
+
 #include "config/settings.h"
+#include "config/settingsschema.h"
 #include "config/configdefaults.h"
 #include "config/configbackends.h"
 #include "core/types/constants.h"
@@ -47,7 +50,60 @@ class TestSettingsValidation : public QObject
 {
     Q_OBJECT
 
+private:
+    static const PhosphorConfig::KeyDef* findKey(const PhosphorConfig::Schema& schema, const QString& group,
+                                                 const QString& key)
+    {
+        const auto it = schema.groups.constFind(group);
+        if (it == schema.groups.constEnd()) {
+            return nullptr;
+        }
+        for (const PhosphorConfig::KeyDef& def : *it) {
+            if (def.key == key) {
+                return &def;
+            }
+        }
+        return nullptr;
+    }
+
 private Q_SLOTS:
+
+    /**
+     * Every release-grace schema entry seeds from its OWN default accessor.
+     *
+     * The five arms share one key spelling and one range, and four of the five
+     * accessors currently delegate to dragActivationGraceMs(), so pasting the
+     * wrong accessor into a schema entry compiles, round-trips, and is
+     * value-identical today. It becomes a real shipped bug the moment any arm
+     * is given a default of its own, and this is the slot that turns that into
+     * a test failure instead of a surprise. Pins the shared clamp per arm too,
+     * so a swapped bound cannot reach only one mode.
+     */
+    void everyReleaseGraceEntrySeedsFromItsOwnAccessor()
+    {
+        const PhosphorConfig::Schema schema = PlasmaZones::buildSettingsSchema();
+        const struct
+        {
+            QString group;
+            int expected;
+        } arms[] = {
+            {ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::dragActivationGraceMs()},
+            {ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::zoneSpanGraceMs()},
+            {ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::snapAssistGraceMs()},
+            {ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::autotileDragInsertGraceMs()},
+            {ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::scrollingDragInsertGraceMs()},
+        };
+        for (const auto& arm : arms) {
+            const auto* def = findKey(schema, arm.group, ConfigDefaults::releaseGraceMsKey());
+            QVERIFY2(def, qPrintable(QStringLiteral("no ReleaseGraceMs entry in ") + arm.group));
+            QVERIFY2(def->validator, qPrintable(QStringLiteral("no validator on ") + arm.group));
+            QCOMPARE(def->defaultValue.toInt(), arm.expected);
+            QCOMPARE(def->validator(-5).toInt(), ConfigDefaults::triggerGraceMsMin());
+            QCOMPARE(def->validator(99999).toInt(), ConfigDefaults::triggerGraceMsMax());
+        }
+        // Guard the guard: an empty table would pass the loop vacuously.
+        QCOMPARE(int(std::size(arms)), 5);
+    }
 
     // =========================================================================
     // Schema clampInt validator (out-of-range int)

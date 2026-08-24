@@ -529,6 +529,7 @@ qt_add_qml_module(plasmazones-settings
         qml/components/SettingsSwitch.qml
         qml/components/SettingsRow.qml
         qml/components/SettingsSeparator.qml
+        qml/components/TriggerGraceRow.qml
         qml/components/SettingsFlickable.qml
         qml/js/AlgorithmCapabilities.js
         qml/js/SearchAnchorHelpers.js

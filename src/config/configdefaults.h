@@ -58,6 +58,26 @@ public:
     {
         return false;
     }
+    // Hold-mode release grace, one per trigger list that has a toggle mode:
+    // snapping activation, the snapping zone span modifier, and the two
+    // engines' drag re-insert. A mouse-button trigger is released by the same hand
+    // that drops the window, so the button often lifts a few milliseconds
+    // before the drop. The trigger keeps reading as held for this long
+    // after its last physically-held tick, so that drop still snaps. Only
+    // hold mode uses it (toggle mode has no release to extend), and 0
+    // turns it off. The range is shared by all four.
+    static int dragActivationGraceMs()
+    {
+        return 150;
+    }
+    static constexpr int triggerGraceMsMin()
+    {
+        return 0;
+    }
+    static constexpr int triggerGraceMsMax()
+    {
+        return 1000;
+    }
     static bool snappingEnabled()
     {
         return true;
@@ -78,6 +98,18 @@ public:
     {
         return false;
     }
+    static int zoneSpanGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
+    /// Snap assist's grace differs from its siblings in WHERE it is read: the
+    /// other three are read on a drag tick, this one at the drop itself, which
+    /// is the moment the lifting hand is most likely to have already let go.
+    /// Its trigger list has no toggle mode, so the grace always applies.
+    static int snapAssistGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
     static QVariantList autotileDragInsertTriggers()
     {
         // Held while dragging a window to dynamically insert it into the
@@ -87,6 +119,10 @@ public:
     static bool autotileDragInsertToggle()
     {
         return false;
+    }
+    static int autotileDragInsertGraceMs()
+    {
+        return dragActivationGraceMs();
     }
     // Scrolling twins of the autotile drag-insert pair (stored under
     // Scrolling.Behavior with the same generic Triggers/ToggleActivation
@@ -100,6 +136,10 @@ public:
     static bool scrollingDragInsertToggle()
     {
         return false;
+    }
+    static int scrollingDragInsertGraceMs()
+    {
+        return dragActivationGraceMs();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

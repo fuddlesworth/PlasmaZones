@@ -581,10 +581,16 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Hold to activate"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("deactivate")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("triggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("activation")});
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("releaseGracePeriod"),
+               PhosphorI18n::tr("Release grace period"),
+               {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop"), PhosphorI18n::tr("delay")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("spanModifier"),
                PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("zone span"), PhosphorI18n::tr("paint")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpanToggleMode"),
                PhosphorI18n::tr("Zone span toggle mode"), {PhosphorI18n::tr("span"), PhosphorI18n::tr("tap")});
+    addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpanReleaseGracePeriod"),
+               PhosphorI18n::tr("Zone span release grace period"),
+               {PhosphorI18n::tr("span"), PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("edgeThreshold"),
                PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("showZonesOnAllMonitors"),
@@ -599,6 +605,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("snap assist"), PhosphorI18n::tr("picker")});
     addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("holdToEnable"),
                PhosphorI18n::tr("Hold to enable"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("snap assist")});
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("snapAssistReleaseGracePeriod"),
+               PhosphorI18n::tr("Release grace period"),
+               {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop"), PhosphorI18n::tr("snap assist")});
     addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("reSnapOnResolutionChange"),
                PhosphorI18n::tr("Re-snap on resolution change"),
                {PhosphorI18n::tr("resolution"), PhosphorI18n::tr("display")});
@@ -775,6 +784,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("strip")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingReleaseGracePeriod"),
+               PhosphorI18n::tr("Release grace period"),
+               {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop"), PhosphorI18n::tr("strip preview")});
 
     // Edge auto-scroll card, between Triggers and the drop indicator. Its
     // master switch is in the card header too, so the section carries the
@@ -910,6 +922,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("stack")});
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("triggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("stack preview")});
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("releaseGracePeriod"),
+               PhosphorI18n::tr("Release grace period"),
+               {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop"), PhosphorI18n::tr("stack preview")});
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("newWindowPlacement"),
                PhosphorI18n::tr("New window placement"), {PhosphorI18n::tr("order"), PhosphorI18n::tr("position")});
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("respectMinimumSize"),

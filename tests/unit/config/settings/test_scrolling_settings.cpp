@@ -745,8 +745,14 @@ private Q_SLOTS:
         QVERIFY(keepAbove);
         QCOMPARE(keepAbove->defaultValue.toBool(), ConfigDefaults::scrollingKeepFloatingAbove());
 
-        // The drag-insert pair. Every other key in the group is pinned
-        // above, and these two were the only ones that were not.
+        // The drag-insert trio. Every other key in the group is pinned
+        // above, and these three were the only ones that were not.
+        const auto* grace = findKey(schema, group, ConfigDefaults::releaseGraceMsKey());
+        QVERIFY(grace && grace->validator);
+        QCOMPARE(grace->defaultValue.toInt(), ConfigDefaults::scrollingDragInsertGraceMs());
+        QCOMPARE(grace->validator(-5).toInt(), ConfigDefaults::triggerGraceMsMin());
+        QCOMPARE(grace->validator(99999).toInt(), ConfigDefaults::triggerGraceMsMax());
+
         const auto* toggle = findKey(schema, group, ConfigDefaults::toggleActivationKey());
         QVERIFY(toggle);
         QCOMPARE(toggle->defaultValue.toBool(), ConfigDefaults::scrollingDragInsertToggle());

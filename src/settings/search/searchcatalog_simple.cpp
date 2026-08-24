@@ -33,6 +33,8 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("overlay"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("trigger")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleHoldToActivate"),
                PhosphorI18n::tr("Hold to show zones"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("trigger")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleReleaseGracePeriod"),
+               PhosphorI18n::tr("Release grace period"), {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleSnapAssist"),
                PhosphorI18n::tr("Snap Assist"), {PhosphorI18n::tr("picker"), PhosphorI18n::tr("fill zones")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("simpleAlwaysShowAfterSnapping"),
@@ -172,6 +174,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("multi-zone")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpanToggleMode"),
                PhosphorI18n::tr("Zone span toggle mode"), {PhosphorI18n::tr("zone span")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpanReleaseGracePeriod"),
+               PhosphorI18n::tr("Zone span release grace period"),
+               {PhosphorI18n::tr("zone span"), PhosphorI18n::tr("mouse button")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("edgeThreshold"),
                PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
     addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("windowHandling"),

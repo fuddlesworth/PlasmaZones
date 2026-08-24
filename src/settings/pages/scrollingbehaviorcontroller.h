@@ -18,7 +18,8 @@ class ISettings;
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.scrollingBehaviorPage.scrollingDragInsertTriggers`
 /// etc. Covers the trigger list plus its derived `alwaysReinsertIntoStrip`
-/// boolean (the AlwaysActive sentinel stored inside the list). Trigger-list
+/// boolean (the AlwaysActive sentinel stored inside the list) and the shared
+/// trigger release-grace bounds. Trigger-list
 /// conversion lives in `PlasmaZones::TriggerUtils`, shared with the snapping
 /// and tiling controllers.
 ///
@@ -36,6 +37,8 @@ class ScrollingBehaviorController : public PhosphorControl::PageController
     Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
                    setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
     Q_PROPERTY(QVariantList defaultScrollingDragInsertTriggers READ defaultScrollingDragInsertTriggers CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMin READ triggerGraceMsMin CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMax READ triggerGraceMsMax CONSTANT)
 
 public:
     explicit ScrollingBehaviorController(ISettings& settings, QObject* parent = nullptr);
@@ -54,6 +57,8 @@ public:
     bool alwaysReinsertIntoStrip() const;
     QVariantList scrollingDragInsertTriggers() const;
     QVariantList defaultScrollingDragInsertTriggers() const;
+    int triggerGraceMsMin() const;
+    int triggerGraceMsMax() const;
 
     void setAlwaysReinsertIntoStrip(bool enabled);
     void setScrollingDragInsertTriggers(const QVariantList& triggers);

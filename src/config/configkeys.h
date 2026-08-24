@@ -273,9 +273,14 @@ public:
 
     P_CONFIG_KEY(triggersKey, "Triggers")
     P_CONFIG_KEY(toggleActivationKey, "ToggleActivation")
+    // Hold-mode release grace in ms; generic like toggleActivationKey and
+    // shared by Snapping.Behavior, Snapping.Behavior.ZoneSpan, Tiling.Behavior
+    // and Scrolling.Behavior.
+    P_CONFIG_KEY(releaseGraceMsKey, "ReleaseGraceMs")
 
     // Snapping.Behavior.ZoneSpan
-    // (uses enabledKey, modifierKey, triggersKey and toggleActivationKey)
+    // (uses enabledKey, modifierKey, triggersKey, toggleActivationKey and
+    //  releaseGraceMsKey)
 
     // Snapping.Behavior.SnapAssist
     P_CONFIG_KEY(featureEnabledKey, "FeatureEnabled")
