@@ -172,8 +172,9 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     // processAxis, so this is the same field the chords were matched against
     // while they were compositor axis shortcuts. Using the other one here
     // would be a behaviour CHANGE, not a fidelity fix.
-    if (TilingHandler* tiling = m_effect->tilingHandler();
-        tiling && tiling->handleWheelChord(event->delta, event->orientation, event->modifiers, event->buttons)) {
+    if (TilingHandler* tiling = m_effect->tilingHandler(); tiling
+        && tiling->handleWheelChord(event->delta, event->deltaV120, event->orientation, event->modifiers,
+                                    event->buttons)) {
         // A claimed chord ends whatever ScrollFactor stream was running: the
         // client never sees this tick, so its fractional remainder must not
         // survive to be applied to the next tick it does see.
