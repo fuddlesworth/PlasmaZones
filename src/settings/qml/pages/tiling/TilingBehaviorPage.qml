@@ -101,29 +101,16 @@ SettingsFlickable {
                     enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
                 }
 
-                SettingsRow {
+                TriggerGraceRow {
                     title: i18n("Release grace period")
                     searchAnchor: "releaseGracePeriod"
                     description: i18n("How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+                    accessibleName: i18n("Release grace period for re-insert into stack")
                     enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
-
-                    SettingsSpinBox {
-                        id: insertGraceSpin
-
-                        accessibleName: i18n("Release grace period for re-insert into stack")
-                        from: root.settingsBridge.triggerGraceMsMin
-                        to: root.settingsBridge.triggerGraceMsMax
-                        stepSize: 10
-                        unitText: i18nc("milliseconds unit suffix in a spin box", "ms")
-                        onValueModified: value => {
-                            return appSettings.autotileDragInsertGraceMs = value;
-                        }
-                        Binding on value {
-                            value: appSettings.autotileDragInsertGraceMs
-                            when: !insertGraceSpin.editing
-                            restoreMode: Binding.RestoreNone
-                        }
-                    }
+                    minMs: root.settingsBridge.triggerGraceMsMin
+                    maxMs: root.settingsBridge.triggerGraceMsMax
+                    graceMs: appSettings.autotileDragInsertGraceMs
+                    onGraceModified: value => appSettings.autotileDragInsertGraceMs = value
                 }
             }
         }

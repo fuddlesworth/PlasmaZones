@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -96,29 +97,16 @@ SettingsCard {
             enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
         }
 
-        SettingsRow {
+        TriggerGraceRow {
             title: i18n("Release grace period")
             searchAnchor: "scrollingReleaseGracePeriod"
             description: i18n("How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+            accessibleName: i18n("Release grace period for re-insert into strip")
             enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
-
-            SettingsSpinBox {
-                id: insertGraceSpin
-
-                accessibleName: i18n("Release grace period for re-insert into strip")
-                from: root.settingsBridge.triggerGraceMsMin
-                to: root.settingsBridge.triggerGraceMsMax
-                stepSize: 10
-                unitText: i18nc("milliseconds unit suffix in a spin box", "ms")
-                onValueModified: value => {
-                    return appSettings.scrollingDragInsertGraceMs = value;
-                }
-                Binding on value {
-                    value: appSettings.scrollingDragInsertGraceMs
-                    when: !insertGraceSpin.editing
-                    restoreMode: Binding.RestoreNone
-                }
-            }
+            minMs: root.settingsBridge.triggerGraceMsMin
+            maxMs: root.settingsBridge.triggerGraceMsMax
+            graceMs: appSettings.scrollingDragInsertGraceMs
+            onGraceModified: value => appSettings.scrollingDragInsertGraceMs = value
         }
     }
 }
