@@ -207,7 +207,234 @@ private:
         return pills;
     }
 
+    /// A bare ZonePreview at @p width by @p height with @p axisHint, no zones.
+    /// The ticks are what is under test, so an empty strip is the honest
+    /// fixture: they must draw without any zone to hang off.
+    QQuickItem* axisPreview(const QString& axisHint, qreal width, qreal height)
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.ZonePreview { }\n",
+            QUrl(QStringLiteral("qrc:/test_zone_preview_axis.qml")));
+        if (!component.isReady()) {
+            qWarning() << "component not ready:" << component.errorString();
+            return nullptr;
+        }
+        QVariantMap initial;
+        initial[QStringLiteral("zones")] = QVariantList();
+        initial[QStringLiteral("stripAxisHint")] = axisHint;
+        initial[QStringLiteral("width")] = width;
+        initial[QStringLiteral("height")] = height;
+        initial[QStringLiteral("edgeGap")] = 3.0;
+        auto* preview = qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial));
+        if (!preview) {
+            qWarning() << "create failed:" << component.errorString();
+            return nullptr;
+        }
+        preview->setParent(&m_engine);
+        return preview;
+    }
+
+    /// One axis tick by object name, or nullptr.
+    static QQuickItem* tickOf(QQuickItem* preview, const char* name)
+    {
+        for (QQuickItem* kid : preview->childItems()) {
+            if (kid->objectName() == QLatin1String(name)) {
+                return kid;
+            }
+        }
+        return nullptr;
+    }
+
 private Q_SLOTS:
+    /// A layout host must draw NO ticks. ZonePreview is shared with the
+    /// picker, the OSD and every settings thumbnail, and a chevron on a snap
+    /// layout would claim it scrolls.
+    void testNoAxisTicksWithoutAHint()
+    {
+        QQuickItem* preview = axisPreview(QStringLiteral("none"), 200, 120);
+        QVERIFY(preview);
+        QVERIFY(!tickOf(preview, "zonePreviewAxisTickStart")->isVisible());
+        QVERIFY(!tickOf(preview, "zonePreviewAxisTickEnd")->isVisible());
+    }
+
+    /// The horizontal ticks sit on the LEFT and RIGHT edges, vertically
+    /// centred. The chevron is built pointing left and rotated into the other
+    /// three directions about its own centre, so a box that is not square
+    /// silently offsets the rotated legs — these two cases are what pins the
+    /// square-box choice in ZonePreview.
+    void testHorizontalAxisTicksSitOnTheSideEdges()
+    {
+        QQuickItem* preview = axisPreview(QStringLiteral("horizontal"), 200, 120);
+        QVERIFY(preview);
+        QQuickItem* start = tickOf(preview, "zonePreviewAxisTickStart");
+        QQuickItem* end = tickOf(preview, "zonePreviewAxisTickEnd");
+        QVERIFY(start && end);
+        QVERIFY(start->isVisible());
+        QVERIFY(end->isVisible());
+
+        // Square, so `rotation` about the centre cannot move the on-screen box.
+        QCOMPARE(start->width(), start->height());
+
+        // Inset from each side edge by the edge gap, and the pair is
+        // symmetric about the box's vertical centre line.
+        QVERIFY(qAbs(start->x() - 3.0) < kEdgeEpsilon);
+        QVERIFY(qAbs((preview->width() - end->x() - end->width()) - 3.0) < kEdgeEpsilon);
+        QVERIFY(qAbs(start->y() + start->height() / 2 - preview->height() / 2) < kEdgeEpsilon);
+        QVERIFY(qAbs(end->y() + end->height() / 2 - preview->height() / 2) < kEdgeEpsilon);
+
+        // Pointing outward, away from each other: 0 is left, 180 is right.
+        QCOMPARE(start->rotation(), 0.0);
+        QCOMPARE(end->rotation(), 180.0);
+    }
+
+    /// The vertical strip's ticks transpose to the TOP and BOTTOM edges.
+    /// Drawing the horizontal pair on a vertical strip would name a direction
+    /// that screen never takes, which is the one thing the old sketch got
+    /// right and this must not lose.
+    void testVerticalAxisTicksSitOnTheTopAndBottomEdges()
+    {
+        QQuickItem* preview = axisPreview(QStringLiteral("vertical"), 120, 200);
+        QVERIFY(preview);
+        QQuickItem* start = tickOf(preview, "zonePreviewAxisTickStart");
+        QQuickItem* end = tickOf(preview, "zonePreviewAxisTickEnd");
+        QVERIFY(start && end);
+        QVERIFY(start->isVisible());
+        QVERIFY(end->isVisible());
+
+        // Asserted on BOTH ticks and before anything else, because it is the
+        // precondition that makes every coordinate below mean what it says.
+        // These legs are rotated 90 and 270 degrees about their own centres,
+        // so on a non-square box the on-screen extent swaps and x/y stop
+        // describing where the chevron actually lands. Without this the rest
+        // of the test passes on a visibly misplaced tick.
+        QCOMPARE(start->width(), start->height());
+        QCOMPARE(end->width(), end->height());
+
+        QVERIFY(qAbs(start->y() - 3.0) < kEdgeEpsilon);
+        QVERIFY(qAbs((preview->height() - end->y() - end->height()) - 3.0) < kEdgeEpsilon);
+        QVERIFY(qAbs(start->x() + start->width() / 2 - preview->width() / 2) < kEdgeEpsilon);
+        QVERIFY(qAbs(end->x() + end->width() / 2 - preview->width() / 2) < kEdgeEpsilon);
+
+        QCOMPARE(start->rotation(), 90.0);
+        QCOMPARE(end->rotation(), 270.0);
+    }
+
+    /// Each chevron is two strokes meeting at a shared tip. They pivot on
+    /// Item.Left at the SAME origin — splaying them from their own centres
+    /// instead opens the shape into a Z, which still looks like a mark and so
+    /// would not fail any of the placement assertions above.
+    void testAxisTickStrokesShareOneTip()
+    {
+        QQuickItem* preview = axisPreview(QStringLiteral("horizontal"), 200, 120);
+        QVERIFY(preview);
+        QQuickItem* start = tickOf(preview, "zonePreviewAxisTickStart");
+        QVERIFY(start);
+
+        // Told apart from the chevron's own Repeater by the `radius` only a
+        // Rectangle carries, the same discriminator pillsOf uses.
+        QList<QQuickItem*> strokes;
+        for (QQuickItem* kid : start->childItems()) {
+            if (kid->property("radius").isValid()) {
+                strokes.append(kid);
+            }
+        }
+        QCOMPARE(strokes.size(), 2);
+        QCOMPARE(strokes.at(0)->x(), strokes.at(1)->x());
+        QCOMPARE(strokes.at(0)->y(), strokes.at(1)->y());
+        // Splayed either side of the axis, not stacked.
+        QCOMPARE(strokes.at(0)->rotation(), -45.0);
+        QCOMPARE(strokes.at(1)->rotation(), 45.0);
+    }
+
+    /// The ticks must survive the hop through LayoutCard, which is how every
+    /// real host reaches ZonePreview (the settings thumbnail, the picker and
+    /// the selector all go through it; only the OSD instantiates the preview
+    /// directly).
+    ///
+    /// This exists because the analogous hop was MISSED on the shell side:
+    /// LayoutOsdContent grew the property and the C++ pushed it, but the
+    /// osdSlot in between never declared it, so setProperty quietly created a
+    /// dead dynamic property and no tick ever drew. A property that is only
+    /// tested at its two ends passes while the middle is unwired.
+    void testLayoutCardForwardsTheAxisHintToItsPreview()
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.LayoutCard { previewWidth: 200; previewHeight: 120 }\n",
+            QUrl(QStringLiteral("qrc:/test_layout_card_axis.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+        QVariantMap initial;
+        QVariantMap layoutData;
+        layoutData[QStringLiteral("zones")] = fourZones();
+        initial[QStringLiteral("layoutData")] = layoutData;
+        initial[QStringLiteral("stripAxisHint")] = QStringLiteral("vertical");
+        auto* card = qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial));
+        QVERIFY2(card, qPrintable(component.errorString()));
+        card->setParent(&m_engine);
+
+        // Identified by carrying BOTH `zones` and `stripAxisHint`, which is
+        // ZonePreview's signature and nothing else in the card's tree has.
+        // Not by the delegates' objectName: those are QObject-parented to
+        // their Repeater, so walking up from one is a detour through an
+        // ownership chain this test has no reason to depend on.
+        QQuickItem* preview = nullptr;
+        for (QQuickItem* kid : card->findChildren<QQuickItem*>()) {
+            if (kid->property("zones").isValid() && kid->property("stripAxisHint").isValid()) {
+                preview = kid;
+                break;
+            }
+        }
+        QVERIFY(preview);
+        QCOMPARE(preview->property("stripAxisHint").toString(), QStringLiteral("vertical"));
+        QVERIFY(tickOf(preview, "zonePreviewAxisTickStart")->isVisible());
+    }
+
+    /// An empty-strip caption swaps the well's contents: the zone preview goes
+    /// away (its own ticks would double up with the arrow) and the empty state
+    /// takes over. Same missed-hop risk as above.
+    void testLayoutCardEmptyCaptionReplacesThePreview()
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.LayoutCard { previewWidth: 200; previewHeight: 120 }\n",
+            QUrl(QStringLiteral("qrc:/test_layout_card_empty.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+        QVariantMap initial;
+        QVariantMap layoutData;
+        layoutData[QStringLiteral("zones")] = QVariantList();
+        initial[QStringLiteral("layoutData")] = layoutData;
+        initial[QStringLiteral("stripAxisHint")] = QStringLiteral("horizontal");
+        initial[QStringLiteral("stripEmptyCaption")] = QStringLiteral("No windows on the strip yet");
+        auto* card = qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial));
+        QVERIFY2(card, qPrintable(component.errorString()));
+        card->setParent(&m_engine);
+
+        // The empty state carries the caption; the preview is hidden.
+        bool sawCaption = false;
+        for (QQuickItem* kid : card->findChildren<QQuickItem*>()) {
+            const QVariant caption = kid->property("caption");
+            if (caption.isValid() && caption.toString() == QLatin1String("No windows on the strip yet")) {
+                sawCaption = true;
+                QVERIFY(kid->isVisible());
+                QCOMPARE(kid->property("verticalAxis").toBool(), false);
+            }
+            const QVariant hint = kid->property("stripAxisHint");
+            if (hint.isValid() && kid->property("zones").isValid()) {
+                QVERIFY(!kid->isVisible());
+            }
+        }
+        QVERIFY(sawCaption);
+    }
+
     /// The zone selector's active layout card. Before the fix `isActive` lit
     /// every zone, so the hit-tested zone was indistinguishable and picking a
     /// specific zone to snap into had no visible feedback.

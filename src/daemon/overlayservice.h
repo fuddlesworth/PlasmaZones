@@ -446,6 +446,18 @@ public:
     /// of showLockedLayoutOsd).
     void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
                                   const QString& screenId = QString(), bool locked = false);
+    /// The live scrolling-strip card. Its own entry point rather than the
+    /// string overload below, because it is the one layout OSD that must
+    /// render with NO zones: an empty strip is a real state, and the card
+    /// says so with the axis arrow and @p emptyCaption instead of bailing the
+    /// way every other empty-zones caller does.
+    ///
+    /// @p verticalAxis draws the edge ticks along the strip's own direction.
+    /// @p emptyCaption is used only when @p zones is empty, and must be
+    /// non-empty in that case — an arrow over a blank well says nothing about
+    /// why the strip is blank.
+    void showScrollingStripOsd(const QString& name, const QVariantList& zones, bool verticalAxis,
+                               const QString& emptyCaption, const QString& screenId = QString());
     /// The card always wears the failure glyph "dialog-cancel". Both callers
     /// (showContextDisabledOsd and showNotAssignedOsd) explain why a
     /// requested change had no effect, which is what the glyph says. A

@@ -48,6 +48,16 @@ Item {
     property int masterCount: 1
     property bool producesOverlappingZones: false
     property string zoneNumberDisplay: "all"
+    /// Strip axis ticks: "none" (every layout card) or "horizontal" /
+    /// "vertical" for the scrolling strip card. Pushed by
+    /// OverlayService::pushLayoutOsdContent on EVERY show, so a strip card
+    /// cannot leave its ticks on the next layout card.
+    property string stripAxisHint: "none"
+    /// Non-empty replaces the zone preview with the empty state: the axis
+    /// arrow plus this caption. Only the strip card ever sets it, and only
+    /// when the strip has nothing to draw. The caption is the gate rather
+    /// than a separate flag, so the two cannot disagree.
+    property string stripEmptyCaption: ""
     // Screen info for aspect ratio (bounded to prevent layout issues).
     // Clamped symmetrically about 1:1 — the lower bound is the inverse of
     // the upper. A 0.5 floor reported a rotated 21:9 (about 0.43) as 1:2,
@@ -190,7 +200,12 @@ Item {
 
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing
+                // Hidden rather than fed an empty list: an empty ZonePreview
+                // still draws its own axis ticks, which would double up with
+                // the empty state's arrow sitting in the same well.
+                visible: root.stripEmptyCaption === ""
                 zones: root.zones
+                stripAxisHint: root.stripAxisHint
                 highlightColor: root.highlightColor
                 inactiveColor: root.inactiveColor
                 borderColor: root.borderColor
@@ -218,6 +233,16 @@ Item {
                 masterCount: root.masterCount
                 fontStrikeout: root.fontStrikeout
                 animationDuration: Kirigami.Units.shortDuration
+            }
+
+            // The empty strip. Not a variant of the zone preview: it draws no
+            // zones at all, because there are none, and says why in words.
+            QFZCommon.StripEmptyState {
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.smallSpacing
+                visible: root.stripEmptyCaption !== ""
+                verticalAxis: root.stripAxisHint === "vertical"
+                caption: root.stripEmptyCaption
             }
         }
 

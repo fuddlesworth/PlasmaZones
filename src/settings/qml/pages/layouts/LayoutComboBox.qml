@@ -675,6 +675,17 @@ ComboBox {
                     isHovered: true
                     showZoneNumbers: false
                     minZoneSize: 2
+                    // Edge ticks on a scrolling-template row, same category-2
+                    // discriminator the widths/zones subtitle above uses. The
+                    // combo browses templates with no target screen in hand,
+                    // so the axis resolves off the global ladder; the Monitors
+                    // page shows a per-monitor override where one applies.
+                    stripAxisHint: {
+                        if (root.getCategory(modelData.layout, modelData.category) !== 2)
+                            return "none";
+
+                        return settingsController.scrollingStripVerticalForScreen("") ? "vertical" : "horizontal";
+                    }
                 }
             }
 

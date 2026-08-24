@@ -370,9 +370,10 @@ SettingsFlickable {
             root._refresh();
         }
 
-        // The empty-strip sketch is drawn along the selected screen's resolved
-        // strip axis, and a per-monitor StripAxis override changes that answer
-        // without touching anything else this page reads.
+        // The strip previews draw their axis ticks (and the empty state its
+        // arrow) along the selected screen's resolved strip axis, and a
+        // per-monitor StripAxis override changes that answer without touching
+        // anything else this page reads.
         function onPerScreenOverridesChanged() {
             root._revision++;
         }
@@ -556,8 +557,8 @@ SettingsFlickable {
                 // The shown-state fallback _selectedScreenAspectRatio uses,
                 // for the same reason: an empty selection (or one naming the
                 // other list's spelling) would miss the override AND make the
-                // Auto arm resolve against no screen, sketching a horizontal
-                // strip beside a preview box that already shows portrait.
+                // Auto arm resolve against no screen, drawing a horizontal
+                // axis beside a preview box that already shows portrait.
                 var target = root._selectedScreen;
                 if (!target) {
                     var state = root._currentState();
@@ -565,56 +566,35 @@ SettingsFlickable {
                 }
                 return settingsController.scrollingStripVerticalForScreen(target);
             }
-            // Representative endless strip: a full column mid-view with a
-            // clipped column at each edge, so the sketch reads as a window
-            // onto a longer strip rather than a fixed zone layout. The three
-            // fractions and their transposition are the twin of
-            // StripZones::sketchRects (src/daemon/daemon/stripzones.h), so the
-            // Monitors page and the OSD card draw the same shape for the same
-            // empty strip. On a vertical strip the same three bands stack
-            // instead of sitting in a row: drawing the horizontal sketch there
-            // would depict a direction that screen never takes.
-            readonly property var scrollingFallbackZones: {
-                const spans = [
-                    {
-                        "offset": 0,
-                        "extent": 0.1
-                    },
-                    {
-                        "offset": 0.115,
-                        "extent": 0.5
-                    },
-                    {
-                        "offset": 0.63,
-                        "extent": 0.37
-                    }
-                ];
-                const vertical = stateView.stripVertical;
-                // Scoped to the screen, 1-based, the way StripZones::
-                // sketchZoneMaps namespaces its own ids. Every monitor's
-                // sketch drew the same three ids otherwise, which is only
-                // harmless as long as nothing downstream keys on zone id.
-                const state = stateView.screenState;
-                const screenId = state ? (state.screenId || "") : "";
-                return spans.map(function (span, index) {
-                    return {
-                        "id": "strip:" + screenId + ":fallback:" + (index + 1),
-                        "name": "",
-                        "useCustomColors": false,
-                        "relativeGeometry": {
-                            "x": vertical ? 0 : span.offset,
-                            "y": vertical ? span.offset : 0,
-                            "width": vertical ? 1 : span.extent,
-                            "height": vertical ? span.extent : 1
-                        }
-                    };
-                });
+
+            // What the strip preview says when it has no tiles to draw.
+            // Empty means there ARE tiles and the zone preview renders.
+            //
+            // Three distinct causes reach this well, and the sketch that used
+            // to fill it drew one confident picture for all three. They are
+            // separated here because they call for different actions from the
+            // user: wait, apply the staged mode, or start the daemon.
+            readonly property string scrollingEmptyCaption: {
+                if (stateView.scrollingStripZones.length > 0)
+                    return "";
+
+                if (!settingsController.daemonRunning)
+                    return i18nc("scrolling strip preview, the daemon is not running", "PlasmaZones is not running");
+
+                // localMode is what the page STAGES, screenState.mode is what
+                // the daemon actually runs. Scrolling picked here but not yet
+                // applied means the strip does not exist yet, which is not the
+                // same as an empty one.
+                if ((stateView.screenState ? (stateView.screenState.mode || 0) : 0) !== 2)
+                    return i18nc("scrolling strip preview, the mode is staged but not applied yet", "Apply to start scrolling on this screen");
+
+                return i18nc("scrolling strip preview, the screen is scrolling but no windows are on the strip", "No windows on the strip yet");
             }
 
             // Fetch the live strip for the current selection. The daemon's
             // strip is briefly empty while a mode flip's re-announce batch is
             // adopted (the OSD defers around the same window); a one-shot read
-            // landing there returned [] and left the fallback sketch up for
+            // landing there returned [] and left the empty state up for
             // good, so an empty strip on a scrolling screen re-reads once.
             // allowRetry MUST be false when called FROM the settle timer. A
             // re-arm from inside its own handler is an unbounded loop: a
@@ -1081,8 +1061,8 @@ SettingsFlickable {
                 Layout.maximumWidth: stateView._messageMaxWidth
                 type: Kirigami.MessageType.Information
                 // The numbering sentence is only shown for a LIVE strip: the
-                // placeholder sketch above is deliberately unnumbered, so
-                // promising numbers over it describes something not on screen.
+                // empty state above draws no windows at all, so promising
+                // numbers over it describes something not on screen.
                 // It also promises no more than Snap to Zone delivers — nine
                 // digit shortcuts — and says windows are numbered rather than
                 // that the numbers are legible, which they are not on a tile

@@ -94,16 +94,19 @@ QVector<StripZones::VisibleTile> visibleStripTiles(const PhosphorEngine::Placeme
 ///
 /// @p tiles are the engine's visible tiles in zone-number order, carrying
 /// their own zone numbers and their absolute clipped rects. Empty means the
-/// strip has no visible tile, and the card falls back to the representative
-/// sketch — as does a screen whose geometry cannot be resolved, since the
-/// rects cannot be placed in the card's full-screen-shaped box without it.
+/// strip has no visible tile, and the card renders the empty state (an axis
+/// arrow and a caption) instead of zones — as does a screen whose geometry
+/// cannot be resolved, since the rects cannot be placed in the card's
+/// full-screen-shaped box without it. The two get DIFFERENT captions: an
+/// empty strip and an unmeasurable screen are not the same message, and the
+/// sketch this replaced said neither.
 ///
-/// @p verticalAxis is a callable, not a bool: only the sketch arm consumes it,
-/// and resolving it eagerly at the call site costs a second per-screen layout
-/// param resolve (rule cascade included) on every LIVE card, which is the
-/// common one.
+/// @p verticalAxis is resolved eagerly. It used to be a callable so the
+/// common LIVE card could skip a per-screen layout param resolve (rule
+/// cascade included) that only the empty arm needed, but the axis ticks put
+/// it on every card, so there is no arm left to be lazy for.
 void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManager* screens, const QString& screenId,
-                           const QVector<StripZones::VisibleTile>& tiles, const std::function<bool()>& verticalAxis)
+                           const QVector<StripZones::VisibleTile>& tiles, bool verticalAxis)
 {
     if (!overlay) {
         return;
@@ -111,33 +114,29 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
     // Through the shared resolver, not a bare screenGeometry(): the OSD
     // renderer this feeds sizes its window via the same helper, whose
     // QScreen fallback covers early startup and unmatched screen ids. A bare
-    // lookup here would bail to the sketch (with a spurious warning) in a
+    // lookup here would bail to the empty state (with a spurious warning) in a
     // case the renderer handles fine.
     const QRect screenGeometry = resolveScreenGeometry(screens, screenId);
-    QVariantList zones = StripZones::zoneMapsForTiles(screenId, tiles, screenGeometry);
-    const bool isSketch = zones.isEmpty();
-    if (isSketch) {
-        if (!tiles.isEmpty()) {
-            // Tiles but no screen geometry to place them in. The card falls
-            // back to the sketch rather than drawing rects it cannot
-            // normalize, and says so here so the wrong-looking preview is
-            // traceable to the screen lookup rather than to the strip.
+    const QVariantList zones = StripZones::zoneMapsForTiles(screenId, tiles, screenGeometry);
+    QString emptyCaption;
+    if (zones.isEmpty()) {
+        if (tiles.isEmpty()) {
+            emptyCaption = PhosphorI18n::tr("No windows on the strip yet", "scrolling strip preview, empty strip");
+        } else {
+            // Tiles but no screen geometry to place them in. The card shows
+            // the empty state rather than drawing rects it cannot normalize,
+            // and both the caption and this warning name the screen lookup
+            // rather than blaming the strip, which is populated.
             qCWarning(lcDaemon) << "Strip preview OSD: no geometry for screen=" << screenId << "tiles=" << tiles.size()
-                                << "— falling back to the sketch";
+                                << "— showing the empty state";
+            emptyCaption = PhosphorI18n::tr("This screen could not be measured",
+                                            "scrolling strip preview, screen geometry lookup failed");
         }
-        // The LIVE arm needs no axis: those rects are the engine's own tiles,
-        // already laid the way the strip runs. Only the sketch is drawn from
-        // nothing and has to be told.
-        zones = StripZones::sketchZoneMaps(screenId, verticalAxis && verticalAxis());
     }
-    // Autotile category: the renderer treats it as "generated, not
-    // editable", which is exactly what a live strip snapshot is.
-    overlay->showLayoutOsd(QString(PhosphorLayout::LayoutId::ScrollingId),
-                           PhosphorI18n::tr("Scrolling", "tiling mode name"), zones,
-                           static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId, false, false,
-                           isSketch ? QStringLiteral("none") : QStringLiteral("all"), 1);
+    overlay->showScrollingStripOsd(PhosphorI18n::tr("Scrolling", "tiling mode name"), zones, verticalAxis, emptyCaption,
+                                   screenId);
     qCInfo(lcDaemon) << "Showing scrolling-mode strip preview OSD: screen=" << screenId << "tiles=" << tiles.size()
-                     << "zones=" << zones.size() << "sketch=" << isSketch;
+                     << "zones=" << zones.size() << "empty=" << !emptyCaption.isEmpty();
 }
 
 } // namespace
@@ -509,9 +508,9 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
     // The mode-switch announcement for a screen entering Scrolling. Preview
     // style renders the strip: the engine's visible tiles stand in for the
     // zone list a layout switch would show, and an EMPTY strip shows the
-    // representative endless-strip sketch (a full column with clipped edge
-    // columns) — the algorithm OSD likewise previews with zero windows, and
-    // the Monitors page uses the same sketch.
+    // empty state (the axis arrow and a caption) rather than no card at all.
+    // The algorithm OSD likewise previews with zero windows, and the Monitors
+    // page renders the same empty state for the same strip.
     if (shouldSuppressOsd(screenId)) {
         return;
     }
@@ -533,15 +532,14 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
             // would land a second, identical card a beat later.
             stopScrollingOsdSettleTimer(screenId);
             recordAnnouncedScrollingTemplate(screenId);
-            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles, [this, &screenId] {
-                return stripIsVerticalForScreen(screenId);
-            });
+            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles,
+                                  stripIsVerticalForScreen(screenId));
             return;
         }
         // A mode toggle announces BEFORE the effect's re-announce batch
         // lands, so at OSD time the strip is still empty. Defer one beat
         // so the adoption settles and the card shows the user's actual
-        // columns; a strip that is still empty then shows the sketch.
+        // columns; a strip that is still empty then shows the empty state.
         //
         // One restartable timer per screen rather than a fresh singleShot per
         // call: repeated toggles inside the settle window used to queue a
@@ -608,13 +606,10 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
     // return without rendering, and the template in force at dispatch is the
     // one this card actually shows.
     recordAnnouncedScrollingTemplate(screenId);
-    // The engine's axis for this screen, for the empty-strip sketch inside.
-    // Passed lazily: only the sketch arm reads it, and an absent engine falls
-    // back to the horizontal sketch.
+    // The engine's axis for this screen, drawn as the card's edge ticks and
+    // as the empty state's arrow. An absent engine resolves horizontal.
     pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId,
-                          visibleStripTiles(m_scrollEngine.get(), screenId), [this, &screenId] {
-                              return stripIsVerticalForScreen(screenId);
-                          });
+                          visibleStripTiles(m_scrollEngine.get(), screenId), stripIsVerticalForScreen(screenId));
 }
 
 void Daemon::stopScrollingOsdSettleTimer(const QString& screenId)

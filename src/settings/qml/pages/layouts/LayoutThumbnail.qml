@@ -46,6 +46,13 @@ Item {
     // number-readable (the scrolling strip, where every tile is a digit
     // target) raises this to 16.
     property int minZoneSize: 8
+    /// Strip axis ticks, passed through to LayoutCard. "none" for every
+    /// layout host; the scrolling hosts resolve the axis for their screen and
+    /// pass "horizontal" or "vertical".
+    property string stripAxisHint: "none"
+    /// Replaces the well's zones with the axis arrow and this caption. See
+    /// LayoutCard.stripEmptyCaption for why it sits inside the card.
+    property string stripEmptyCaption: ""
     // Zone fill opacities when no settings source is attached — the same
     // values LayoutCard's own activeOpacity / inactiveOpacity defaults carry,
     // named here so the pair stays in step by reference rather than by luck.
@@ -184,6 +191,8 @@ Item {
         producesOverlappingZones: root.layout ? root.layout.producesOverlappingZones === true : false
         showMasterDot: root.layout ? (root.layout.isAutotile === true && root.layout.supportsMasterCount === true) : false
         masterCount: root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1
+        stripAxisHint: root.stripAxisHint
+        stripEmptyCaption: root.stripEmptyCaption
         // Effective settings-pipeline values — the daemon pushes the same
         // settings->activeOpacity()/inactiveOpacity()/highlightColor() into
         // the popup slots (internal.h writeColorSettings); here they come

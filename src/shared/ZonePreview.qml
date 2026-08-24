@@ -79,10 +79,119 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    /// Which way the scrolling strip runs, drawn as a chevron on each of the
+    /// two edges the strip continues past: "none" (the default, every layout
+    /// host), "horizontal" or "vertical".
+    ///
+    /// This is the ONLY thing a strip preview says about continuation. The
+    /// sketch it replaced drew three invented columns with their outer two
+    /// clipped at the box edges, which read as real windows because the
+    /// renderer draws real zones the same way. A chevron cannot be mistaken
+    /// for a window, and unlike the sketch it is honest on a populated strip
+    /// too, so every scrolling surface carries it rather than only the empty
+    /// one.
+    property string stripAxisHint: "none"
+    /// Tick colour. Theme text by default, deliberately NOT the zone palette:
+    /// the ticks describe the strip, not a zone, and a user who has recoloured
+    /// their zones should not lose them into the fill.
+    property color stripAxisHintColor: Kirigami.Theme.textColor
     /// Whether to show master indicator dots on master zone(s)
     property bool showMasterDot: false
     /// Number of master zones to mark with indicator dots
     property int masterCount: 1
+
+    readonly property bool stripAxisHintVertical: root.stripAxisHint === "vertical"
+    readonly property bool stripAxisHintVisible: root.stripAxisHintVertical || root.stripAxisHint === "horizontal"
+    /// Arm length of one chevron stroke. Scaled off the box's SHORT side so a
+    /// tick keeps its proportions on a portrait screen's preview, floored so
+    /// it survives the smallest host (the layout combo's thumbnail) and capped
+    /// so it does not grow into a wedge on the Monitors page's large box.
+    readonly property real stripAxisHintArm: Math.max(3, Math.min(9, Math.min(root.width, root.height) * 0.085))
+    /// Stroke thickness, floored at 1 for the same reason the tab band floors
+    /// its own: below a pixel the stroke stops being drawn at all.
+    readonly property real stripAxisHintThickness: Math.max(1, root.stripAxisHintArm * 0.22)
+
+    /// Side of one chevron's box. SQUARE on purpose: `rotation` pivots on the
+    /// item's centre, so a square is the only box whose on-screen extent is
+    /// unchanged by the 90 and 270 degree legs. With a snug arm*cos45 by
+    /// arm*2*sin45 box the vertical ticks would need their own inset algebra
+    /// to undo the swap, and that algebra is exactly the kind that goes wrong
+    /// silently on one axis only.
+    readonly property real stripAxisHintSide: root.stripAxisHintArm * Math.SQRT2
+
+    /// One chevron, built pointing LEFT and rotated into the other three
+    /// directions. The two strokes meet at the tip and splay by 45 degrees,
+    /// so the arm length is the hypotenuse of each stroke.
+    component AxisChevron: Item {
+        id: chevron
+
+        /// 0 left, 1 right, 2 up, 3 down.
+        required property int direction
+        readonly property real arm: root.stripAxisHintArm
+        readonly property real thickness: root.stripAxisHintThickness
+        width: root.stripAxisHintSide
+        height: root.stripAxisHintSide
+        rotation: {
+            switch (direction) {
+            case 1:
+                return 180;
+            case 2:
+                return 90;
+            case 3:
+                return 270;
+            default:
+                return 0;
+            }
+        }
+        opacity: 0.5
+        Accessible.ignored: true
+
+        Repeater {
+            // Two strokes, splayed either side of the tip. The model IS the
+            // rotation, so the pair cannot drift out of symmetry.
+            model: [-45, 45]
+
+            Rectangle {
+                required property real modelData
+
+                width: chevron.arm
+                height: chevron.thickness
+                radius: chevron.thickness / 2
+                color: root.stripAxisHintColor
+                // The tip, centred in the square box: the shape spans
+                // arm*cos45 across, so half the slack sits either side.
+                x: (chevron.width - chevron.arm * Math.SQRT1_2) / 2
+                y: chevron.height / 2 - chevron.thickness / 2
+                // Pivot on the tip, not the stroke's centre: both strokes must
+                // share one origin or the chevron opens into a Z.
+                transformOrigin: Item.Left
+                rotation: modelData
+            }
+        }
+    }
+
+    // The axis ticks: one chevron on each edge the strip continues past.
+    // z 1 rather than declaration order, because an edge column of a live
+    // strip lands exactly here and a tick under its fill is a smudge. Both
+    // are non-interactive: ZonePreview carries no MouseAreas (the selector
+    // hit-tests the delegates from C++) and these must not introduce one.
+    AxisChevron {
+        objectName: "zonePreviewAxisTickStart"
+        z: 1
+        direction: root.stripAxisHintVertical ? 2 : 0
+        visible: root.stripAxisHintVisible
+        x: root.stripAxisHintVertical ? (root.width - width) / 2 : root.edgeGap
+        y: root.stripAxisHintVertical ? root.edgeGap : (root.height - height) / 2
+    }
+
+    AxisChevron {
+        objectName: "zonePreviewAxisTickEnd"
+        z: 1
+        direction: root.stripAxisHintVertical ? 3 : 1
+        visible: root.stripAxisHintVisible
+        x: root.stripAxisHintVertical ? (root.width - width) / 2 : root.width - root.edgeGap - width
+        y: root.stripAxisHintVertical ? root.height - root.edgeGap - height : (root.height - height) / 2
+    }
 
     /// Where a zone's tile lands, in one place. Three overlays need it — the
     /// zone rect itself, the master dots and the scrolling tab bands — and

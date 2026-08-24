@@ -824,6 +824,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         m_layoutSupportResolver && m_layoutSupportResolver(resolvedId) == LayoutSupportTemplates;
     writeQmlProperty(slot, QStringLiteral("globalAutoAssign"),
                      !templatesScreenForBadges && m_settings && m_settings->autoAssignAllLayouts());
+    // Strip axis for the template cards' edge ticks. Resolved for THIS
+    // screen, which the picker knows and the settings library does not, so a
+    // per-monitor StripAxis override is reflected here. Non-template cards
+    // ignore it (LayoutPickerContent gates on the card's own category).
+    writeQmlProperty(slot, QStringLiteral("stripAxisVertical"), stripIsVertical(resolvedId));
     writeFontProperties(slot, m_settings, /*includeLabelFontColor=*/false);
 
     bool locked = false;

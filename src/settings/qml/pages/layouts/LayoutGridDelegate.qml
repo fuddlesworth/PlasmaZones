@@ -238,6 +238,18 @@ Item {
                     fontItalic: root.appSettings ? root.appSettings.labelFontItalic : false
                     fontUnderline: root.appSettings ? root.appSettings.labelFontUnderline : false
                     fontStrikeout: root.appSettings ? root.appSettings.labelFontStrikeout : false
+                    // Strip axis ticks on a template card, so the library says
+                    // which way a template's columns will run before it is
+                    // applied. The library browses templates with no target
+                    // screen in hand, so this resolves the GLOBAL axis ladder
+                    // (empty screen name); a per-monitor StripAxis override
+                    // shows up on the Monitors page, which does have a screen.
+                    stripAxisHint: {
+                        if (!root.isTemplateCard)
+                            return "none";
+
+                        return root.settingsController.scrollingStripVerticalForScreen("") ? "vertical" : "horizontal";
+                    }
 
                     // Hover the preview to read the layout/algorithm description.
                     // Scoped to the thumbnail graphic (not the whole card) so it

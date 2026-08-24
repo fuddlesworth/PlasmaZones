@@ -94,6 +94,10 @@ private Q_SLOTS:
     {
         loadType(QStringLiteral("ShaderCompileErrorBanner"));
     }
+    void loadsStripEmptyState()
+    {
+        loadType(QStringLiteral("StripEmptyState"), QStringLiteral("caption: \"no windows\""));
+    }
     void loadsParameterEditor()
     {
         loadType(QStringLiteral("ParameterEditor"), QStringLiteral("parameters: []; currentValues: ({})"));
