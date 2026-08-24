@@ -15,9 +15,11 @@
 namespace PhosphorPopout {
 
 // Namespace metaobject so QML can see the Anchor and ExclusiveMode
-// enums by name. QML_ELEMENT publishes the namespace to QML under the
-// module URI, so consumers write `Anchor.BarCenter` and
-// `ExclusiveMode.Cooperative` from QML after `import Phosphor.Popout`.
+// enums. QML_ELEMENT on a Q_NAMESPACE publishes the NAMESPACE as the
+// QML type name, so after `import Phosphor.Popout` consumers reach the
+// values through it: `PhosphorPopout.Anchor.BarCenter` and
+// `PhosphorPopout.ExclusiveMode.Cooperative`. The enums are not in
+// scope unqualified — a bare `Anchor.BarCenter` is a ReferenceError.
 Q_NAMESPACE_EXPORT(PHOSPHORPOPOUT_EXPORT)
 QML_ELEMENT
 
@@ -76,6 +78,13 @@ class PHOSPHORPOPOUT_EXPORT PopoutRequest
 {
     Q_GADGET
     QML_VALUE_TYPE(popoutRequest)
+    // STRUCTURED_VALUE is what lets QML build one from an object literal,
+    // which is how every caller actually passes a request:
+    // `Popouts.toggle({ "popoutId": "power", ... })`. Without it QML has no
+    // conversion from a JS object to this gadget and the call fails with
+    // "Passing incompatible arguments to C++ functions from JavaScript is
+    // not allowed" — a TypeError at the call site, not a compile error.
+    QML_STRUCTURED_VALUE
 
     Q_PROPERTY(QString popoutId MEMBER popoutId)
     Q_PROPERTY(QQmlComponent* content MEMBER content)

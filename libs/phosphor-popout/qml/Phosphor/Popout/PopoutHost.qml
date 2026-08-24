@@ -11,7 +11,22 @@
 import Phosphor.Theme
 import QtQuick
 
-Item {
+// FocusScope, not Item, and that is load-bearing. The host claims focus while
+// it is open so Escape reaches it, but its content usually wants focus too: a
+// menu with single-key shortcuts puts focus on a default entry. In one flat
+// focus scope those two claims are the same claim, and whichever runs last
+// wins. The transport sets `open = true` after the content has completed, so
+// the host would win and the content's keys would die, silently and partially
+// (Escape still worked, everything else did not).
+//
+// For a pre-built `contentItem` the scope is enough on its own: Qt delegates
+// focus down into it when the host claims scope focus, whether the delegate
+// asks declaratively (`focus: true`) or focuses a child of its own. A
+// `contentComponent` delegate is built by the Loader after that resolution has
+// happened and does need a nudge, which onOpenChanged gives it. Either way,
+// keys the content leaves unhandled propagate back up to the Keys handler
+// here.
+FocusScope {
     id: root
 
     // The popout's content. The host accepts either a pre-built Item
@@ -43,6 +58,12 @@ Item {
     // dismisses the popout. Cooperative and modal popouts typically
     // want this on. Detached popouts off.
     property bool dismissOnClickOutside: true
+    // Whether this popout wants the keyboard while it is open. Separate from
+    // dismissOnClickOutside on purpose: those are different questions, and
+    // gating focus on the dismiss policy meant a pinned popout could not hold
+    // the keyboard and any re-evaluation of that policy stripped focus from
+    // live content. Transports set this from PopoutRequest::keyboardFocus.
+    property bool keyboardFocus: true
     // Background dim. The transport binds this. Cooperative popouts
     // may want a translucent dim. Modal popouts want an opaque scrim.
     // Detached popouts want transparent. The literal "transparent"
@@ -94,6 +115,46 @@ Item {
         open = false;
     }
 
+    // Escape dismisses, matching the click-outside path exactly: it sets
+    // `open = false` so the close animation runs and `dismissed` fires from
+    // the same timer, rather than tearing the host down out from under the
+    // transport.
+    //
+    // `focus` is claimed while open and released on close, so a closed host
+    // does not swallow keys meant for whatever is underneath. Because the root
+    // is a FocusScope, this gates keyboard focus for the ENTIRE content
+    // subtree, not just for the Escape handler below: a FocusScope that does
+    // not hold scope focus cannot delegate active focus to any descendant.
+    //
+    // Gated on `keyboardFocus`, NOT on `dismissOnClickOutside`. The dismiss
+    // policy is a different question, and gating on it meant a pinned popout
+    // could not hold the keyboard, while any re-evaluation of the policy
+    // stripped focus from live content. It also made every host that could
+    // self-dismiss claim focus, so opening a second in-window popout took the
+    // keyboard from the first even when the second never wanted it. Escape
+    // re-checks the dismiss policy for itself, which is where that belongs.
+    //
+    // Note this also gates ESCAPE: a host that takes no focus receives no key
+    // events, so `keyboardFocus: false` means Escape does not dismiss either,
+    // even with dismissOnClickOutside set. That is consistent on a layer
+    // surface (the transport maps !keyboardFocus to KeyboardInteractivity
+    // None, so the compositor delivers nothing anyway), and click-outside
+    // remains the dismissal route for such a popout.
+    //
+    // The surface still has to grant keyboard interactivity for any of this to
+    // arrive — on a layer-shell surface that means
+    // KeyboardInteractivity::Exclusive or OnDemand; the default None never
+    // delivers a key event at all.
+    focus: root.open && root.keyboardFocus
+    Keys.onEscapePressed: event => {
+        if (!root.open || !root.dismissOnClickOutside) {
+            event.accepted = false;
+            return;
+        }
+        root.dismiss();
+        event.accepted = true;
+    }
+
     // Sizing is the transport's responsibility — the transport sets x,
     // y, width, and height on this Item. The root Item deliberately
     // does NOT anchors.fill its parent: an earlier revision did, which
@@ -117,6 +178,19 @@ Item {
             dismissEmitter.stop();
             dismissLatch.dismissedFired = false;
             dismissLatch.everOpened = true;
+            // Give a LOADER-built delegate the keyboard, if nothing inside it
+            // already has it.
+            //
+            // The two content paths need different handling, measured rather
+            // than assumed. A pre-built `contentItem` is reparented before the
+            // host claims scope focus, so Qt delegates down into it correctly
+            // on its own — and pushing there is actively harmful, because it
+            // overrides a delegate that focused a child of its own. A
+            // `contentComponent` delegate is built by the Loader after that
+            // resolution has happened, so without a push focus stays on the
+            // host and the content's keys are dead.
+            if (root.keyboardFocus && !root.contentItem)
+                contentFrame.focusContentIfIdle();
         } else {
             // Known limitation: QTimer samples interval at start(), so
             // a Motion-token retune (theme switch mid-close) updates
@@ -317,7 +391,45 @@ Item {
         // The `??` (nullish coalescing) operator requires Qt 6.4+ in
         // QML's JS engine. The project pins QT_MIN_VERSION 6.6.0 (top-
         // level CMakeLists.txt), so the operator is safe to use here.
-        readonly property Item _visibleDelegate: root.contentItem ?? contentLoader.item
+        //
+        // `Loader.item` is typed QObject, so the cast is what keeps this an
+        // Item-typed binding rather than an implicit narrowing qmllint flags.
+        // A Loader holding a non-Item yields null here, which the consumers
+        // below already handle.
+        readonly property Item _visibleDelegate: root.contentItem ?? (contentLoader.item as Item)
+
+        // True when focus is already somewhere in the delegate's subtree.
+        //
+        // BOTH halves are needed and each covers a case the other misses. The
+        // `activeFocus` half catches a delegate holding focus itself, and a
+        // pre-built contentItem whose child focused itself before the window
+        // existed, where the window's focus item has not settled onto that
+        // child yet. The parent-chain walk catches a Loader-built delegate
+        // whose child genuinely holds focus, where the delegate's own
+        // `activeFocus` reads false. Dropping either one lets the push
+        // override content that manages its own focus.
+        function contentHoldsFocus(): bool {
+            const delegate = _visibleDelegate;
+            if (!delegate)
+                return false;
+            if (delegate.activeFocus)
+                return true;
+            let item = delegate.Window.activeFocusItem;
+            while (item) {
+                if (item === delegate)
+                    return true;
+                item = item.parent;
+            }
+            return false;
+        }
+
+        function focusContentIfIdle(): void {
+            if (contentHoldsFocus())
+                return;
+            const delegate = _visibleDelegate;
+            if (delegate)
+                delegate.forceActiveFocus();
+        }
 
         function rebindContentItem() {
             // Only orphan _lastBound if it is still parented under

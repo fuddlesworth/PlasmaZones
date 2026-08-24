@@ -21,11 +21,12 @@ consistently.
 
 - **Single arbiter, multiple transports.** The arbitration state
   machine lives in `PopoutController`. The actual layer-shell surface
-  creation is behind `IPopoutTransport`. A future `LayerPopoutTransport`
-  will wire to `phosphor-layer::SurfaceFactory` once the shell binary
-  needs popouts. The in-app demo transport ships today as the
-  acceptance harness. Tests inject a fake transport and drive the
-  controller as pure logic with no Wayland in sight.
+  creation is behind `IPopoutTransport`. The shell's
+  `LayerPopoutTransport` wires it to `phosphor-layer::SurfaceFactory`,
+  giving each popout its own layer-shell overlay surface. The in-app
+  demo transport is the acceptance harness. Tests inject a fake
+  transport and drive the controller as pure logic with no Wayland in
+  sight.
 - **Three exclusivity modes.** Cooperative is the default. One per
   scope. Opening a new one swaps the previous. Modal suppresses every
   Cooperative across every scope while it's open. Detached floats
@@ -58,6 +59,7 @@ consistently.
 | `contentItem: Item`           | property | A pre-built Item the host reparents under its content frame. Wins over `contentComponent` if both are set |
 | `open: bool`                  | property | Drives the show/hide animation. The transport sets this true after the surface is parented and false to begin teardown |
 | `dismissOnClickOutside: bool` | property | When true, a click on the backdrop sets `open = false`. The transport wires this from `PopoutRequest.dismissOnFocusLoss` |
+| `keyboardFocus: bool`         | property | Whether the popout takes the keyboard while open. The transport wires this from `PopoutRequest.keyboardFocus`. Separate from `dismissOnClickOutside`, since wanting the keyboard and being dismissible are different questions. A host with this false receives no key events at all, so Escape does not dismiss it either and click-outside is its only self-dismissal route |
 | `backdropColor: color`        | property | Background dim color. The transport binds a scrim for Modal, a lighter dim for Cooperative, transparent for Detached |
 | `dismiss()`                   | function | Content delegates several levels deep can call this to close the popout without walking the parent chain. The transport injects a `_popoutHost` reference on the content, and the content calls `_popoutHost.dismiss()` |
 | `dismissed()`                 | signal   | Emitted after the close animation finishes. Fires once per open-then-close cycle, so transports that reuse a single host across many popouts get a fresh dismissed each time. Also fires once on `Component.onDestruction` if the host had ever been opened and is torn down before the close-animation timer emits dismissed itself, so transport bookkeeping never leaks a handle when a popout is destroyed mid-cycle. A host that is constructed and destroyed without ever having `open` driven true does NOT fire dismissed, so transports that pre-build and discard surfaces don't see a phantom dismissed in that case. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
@@ -102,28 +104,36 @@ import QtQuick.Controls
 import Phosphor.Popout
 
 ToolButton {
-    text: i18nc("@action:button", "Toggle calendar")
+    text: qsTr("Toggle calendar")
 
     Component {
         id: calendarComponent
         Rectangle { implicitWidth: 320; implicitHeight: 220; color: "white" }
     }
 
-    onClicked: {
-        let req = popoutRequest();
-        req.popoutId = "calendar";
-        req.content = calendarComponent;
-        req.anchor = Anchor.BarCenter;
-        req.exclusive = ExclusiveMode.Cooperative;
-        Popouts.toggle(req);
-    }
+    onClicked: Popouts.toggle({
+        "popoutId": "calendar",
+        "content": calendarComponent,
+        "anchor": PhosphorPopout.Anchor.BarCenter,
+        "exclusive": PhosphorPopout.ExclusiveMode.Cooperative
+    })
 }
 ```
 
-The `popoutRequest` value type, `Anchor`, and `ExclusiveMode` enums
-are all visible to QML through the registrations described in the
-key-types table above. `popoutRequest()` is the value type's default
-constructor. Field assignment uses regular property syntax.
+Two things about that call are easy to get wrong, and both fail only at
+runtime.
+
+The object literal converts to a `popoutRequest` because the value type
+is declared `QML_STRUCTURED_VALUE`. Without that macro QML has no
+conversion from a JS object to the gadget and the call raises
+`TypeError: Passing incompatible arguments to C++ functions from
+JavaScript is not allowed`.
+
+`Anchor` and `ExclusiveMode` must be reached THROUGH `PhosphorPopout`.
+`QML_ELEMENT` on a `Q_NAMESPACE` publishes the namespace as the QML type
+name, so it does not put the enums in scope unqualified. A bare
+`Anchor.BarCenter` is a `ReferenceError`. Both rules are pinned by
+`tests/test_popout_qml_enums.cpp`.
 
 ## Arbitration
 
@@ -158,8 +168,7 @@ constructor. Field assignment uses regular property syntax.
   the in-tree linkable artefact. Out-of-tree consumption via
   `find_package(PhosphorPopout)` exposes the C++ core
   (`PhosphorPopout::PhosphorPopout`) only. Installed QML module
-  deployment lands together with the layer-shell transport in a
-  follow-up. In-tree consumers that link `PhosphorPopout::PhosphorPopoutQml`
+  deployment is still a follow-up. In-tree consumers that link `PhosphorPopout::PhosphorPopoutQml`
   pick up the PhosphorTheme QML plugin transitively, so the runtime
   `import Phosphor.Theme` inside PopoutHost.qml resolves without
   extra wiring at the consumer side.
@@ -167,4 +176,4 @@ constructor. Field assignment uses regular property syntax.
 ## See also
 
 - `libs/phosphor-layer/`. The policy layer over `wlr-layer-shell`
-  that the default transport will consume.
+  that the shell's `LayerPopoutTransport` consumes.

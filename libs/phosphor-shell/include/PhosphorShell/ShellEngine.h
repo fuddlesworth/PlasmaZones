@@ -58,10 +58,32 @@ public:
     /// supply them. The callback is invoked synchronously, in
     /// registration order, after the engine's own context properties
     /// are set but before any QML is loaded.
+    ///
+    /// A hook must tolerate being called for an engine that is destroyed
+    /// moments later: hooks run before the QML is parsed, and a load that
+    /// then fails tears that engine down immediately.
     using EngineHook = std::function<void(QQmlEngine*)>;
     void addEngineHook(EngineHook hook);
 
 Q_SIGNALS:
+    /// Emitted at the very top of a hot reload, BEFORE any teardown.
+    ///
+    /// `loaded`, `reloaded` and `failed` all report after the fact, which
+    /// is useless to anything holding objects built from the outgoing
+    /// QQmlEngine: by the time they fire, that engine and every object it
+    /// created are gone. A consumer that owns engine-scoped state (a
+    /// popout transport holding live surfaces, say) needs a chance to drain
+    /// while the graph is still valid.
+    ///
+    /// Covers RELOAD only, not destruction: ~ShellEngine tears down without
+    /// emitting anything, so a consumer must also drain from its own
+    /// shutdown path (QGuiApplication::aboutToQuit, or before the engine
+    /// goes out of scope). Nor is it paired one-to-one with `reloaded`: a
+    /// reload whose rebuild fails emits this and then `failed`, never
+    /// `reloaded`, and the next file change emits it again, so the drain must
+    /// be idempotent.
+    void aboutToReload();
+
     void loaded();
     void reloaded();
     void failed(const QString& reason);
@@ -76,7 +98,13 @@ private:
     /// hot-reload onFileChanged() path. Emits failed() and returns false
     /// if the QML fails to load or instantiate.
     [[nodiscard]] bool buildAndMaterialize();
-    void materializePanels();
+    /// Build a layer surface for every PanelWindow the QML graph declares.
+    /// Returns false only when the ROOT panel's surface fails, which leaves
+    /// the QML root destroyed and the engine unusable; a non-root failure is
+    /// logged and the remaining panels are still materialized. On false,
+    /// `failureReason` (when non-null) receives the message for `failed`,
+    /// which the CALLER emits after tearing down.
+    [[nodiscard]] bool materializePanels(QString* failureReason);
     void installDynamicAutoFit(PanelWindow* panel, PhosphorLayer::Surface* surface, QSize screenSize);
     /// Mask the surface's input region down to the painted band, so the
     /// shadow strip beyond `thickness` stops accepting pointer events meant

@@ -3,12 +3,14 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
-# PopoutController's test coverage is split across three test binaries by
-# concern, so a future contributor can add tests in one slice without
-# re-reading the others.
+# The popout library's test coverage is split across four binaries by concern,
+# so a future contributor can add tests in one slice without re-reading the
+# others.
 #   _arbitration : open/close/toggle/closeAll arbitration paths
 #   _dismiss     : dismissed-callback routing, re-entrancy guard, destructor
 #   _signals     : signal-ordering invariants, slot-state consistency, DefaultScope
+#   _qml_enums   : the QML-facing enum path (PhosphorPopout.Anchor.* and
+#                  ExclusiveMode.*) and object-literal to PopoutRequest
 
 # Shared test isolation: a private D-Bus session (so a test that touches D-Bus
 # cannot activate the INSTALLED daemon, which then holds the test's stdout pipe
@@ -30,9 +32,28 @@ function(phosphorpopout_add_test name)
     # offscreen QPA keeps the tests headless on CI; the test binaries
     # transitively link Qt Gui (via QScreen on PopoutRequest) and
     # construct a QCoreApplication via QTEST_MAIN.
+    # APPEND, not set_tests_properties: a plain SET here would replace the
+    # whole ENVIRONMENT list and drop the XDG sandbox the isolation helper
+    # just installed.
     phosphor_append_test_environment(${name} "QT_QPA_PLATFORM=offscreen")
+    # A tighter bound than the helper's 120s default, so a hang in this suite
+    # fails the run promptly. Set AFTER phosphor_apply_test_isolation, which
+    # only supplies its default when no TIMEOUT is set yet — last write wins.
+    set_tests_properties(${name} PROPERTIES TIMEOUT 30)
 endfunction()
 
 phosphorpopout_add_test(test_popoutcontroller_arbitration)
 phosphorpopout_add_test(test_popoutcontroller_dismiss)
 phosphorpopout_add_test(test_popoutcontroller_signals)
+
+# The QML-facing enum path needs the QML module itself, not just the C++
+# library: the type registration that decides whether QML sees the values at
+# PhosphorPopout.Anchor.* lives in the generated plugin, and on a STATIC
+# module that registration only happens for a binary that links the plugin
+# target as well as the module.
+phosphorpopout_add_test(test_popout_qml_enums)
+target_link_libraries(test_popout_qml_enums
+    PRIVATE
+        PhosphorPopout::PhosphorPopoutQml
+        PhosphorPopoutQmlplugin
+)

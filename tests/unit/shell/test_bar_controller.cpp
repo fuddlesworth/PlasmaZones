@@ -17,6 +17,7 @@
 
 #include <QQmlEngine>
 #include <QQuickItem>
+#include <QSignalSpy>
 #include <QRegularExpression>
 #include <QStringList>
 #include <QTest>
@@ -34,7 +35,33 @@ private Q_SLOTS:
     void nullParentYieldsNull();
     void factoryRejectsNullEngine();
     void factoryRejectsNullParent();
+    void relaysActivationWithItsRegistryId();
+    void activationWithoutAnIdIsRefused();
+    void aDynamicPropertyWriteReportsFailureButStoresTheValue();
 };
+
+namespace {
+
+// Stand-in for a trigger delegate. The shipped ones (PowerButton and the
+// rest) cannot be instantiated in a unit-test binary because they import
+// Phosphor.Shell and the Phosphor.Service.* modules, which only the shell
+// process registers, so createWidgetFor cannot produce a real widget here.
+//
+// That bounds what these two cases pin: the RELAY (id recovery from the
+// sender, the empty-id refusal, and the two-argument payload), wired the same
+// string-based way createWidgetFor wires it. The duck-typing branch inside
+// createWidgetFor — that a widget WITHOUT an `activated()` signal is left
+// unconnected — is not covered here and needs a binary that can build a real
+// delegate.
+class FakeTriggerWidget : public QQuickItem
+{
+    Q_OBJECT
+
+Q_SIGNALS:
+    void activated();
+};
+
+} // namespace
 
 void TestBarController::registersEveryBuiltin()
 {
@@ -116,6 +143,69 @@ void TestBarController::factoryRejectsNullParent()
                                          QStringLiteral("Clock"));
     QQmlEngine engine;
     QCOMPARE(factory.createWidget(&engine, nullptr), nullptr);
+}
+
+void TestBarController::relaysActivationWithItsRegistryId()
+{
+    // QQuickItem* is not a metatype QSignalSpy can marshal on its own here,
+    // and without this the source argument reads back as null and the
+    // assertion below would fail for a reason that has nothing to do with
+    // the relay.
+    qRegisterMetaType<QQuickItem*>("QQuickItem*");
+
+    BarController controller;
+    FakeTriggerWidget widget;
+    // Exactly what createWidgetFor does after the duck-type check.
+    widget.setProperty("_barWidgetId", QStringLiteral("power"));
+    QObject::connect(&widget, SIGNAL(activated()), &controller, SLOT(relayWidgetActivation()));
+
+    QSignalSpy spy(&controller, &BarController::widgetActivated);
+    Q_EMIT widget.activated();
+
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.first().at(0).toString(), QStringLiteral("power"));
+    // The source travels with the id so a multi-monitor composer can tell
+    // which bar's button fired.
+    QCOMPARE(spy.first().at(1).value<QQuickItem*>(), &widget);
+}
+
+void TestBarController::activationWithoutAnIdIsRefused()
+{
+    // Reachable only if a delegate declares its own property of that name and
+    // rejects the write. The relay must stay silent on the wire and loud in
+    // the log, rather than emitting an empty id the composer would ignore.
+    BarController controller;
+    FakeTriggerWidget widget;
+    QObject::connect(&widget, SIGNAL(activated()), &controller, SLOT(relayWidgetActivation()));
+
+    QSignalSpy spy(&controller, &BarController::widgetActivated);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("carries no registry id")));
+    Q_EMIT widget.activated();
+
+    QCOMPARE(spy.count(), 0);
+}
+
+void TestBarController::aDynamicPropertyWriteReportsFailureButStoresTheValue()
+{
+    // Pins the Qt behaviour that createWidgetFor's id stamp depends on, and
+    // that a "hardening" change once got backwards with the whole bar as the
+    // blast radius.
+    //
+    // QObject::setProperty returns TRUE only for a declared Q_PROPERTY. For
+    // any other name it stores a DYNAMIC property and returns FALSE. So a
+    // false return here means "stored dynamically", not "rejected", and
+    // treating it as failure skips the activated() connect for every widget —
+    // which is inert bar buttons, with nothing in the log.
+    //
+    // `_barWidgetId` is dynamic by design (no bar delegate declares it), so
+    // the only correct verification is a READ-BACK.
+    FakeTriggerWidget widget;
+    const QString id = QStringLiteral("power");
+
+    QVERIFY2(!widget.setProperty("_barWidgetId", id),
+             "Qt started returning true for a dynamic property write; "
+             "revisit createWidgetFor, which is written around this returning false");
+    QCOMPARE(widget.property("_barWidgetId").toString(), id);
 }
 
 QTEST_MAIN(TestBarController)

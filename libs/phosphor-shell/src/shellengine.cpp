@@ -86,6 +86,16 @@ bool ShellEngine::load(const QUrl& shellUrl)
         return false;
     }
 
+    // Single-shot. A second load() would construct a second ScreenModel and
+    // ShellGlobal parented to `this`, leaking the first pair for this object's
+    // lifetime, orphaning the old singleton map, and duplicating the
+    // screensChanged connection. Recovery after a failed load is a fresh
+    // ShellEngine, not a retry on this one.
+    if (m_screenModel) {
+        Q_EMIT failed(QStringLiteral("ShellEngine: load() has already run on this instance"));
+        return false;
+    }
+
     m_shellUrl = shellUrl;
 
     m_screenModel = new ScreenModel(m_deps.screenProvider, this);
@@ -152,10 +162,13 @@ bool ShellEngine::load(const QUrl& shellUrl)
         qmlRegisterSingletonType<Workspaces>("Phosphor.Shell", 1, 0, "Workspaces", &Workspaces::create);
     });
 
+    // Watch BEFORE building. A failed initial load still leaves the watcher
+    // armed, so editing the offending shell.qml recovers the process rather
+    // than requiring a restart.
+    setupWatcher();
     if (!buildAndMaterialize()) {
         return false;
     }
-    setupWatcher();
     Q_EMIT loaded();
     return true;
 }
@@ -179,24 +192,39 @@ bool ShellEngine::buildAndMaterialize()
         }
     }
 
+    // Every failure exit below takes the SAME shape: tear down, then emit
+    // `failed`. Uniform so `engine()` is null after any failure rather than
+    // non-null after some and null after others, and so a handler that
+    // rebuilds synchronously is not undone by a teardown running after it.
+    const auto fail = [this](const QString& reason) {
+        teardown();
+        Q_EMIT failed(reason);
+        return false;
+    };
+
     QQmlComponent component(m_engine.get(), m_shellUrl, QQmlComponent::PreferSynchronous);
     if (component.isError()) {
         const QString errors = component.errorString();
         qCWarning(lcShellEngine) << "Failed to load shell.qml:" << errors;
-        Q_EMIT failed(errors);
-        return false;
+        return fail(errors);
     }
 
     m_rootObject.reset(component.create());
     if (!m_rootObject) {
         const QString errors = component.errorString();
         qCWarning(lcShellEngine) << "Failed to instantiate shell.qml:" << errors;
-        Q_EMIT failed(errors);
-        return false;
+        return fail(errors);
     }
     m_rootRef = m_rootObject.get();
 
-    materializePanels();
+    // A false return means the ROOT panel's surface failed. Its QML root is
+    // already destroyed, so every later step (PersistentProperties scan,
+    // hot-reload save/restore) would no-op against a null root and the shell
+    // would run headless with no surfaces.
+    QString materializeError;
+    if (!materializePanels(&materializeError)) {
+        return fail(materializeError);
+    }
     return true;
 }
 
@@ -239,6 +267,13 @@ void ShellEngine::teardown()
 
 void ShellEngine::setupWatcher()
 {
+    // A qrc: shell URL has no local file to watch, and it is a reachable case
+    // (ShellLoader falls back to the bundled example). Without this the two
+    // addPath calls below would each log "path is empty" at every startup.
+    if (!m_shellUrl.isLocalFile()) {
+        qCDebug(lcShellEngine) << "shell URL is not a local file; hot reload disabled";
+        return;
+    }
     if (m_watcher) {
         return;
     }
@@ -279,6 +314,11 @@ void ShellEngine::onFileChanged()
     // (onScreensChanged routes through the same debounce timer), so the
     // message stays neutral about the cause.
     qCDebug(lcShellEngine) << "Reloading shell...";
+
+    // Before savePersistentState, and well before teardown: consumers
+    // holding objects created by the outgoing engine must drop them while
+    // that engine still exists.
+    Q_EMIT aboutToReload();
 
     savePersistentState();
     teardown();
@@ -327,9 +367,13 @@ static PhosphorLayer::Anchor edgeToAnchor(PanelWindow::Edge edge)
     Q_UNREACHABLE_RETURN(PhosphorLayer::Anchor::Top);
 }
 
-void ShellEngine::materializePanels()
+bool ShellEngine::materializePanels(QString* failureReason)
 {
-    QList<PanelWindow*> panels;
+    // QPointer, not raw: a panel whose surface fails is destroyed by
+    // cfg.contentItem's destructor, and a NESTED panel underneath it dies with
+    // its parent while still sitting in this list. A raw pointer would be
+    // dereferenced on the next iteration.
+    QList<QPointer<PanelWindow>> panels;
 
     auto* rootPanel = qobject_cast<PanelWindow*>(m_rootObject.get());
     if (rootPanel) {
@@ -337,9 +381,29 @@ void ShellEngine::materializePanels()
     }
 
     const auto children = m_rootObject->findChildren<PanelWindow*>();
-    panels.append(children);
+    panels.reserve(panels.size() + children.size());
+    for (PanelWindow* child : children) {
+        panels.append(child);
+    }
 
-    for (PanelWindow* panel : panels) {
+    for (const QPointer<PanelWindow>& panelRef : panels) {
+        // A panel destroyed as collateral of an earlier panel's failure.
+        if (!panelRef) {
+            continue;
+        }
+        PanelWindow* panel = panelRef;
+        // A panel nested inside another panel is silently re-hosted: the outer
+        // one's Surface adopts the whole subtree, then this iteration tears the
+        // inner one back out and gives it a surface of its own. Safe, but the
+        // QML author never asked for it and gets no other signal.
+        for (QObject* ancestor = panel->parent(); ancestor; ancestor = ancestor->parent()) {
+            if (qobject_cast<PanelWindow*>(ancestor)) {
+                qCWarning(lcShellEngine)
+                    << "PanelWindow is nested inside another PanelWindow; it will be detached and given its own"
+                    << "layer surface rather than rendered inside its parent";
+                break;
+            }
+        }
         if (panel->alignment() != PanelWindow::Fill && panel->panelLength() < 0) {
             qCWarning(lcShellEngine) << "PanelWindow has alignment=" << panel->alignment()
                                      << "but panelLength=-1 (Fill) — set panelLength to a non-negative"
@@ -486,7 +550,24 @@ void ShellEngine::materializePanels()
             break;
         }
 
-        if (panel->alignment() == PanelWindow::Fill && panel->exclusiveZoneEnabled()) {
+        if (panel->panelLayer() == PanelWindow::LayerOverlay) {
+            // Role::isValid REJECTS an Overlay that reserves or respects a
+            // zone, and the factory refuses to create on an invalid role, so
+            // every branch below would make an overlay panel fail outright.
+            // -1 is the only value an overlay can carry.
+            // exclusiveZoneEnabled defaults to TRUE, so testing it alone
+            // would warn for every overlay panel that never asked for
+            // anything. Warn only when a branch below would really have
+            // reserved a zone.
+            const bool wouldHaveReserved = panel->exclusiveZone() >= 0
+                || (panel->alignment() == PanelWindow::Fill && panel->exclusiveZoneEnabled());
+            if (wouldHaveReserved) {
+                qCWarning(lcShellEngine)
+                    << "PanelWindow asks for an exclusive zone on the Overlay layer, which cannot reserve one;"
+                    << "ignoring the zone request";
+            }
+            role = role.withExclusiveZone(-1);
+        } else if (panel->alignment() == PanelWindow::Fill && panel->exclusiveZoneEnabled()) {
             role = role.withExclusiveZone(panel->thickness());
         } else if (panel->exclusiveZone() >= 0) {
             role = role.withExclusiveZone(panel->exclusiveZone());
@@ -539,18 +620,27 @@ void ShellEngine::materializePanels()
         }
         cfg.contentItem = std::unique_ptr<QQuickItem>(panel);
 
-        // Pass nullptr as parent — m_surfaces (vector of unique_ptr) is
-        // the single owner. Passing `this` would double-own (QObject parent
-        // + unique_ptr) and double-free during ~ShellEngine.
+        // m_surfaces (a vector of unique_ptr) is the single owner — but
+        // the factory does NOT hand back an unparented object. `create`
+        // ends in `parent ? parent : this`, so a null parent parents the
+        // Surface to the FACTORY, and the unique_ptr below would then be a
+        // second owner. That is safe today only because main declares the
+        // factory before the engine, so reverse destruction happens to run
+        // these unique_ptrs first; any reordering makes it a double free.
+        // Detach explicitly right after creation so the unique_ptr really
+        // is the sole owner, rather than relying on declaration order.
         const bool wasRootPanel = (panel == rootPanel);
-        // Own it immediately. create() hands back a raw pointer with no
-        // QObject parent, so until this lands in m_surfaces the unique_ptr
-        // is the only thing that will free it — and the Failed branch below
-        // needs to DESTROY it, not just stop referring to it. The surface
-        // has already adopted the panel as its content item, so destroying
-        // it takes the panel with it.
+        // Own it immediately. create() parents the Surface to the FACTORY
+        // when the parent argument is null, so the setParent(nullptr) below
+        // detaches it and leaves this unique_ptr the sole owner — do not
+        // delete that line as redundant. Until the surface lands in
+        // m_surfaces the unique_ptr is the only thing that will free it, and
+        // the Failed branch below needs to DESTROY it rather than just stop
+        // referring to it. The surface has already adopted the panel as its
+        // content item, so destroying it takes the panel with it.
         std::unique_ptr<PhosphorLayer::Surface> ownedSurface(m_deps.surfaceFactory->create(std::move(cfg), nullptr));
         if (ownedSurface) {
+            ownedSurface->setParent(nullptr);
             ownedSurface->show();
             // AFTER show(), not before. create() only constructs — it never
             // warms or attaches — so the state is always Constructed on
@@ -601,8 +691,14 @@ void ShellEngine::materializePanels()
             if (wasRootPanel) {
                 qCCritical(lcShellEngine) << "Root panel surface creation failed — aborting load";
                 m_surfaces.clear();
-                Q_EMIT failed(QStringLiteral("Failed to create surface for root PanelWindow"));
-                return;
+                // Report rather than emit. `failed` has to reach the consumer
+                // AFTER teardown, or a handler that synchronously rebuilds
+                // would have its fresh engine destroyed by the teardown that
+                // runs when this returns.
+                if (failureReason) {
+                    *failureReason = QStringLiteral("Failed to create surface for root PanelWindow");
+                }
+                return false;
             }
         }
     }
@@ -622,6 +718,7 @@ void ShellEngine::materializePanels()
             }
         }
     }
+    return true;
 }
 
 void ShellEngine::installInputRegion(PanelWindow* panel, PhosphorLayer::Surface* surface)

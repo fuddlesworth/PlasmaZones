@@ -10,9 +10,9 @@
 # IBarWidgetFactory registry the shell owns (BarController), so the
 # module itself stays registry-agnostic and the delegates are pluggable.
 # Themed through phosphor-theme and built on the phosphor-shell-widgets
-# atoms (BarCanvas, ElevationShadow, PhosphorRipple). Unlike the other
-# shell-tier libs this one depends on KF6 Kirigami, for Kirigami.Icon's
-# named-icon resolution in the status widgets.
+# atoms (BarCanvas, ElevationShadow, PhosphorRipple). This lib depends on
+# KF6 Kirigami, for Kirigami.Icon's named-icon resolution in the status
+# widgets. phosphor-shell-power does too, for the same reason.
 #
 # Phase 4.1 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
 

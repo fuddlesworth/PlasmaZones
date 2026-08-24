@@ -703,6 +703,8 @@ if(BUILD_PHOSPHOR_SHELL)
         # (Phase 4.1).
         shell/BarController.h
         shell/barcontroller.cpp
+        shell/LayerPopoutTransport.h
+        shell/layerpopouttransport.cpp
         shell/QmlComponentBarWidgetFactory.h
         shell/qmlcomponentbarwidgetfactory.cpp
     )
@@ -716,6 +718,21 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorRegistry::PhosphorRegistry
             PhosphorShellBar::PhosphorShellBarQml
             PhosphorShellBarQmlplugin
+            PhosphorShellPower::PhosphorShellPowerQml
+            PhosphorShellPowerQmlplugin
+            # IpcRouter + the Phosphor.Ipc module that publishes IpcTarget.
+            # The router has to be installed on each engine (see main.cpp)
+            # or every IpcTarget logs a warning and stays inert.
+            PhosphorIpc::PhosphorIpc
+            PhosphorIpc::PhosphorIpcQml
+            PhosphorIpcQmlplugin
+            # Popout policy + the QML host it drives. Static QML modules ship
+            # both a library and a plugin registrar; the registrar is what
+            # publishes the module to a QQmlEngine, so without it the
+            # transport's PopoutHost.qml load would fail at runtime.
+            PhosphorPopout::PhosphorPopout
+            PhosphorPopout::PhosphorPopoutQml
+            PhosphorPopoutQmlplugin
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
             PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceUPower::PhosphorServiceUPower

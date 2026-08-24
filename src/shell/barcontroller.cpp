@@ -24,6 +24,11 @@ namespace {
 // sort imposes a stable ALPHABETICAL display order on top of that, so a
 // consumer enumerating ids renders the same sequence regardless of the
 // order the built-ins happened to be registered in.
+// The registry id is stashed on the widget so the activation relay can
+// recover it from sender(), rather than keeping a parallel map that would
+// have to be pruned as widgets die.
+constexpr auto kWidgetIdProperty = "_barWidgetId";
+
 QStringList sortedIds(const Registry<IBarWidgetFactory>& registry)
 {
     QStringList ids = registry.ids();
@@ -141,7 +146,54 @@ QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent
         qCWarning(lcBar) << "BarController: no QML engine resolvable from parent for id" << id;
         return nullptr;
     }
-    return factory->createWidget(engine, parent);
+    QQuickItem* widget = factory->createWidget(engine, parent);
+    if (!widget) {
+        return nullptr;
+    }
+    // Duck-typed: only some widgets are triggers. The metaobject lookup is
+    // what keeps this from being a hard contract every delegate must satisfy
+    // — a widget with no `activated` signal simply is not connected.
+    if (widget->metaObject()->indexOfSignal("activated()") >= 0) {
+        // Verify by READING BACK, never by setProperty's return value.
+        // setProperty returns false whenever the name is not a declared
+        // Q_PROPERTY — it stores a dynamic property and reports false — and
+        // `_barWidgetId` is dynamic by design, so treating that as failure
+        // would skip the connect for every widget, always. This exact
+        // mistake shipped once and left every bar button inert.
+        //
+        // The read-back is still worth doing: a delegate that declares its own
+        // property of this name takes the write and may coerce it (an int
+        // property yields "0"), which would relay a bogus id.
+        widget->setProperty(kWidgetIdProperty, id);
+        if (widget->property(kWidgetIdProperty).toString() != id) {
+            qCWarning(lcBar) << "BarController: widget for id" << id << "declares its own" << kWidgetIdProperty
+                             << "property; leaving it unconnected rather than relaying a bogus id";
+            return widget;
+        }
+        QObject::connect(widget, SIGNAL(activated()), this, SLOT(relayWidgetActivation()));
+    }
+    return widget;
+}
+
+void BarController::relayWidgetActivation()
+{
+    auto* widget = qobject_cast<QQuickItem*>(sender());
+    if (!widget) {
+        // Unreachable today: the only connection is made in createWidgetFor
+        // against the factory's QQuickItem*. Logged rather than dropped so the
+        // day that stops being true is diagnosable.
+        qCWarning(lcBar) << "BarController: activation from a non-item sender; ignoring";
+        return;
+    }
+    const QString id = widget->property(kWidgetIdProperty).toString();
+    if (id.isEmpty()) {
+        // Only reachable if the delegate declares its own property of this
+        // name and rejects the write. Silent here would mean a bar button
+        // that does nothing with nothing in the log to explain it.
+        qCWarning(lcBar) << "BarController: activated widget carries no registry id; ignoring";
+        return;
+    }
+    Q_EMIT widgetActivated(id, widget);
 }
 
 QStringList BarController::factoryIds() const

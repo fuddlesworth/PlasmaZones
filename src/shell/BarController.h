@@ -66,6 +66,11 @@ public:
     // skips it), for a null `parent`, or when no engine is resolvable from
     // `parent`. The engine is resolved from `parent` so QML need not pass
     // it, which is also why `parent` must be non-null.
+    //
+    // A widget declaring an `activated()` signal is wired to widgetActivated
+    // here, AFTER its construction completes. A widget that emits during its
+    // own Component.onCompleted therefore fires before the relay exists and
+    // is not heard; triggers must emit in response to input, not at birth.
     [[nodiscard]] Q_INVOKABLE QQuickItem* createWidgetFor(const QString& id, QQuickItem* parent);
 
     // The registered widget ids, sorted for a deterministic order. Exposed
@@ -75,6 +80,27 @@ public:
 
 Q_SIGNALS:
     void factoryIdsChanged();
+
+    /// A bar widget was activated (clicked, Space/Enter, or an assistive-tech
+    /// press), carrying the registry id of the widget and the widget itself.
+    ///
+    /// The trailing bar buttons — power, notifications, control centre — are
+    /// only triggers; what they open lives in other modules. Routing through
+    /// the registry keeps that edge out of Phosphor.Bar, which would
+    /// otherwise have to depend on every surface it can summon. The shell
+    /// composer listens here and decides what a given id opens.
+    ///
+    /// `source` matters because there is one bar per output: without it every
+    /// screen's "power" button emits an identical payload and a bar-anchored
+    /// popout has no way to know which bar it belongs to. A screen-centred
+    /// popout can ignore it.
+    void widgetActivated(const QString& id, QQuickItem* source);
+
+private Q_SLOTS:
+    /// Relay for a widget's QML-declared `activated` signal. QML signals have
+    /// no compile-time member pointer, so the connection is made in the
+    /// string-based form, which requires a real slot.
+    void relayWidgetActivation();
 
 private:
     void registerBuiltins();

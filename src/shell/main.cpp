@@ -2,6 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "BarController.h"
+#include "LayerPopoutTransport.h"
+
+#include <PhosphorPopout/PopoutController.h>
+
+#include <PhosphorIpc/IpcEngine.h>
+#include <PhosphorIpc/IpcRouter.h>
 
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
@@ -206,6 +212,23 @@ int main(int argc, char* argv[])
     // each widget's parent so no stale-engine reference is held.
     PhosphorShellApp::BarController barController;
 
+    // The IPC router every IpcTarget in the shell's QML registers with.
+    // Declared before the engine for the same reverse-destruction reason as
+    // the others: targets unregister themselves on destruction and must find
+    // a live router when they do.
+    PhosphorIpc::IpcRouter ipcRouter;
+
+    // Popout infrastructure, declared BEFORE the engine for the same
+    // reverse-destruction reason as barController: the engine must die (and
+    // clear every QML binding to these) before they do.
+    //
+    // Transport FIRST, controller SECOND. ~PopoutController detaches its
+    // dismissed callback by calling back into the transport, so the
+    // controller has to be destroyed while the transport is still alive —
+    // which reverse-declaration order gives us for free.
+    PhosphorShellApp::LayerPopoutTransport popoutTransport(&factory, screenProvider.get());
+    PhosphorPopout::PopoutController popouts(&popoutTransport);
+
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{
             .surfaceFactory = &factory,
@@ -225,9 +248,53 @@ int main(int argc, char* argv[])
         PhosphorServiceIconTheme::installImageProvider(qmlEngine);
     });
 
+    // The transport builds popout content from the live engine, so it needs
+    // the new one on every hot reload. Paired with the aboutToReload drain
+    // below: that drops the outgoing engine's surfaces while its object
+    // graph is still valid, and this adopts the replacement.
+    engine.addEngineHook([&popoutTransport](QQmlEngine* qmlEngine) {
+        popoutTransport.setEngine(qmlEngine);
+    });
+
+    // IpcTarget resolves its router from a property stashed on the engine,
+    // so this has to run for every fresh engine, not once at startup.
+    // Without it each target warns and stays inert, and `phosphorctl call`
+    // finds nothing.
+    engine.addEngineHook([&ipcRouter](QQmlEngine* qmlEngine) {
+        PhosphorIpc::IpcEngine::install(qmlEngine, &ipcRouter);
+    });
+
+    // A hot reload destroys the QQmlEngine and every delegate built from it.
+    // Drain while that is still safe to touch, rather than discovering it
+    // afterwards through dangling QPointers.
+    // Context object is `popouts`, the SHORTEST-lived of the two captures
+    // (it is declared after the transport, so it is destroyed first).
+    // Auto-disconnect has to key on whichever capture dies first, or the
+    // lambda outlives one of the references it holds.
+    QObject::connect(&engine, &PhosphorShell::ShellEngine::aboutToReload, &popouts, [&popoutTransport, &popouts] {
+        popouts.closeAll();
+        popoutTransport.drain();
+    });
+
+    // Surfaces must be gone before the QML engine and the Wayland
+    // connection unwind. Without this the transport tears down during
+    // static destruction, which is where Qt object graphs misbehave.
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &popouts, [&popoutTransport, &popouts] {
+        popouts.closeAll();
+        popoutTransport.drain();
+    });
+
+    engine.addEngineHook([&popouts](QQmlEngine* qmlEngine) {
+        // Context property rather than qmlRegisterSingletonInstance: the
+        // Phosphor.Popout URI already belongs to a qt_add_qml_module, and
+        // the BarRegistry precedent for re-binding a process-global C++
+        // object onto each fresh engine is already proven across reloads.
+        qmlEngine->rootContext()->setContextProperty(QStringLiteral("Popouts"), &popouts);
+    });
+
     // Expose the bar widget registry to QML as the BarRegistry context
-    // property on every engine the shell builds (startup + each
-    // hot-reload). Slot.qml mounts each delegate through
+    // property on every engine the shell builds (startup + each hot reload).
+    // Slot.qml mounts each delegate through
     // BarRegistry.createWidgetFor(id, parent).
     engine.addEngineHook([&barController](QQmlEngine* qmlEngine) {
         qmlEngine->rootContext()->setContextProperty(QStringLiteral("BarRegistry"), &barController);
