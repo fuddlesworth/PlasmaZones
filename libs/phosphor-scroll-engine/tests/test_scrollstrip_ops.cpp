@@ -430,7 +430,7 @@ void TestScrollStripOps::windowHeights()
 
     // Preset height on the active tile (b). The tile is AUTO, so it has no
     // fraction of its own and the entry has to come from what it RENDERS at:
-    // a forward press takes the first preset taller than its current 395px,
+    // a forward press takes the nearest preset taller than its current 395px,
     // which is 2/3 — not vocabulary entry 0, the answer the old
     // no-determinate-fraction arm gave regardless of what was on screen (and
     // which SHRANK the tile on a "taller" press).
