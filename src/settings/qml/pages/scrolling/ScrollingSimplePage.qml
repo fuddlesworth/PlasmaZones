@@ -150,15 +150,19 @@ SettingsFlickable {
 
                     SettingsSlider {
                         accessibleName: i18n("Proportion of the strip")
-                        from: root._scrollConsts.proportionMin
-                        to: root._scrollConsts.proportionMax
-                        stepSize: root._scrollConsts.proportionStep
-                        value: appSettings.scrollingDefaultColumnWidthValue
+                        // Percent units, not the stored fraction: the step is
+                        // 1% and the tick-mark hint is an int, so ticks can
+                        // only stay readable (one per 5%) in whole percent.
+                        from: Math.round(root._scrollConsts.proportionMin * 100)
+                        to: Math.round(root._scrollConsts.proportionMax * 100)
+                        stepSize: Math.max(1, Math.round(root._scrollConsts.proportionStep * 100))
+                        tickMarkStepSize: 5
+                        value: appSettings.scrollingDefaultColumnWidthValue * 100
                         formatValue: function (v) {
-                            return Math.round(v * 100) + "%";
+                            return Math.round(v) + "%";
                         }
                         onMoved: function (newValue) {
-                            appSettings.scrollingDefaultColumnWidthValue = newValue;
+                            appSettings.scrollingDefaultColumnWidthValue = Math.round(newValue) / 100;
                         }
                     }
                 }
