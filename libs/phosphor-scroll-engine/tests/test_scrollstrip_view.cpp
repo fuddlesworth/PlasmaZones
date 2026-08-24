@@ -532,7 +532,7 @@ void TestScrollStripView::equalizeLeavesALeadEdgeStraddlerAlone()
 {
     // Four 0.30 columns with the LAST focused: the view scrolls so d ends at
     // the trailing edge, which clips a at the LEAD edge. a is the column the
-    // `pos >= 0` half of the visibility test exists for; the sibling test
+    // `viewPos >= 0` half of fullyVisibleColumnIndices exists for; the sibling test
     // only ever clips the trailing edge.
     const auto params = defaultParams();
     ScrollStrip strip;

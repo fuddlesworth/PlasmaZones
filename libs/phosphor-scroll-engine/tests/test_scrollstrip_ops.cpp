@@ -251,8 +251,8 @@ void TestScrollStripOps::widthPresetCycling()
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
 
     // From a non-preset width the cycle enters where niri's does: a FORWARD
-    // press takes the first preset WIDER than the current extent, never the
-    // merely nearest one. The fixture width is a LITERAL, not a
+    // press takes the nearest preset WIDER than the current extent, never the
+    // merely nearest one in either direction. The fixture width is a LITERAL, not a
     // resolveColumnWidthPx call — this file's own rule (see the reconcile
     // tests) forbids deriving fixture values through the code under test.
     // 408 (≈ 0.34 of the viewport) sits just ABOVE presets[0] (one third,
@@ -266,7 +266,7 @@ void TestScrollStripOps::widthPresetCycling()
     QCOMPARE(strip.activeColumn()->width.kind, ColumnWidth::Preset);
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(1));
 
-    // And the backward press is its mirror: the last preset strictly
+    // And the backward press is its mirror: the nearest preset strictly
     // NARROWER than the current extent, so the same 408 answers presets[0].
     QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(408)));
     QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
@@ -1435,6 +1435,9 @@ void TestScrollStripOps::centerVisibleColumnsCentersTheSpanAndFallsBack()
         bool anyFullyVisible = false;
         for (const QString& id : {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}) {
             const QRect rect = rectOf(parked, id);
+            // fullyVisibleColumnIndices' bounds, restated on an INCLUSIVE end:
+            // its `viewPos + colMain <= viewMain` is `mainEnd < viewRight`
+            // here, because Ax::mainEnd is QRect::right().
             if (!rect.isNull() && Ax::mainPos(rect) >= viewLeft && Ax::mainEnd(rect) < viewRight) {
                 anyFullyVisible = true;
             }
