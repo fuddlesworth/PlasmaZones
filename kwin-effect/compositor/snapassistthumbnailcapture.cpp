@@ -140,9 +140,13 @@ SnapAssistThumbnailCapture::SnapAssistThumbnailCapture(QObject* parent)
         qCInfo(lcSnapAssistTrace) << "PLASMAZONES_THUMBNAIL_TRACE set — per-capture stage timings enabled, path:"
                                   << (m_dmabufEnabled ? "dma-buf" : "pixels");
     }
-    if (m_dmabufEnabled) {
-        qCInfo(lcSnapAssistCapture) << "PLASMAZONES_DMABUF_THUMBNAILS set — snap-assist thumbnails will be exported "
-                                       "as dma-bufs (experimental zero-copy path).";
+    // Only the non-default state is worth a line. The dma-buf path is on by
+    // default, so announcing it every session would be noise; the operator who
+    // needs to know is the one who turned it off, or the one reading why a
+    // session is on pixels.
+    if (!m_dmabufEnabled) {
+        qCInfo(lcSnapAssistCapture) << "PLASMAZONES_DMABUF_THUMBNAILS=0 — snap-assist thumbnails will be posted as "
+                                       "raw pixels (zero-copy dma-buf path disabled).";
     }
 }
 
@@ -253,8 +257,8 @@ void SnapAssistThumbnailCapture::rearmDmabufPath()
         return;
     }
     // Daemon-restart recovery: transient D-Bus errors during a restart must
-    // not leave the session latched onto the pixel path when the env gate is
-    // on. Genuine capability gaps (missing EGL extensions, importer refusal)
+    // not leave the session latched onto the pixel path when the env gate has
+    // not been turned off. Genuine capability gaps (missing EGL extensions, importer refusal)
     // simply re-trip the fallback within the next show. Called only from the
     // daemon-ready transition — NOT from the cache-trim reset, which fires
     // repeatedly in a healthy session.

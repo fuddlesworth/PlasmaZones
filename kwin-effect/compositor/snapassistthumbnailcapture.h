@@ -50,11 +50,13 @@ namespace PlasmaZones {
  * daemon validates the buffer shape and copies the bytes into a QImage that
  * lands in its bounded LRU cache.
  *
- * An opt-in zero-copy GPU path (@c PLASMAZONES_DMABUF_THUMBNAILS) exports the
- * rendered FBO texture as a single-plane dma-buf and ships the fd via
+ * The default transport is the zero-copy GPU path: the rendered FBO texture
+ * is exported as a single-plane dma-buf and the fd shipped via
  * @c setWindowThumbnailDmabuf instead of the raw bytes. It degrades to the
  * raw-pixel path automatically when the driver lacks the required EGL
- * extensions or the daemon repeatedly rejects the import (@ref onDmabufRejected).
+ * extensions or the daemon repeatedly rejects the import (@ref onDmabufRejected),
+ * so a preview appears on every driver and RHI backend. Setting
+ * @c PLASMAZONES_DMABUF_THUMBNAILS=0 pins the session to raw pixels outright.
  */
 class SnapAssistThumbnailCapture : public QObject
 {
@@ -112,8 +114,8 @@ public:
      * historically those latched the session onto the raw-pixel path with no
      * recovery edge. Called from the daemon-ready hook ONLY (not the cache
      * trim, which fires repeatedly in healthy sessions): re-enables the path
-     * and zeroes the failure counter when the env gate is set. No-op when
-     * PLASMAZONES_DMABUF_THUMBNAILS is unset.
+     * and zeroes the failure counter unless the env gate is off. No-op when
+     * PLASMAZONES_DMABUF_THUMBNAILS=0.
      */
     void rearmDmabufPath();
 
@@ -311,9 +313,9 @@ private:
                   "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
                   "assumes the just-inserted handle survives the capacity check.");
 
-    /// Opt-in zero-copy GPU path (PLASMAZONES_DMABUF_THUMBNAILS). When set,
-    /// each capture renders into its own FBO texture, exports it as a dma-buf
-    /// and posts via setWindowThumbnailDmabuf instead of the raw-ARGB32
+    /// Zero-copy GPU path, on unless PLASMAZONES_DMABUF_THUMBNAILS=0. When
+    /// set, each capture renders into its own FBO texture, exports it as a
+    /// dma-buf and posts via setWindowThumbnailDmabuf instead of the raw-ARGB32
     /// setSnapAssistThumbnail. Initialised from the env var at construction;
     /// cleared by @ref countDmabufFailure if the path proves unavailable at
     /// runtime, after which the session uses the pixel path (until a

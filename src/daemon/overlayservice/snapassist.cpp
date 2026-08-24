@@ -436,12 +436,13 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
 
 bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
 {
-    // Experimental zero-copy GPU thumbnail path (Phase-0 spike). Gated behind
-    // an env var so the default build behaves exactly as before: the kwin-
-    // effect only takes the dma-buf path when its own gate is set, and the
-    // daemon refuses it here unless explicitly enabled. Returning false makes
-    // the effect fall back to the raw-pixel setSnapAssistThumbnail path, so a
-    // preview always appears regardless of dma-buf support.
+    // Zero-copy GPU thumbnail path, the default transport. The env gate is a
+    // kill switch rather than an opt-in: the daemon refuses the import here
+    // when PLASMAZONES_DMABUF_THUMBNAILS=0, and returning false makes the
+    // effect fall back to the raw-pixel setSnapAssistThumbnail path. That
+    // fallback is also what covers every driver, backend and format the gate
+    // cannot predict, so a preview always appears regardless of dma-buf
+    // support.
     static const bool dmabufEnabled = PhosphorProtocol::Service::snapAssistDmabufThumbnailsEnabled();
     if (!dmabufEnabled) {
         return false;

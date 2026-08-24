@@ -195,7 +195,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
 
     // Same eager-construct + engine-handover pattern for the zero-copy GPU
     // thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Always constructed so
-    // the borrowed pointer is non-null; it only ever receives descriptors when
+    // the borrowed pointer is non-null; it only ever receives descriptors while
     // the env gate is on and the kwin-effect takes the dma-buf path.
     m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
     m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
@@ -273,8 +273,8 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         // Zero-copy dma-buf thumbnail import (PLASMAZONES_DMABUF_THUMBNAILS)
         // needs these device extensions enabled on the overlay windows' QRhi
         // Vulkan device; without them vkGetMemoryFdPropertiesKHR is unavailable
-        // and the import fails. Only requested when the experimental gate is
-        // on, so default builds keep Qt's stock device. Qt enables only the
+        // and the import fails. Skipped when the gate is off, so a session
+        // pinned to raw pixels keeps Qt's stock device. Qt enables only the
         // physically-supported subset.
         .vulkanDeviceExtensions = PhosphorProtocol::Service::snapAssistDmabufThumbnailsEnabled()
             ? QByteArrayList{QByteArrayLiteral("VK_KHR_external_memory_fd"),
