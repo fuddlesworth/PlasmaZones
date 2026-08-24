@@ -50,6 +50,8 @@ private Q_SLOTS:
     void heightAdjustFloorsAtTheClientMinimum();
     void heightAdjustResizesATabbedColumn();
     void heightPresetCycleResizesATabbedColumn();
+    void heightAdjustMeasuresATabbedColumnInColumnSpace();
+    void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
 };
@@ -151,6 +153,83 @@ void TestScrollStripSizing::heightPresetCycleResizesATabbedColumn()
     // And back up, so the walk is not one-way.
     QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), tall);
+}
+
+// The column-space conversion both height verbs make, which the two slots
+// above cannot reach: they run with the shipped indicator defaults, where
+// placeWithinColumn is off and the reservation is zero, so the column and its
+// tabs measure the same. With the indicator placed WITHIN the column and
+// eating the CROSS axis the two differ, and a verb that compared in the tab's
+// space would enter one reservation off and settle short of the press.
+void TestScrollStripSizing::heightAdjustMeasuresATabbedColumnInColumnSpace()
+{
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator.placeWithinColumn = true;
+    // A Left/Right indicator is thick along x, which is the CROSS axis only
+    // while the strip runs vertically; Top/Bottom inverts with it. Picking by
+    // axis here is what keeps the transposed run testing the same arm.
+    params.tabIndicator.position = params.axis.isHorizontal() ? TabIndicatorPosition::Top : TabIndicatorPosition::Left;
+    const int reservation = params.tabIndicator.reservedThickness(2);
+    QVERIFY2(reservation > 0, "the fixture must actually reserve, or the slot proves nothing");
+    const int crossExtent = Ax::crossLen(ScrollTestUtils::defaultScreenRect());
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // Auto: the column is the whole work area and the tab takes what the
+    // indicator left of it.
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), crossExtent - reservation);
+
+    // The delta applies to the COLUMN, so the tab lands exactly one
+    // reservation under the shortened column rather than one under a column
+    // shortened from the tab's own extent.
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const int shrunkColumn = crossExtent - qRound(0.25 * crossExtent);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), shrunkColumn - reservation);
+
+    // And the matching grow returns to exactly where it started, which is the
+    // part an off-by-a-reservation entry rule loses.
+    QVERIFY(strip.adjustActiveWindowHeight(25.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), crossExtent - reservation);
+}
+
+// The floor a tabbed column shrinks onto is the whole tab SET's, not the
+// shown tab's: every tab is committed at the one rect, so relayout clamps the
+// column up to the tallest visible minimum. A verb that only knew the shown
+// tab's minimum would keep writing under that clamp and keep reporting
+// success while the screen stood still — this suite's stated failure mode,
+// and it repeats for as long as the key is held.
+void TestScrollStripSizing::heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum()
+{
+    ScrollLayoutParams params = defaultParams();
+    QVERIFY(params.respectMinimumSize); // the arm under test
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    // The minimum belongs to the HIDDEN tab. "b" is the shown one and the one
+    // the verb writes, so a floor read off the written tile alone misses this
+    // entirely.
+    const int clientMin = Ax::crossLen(ScrollTestUtils::defaultScreenRect()) / 4;
+    QVERIFY(strip.setWindowMinimumSize(QStringLiteral("a"), clientMin, clientMin));
+    QCOMPARE(strip.activeColumn()->tiles.at(strip.activeColumn()->activeTileIdx).windowId, QStringLiteral("b"));
+
+    bool everRefused = false;
+    for (int i = 0; i < 20; ++i) {
+        if (!strip.adjustActiveWindowHeight(-25.0, params)) {
+            everRefused = true;
+            break;
+        }
+    }
+    QVERIFY2(everRefused, "a repeated shrink must converge onto the hidden tab's minimum and then decline");
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), clientMin);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), clientMin);
+    // Seated, not alternating.
+    QVERIFY(!strip.adjustActiveWindowHeight(-25.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), clientMin);
 }
 
 // The grow side's budget invariant. Deliberately NOT an exact ceiling

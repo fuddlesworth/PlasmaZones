@@ -608,8 +608,21 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // sync with MinWindowHeightFraction. So the engine-side 1px floor it
     // commits with is defensive on an already-gated value.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
-    const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
-    // Both floors describe the WINDOW, and while tabbed the value being
+    int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
+    if (tabbed && params.respectMinimumSize) {
+        // The whole tab SET's minimum, matching tabbedColumnCrossPx: every
+        // visible tab is committed at this one rect, so a shrink stopped at
+        // the SHOWN tab's minimum alone would write an extent that relayout
+        // clamps straight back up, which is a success verdict per press with
+        // nothing moving. That is the exact failure this floor exists to
+        // prevent, and it repeats for as long as the key is held.
+        for (const Tile& t : activeCol->tiles) {
+            if (!t.minimized) {
+                clientFloor = qMax(clientFloor, t.minCross(params.axis));
+            }
+        }
+    }
+    // Both floors are in WINDOW space, and while tabbed the value being
     // clamped is the column, so the reservation is added once on the outside
     // rather than to either of them. Zero unless the indicator is placed
     // within a tabbed column and eats the cross axis.
@@ -705,7 +718,16 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     // snapping back.
     if (crossChanged) {
         Tile& tile = col.tiles[col.indexOfWindow(windowId)];
-        const WindowHeight ackedH = WindowHeight::makeFixed(params.axis.crossSize(ackedSize));
+        // Lifted into COLUMN space first, the conversion both height verbs
+        // make: on a tabbed column the height intent sizes the column
+        // (tabbedColumnCrossPx) and the tabs are then committed at the column
+        // minus the indicator's cross-axis reservation, while the ack here is
+        // the WINDOW's own extent. Without the lift every interactive
+        // cross-edge drag would settle one reservation short of where it was
+        // released. Zero on every other column, and on a tabbed one whose
+        // indicator eats the main axis or is not placed within the column.
+        const WindowHeight ackedH =
+            WindowHeight::makeFixed(params.axis.crossSize(ackedSize) + tabbedCrossReservationPx(col, params));
         if (!(tile.height == ackedH)) {
             tile.height = ackedH;
             changed = true;

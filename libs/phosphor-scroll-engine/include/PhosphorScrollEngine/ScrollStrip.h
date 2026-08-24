@@ -375,7 +375,10 @@ public:
     /// to pixels. The acked CROSS extent becomes the tile's Fixed height
     /// intent symmetrically, only when @p crossChanged; a lone tile is
     /// included, because relayout honours a solo tile's Fixed height (niri
-    /// parity). Other columns are untouched.
+    /// parity). On a TABBED column that cross intent sizes the COLUMN rather
+    /// than the window, so the ack is lifted by @c tabbedCrossReservationPx
+    /// on the way in, the same conversion the two height verbs make. Other
+    /// columns are untouched.
     ///
     /// These two bools were spelled @c widthChanged / @c heightChanged before
     /// the strip gained a second axis, and they now mean main/cross. The

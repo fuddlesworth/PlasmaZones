@@ -172,7 +172,7 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         // Applied HERE, in the one function every consumer
         // (columnStripPos / stripExtentPx / relayout / the anchor math) goes
         // through, so the strip widens consistently for such columns. The
-        // The CROSS axis has its own copy of this, in tabbedColumnCrossPx:
+        // CROSS axis has its own copy of this, in tabbedColumnCrossPx:
         // that branch raises a tabbed column to its tabs' minimum plus the
         // cross-axis reservation for exactly the same reason.
         //
