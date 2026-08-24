@@ -685,6 +685,11 @@ private:
     qint64 m_activationLastHeldMs = -1;
     qint64 m_dragInsertLastHeldMs = -1;
     qint64 m_zoneSpanLastHeldMs = -1;
+    // Snap assist's stamp is fed per tick like the others but CONSUMED at the
+    // drop rather than on a tick, so it needs no expiry replay: endDrag reads
+    // it once and the drag is over. That also makes it the arm most exposed to
+    // the race, since the drop is the moment the lifting hand has let go.
+    qint64 m_snapAssistLastHeldMs = -1;
     // A release followed by no pointer motion delivers no tick once the
     // grace has run out, so the zone state the release tick preserved would
     // stand until the drop and a drop long after the grace would still snap.
@@ -764,6 +769,7 @@ private:
     // bypass or snap; used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
+    QVector<ParsedTrigger> m_cachedSnapAssistTriggers;
     QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;
     QVector<ParsedTrigger> m_cachedScrollingDragInsertTriggers;
 

@@ -175,6 +175,7 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return true;
     };
     m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
+    REGISTER_INT_SETTING("snapAssistGraceMs", snapAssistGraceMs, setSnapAssistGraceMs)
 
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)

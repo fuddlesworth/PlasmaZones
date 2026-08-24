@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <limits>
 #include <optional>
 #include "phosphor_i18n.h"
 #include "config/configdefaults.h"
@@ -928,7 +927,8 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
         // picker left open across the drop.
         releaseCancelOverlayShortcutIfIdle();
     }
-    // Symmetric with the arms in dragStarted / beginDrag. A pending expiry is
+    // Symmetric with the stops in dragStarted / beginDrag; the arms themselves
+    // all live in dragMoved. A pending expiry is
     // already harmless once m_draggedWindowId is cleared below (the replay
     // guards on an empty id), but this is the shared teardown and leaving the
     // timer running here makes that safety depend on the clear staying ahead of

@@ -57,9 +57,16 @@ private:
             // quantity of anything.
             QStringLiteral("Snapping.Zones.Labels/FontWeight"),
             QStringLiteral("Scrolling.TabIndicator/FontWeight"),
-            // A unitless 0-1 strength scalar. Not a percentage: it is not
-            // stored as one and the UI does not present it as one.
+            // A 0-100 strength knob that the UI deliberately renders with no
+            // suffix (GeneralPage.qml sets valueSuffix to empty). It is not a
+            // percentage OF anything, so a "%" would assert a meaning the
+            // value does not carry.
             QStringLiteral("Shaders.Audio/NoiseReduction"),
+            // Dual-kind: holds a 0.05-1.0 proportion or a pixel width
+            // depending on Scrolling/DefaultColumnWidthKind, and proportion is
+            // the default. No single unit is correct, so it carries none
+            // rather than a wrong one.
+            QStringLiteral("Scrolling/DefaultColumnWidthValue"),
         };
         return kSet;
     }
@@ -166,6 +173,35 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("numeric keys with no descriptor and not declared unitless: %1")
                                 .arg(undescribed.join(QLatin1String(", ")))));
         QVERIFY2(checked > 0, "no numeric keys found in the schema — the walk is broken, not clean");
+    }
+
+    /// Every unitless-allowlist entry must name a key the schema declares.
+    ///
+    /// Without this a renamed or misspelled entry silently stops excusing
+    /// anything while still reading as a live exemption. The gate stays honest
+    /// either way (an unmatched entry excuses nothing), but the list would
+    /// quietly rot. Mirrors deliberateExclusionsAreRealKeys in
+    /// test_page_owned_config_keys.cpp.
+    void everyUnitlessDeclarationNamesARealKey()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QSet<QString> declared;
+        for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
+            for (const PhosphorConfig::KeyDef& def : git.value()) {
+                declared.insert(git.key() + QLatin1Char('/') + def.key);
+            }
+        }
+        QStringList dangling;
+        for (const QString& entry : unitlessNumericKeys()) {
+            if (!declared.contains(entry)) {
+                dangling.append(entry);
+            }
+        }
+        dangling.sort();
+        QVERIFY2(dangling.isEmpty(),
+                 qPrintable(QStringLiteral("unitless declarations naming no schema key: %1")
+                                .arg(dangling.join(QLatin1String(", ")))));
+        QVERIFY2(!unitlessNumericKeys().isEmpty(), "the allowlist is empty — this guard checks nothing");
     }
 
     /// A declared value must be one its own key actually accepts. The validator

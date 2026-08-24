@@ -930,6 +930,11 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
         {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
         {CD::triggersKey(), CD::snapAssistTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::releaseGraceMsKey(),
+         CD::snapAssistGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 }
 

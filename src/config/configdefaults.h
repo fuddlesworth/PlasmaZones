@@ -102,6 +102,14 @@ public:
     {
         return dragActivationGraceMs();
     }
+    /// Snap assist's grace differs from its siblings in WHERE it is read: the
+    /// other three are read on a drag tick, this one at the drop itself, which
+    /// is the moment the lifting hand is most likely to have already let go.
+    /// Its trigger list has no toggle mode, so the grace always applies.
+    static int snapAssistGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
     static QVariantList autotileDragInsertTriggers()
     {
         // Held while dragging a window to dynamically insert it into the

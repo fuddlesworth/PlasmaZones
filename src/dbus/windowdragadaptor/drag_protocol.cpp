@@ -278,6 +278,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     m_activationLastHeldMs = -1;
     m_dragInsertLastHeldMs = -1;
     m_zoneSpanLastHeldMs = -1;
+    m_snapAssistLastHeldMs = -1;
     stopGraceExpiry();
     // Zone span toggle latch (#563), same rationale and seed contract as the
     // autotile drag-insert latch above: reset on every beginDrag so it covers
@@ -314,6 +315,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_cachedScrollingDragInsertTriggers = parseTriggers(m_settings->scrollingDragInsertTriggers());
         m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
         m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
+        m_cachedSnapAssistTriggers = parseTriggers(m_settings->snapAssistTriggers());
     }
 
     // Per-window drop-indicator colours, resolved from THIS window's rules and

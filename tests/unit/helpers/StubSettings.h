@@ -1935,6 +1935,19 @@ public:
         Q_EMIT snapAssistTriggersChanged();
         Q_EMIT settingsChanged();
     }
+    int snapAssistGraceMs() const override
+    {
+        return m_snapAssistGraceMs;
+    }
+    void setSnapAssistGraceMs(int value) override
+    {
+        if (m_snapAssistGraceMs == value) {
+            return;
+        }
+        m_snapAssistGraceMs = value;
+        Q_EMIT snapAssistGraceMsChanged();
+        Q_EMIT settingsChanged();
+    }
     bool filterLayoutsByAspectRatio() const override
     {
         return m_filterLayoutsByAspectRatio;
@@ -3036,6 +3049,7 @@ private:
     int m_minimumZoneSizePx = ConfigDefaults::minimumZoneSizePx();
     int m_pollIntervalMs = ConfigDefaults::pollIntervalMs();
     int m_scrollingDragInsertGraceMs = ConfigDefaults::scrollingDragInsertGraceMs();
+    int m_snapAssistGraceMs = ConfigDefaults::snapAssistGraceMs();
     int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
     int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
     int m_zoneSelectorMaxRows = ConfigDefaults::maxRows();

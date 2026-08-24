@@ -54,6 +54,7 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::zoneSpanGraceMs(), ConfigDefaults::dragActivationGraceMs());
         QCOMPARE(ConfigDefaults::autotileDragInsertGraceMs(), ConfigDefaults::dragActivationGraceMs());
         QCOMPARE(ConfigDefaults::scrollingDragInsertGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        QCOMPARE(ConfigDefaults::snapAssistGraceMs(), ConfigDefaults::dragActivationGraceMs());
         // 0 must stay reachable: it is the documented off switch.
         QCOMPARE(ConfigDefaults::triggerGraceMsMin(), 0);
         QVERIFY(ConfigDefaults::triggerGraceMsMax() > ConfigDefaults::dragActivationGraceMs());

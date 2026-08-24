@@ -258,6 +258,7 @@ public:
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
                    snapAssistTriggersChanged)
+    Q_PROPERTY(int snapAssistGraceMs READ snapAssistGraceMs WRITE setSnapAssistGraceMs NOTIFY snapAssistGraceMsChanged)
 
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
@@ -1076,6 +1077,8 @@ public:
     void setSnapAssistEnabled(bool enabled) override;
     QVariantList snapAssistTriggers() const override;
     void setSnapAssistTriggers(const QVariantList& triggers) override;
+    int snapAssistGraceMs() const override;
+    void setSnapAssistGraceMs(int ms) override;
     QString defaultLayoutId() const override;
     void setDefaultLayoutId(const QString& layoutId) override;
     bool suppressDefaultLayoutAssignment() const override;

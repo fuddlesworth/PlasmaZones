@@ -4,6 +4,7 @@
 #include "windowdragadaptor.h"
 #include "dragactivation.h"
 #include <QTimer>
+#include "core/interfaces/interfaces.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -15,8 +16,9 @@
  *
  * Split out of windowdragadaptor.cpp so that file stays inside the file-size
  * ceiling. The two timer families belong together: both are lazily created,
- * both are stopped from the shared teardown, and both self-terminate from
- * inside their own handler rather than trusting callers to stop them.
+ * both are stopped from teardown paths rather than by their own callers, and
+ * both self-terminate from inside their own handler rather than trusting a
+ * caller to have stopped them.
  */
 
 namespace PlasmaZones {
@@ -133,8 +135,8 @@ void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const Q
     // screensMatch, not raw !=, defensively: the recorded id and an incoming
     // one can spell the same output as a physical id or a virtual one, and a
     // raw compare would read a spelling change as a screen change — pushing a
-    // hide the very next line un-hides. Every sibling comparison in this file
-    // already uses it.
+    // hide the very next line un-hides. Every sibling comparison in
+    // windowdragadaptor.cpp already uses it.
     if (!m_dropIndicatorScreenId.isEmpty()
         && !PhosphorScreens::ScreenIdentity::screensMatch(m_dropIndicatorScreenId, screenId)) {
         // The departing screen's hide is never animated: there is no target

@@ -605,6 +605,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("snap assist"), PhosphorI18n::tr("picker")});
     addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("holdToEnable"),
                PhosphorI18n::tr("Hold to enable"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("snap assist")});
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("snapAssistReleaseGracePeriod"),
+               PhosphorI18n::tr("Release grace period"),
+               {PhosphorI18n::tr("mouse button"), PhosphorI18n::tr("drop"), PhosphorI18n::tr("snap assist")});
     addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("reSnapOnResolutionChange"),
                PhosphorI18n::tr("Re-snap on resolution change"),
                {PhosphorI18n::tr("resolution"), PhosphorI18n::tr("display")});

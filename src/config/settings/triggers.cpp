@@ -357,6 +357,9 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
                      &Settings::snapAssistTriggersChanged);
 }
 
+P_STORE_GET(int, snapAssistGraceMs, snappingBehaviorSnapAssistGroup, releaseGraceMsKey, int)
+P_STORE_SET_INT(setSnapAssistGraceMs, snappingBehaviorSnapAssistGroup, releaseGraceMsKey, snapAssistGraceMsChanged)
+
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
 // Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle.
 // defaultAutotileAlgorithm is stored as-is with no registry lookup in this

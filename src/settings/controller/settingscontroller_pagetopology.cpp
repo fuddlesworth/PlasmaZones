@@ -350,6 +350,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorSnapAssistGroup(), CD::featureEnabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::enabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::triggersKey()},
+             {CD::snappingBehaviorSnapAssistGroup(), CD::releaseGraceMsKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::keepOnResolutionChangeKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::moveNewToLastZoneKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::autoAssignAllLayoutsKey()},

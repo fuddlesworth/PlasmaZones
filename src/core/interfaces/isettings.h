@@ -767,6 +767,7 @@ Q_SIGNALS:
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
+    void snapAssistGraceMsChanged();
     void defaultLayoutIdChanged();
     void suppressDefaultLayoutAssignmentChanged();
     void filterLayoutsByAspectRatioChanged();

@@ -183,6 +183,7 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor/dragtimers.cpp
+    dbus/windowdragadaptor/dragzonespan.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
     dbus/windowdragadaptor/windowdragadaptor.h
@@ -229,6 +230,8 @@ set_source_files_properties(
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
+    dbus/windowdragadaptor/dragtimers.cpp
+    dbus/windowdragadaptor/dragzonespan.cpp
     dbus/windowdragadaptor/selector_gate.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )

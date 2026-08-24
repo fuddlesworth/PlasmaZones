@@ -219,6 +219,7 @@ private Q_SLOTS:
         settings.setZoneSpanGraceMs(120);
         settings.setAutotileDragInsertGraceMs(130);
         settings.setScrollingDragInsertGraceMs(140);
+        settings.setSnapAssistGraceMs(160);
 
         settings.save();
 
@@ -261,6 +262,11 @@ private Q_SLOTS:
             // Snapping.Behavior.ZoneSpan hold the same key name, and on disk the
             // parent's scalar sits as a sibling of the ZoneSpan child object.
             QCOMPARE(zoneSpan->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 120);
+        }
+
+        {
+            auto snapAssist = backend->group(ConfigDefaults::snappingBehaviorSnapAssistGroup());
+            QCOMPARE(snapAssist->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 160);
         }
 
         {
