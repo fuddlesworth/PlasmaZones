@@ -11,14 +11,6 @@ namespace PhosphorScrollEngine {
 
 namespace {
 
-/// A proportion resolves against the work extent PLUS one gap so that
-/// proportions summing to 1 tile edge-to-edge with the gaps between them
-/// (0.5 + 0.5 across a 1000px area with a 10px gap → 495 + 10 + 495).
-int proportionalPx(qreal proportion, int workExtent, int gap)
-{
-    return qMax(1, qRound(proportion * (workExtent + gap)) - gap);
-}
-
 /// The work area measured along the strip, and across it. Every "how much
 /// room is there" question in this file is one of these two, and naming them
 /// keeps the anchor math readable once the physical axis stops being fixed.
@@ -194,8 +186,7 @@ int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParam
     // was UNLESS the centering policy pins the focused column to the middle:
     // Always / lone-column centering must survive a strip-width change, or
     // the focused column drifts off-center until the next focus move.
-    const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-    if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+    if (isCenteringActiveColumn(params)) {
         // The policy took the view back; a pan that stayed latched here would
         // leave the next pass refusing to re-derive the position it has.
         m_viewDetached = false;
@@ -266,8 +257,7 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
     const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
 
-    const bool centerLoneColumn = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-    bool center = centerLoneColumn || params.centerFocusedColumn == CenterFocusedColumn::Always;
+    bool center = isCenteringActiveColumn(params);
 
     if (!center && params.centerFocusedColumn == CenterFocusedColumn::OnOverflow && prevIdx >= 0
         && prevIdx < m_columns.size() && prevIdx != m_activeColumnIdx) {
@@ -389,8 +379,7 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // silently undo an explicit centerActiveColumn at the strip's edges
     // (whose centered anchor implies out-of-range viewOffset by design) and
     // reclaim removeWindowInternal's deliberate right-edge dead space.
-    const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-    if (!centerLone && params.centerFocusedColumn != CenterFocusedColumn::Always && m_activeColumnIdx >= 0) {
+    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0) {
         const int viewMain = mainExtent(params);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);
@@ -437,31 +426,20 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     // by the time its guard is reached.
     m_viewDetached = false;
     const int viewMain = mainExtent(params);
-    const int viewOffset = viewOffsetFor(params);
     // FULLY visible columns only (niri center-visible-columns): a partially
     // clipped edge column is exactly what the verb pushes out of the way, so
-    // it must not drag the span. Zero-extent (fully minimized) columns carry
-    // no strip position and are skipped the same way stripExtentPx skips them.
-    int spanStart = -1;
-    int spanEnd = -1;
-    // Running accumulator, the columnStripPos pattern inlined once: asking
-    // columnStripPos per column re-walks the prefix each time, which is
-    // quadratic in the column count for a walk this loop already performs.
-    int colMainPos = 0;
-    for (int i = 0; i < m_columns.size(); ++i) {
-        const int colMain = columnExtentPx(m_columns.at(i), params);
-        if (colMain <= 0) {
-            continue;
-        }
-        const int pos = colMainPos - viewOffset;
-        if (pos >= 0 && pos + colMain <= viewMain) {
-            if (spanStart < 0) {
-                spanStart = colMainPos;
-            }
-            spanEnd = colMainPos + colMain;
-        }
-        colMainPos += colMain + params.gap;
-    }
+    // it must not drag the span. The ONE spelling of that walk, shared with
+    // the width-distribution verbs — zero-extent (fully minimized) columns
+    // carry no strip position and are skipped there the same way
+    // stripExtentPx skips them.
+    const QVector<int> visible = fullyVisibleColumnIndices(params);
+    // The span in STRIP coordinates. Two columnStripPos calls rather than one
+    // per column: the per-column form re-walks the prefix each time, which is
+    // quadratic in the column count.
+    const int spanStart = visible.isEmpty() ? -1 : columnStripPos(visible.first(), params);
+    const int spanEnd = visible.isEmpty()
+        ? -1
+        : columnStripPos(visible.last(), params) + columnExtentPx(m_columns.at(visible.last()), params);
     if (spanStart < 0) {
         // Nothing fully visible (a lone over-wide column, or a viewport mid
         // scroll) — centering the active column is the closest sensible act.

@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// The repeatable SIZE verbs' refusal contract: where adjustActiveColumnWidth
-// and adjustActiveWindowHeight stop, and which states they decline outright.
-// Placed in its own file rather than grown into test_scrollstrip_ops, which
-// owns the per-operation surface over one shared strip fixture and already
+// The repeatable SIZE verbs' refusal and entry contract: where
+// adjustActiveColumnWidth and adjustActiveWindowHeight stop, which states
+// they and the two preset cycles decline outright, and which vocabulary entry
+// a cycle press lands on when the list is not what the shipped defaults look
+// like. Placed in its own file rather than grown into test_scrollstrip_ops,
+// which owns the per-operation surface over one shared strip fixture and already
 // carries a file-size exception; every slot here builds its own strip against
 // the shared screen constants.
 //
@@ -47,7 +49,9 @@ private Q_SLOTS:
     // doubles as the file's table of contents (the ops suite's rule).
     void heightAdjustFloorsAtTheClientMinimum();
     void heightAdjustRefusesOnATabbedColumn();
+    void heightPresetCycleRefusesOnATabbedColumn();
     void heightGrowLeavesTheColumnTilingItsBudget();
+    void widthPresetCycleWrapsByExtentNotByPosition();
 };
 
 // The client half of the height floor, which the engine-minimum slots in the
@@ -121,6 +125,35 @@ void TestScrollStripSizing::heightAdjustRefusesOnATabbedColumn()
     QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
 }
 
+// The preset cycle's half of the tabbed refusal. It matters once the cycle
+// enters from the RENDERED extent: a tab is drawn at the column's whole
+// content height, which is taller than any preset, so a forward press would
+// find nothing taller and answer the SMALLEST entry — a "taller" press
+// writing the shortest height, and the press after it declining because that
+// intent is already there. Neither press moves a pixel.
+void TestScrollStripSizing::heightPresetCycleRefusesOnATabbedColumn()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    const int before = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(!strip.cycleActiveWindowPresetHeight(+1, params));
+    QVERIFY(!strip.cycleActiveWindowPresetHeight(-1, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), before);
+    // No intent was buried for a later untab to spring.
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->tiles.at(col->activeTileIdx).height.kind, WindowHeight::Auto);
+
+    // The refusal is the tabbed state, not the fixture.
+    QVERIFY(strip.toggleActiveColumnTabbed());
+    QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+}
+
 // The grow side's budget invariant. Deliberately NOT an exact ceiling
 // pixel: what the verb's ceiling OUGHT to be for a multi-tile column is an
 // open question (it caps at the work area's cross extent, while relayout can
@@ -147,6 +180,40 @@ void TestScrollStripSizing::heightGrowLeavesTheColumnTilingItsBudget()
     QVERIFY2(sibling > 0, "growing one tile must not evict its sibling");
     // And the stack still exactly tiles the cross extent, gap included.
     QCOMPARE(grown + sibling + params.gap, crossExtent);
+}
+
+// The preset lists are deduplicated at the boundary but never SORTED, so the
+// narrowest entry can sit anywhere in the vocabulary. The cycle is anchored on
+// the resolved extent rather than on a stored index, which means its WRAP has
+// to be by extent too: wrapping to position 0 in a list typed 1/2, 1/3, 2/3
+// hands a forward press the MIDDLE width and leaves 1/3 reachable only
+// backwards, so the cycle never comes back round to the narrowest column.
+void TestScrollStripSizing::widthPresetCycleWrapsByExtentNotByPosition()
+{
+    ScrollLayoutParams params = defaultParams();
+    // Typed out of size order on purpose: the narrowest entry is at index 1.
+    params.presetColumnWidths = {0.5, 1.0 / 3.0, 2.0 / 3.0};
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makePreset(0.5), ColumnDisplay::Normal, params));
+
+    // Literals, not the resolver's own formula: across the gap-aware 1210
+    // span, 1/2 is 605 - 10 = 595, 2/3 is 807 - 10 = 797, 1/3 is 403 - 10 = 393.
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 595);
+
+    // Forward takes the NEAREST wider entry, which is 2/3 at index 2.
+    QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 797);
+
+    // Nothing is wider, so the press wraps — to the NARROWEST entry, not to
+    // position 0. Position 0 here is 1/2, the answer that stranded 1/3.
+    QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 393);
+
+    // And the backward wrap is its mirror: nothing is narrower than 1/3, so
+    // the press comes back round to the widest entry.
+    QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("a"))), 797);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripSizing)

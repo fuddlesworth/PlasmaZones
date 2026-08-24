@@ -410,8 +410,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     if (refocus) {
         const int viewMain = params.axis.mainSize(params.workArea);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
-        const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-        if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+        if (isCenteringActiveColumn(params)) {
             // The policy took the view (keepOrRecenterAnchor's reason), so a
             // pan latched before the removal is over.
             m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
@@ -828,6 +827,33 @@ QVector<int> ScrollStrip::visibleColumnIndices(const ScrollLayoutParams& params)
         stripMainPos += colMain + params.gap;
     }
     return visible;
+}
+
+QVector<int> ScrollStrip::fullyVisibleColumnIndices(const ScrollLayoutParams& params) const
+{
+    const int viewOffset = viewOffsetFor(params);
+    const int viewMain = params.axis.mainSize(params.workArea);
+    QVector<int> visible;
+    // Accumulated, not re-derived per index — visibleColumnIndices' reason.
+    int stripMainPos = 0;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        const int colMain = columnExtentPx(m_columns.at(i), params);
+        if (colMain <= 0) {
+            continue;
+        }
+        const int viewPos = stripMainPos - viewOffset;
+        if (viewPos >= 0 && viewPos + colMain <= viewMain) {
+            visible.append(i);
+        }
+        stripMainPos += colMain + params.gap;
+    }
+    return visible;
+}
+
+bool ScrollStrip::isCenteringActiveColumn(const ScrollLayoutParams& params) const
+{
+    return (params.alwaysCenterSingleColumn && m_columns.size() == 1)
+        || params.centerFocusedColumn == CenterFocusedColumn::Always;
 }
 
 int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& params)

@@ -653,6 +653,85 @@ inline qreal nearestPresetValue(const QList<qreal>& presets, qreal fraction, qre
     return presets.isEmpty() ? fallback : presets.at(nearestPresetIndex(presets, fraction));
 }
 
+/// A proportion resolves against the work extent PLUS one gap so that
+/// proportions summing to 1 tile edge-to-edge with the gaps between them
+/// (0.5 + 0.5 across a 1000px area with a 10px gap → 495 + 10 + 495).
+///
+/// Lives here rather than in relayout's anonymous namespace because the
+/// preset CYCLES have to resolve a vocabulary entry to the very pixels
+/// relayout will lay it out at — a second copy of this rounding is exactly
+/// the drift that makes a cycle press land one entry off.
+inline int proportionalPx(qreal proportion, int workExtent, int gap)
+{
+    return qMax(1, qRound(proportion * (workExtent + gap)) - gap);
+}
+
+/// The vocabulary index a preset CYCLE press lands on, given what the target
+/// currently measures on screen.
+///
+/// niri's rule (`Column::toggle_width` / `toggle_window_height`), ported: a
+/// press moves the size the way the key says, so a forward press takes an
+/// entry strictly WIDER/TALLER than the current extent and a backward press
+/// one strictly smaller, wrapping at each end. The one-pixel allowance is
+/// niri's too, for fractional-scale rounding. Which entry, and which end, are
+/// resolved by EXTENT here (nearest on the pressed side; the vocabulary's own
+/// smallest and largest for the wraps) rather than by position in the list,
+/// which is the divergence the next two paragraphs are about.
+///
+/// Anchored on the resolved EXTENT rather than on a stored vocabulary index,
+/// which is this engine's one deliberate divergence: a stored index lets a
+/// short template vocabulary rewrite an anchor's original intent, so the
+/// index was removed. For an ascending list (every shipped default, and
+/// every list a user would plausibly type) the two rules agree entry for
+/// entry — a list typed out of size order cycles in SIZE order here and in
+/// TYPED order under niri.
+///
+/// Both the pick and the WRAP are by extent, not by position, and that is
+/// what makes the SIZE-order claim above true. The preset lists are
+/// deduplicated at the boundary but never sorted (minimizeActiveColumnWidth's
+/// comment spells out why), so a list typed as e.g. 1/2, 1/3, 2/3 has its
+/// narrowest entry in the middle. Wrapping to position 0 there would hand a
+/// forward press the MIDDLE entry and leave the narrowest reachable only
+/// backwards.
+///
+/// @p resolve maps a vocabulary index to the pixel extent that entry would
+/// render at. Returns -1 for an empty vocabulary.
+template<typename Resolver>
+int cyclePresetIndexByExtent(int count, int currentPx, int delta, Resolver resolve)
+{
+    if (count <= 0) {
+        return -1;
+    }
+    const bool forward = delta >= 0;
+    int best = -1; // nearest entry strictly on the pressed side
+    int bestPx = 0; // its extent
+    int wrap = -1; // the extreme entry the press wraps to
+    int wrapPx = 0; // its extent
+    for (int i = 0; i < count; ++i) {
+        const int px = resolve(i);
+        if (forward) {
+            if (currentPx + 1 < px && (best < 0 || px < bestPx)) {
+                best = i;
+                bestPx = px;
+            }
+            if (wrap < 0 || px < wrapPx) {
+                wrap = i;
+                wrapPx = px;
+            }
+        } else {
+            if (px + 1 < currentPx && (best < 0 || px > bestPx)) {
+                best = i;
+                bestPx = px;
+            }
+            if (wrap < 0 || px > wrapPx) {
+                wrap = i;
+                wrapPx = px;
+            }
+        }
+    }
+    return best >= 0 ? best : wrap;
+}
+
 /// One window in a column.
 struct Tile
 {

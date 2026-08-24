@@ -99,14 +99,16 @@ public:
     /// If that tile is MINIMIZED it falls back to the column's first
     /// non-minimized tile, so this can name a different window than
     /// `activeColumn()->activeTileIdx` points at. The mutating verbs
-    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight, and
-    /// cycleActiveWindowPresetHeight — adjustActiveWindowHeight is NOT on
-    /// this list; it self-guards by resolving the tile from the relayout)
-    /// all act
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight) all act
     /// on activeTileIdx, so a caller pairing this accessor with one of them
     /// could report a window the operation did not touch. Not reachable in
     /// production today, where the daemon models minimize as float and a
     /// minimized window is not a strip tile at all.
+    ///
+    /// The two height SIZING verbs are not on that list: both measure through
+    /// activeTileCrossPx, which resolves activeTileIdx's tile from a relayout
+    /// and answers -1 when it is minimized, so they refuse rather than act on
+    /// a window this accessor did not name.
     QString activeWindowId() const;
     /// Column index owning @p windowId, or -1.
     int columnOfWindow(const QString& windowId) const;
@@ -256,8 +258,14 @@ public:
     /// column's extent ALONG the strip.
     bool setActiveColumnWidth(const ColumnWidth& width);
     /// Cycle the active column through the preset width list. @p delta -1/+1.
-    /// Enters the cycle at the nearest preset when the current width is not
-    /// a preset.
+    /// Entry follows niri's rule (cyclePresetIndexByExtent): a forward press
+    /// takes the narrowest preset WIDER than what the column renders at and
+    /// wraps to the narrowest of all when nothing is wider; a backward press
+    /// takes the widest preset narrower and wraps to the widest of all,
+    /// so every entry is reachable in both directions even when the
+    /// vocabulary was typed out of size order. Measured from the
+    /// RENDERED extent, so a column held at its client minimum enters where
+    /// it looks like it should.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
     /// Adjust the active column's width by @p deltaPercent of the work area's
     /// MAIN extent (niri set-column-width "+10%"/"-10%"). Measured from the
@@ -273,8 +281,28 @@ public:
     /// Full work-area MAIN extent, still tiled (niri maximize-column). Toggles
     /// back to the pre-maximize intent when already maximized.
     bool toggleMaximizeActiveColumn(const ScrollLayoutParams& params);
-    /// Grow the active column into the on-screen MAIN-axis space not covered by
-    /// any column at the current view (niri expand-column-to-available-width).
+    /// Grow the active column into the on-screen MAIN-axis space not taken by
+    /// the FULLY visible columns at the current view (niri
+    /// expand-column-to-available-width).
+    ///
+    /// Fully visible on fullyVisibleColumnIndices' terms, which is niri's
+    /// accounting: a column clipped by either viewport edge is not counted, so
+    /// the expansion reclaims its on-screen pixels and pushes it out of view.
+    /// Refuses when the active column is not itself fully visible (there is no
+    /// meaningful answer for a straddler), and when the column already fills
+    /// the viewport.
+    ///
+    /// Two cases route through toggleMaximizeActiveColumn instead of writing
+    /// Fixed pixels, both niri's: a centering policy that pins the active
+    /// column to the middle (the column's position is not ours to choose, so
+    /// "fill what is left" has no stable answer), and an active column that is
+    /// the ONLY fully visible one (the result is full width, and going through
+    /// the toggle leaves the user a way back out of it).
+    ///
+    /// The centering branch is taken BEFORE the straddling-active refusal, so
+    /// under a centering policy a straddling active column maximizes rather
+    /// than refusing: the policy already owns that column's position, which
+    /// is the whole reason the branch exists.
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
     /// Give every FULLY visible column an equal share of the work area's MAIN
     /// extent (Karousel equalize; niri has no equivalent). Fully visible on
@@ -321,6 +349,13 @@ public:
     /// tile's extent ACROSS the strip.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
+    /// Entry follows the same niri rule the width cycle uses (nearest entry
+    /// TALLER going forward, nearest shorter going back, wrapping at each
+    /// end), measured off a fresh relayout so an AUTO tile enters the cycle
+    /// at what it currently renders rather than always at the first entry.
+    /// Declines on a TABBED column, adjustActiveWindowHeight's guard: every
+    /// tab is drawn at the column's whole height, so there is no per-window
+    /// height for the measurement to read or the press to change.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
     /// Adjust the active tile's height by @p deltaPercent of the work area's
     /// CROSS extent. The current height is read off a fresh relayout, since an
@@ -384,6 +419,24 @@ public:
     /// ScrollEngine::visibleTiles; rotateVisibleColumns is this helper's
     /// only consumer.
     QVector<int> visibleColumnIndices(const ScrollLayoutParams& params) const;
+
+    /// Strip indices of the columns lying ENTIRELY inside the viewport, in
+    /// strip order — the stricter twin of visibleColumnIndices, and the one
+    /// the width-distribution verbs and centerVisibleColumns walk. A column
+    /// clipped by either edge is excluded, which is what lets
+    /// equalizeVisibleColumnWidths refuse to drag a straddler into the split,
+    /// lets centerVisibleColumns leave it out of the span, and lets
+    /// expandActiveColumnToAvailableWidth reclaim a straddler's pixels the
+    /// way niri does. Zero-extent (fully minimized) columns carry no strip
+    /// position and are skipped, matching stripExtentPx.
+    QVector<int> fullyVisibleColumnIndices(const ScrollLayoutParams& params) const;
+
+    /// Whether the layout policy pins the ACTIVE column to the middle of the
+    /// viewport, so its on-screen position is not the strip's to choose. The
+    /// one spelling of the test the anchor math (keepOrRecenterAnchor,
+    /// reanchorAfterFocusChange, updateViewForFocus), the removal re-focus,
+    /// and the expand verb all ask.
+    bool isCenteringActiveColumn(const ScrollLayoutParams& params) const;
 
     /// Rotate the window contents of the VISIBLE columns through their
     /// slots (clockwise = every stack shifts one slot ALONG the strip,
@@ -492,6 +545,16 @@ public:
     static int resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params);
 
 private:
+    // scrollstrip_sizing.cpp
+    /// The active tile's CROSS extent as it currently RENDERS, read off a
+    /// fresh relayout. An Auto tile only gets a pixel value from the whole
+    /// column distribution (floors, budget rebalance), so the relayout IS the
+    /// resolution and no targeted per-tile helper can replace it. Answers -1
+    /// when there is no active tile or it resolved to nothing (a minimized
+    /// tile is dropped from the relayout entirely). Shortcut-rate path, not
+    /// per-frame — both height verbs call it once per press.
+    int activeTileCrossPx(const ScrollLayoutParams& params) const;
+
     // scrollstrip_structure.cpp
     void removeColumnAt(int columnIndex);
     /// Shared body of removeWindow/takeWindow: drop the tile, close up an
@@ -545,12 +608,6 @@ private:
     {
         m_viewDetached = false;
     }
-    // scrollstrip_sizing.cpp
-    /// The tile's current height as a fraction of the column's CROSS extent, or -1
-    /// when it has no determinate fraction (Auto weight). Preset anchors
-    /// answer their SNAPPED value (nearestPresetValue), matching relayout.
-    qreal currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const;
-
     Column* activeColumnMutable();
     Tile* activeTileMutable();
     void clampActiveIndices();
