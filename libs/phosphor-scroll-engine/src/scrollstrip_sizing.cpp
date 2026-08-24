@@ -35,6 +35,28 @@ int ScrollStrip::activeTileCrossPx(const ScrollLayoutParams& params) const
     return -1;
 }
 
+bool ScrollStrip::claimTabbedHeightOwnership(Column& c, int tileIdx, const WindowHeight& incoming)
+{
+    if (c.display != ColumnDisplay::Tabbed || incoming.kind == WindowHeight::Auto) {
+        return false;
+    }
+    bool changed = false;
+    for (int ti = 0; ti < c.tiles.size(); ++ti) {
+        // Auto siblings are left alone, weight included: an Auto tab
+        // contributes nothing to tabbedColumnCrossPx's scan, so rewriting it
+        // would move no pixels while making the caller report success.
+        // MINIMIZED siblings are cleared like any other, deliberately: their
+        // intent is inert while the column is tabbed, and leaving one behind
+        // would let an unminimize hand the column a height nobody asked for.
+        if (ti == tileIdx || c.tiles.at(ti).height.kind == WindowHeight::Auto) {
+            continue;
+        }
+        c.tiles[ti].height = WindowHeight::makeAuto();
+        changed = true;
+    }
+    return changed;
+}
+
 bool ScrollStrip::setActiveColumnWidth(const ColumnWidth& width)
 {
     Column* col = activeColumnMutable();
@@ -477,11 +499,20 @@ bool ScrollStrip::setActiveWindowHeight(const WindowHeight& height)
     // Lone tiles included: relayout honors an explicit Fixed/Preset height
     // for a solo tile (niri parity), so the write is meaningful at any
     // stack size.
-    Tile* tile = activeTileMutable();
-    if (!tile || tile->height == height) {
+    Column* col = activeColumnMutable();
+    if (!col || col->activeTileIdx < 0 || col->activeTileIdx >= col->tiles.size()) {
         return false;
     }
-    tile->height = height;
+    const int ti = col->activeTileIdx;
+    // Ownership BEFORE the no-change bail: clearing a sibling's intent moves
+    // the tabbed column even when this tile already holds the height asked
+    // for, so answering false there would report "nothing happened" for a
+    // relayout that does.
+    const bool claimed = claimTabbedHeightOwnership(*col, ti, height);
+    if (col->tiles.at(ti).height == height) {
+        return claimed;
+    }
+    col->tiles[ti].height = height;
     return true;
 }
 
@@ -492,17 +523,11 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
-    // Tabbed columns have no per-tile height, adjustActiveWindowHeight's
-    // guard and its reason. It binds here too now that the entry rule reads
-    // the RENDERED extent: relayout draws every tab at the column's whole
-    // content rect, so the measurement is the same on every press and taller
-    // than any preset — a forward press would answer the smallest entry
-    // whatever is on screen, and the press after it would find that intent
-    // already written and decline. Neither press moves a pixel.
-    const Column* activeCol = activeColumn();
-    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
-        return false;
-    }
+    Column* activeCol = activeColumnMutable();
+    // A tabbed column sizes ITSELF from this tile's intent
+    // (tabbedColumnCrossPx), so the press works there as well; what changes is
+    // the space the comparison happens in. See the reservation below.
+    const bool tabbed = activeCol && activeCol->display == ColumnDisplay::Tabbed;
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area, the sibling verbs' bail
@@ -513,9 +538,18 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     // "no determinate fraction" arm entered at vocabulary entry 0 regardless
     // of the height on screen, so the first press on an evenly-split column
     // could shrink or grow the tile depending only on where entry 0 sat.
-    const int currentPx = activeTileCrossPx(params);
+    int currentPx = activeTileCrossPx(params);
     if (currentPx < 0) {
         return false;
+    }
+    if (tabbed) {
+        // A tab is committed at the column's CONTENT rect, so what the
+        // relayout measures is the column minus whatever the indicator
+        // reserved across the strip, while the intent below sizes the whole
+        // column. Compare in the column's space or the entry rule enters one
+        // reservation-width off, and a press could answer the entry the
+        // column already renders at.
+        currentPx += tabbedCrossReservationPx(*activeCol, params);
     }
     // Each entry resolved the way relayout's Preset arm resolves it, so the
     // entry the cycle picks is the extent that will actually render. The
@@ -531,15 +565,29 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
             }
         }
     }
-    const int availH = qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
+    // A tabbed column stacks nothing, so it spends no inner gaps and its
+    // whole budget is the work area — tabbedColumnCrossPx caps the entries at
+    // exactly that.
+    const int availH = tabbed ? workH : qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
     const int idx = cyclePresetIndexByExtent(params.presetWindowHeights.size(), currentPx, delta, [&](int i) {
         return qMin(availH, proportionalPx(params.presetWindowHeights.at(i), workH, params.gap));
     });
     const WindowHeight result = WindowHeight::makePreset(params.presetWindowHeights.at(idx));
-    if (tile->height == result) {
-        return false;
+    // Ownership before the no-change bail, setActiveWindowHeight's reason:
+    // a sibling that still carried an intent was deciding this column's
+    // extent, and taking it over is a move even when the step lands on the
+    // entry this tile already held.
+    //
+    // Written through the COLUMN from here on, not the cached tile pointer:
+    // the claim indexes the tile vector, and a strip that is implicitly
+    // shared (drag_preview copies one to probe a drop) detaches on that
+    // write, which would leave the cached pointer aimed at the old buffer.
+    const int ti = activeCol->activeTileIdx;
+    const bool claimed = claimTabbedHeightOwnership(*activeCol, ti, result);
+    if (activeCol->tiles.at(ti).height == result) {
+        return claimed;
     }
-    tile->height = result;
+    activeCol->tiles[ti].height = result;
     return true;
 }
 
@@ -550,19 +598,12 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
-    // Tabbed columns have no per-tile height to adjust: relayout lays every
-    // visible tile out at the column's whole content rect and never reads
-    // Tile::height there, so the measured extent is the same on every press
-    // and a write would move nothing while the verb reported success forever.
-    // Refuse instead. cycleActiveWindowPresetHeight carries the same guard,
-    // for the same reason once its entry rule reads the rendered extent.
-    // setActiveWindowHeight deliberately does NOT: it promises an INTENT
-    // change, which stays true while tabbed, and the restore and handoff
-    // paths write intent into tabbed columns on purpose.
-    const Column* activeCol = activeColumn();
-    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
-        return false;
-    }
+    // A tabbed column adjusts too, in the same space the preset cycle
+    // measures in: the intent sizes the COLUMN there, and the tab is
+    // committed at the column minus the indicator's cross-axis reservation.
+    Column* activeCol = activeColumnMutable();
+    const bool tabbed = activeCol && activeCol->display == ColumnDisplay::Tabbed;
+    const int reservationPx = tabbed ? tabbedCrossReservationPx(*activeCol, params) : 0;
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area: qBound(1, …, workH) would invert
@@ -570,7 +611,7 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // Current pixel height: read off a fresh relayout so the adjustment
     // starts from what is actually on screen (activeTileCrossPx's doc carries
     // the why). The preset cycle enters from the same measurement.
-    const int currentPx = activeTileCrossPx(params);
+    int currentPx = activeTileCrossPx(params);
     if (currentPx < 0) {
         // The active tile resolved to nothing — a minimized tile is dropped
         // from the relayout entirely. Seeding the full work area instead
@@ -579,6 +620,10 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
         // seam can drive it.
         return false;
     }
+    // Into the column's space while tabbed, the cycle's adjustment and its
+    // reason: what gets written below is the extent tabbedColumnCrossPx will
+    // resolve, and that is the COLUMN's.
+    currentPx += reservationPx;
     // Clamp to the tile's own floor as well (niri clamps against the client
     // min size in the verb): without it a shrink below minHeight would
     // "succeed" here while relayout re-clamps, so every further press
@@ -605,8 +650,25 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // sync with MinWindowHeightFraction. So the engine-side 1px floor it
     // commits with is defensive on an already-gated value.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
-    const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
-    const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);
+    int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
+    if (tabbed && params.respectMinimumSize) {
+        // The whole tab SET's minimum, matching tabbedColumnCrossPx: every
+        // visible tab is committed at this one rect, so a shrink stopped at
+        // the SHOWN tab's minimum alone would write an extent that relayout
+        // clamps straight back up, which is a success verdict per press with
+        // nothing moving. That is the exact failure this floor exists to
+        // prevent, and it repeats for as long as the key is held.
+        for (const Tile& t : activeCol->tiles) {
+            if (!t.minimized) {
+                clientFloor = qMax(clientFloor, t.minCross(params.axis));
+            }
+        }
+    }
+    // Both floors are in WINDOW space, and while tabbed the value being
+    // clamped is the column, so the reservation is added once on the outside
+    // rather than to either of them. Zero unless the indicator is placed
+    // within a tabbed column and eats the cross axis.
+    const int floorPx = qBound(1, qMax(fractionFloor, clientFloor) + reservationPx, workH);
     // Lowered to the current height when the tile already renders below the
     // floor, the twin of the guard adjustActiveColumnWidth documents: the
     // smallest LEGAL preset height resolves through proportionalPx to a gap's
@@ -615,10 +677,19 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // window.
     const int lowerPx = qMin(floorPx, currentPx);
     const int target = qBound(lowerPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
+    const WindowHeight result = WindowHeight::makeFixed(target);
+    // Ownership before the no-move bail, and written through the COLUMN
+    // rather than the cached tile pointer — cycleActiveWindowPresetHeight
+    // carries both reasons.
+    // activeCol is non-null here by construction: activeTileMutable answers a
+    // tile only when activeColumnMutable answered a column, and the !tile bail
+    // at the top already took the other case.
+    const int ti = activeCol->activeTileIdx;
+    const bool claimed = claimTabbedHeightOwnership(*activeCol, ti, result);
     if (target == currentPx) {
-        return false;
+        return claimed;
     }
-    tile->height = WindowHeight::makeFixed(target);
+    activeCol->tiles[ti].height = result;
     return true;
 }
 
@@ -629,11 +700,15 @@ bool ScrollStrip::setWindowHeightIntent(const QString& windowId, const WindowHei
         return false;
     }
     Column& col = m_columns[colIdx];
-    Tile& tile = col.tiles[col.indexOfWindow(windowId)];
-    if (tile.height == height) {
-        return false;
+    const int ti = col.indexOfWindow(windowId);
+    // Ownership before the no-change bail, setActiveWindowHeight's reason.
+    // This is the restore and handoff seam, so it is exactly where a strip
+    // could otherwise come back from disk with two tabs carrying intents.
+    const bool claimed = claimTabbedHeightOwnership(col, ti, height);
+    if (col.tiles.at(ti).height == height) {
+        return claimed;
     }
-    tile.height = height;
+    col.tiles[ti].height = height;
     return true;
 }
 
@@ -697,10 +772,26 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     // an interactive cross-axis resize of a lone window sticks instead of
     // snapping back.
     if (crossChanged) {
-        Tile& tile = col.tiles[col.indexOfWindow(windowId)];
-        const WindowHeight ackedH = WindowHeight::makeFixed(params.axis.crossSize(ackedSize));
-        if (!(tile.height == ackedH)) {
-            tile.height = ackedH;
+        const int ti = col.indexOfWindow(windowId);
+        // Lifted into COLUMN space first, the conversion both height verbs
+        // make: on a tabbed column the height intent sizes the column
+        // (tabbedColumnCrossPx) and the tabs are then committed at the column
+        // minus the indicator's cross-axis reservation, while the ack here is
+        // the WINDOW's own extent. Without the lift every interactive
+        // cross-edge drag would settle one reservation short of where it was
+        // released. Zero on every other column, and on a tabbed one whose
+        // indicator eats the main axis or is not placed within the column.
+        const WindowHeight ackedH =
+            WindowHeight::makeFixed(params.axis.crossSize(ackedSize) + tabbedCrossReservationPx(col, params));
+        // The dragged tab becomes the column's sole height owner, the same
+        // claim the keyboard verbs make: without it a drag on tab B would
+        // settle, and then the column would snap back to tab A's older intent
+        // because the resolver takes the first non-Auto tab it finds.
+        if (claimTabbedHeightOwnership(col, ti, ackedH)) {
+            changed = true;
+        }
+        if (!(col.tiles.at(ti).height == ackedH)) {
+            col.tiles[ti].height = ackedH;
             changed = true;
         }
     }

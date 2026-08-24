@@ -238,8 +238,11 @@ enum class CenterFocusedColumn : int {
 enum class ColumnDisplay : int {
     /// Tiles split the column's CROSS extent between them; all are visible.
     Normal = 0,
-    /// Only the active tile is laid out, at the column's full CROSS extent; the other
-    /// tiles are hidden and represented by a tab-indicator strip.
+    /// Only the active tile is laid out, at the column's content rect (its
+    /// CROSS extent less whatever an in-column indicator reserved); the other
+    /// tiles are hidden and represented by a tab-indicator strip. That cross
+    /// extent is the SHOWN tab's own height intent, so a tabbed column need
+    /// not span the work area (ScrollStrip::tabbedColumnCrossPx).
     Tabbed = 1,
 };
 
