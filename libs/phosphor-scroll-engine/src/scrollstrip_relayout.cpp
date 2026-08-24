@@ -426,31 +426,20 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     // by the time its guard is reached.
     m_viewDetached = false;
     const int viewMain = mainExtent(params);
-    const int viewOffset = viewOffsetFor(params);
     // FULLY visible columns only (niri center-visible-columns): a partially
     // clipped edge column is exactly what the verb pushes out of the way, so
-    // it must not drag the span. Zero-extent (fully minimized) columns carry
-    // no strip position and are skipped the same way stripExtentPx skips them.
-    int spanStart = -1;
-    int spanEnd = -1;
-    // Running accumulator, the columnStripPos pattern inlined once: asking
-    // columnStripPos per column re-walks the prefix each time, which is
-    // quadratic in the column count for a walk this loop already performs.
-    int colMainPos = 0;
-    for (int i = 0; i < m_columns.size(); ++i) {
-        const int colMain = columnExtentPx(m_columns.at(i), params);
-        if (colMain <= 0) {
-            continue;
-        }
-        const int pos = colMainPos - viewOffset;
-        if (pos >= 0 && pos + colMain <= viewMain) {
-            if (spanStart < 0) {
-                spanStart = colMainPos;
-            }
-            spanEnd = colMainPos + colMain;
-        }
-        colMainPos += colMain + params.gap;
-    }
+    // it must not drag the span. The ONE spelling of that walk, shared with
+    // the width-distribution verbs — zero-extent (fully minimized) columns
+    // carry no strip position and are skipped there the same way
+    // stripExtentPx skips them.
+    const QVector<int> visible = fullyVisibleColumnIndices(params);
+    // The span in STRIP coordinates. Two columnStripPos calls rather than one
+    // per column: the per-column form re-walks the prefix each time, which is
+    // quadratic in the column count.
+    const int spanStart = visible.isEmpty() ? -1 : columnStripPos(visible.first(), params);
+    const int spanEnd = visible.isEmpty()
+        ? -1
+        : columnStripPos(visible.last(), params) + columnExtentPx(m_columns.at(visible.last()), params);
     if (spanStart < 0) {
         // Nothing fully visible (a lone over-wide column, or a viewport mid
         // scroll) — centering the active column is the closest sensible act.

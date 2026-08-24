@@ -670,10 +670,13 @@ inline int proportionalPx(qreal proportion, int workExtent, int gap)
 /// currently measures on screen.
 ///
 /// niri's rule (`Column::toggle_width` / `toggle_window_height`), ported: a
-/// forward press takes the first entry strictly WIDER/TALLER than the current
-/// extent and wraps to the first entry when nothing is bigger; a backward
-/// press takes the last entry strictly smaller and wraps to the last entry.
-/// The one-pixel allowance is niri's too, for fractional-scale rounding.
+/// press moves the size the way the key says, so a forward press takes an
+/// entry strictly WIDER/TALLER than the current extent and a backward press
+/// one strictly smaller, wrapping at each end. The one-pixel allowance is
+/// niri's too, for fractional-scale rounding. Which entry, and which end, are
+/// resolved by EXTENT here (nearest on the pressed side; the vocabulary's own
+/// smallest and largest for the wraps) rather than by position in the list,
+/// which is the divergence the next two paragraphs are about.
 ///
 /// Anchored on the resolved EXTENT rather than on a stored vocabulary index,
 /// which is this engine's one deliberate divergence: a stored index lets a
@@ -683,6 +686,14 @@ inline int proportionalPx(qreal proportion, int workExtent, int gap)
 /// entry — a list typed out of size order cycles in SIZE order here and in
 /// TYPED order under niri.
 ///
+/// Both the pick and the WRAP are by extent, not by position, and that is
+/// what makes the SIZE-order claim above true. The preset lists are
+/// deduplicated at the boundary but never sorted (minimizeActiveColumnWidth's
+/// comment spells out why), so a list typed as e.g. 1/2, 1/3, 2/3 has its
+/// narrowest entry in the middle. Wrapping to position 0 there would hand a
+/// forward press the MIDDLE entry and leave the narrowest reachable only
+/// backwards.
+///
 /// @p resolve maps a vocabulary index to the pixel extent that entry would
 /// render at. Returns -1 for an empty vocabulary.
 template<typename Resolver>
@@ -691,20 +702,34 @@ int cyclePresetIndexByExtent(int count, int currentPx, int delta, Resolver resol
     if (count <= 0) {
         return -1;
     }
-    if (delta >= 0) {
-        for (int i = 0; i < count; ++i) {
-            if (currentPx + 1 < resolve(i)) {
-                return i;
+    const bool forward = delta >= 0;
+    int best = -1; // nearest entry strictly on the pressed side
+    int bestPx = 0; // its extent
+    int wrap = -1; // the extreme entry the press wraps to
+    int wrapPx = 0; // its extent
+    for (int i = 0; i < count; ++i) {
+        const int px = resolve(i);
+        if (forward) {
+            if (currentPx + 1 < px && (best < 0 || px < bestPx)) {
+                best = i;
+                bestPx = px;
+            }
+            if (wrap < 0 || px < wrapPx) {
+                wrap = i;
+                wrapPx = px;
+            }
+        } else {
+            if (px + 1 < currentPx && (best < 0 || px > bestPx)) {
+                best = i;
+                bestPx = px;
+            }
+            if (wrap < 0 || px > wrapPx) {
+                wrap = i;
+                wrapPx = px;
             }
         }
-        return 0;
     }
-    for (int i = count - 1; i >= 0; --i) {
-        if (resolve(i) + 1 < currentPx) {
-            return i;
-        }
-    }
-    return count - 1;
+    return best >= 0 ? best : wrap;
 }
 
 /// One window in a column.

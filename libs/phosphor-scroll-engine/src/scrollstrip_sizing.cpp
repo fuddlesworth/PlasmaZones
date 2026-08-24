@@ -57,9 +57,10 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     // ONE path for every current kind — the F30 fix: there is no index to
     // read back, so a short template vocabulary can never rewrite the
     // anchor's original intent. Where the cycle ENTERS is niri's rule
-    // (cyclePresetIndexByExtent, whose doc carries the parity note): the
-    // first entry wider than what the column renders at going forward, the
-    // last entry narrower going back, wrapping at each end. The old "nearest
+    // (cyclePresetIndexByExtent, whose doc carries the parity note and the
+    // wrap's reason): the nearest entry wider than what the column renders at
+    // going forward, the nearest narrower going back, wrapping at each end to
+    // the vocabulary's own narrowest and widest. The old "nearest
     // entry, step when it already matches" rule could answer a NARROWER
     // preset for a forward press — a column resized to sit just above one
     // entry entered at that entry and shrank.
@@ -491,6 +492,17 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
+    // Tabbed columns have no per-tile height, adjustActiveWindowHeight's
+    // guard and its reason. It binds here too now that the entry rule reads
+    // the RENDERED extent: relayout draws every tab at the column's whole
+    // content rect, so the measurement is the same on every press and taller
+    // than any preset — a forward press would answer the smallest entry
+    // whatever is on screen, and the press after it would find that intent
+    // already written and decline. Neither press moves a pixel.
+    const Column* activeCol = activeColumn();
+    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
+        return false;
+    }
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area, the sibling verbs' bail
@@ -511,7 +523,6 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     // here; without the cap two entries taller than the budget would both
     // resolve past it and the walk could pick one that renders identically
     // to the current height.
-    const Column* activeCol = activeColumn();
     int visibleTiles = 0;
     if (activeCol) {
         for (const Tile& t : activeCol->tiles) {
@@ -543,10 +554,11 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // visible tile out at the column's whole content rect and never reads
     // Tile::height there, so the measured extent is the same on every press
     // and a write would move nothing while the verb reported success forever.
-    // Refuse instead. setActiveWindowHeight and cycleActiveWindowPresetHeight
-    // deliberately do NOT carry this guard: they promise an INTENT change,
-    // which stays true while tabbed, and the restore and handoff paths write
-    // intent into tabbed columns on purpose.
+    // Refuse instead. cycleActiveWindowPresetHeight carries the same guard,
+    // for the same reason once its entry rule reads the rendered extent.
+    // setActiveWindowHeight deliberately does NOT: it promises an INTENT
+    // change, which stays true while tabbed, and the restore and handoff
+    // paths write intent into tabbed columns on purpose.
     const Column* activeCol = activeColumn();
     if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
         return false;

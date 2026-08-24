@@ -99,14 +99,16 @@ public:
     /// If that tile is MINIMIZED it falls back to the column's first
     /// non-minimized tile, so this can name a different window than
     /// `activeColumn()->activeTileIdx` points at. The mutating verbs
-    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight, and
-    /// cycleActiveWindowPresetHeight — adjustActiveWindowHeight is NOT on
-    /// this list; it self-guards by resolving the tile from the relayout)
-    /// all act
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight) all act
     /// on activeTileIdx, so a caller pairing this accessor with one of them
     /// could report a window the operation did not touch. Not reachable in
     /// production today, where the daemon models minimize as float and a
     /// minimized window is not a strip tile at all.
+    ///
+    /// The two height SIZING verbs are not on that list: both measure through
+    /// activeTileCrossPx, which resolves activeTileIdx's tile from a relayout
+    /// and answers -1 when it is minimized, so they refuse rather than act on
+    /// a window this accessor did not name.
     QString activeWindowId() const;
     /// Column index owning @p windowId, or -1.
     int columnOfWindow(const QString& windowId) const;
@@ -257,9 +259,11 @@ public:
     bool setActiveColumnWidth(const ColumnWidth& width);
     /// Cycle the active column through the preset width list. @p delta -1/+1.
     /// Entry follows niri's rule (cyclePresetIndexByExtent): a forward press
-    /// takes the first preset WIDER than what the column renders at and wraps
-    /// to the first entry when nothing is wider; a backward press takes the
-    /// last preset narrower and wraps to the last entry. Measured from the
+    /// takes the narrowest preset WIDER than what the column renders at and
+    /// wraps to the narrowest of all when nothing is wider; a backward press
+    /// takes the widest preset narrower and wraps to the widest of all,
+    /// so every entry is reachable in both directions even when the
+    /// vocabulary was typed out of size order. Measured from the
     /// RENDERED extent, so a column held at its client minimum enters where
     /// it looks like it should.
     bool cycleActiveColumnPresetWidth(int delta, const ScrollLayoutParams& params);
@@ -294,6 +298,11 @@ public:
     /// "fill what is left" has no stable answer), and an active column that is
     /// the ONLY fully visible one (the result is full width, and going through
     /// the toggle leaves the user a way back out of it).
+    ///
+    /// The centering branch is taken BEFORE the straddling-active refusal, so
+    /// under a centering policy a straddling active column maximizes rather
+    /// than refusing: the policy already owns that column's position, which
+    /// is the whole reason the branch exists.
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
     /// Give every FULLY visible column an equal share of the work area's MAIN
     /// extent (Karousel equalize; niri has no equivalent). Fully visible on
@@ -340,10 +349,13 @@ public:
     /// tile's extent ACROSS the strip.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
-    /// Entry follows the same niri rule the width cycle uses (first entry
-    /// TALLER going forward, last entry shorter going back, wrapping at each
+    /// Entry follows the same niri rule the width cycle uses (nearest entry
+    /// TALLER going forward, nearest shorter going back, wrapping at each
     /// end), measured off a fresh relayout so an AUTO tile enters the cycle
     /// at what it currently renders rather than always at the first entry.
+    /// Declines on a TABBED column, adjustActiveWindowHeight's guard: every
+    /// tab is drawn at the column's whole height, so there is no per-window
+    /// height for the measurement to read or the press to change.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
     /// Adjust the active tile's height by @p deltaPercent of the work area's
     /// CROSS extent. The current height is read off a fresh relayout, since an
@@ -410,9 +422,10 @@ public:
 
     /// Strip indices of the columns lying ENTIRELY inside the viewport, in
     /// strip order — the stricter twin of visibleColumnIndices, and the one
-    /// the width-distribution verbs walk. A column clipped by either edge is
-    /// excluded, which is what lets equalizeVisibleColumnWidths refuse to
-    /// drag a straddler into the split and lets
+    /// the width-distribution verbs and centerVisibleColumns walk. A column
+    /// clipped by either edge is excluded, which is what lets
+    /// equalizeVisibleColumnWidths refuse to drag a straddler into the split,
+    /// lets centerVisibleColumns leave it out of the span, and lets
     /// expandActiveColumnToAvailableWidth reclaim a straddler's pixels the
     /// way niri does. Zero-extent (fully minimized) columns carry no strip
     /// position and are skipped, matching stripExtentPx.
@@ -420,8 +433,9 @@ public:
 
     /// Whether the layout policy pins the ACTIVE column to the middle of the
     /// viewport, so its on-screen position is not the strip's to choose. The
-    /// one spelling of the test relayout, the structure walks, and the
-    /// expand verb all ask.
+    /// one spelling of the test the anchor math (keepOrRecenterAnchor,
+    /// reanchorAfterFocusChange, updateViewForFocus), the removal re-focus,
+    /// and the expand verb all ask.
     bool isCenteringActiveColumn(const ScrollLayoutParams& params) const;
 
     /// Rotate the window contents of the VISIBLE columns through their
@@ -530,6 +544,8 @@ public:
     /// proportions, preset lookup; no min-extent clamp).
     static int resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params);
 
+private:
+    // scrollstrip_sizing.cpp
     /// The active tile's CROSS extent as it currently RENDERS, read off a
     /// fresh relayout. An Auto tile only gets a pixel value from the whole
     /// column distribution (floors, budget rebalance), so the relayout IS the
@@ -539,7 +555,6 @@ public:
     /// per-frame — both height verbs call it once per press.
     int activeTileCrossPx(const ScrollLayoutParams& params) const;
 
-private:
     // scrollstrip_structure.cpp
     void removeColumnAt(int columnIndex);
     /// Shared body of removeWindow/takeWindow: drop the tile, close up an

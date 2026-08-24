@@ -410,8 +410,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     if (refocus) {
         const int viewMain = params.axis.mainSize(params.workArea);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
-        const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-        if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+        if (isCenteringActiveColumn(params)) {
             // The policy took the view (keepOrRecenterAnchor's reason), so a
             // pan latched before the removal is over.
             m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
