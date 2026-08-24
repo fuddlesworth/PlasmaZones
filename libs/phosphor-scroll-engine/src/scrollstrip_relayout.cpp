@@ -11,14 +11,6 @@ namespace PhosphorScrollEngine {
 
 namespace {
 
-/// A proportion resolves against the work extent PLUS one gap so that
-/// proportions summing to 1 tile edge-to-edge with the gaps between them
-/// (0.5 + 0.5 across a 1000px area with a 10px gap → 495 + 10 + 495).
-int proportionalPx(qreal proportion, int workExtent, int gap)
-{
-    return qMax(1, qRound(proportion * (workExtent + gap)) - gap);
-}
-
 /// The work area measured along the strip, and across it. Every "how much
 /// room is there" question in this file is one of these two, and naming them
 /// keeps the anchor math readable once the physical axis stops being fixed.
@@ -194,8 +186,7 @@ int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParam
     // was UNLESS the centering policy pins the focused column to the middle:
     // Always / lone-column centering must survive a strip-width change, or
     // the focused column drifts off-center until the next focus move.
-    const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-    if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
+    if (isCenteringActiveColumn(params)) {
         // The policy took the view back; a pan that stayed latched here would
         // leave the next pass refusing to re-derive the position it has.
         m_viewDetached = false;
@@ -266,8 +257,7 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
     const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
 
-    const bool centerLoneColumn = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-    bool center = centerLoneColumn || params.centerFocusedColumn == CenterFocusedColumn::Always;
+    bool center = isCenteringActiveColumn(params);
 
     if (!center && params.centerFocusedColumn == CenterFocusedColumn::OnOverflow && prevIdx >= 0
         && prevIdx < m_columns.size() && prevIdx != m_activeColumnIdx) {
@@ -389,8 +379,7 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // silently undo an explicit centerActiveColumn at the strip's edges
     // (whose centered anchor implies out-of-range viewOffset by design) and
     // reclaim removeWindowInternal's deliberate right-edge dead space.
-    const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
-    if (!centerLone && params.centerFocusedColumn != CenterFocusedColumn::Always && m_activeColumnIdx >= 0) {
+    if (!isCenteringActiveColumn(params) && m_activeColumnIdx >= 0) {
         const int viewMain = mainExtent(params);
         const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);

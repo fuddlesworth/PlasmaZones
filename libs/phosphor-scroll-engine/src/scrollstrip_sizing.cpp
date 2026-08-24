@@ -9,25 +9,28 @@
 
 namespace PhosphorScrollEngine {
 
-qreal ScrollStrip::currentHeightFraction(const Tile& t, const ScrollLayoutParams& params) const
+int ScrollStrip::activeTileCrossPx(const ScrollLayoutParams& params) const
 {
-    switch (t.height.kind) {
-    case WindowHeight::Preset:
-        // Snapped, matching relayout's resolution of the same anchor.
-        return nearestPresetValue(params.presetWindowHeights, t.height.presetFraction, -1);
-    case WindowHeight::Fixed: {
-        // A tile's Fixed extent is pixels ACROSS the strip, so it becomes a
-        // fraction of the cross extent — via the EXACT inverse of relayout's
-        // proportionalPx (px = round(f * (cross + gap)) - gap), the same
-        // (px + gap) / (extent + gap) form the width cycle uses. The bare
-        // px / cross form was biased by roughly gap/cross and could enter
-        // the preset cycle one entry off when the vocabulary's stops sit
-        // closer together than the gap.
-        const int cross = params.axis.crossSize(params.workArea);
-        return cross > 0 ? static_cast<qreal>(t.height.fixedPx + params.gap) / (cross + params.gap) : -1;
-    }
-    case WindowHeight::Auto:
+    // activeTileIdx, NOT activeWindowId(): the height verbs write through
+    // activeTileMutable, which indexes activeTileIdx, and activeWindowId()
+    // deliberately falls back to another tile when that one is minimized.
+    // Measuring a different tile than the one about to be written is exactly
+    // the mismatch that makes a verb report success while nothing moves.
+    const Column* col = activeColumn();
+    if (!col || col->activeTileIdx < 0 || col->activeTileIdx >= col->tiles.size()) {
         return -1;
+    }
+    const QString windowId = col->tiles.at(col->activeTileIdx).windowId;
+    const ResolvedStrip resolved = relayout(params);
+    for (const ResolvedColumn& rc : resolved.columns) {
+        if (rc.columnIndex != m_activeColumnIdx) {
+            continue;
+        }
+        for (const ResolvedTile& rt : rc.tiles) {
+            if (rt.windowId == windowId) {
+                return params.axis.crossSize(rt.rect);
+            }
+        }
     }
     return -1;
 }
@@ -53,26 +56,29 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     }
     // ONE path for every current kind — the F30 fix: there is no index to
     // read back, so a short template vocabulary can never rewrite the
-    // anchor's original intent. Enter the cycle at the vocabulary entry
-    // nearest the CURRENT on-screen size (a Preset anchor RESOLVES to that
-    // entry, so the equality test below is true for it and the press steps,
-    // same stepping the index cycle had); a non-preset width steps only when
-    // the nearest entry already matches, so the first press always lands on
-    // a visible change. proportionalPx is monotone in the fraction, so the
-    // exact-inverse fraction below selects the same nearest entry the old
-    // pixel-space probe did.
+    // anchor's original intent. Where the cycle ENTERS is niri's rule
+    // (cyclePresetIndexByExtent, whose doc carries the parity note): the
+    // first entry wider than what the column renders at going forward, the
+    // last entry narrower going back, wrapping at each end. The old "nearest
+    // entry, step when it already matches" rule could answer a NARROWER
+    // preset for a forward press — a column resized to sit just above one
+    // entry entered at that entry and shrank.
     const int count = params.presetColumnWidths.size();
     const int workW = params.axis.mainSize(params.workArea);
     if (workW <= 0) {
         return false;
     }
-    const int currentPx = resolveColumnWidthPx(col->width, params);
-    const qreal currentFraction = qreal(currentPx + params.gap) / (workW + params.gap);
-    int idx = nearestPresetIndex(params.presetColumnWidths, currentFraction);
-    const int nearPx = resolveColumnWidthPx(ColumnWidth::makePreset(params.presetColumnWidths.at(idx)), params);
-    if (qAbs(nearPx - currentPx) <= 1) {
-        idx = (idx + delta + count) % count;
+    // The RENDERED extent, matching adjustActiveColumnWidth and the entry
+    // rule's premise: a column pinned to its client minimum resolves to a
+    // narrower intent than it draws, and entering from the intent would step
+    // to a preset it is already wider than, so the press moved nothing.
+    const int currentPx = columnExtentPx(*col, params);
+    if (currentPx <= 0) {
+        return false; // empty or fully minimized column: nothing to size
     }
+    const int idx = cyclePresetIndexByExtent(count, currentPx, delta, [&](int i) {
+        return resolveColumnWidthPx(ColumnWidth::makePreset(params.presetColumnWidths.at(i)), params);
+    });
     const ColumnWidth result = ColumnWidth::makePreset(params.presetColumnWidths.at(idx));
     if (col->width == result) {
         // Single-entry preset list (or a step that landed where we already
@@ -195,27 +201,62 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     if (!col) {
         return false;
     }
-    // On-screen leftover: the columns are contiguous in strip space, so the
-    // occupied viewport region is one interval — everything outside it is
-    // reclaimable.
     const int workW = params.axis.mainSize(params.workArea);
-    const int viewOffset = viewOffsetFor(params);
-    const int stripW = stripExtentPx(params);
-    const int covered = qMax(0, qMin(workW, stripW - viewOffset) - qMax(0, -viewOffset));
-    const int leftover = workW - covered;
-    if (leftover <= 0) {
-        return false;
+    if (workW <= 0) {
+        return false; // degenerate area, the sibling width verbs' bail
     }
     // Measured from what is ON SCREEN, matching adjustActiveColumnWidth and
-    // matching `covered` above, which sums columnExtentPx. Stepping from the
-    // bare intent would mismatch the two: a column held at its client minimum
-    // resolves to a narrower intent than it renders, so target could land
-    // BELOW the rendered extent, leaving the screen unchanged while the verb
-    // reported success and buried the proportional anchor under a smaller
-    // Fixed value.
+    // matching the `taken` walk below, which sums columnExtentPx. Stepping
+    // from the bare intent would mismatch the two: a column held at its
+    // client minimum resolves to a narrower intent than it renders, so target
+    // could land BELOW the rendered extent, leaving the screen unchanged
+    // while the verb reported success and buried the proportional anchor
+    // under a smaller Fixed value.
     const int current = columnExtentPx(*col, params);
     if (current <= 0) {
         return false; // empty or fully minimized column: nothing to expand
+    }
+    // Already filling the viewport: niri's `col.is_full_width` early-out.
+    // Taken before either toggle branch below so both of them MAXIMIZE — the
+    // toggle's un-maximize arm is the wrong answer for a verb whose whole
+    // promise is "grow".
+    if (current >= workW) {
+        return false;
+    }
+    // A centering policy pins the active column to the middle of the
+    // viewport, so its position after the resize is not ours to choose and
+    // "fill what is left" has no stable answer. niri takes the simple way out
+    // here and so do we: maximize, which the user can back out of.
+    if (isCenteringActiveColumn(params)) {
+        return toggleMaximizeActiveColumn(params);
+    }
+    // niri's accounting: only the columns lying ENTIRELY in the viewport are
+    // counted as taking space. A straddler's on-screen pixels are reclaimable
+    // — the expansion pushes it out of view — which is the whole difference
+    // between this and measuring the strip's covered interval, the form that
+    // let a clipped neighbour eat the leftover it was about to be pushed out
+    // of. The active column must itself be fully visible: for a straddler
+    // there is no meaningful answer, since the leftover is measured against a
+    // position the column does not fully occupy.
+    const QVector<int> visible = fullyVisibleColumnIndices(params);
+    if (!visible.contains(m_activeColumnIdx)) {
+        return false;
+    }
+    int taken = params.gap * (visible.size() - 1);
+    for (int idx : visible) {
+        taken += columnExtentPx(m_columns.at(idx), params);
+    }
+    const int leftover = workW - taken;
+    if (leftover <= 0) {
+        return false;
+    }
+    // The active column is the only one fully on screen, so it is about to
+    // take the whole viewport. niri routes that through the maximize toggle
+    // rather than writing the width, "as it lets you back out of it more
+    // intuitively" — a Fixed(workW) would strand the column at full width
+    // with no un-maximize to undo it.
+    if (visible.size() == 1) {
+        return toggleMaximizeActiveColumn(params);
     }
     const int target = qMin(workW, current + leftover);
     if (target == current) {
@@ -238,24 +279,10 @@ bool ScrollStrip::equalizeVisibleColumnWidths(const ScrollLayoutParams& params)
     if (workW <= 0) {
         return false; // degenerate area, the sibling width verbs' bail
     }
-    // FULLY visible columns, the walk centerVisibleColumns performs: a
-    // column clipped by either edge is exactly what must not be dragged into
-    // the split. Zero-extent (fully minimized) columns carry no strip
-    // position and are skipped the way stripExtentPx skips them.
-    const int viewOffset = viewOffsetFor(params);
-    QVector<int> visible;
-    int colMainPos = 0;
-    for (int i = 0; i < m_columns.size(); ++i) {
-        const int colMain = columnExtentPx(m_columns.at(i), params);
-        if (colMain <= 0) {
-            continue;
-        }
-        const int pos = colMainPos - viewOffset;
-        if (pos >= 0 && pos + colMain <= workW) {
-            visible.append(i);
-        }
-        colMainPos += colMain + params.gap;
-    }
+    // FULLY visible columns, the walk centerVisibleColumns performs and the
+    // one expandActiveColumnToAvailableWidth shares: a column clipped by
+    // either edge is exactly what must not be dragged into the split.
+    const QVector<int> visible = fullyVisibleColumnIndices(params);
     // One column has nothing to equalize against; "equal" would mean "full
     // width", which is maximize's job.
     const int n = visible.size();
@@ -464,17 +491,39 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
-    // ONE path, mirroring the width cycle's value-anchored shape (see its
-    // comment): enter at the nearest vocabulary entry to the current height
-    // fraction, step when it already matches (a Preset anchor resolves to
-    // it, so a press on a preset tile always steps; Auto has no determinate
-    // fraction and enters at the first entry without stepping).
-    const int count = params.presetWindowHeights.size();
-    const qreal curFrac = currentHeightFraction(*tile, params);
-    int idx = curFrac < 0 ? 0 : nearestPresetIndex(params.presetWindowHeights, curFrac);
-    if (curFrac >= 0 && qAbs(params.presetWindowHeights.at(idx) - curFrac) < 0.01) {
-        idx = (idx + delta + count) % count;
+    const int workH = params.axis.crossSize(params.workArea);
+    if (workH <= 0) {
+        return false; // degenerate area, the sibling verbs' bail
     }
+    // ONE path, mirroring the width cycle's shape and its niri entry rule
+    // (see cyclePresetIndexByExtent). Measured off a fresh relayout, which is
+    // what an AUTO tile needs: it has no fraction of its own, and the old
+    // "no determinate fraction" arm entered at vocabulary entry 0 regardless
+    // of the height on screen, so the first press on an evenly-split column
+    // could shrink or grow the tile depending only on where entry 0 sat.
+    const int currentPx = activeTileCrossPx(params);
+    if (currentPx < 0) {
+        return false;
+    }
+    // Each entry resolved the way relayout's Preset arm resolves it, so the
+    // entry the cycle picks is the extent that will actually render. The
+    // column's own Auto/Fixed budget (availH) caps it there and so does it
+    // here; without the cap two entries taller than the budget would both
+    // resolve past it and the walk could pick one that renders identically
+    // to the current height.
+    const Column* activeCol = activeColumn();
+    int visibleTiles = 0;
+    if (activeCol) {
+        for (const Tile& t : activeCol->tiles) {
+            if (!t.minimized) {
+                ++visibleTiles;
+            }
+        }
+    }
+    const int availH = qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
+    const int idx = cyclePresetIndexByExtent(params.presetWindowHeights.size(), currentPx, delta, [&](int i) {
+        return qMin(availH, proportionalPx(params.presetWindowHeights.at(i), workH, params.gap));
+    });
     const WindowHeight result = WindowHeight::makePreset(params.presetWindowHeights.at(idx));
     if (tile->height == result) {
         return false;
@@ -506,23 +555,10 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     if (workH <= 0) {
         return false; // degenerate area: qBound(1, …, workH) would invert
     }
-    // Current pixel height: read it off a fresh relayout so the adjustment
-    // starts from what is actually on screen. A targeted per-tile helper
-    // cannot replace this: an Auto height only gets a pixel value from the
-    // full column distribution (floors, budget rebalance), so the relayout
-    // IS the resolution. Shortcut-rate path, not per-frame.
-    int currentPx = -1;
-    const ResolvedStrip resolved = relayout(params);
-    for (const ResolvedColumn& rc : resolved.columns) {
-        if (rc.columnIndex != m_activeColumnIdx) {
-            continue;
-        }
-        for (const ResolvedTile& rt : rc.tiles) {
-            if (rt.windowId == tile->windowId) {
-                currentPx = params.axis.crossSize(rt.rect);
-            }
-        }
-    }
+    // Current pixel height: read off a fresh relayout so the adjustment
+    // starts from what is actually on screen (activeTileCrossPx's doc carries
+    // the why). The preset cycle enters from the same measurement.
+    const int currentPx = activeTileCrossPx(params);
     if (currentPx < 0) {
         // The active tile resolved to nothing — a minimized tile is dropped
         // from the relayout entirely. Seeding the full work area instead

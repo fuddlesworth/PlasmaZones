@@ -51,6 +51,10 @@ private Q_SLOTS:
     void equalizeRefusesWhenTheActiveColumnStraddlesAnEdge();
     void equalizeDetachesTheViewSoAlwaysCenteringCannotUndoIt();
     void equalizeGivesAMinimumBoundColumnItsFloor();
+    void expandReclaimsAStraddlersPixels();
+    void expandMaximizesWhenTheActiveColumnIsAloneOnScreen();
+    void expandRefusesForAStraddlingActiveColumn();
+    void expandMaximizesUnderACenteringPolicy();
     void resetToDefaultsClearsThePreMaximizeSlot();
 };
 
@@ -713,6 +717,111 @@ void TestScrollStripView::resetToDefaultsClearsThePreMaximizeSlot()
     QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeProportion(1.0));
     QVERIFY(clientSized.toggleMaximizeActiveColumn(params));
     QCOMPARE(clientSized.columns().at(0).width, ColumnWidth::makeProportion(0.3));
+}
+
+void TestScrollStripView::expandReclaimsAStraddlersPixels()
+{
+    // niri's accounting for expand-column-to-available-width: only the
+    // columns lying ENTIRELY in the viewport count as taking space. A
+    // straddler's on-screen pixels are reclaimable, because the expansion is
+    // what pushes it out of view.
+    //
+    // Three 500px columns (strip positions 0, 510, 1020) with the LAST
+    // focused puts the view at offset 320, which clips a at the lead edge and
+    // leaves b and c fully visible. Measuring the strip's COVERED interval
+    // instead — the form this replaced — counts a's 180 on-screen pixels and
+    // answers "nothing left over", so the verb refused.
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    for (const char* id : {"a", "b", "c"}) {
+        QVERIFY(
+            strip.insertWindow(QString::fromLatin1(id), ColumnWidth::makeFixed(500), ColumnDisplay::Normal, params));
+    }
+    QVERIFY(strip.focusColumn(1, params));
+    const ResolvedStrip before = strip.relayout(params);
+    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("a"))) < 0, "fixture: a must straddle the lead edge");
+    QCOMPARE(strip.fullyVisibleColumnIndices(params), QVector<int>({1, 2}));
+
+    // Taken = 500 + 500 + one gap between them = 1010, so 190 is reclaimable
+    // and b grows to 690.
+    QVERIFY(strip.expandActiveColumnToAvailableWidth(params));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), 690);
+    QCOMPARE(strip.columns().at(2).width, ColumnWidth::makeFixed(500)); // c untouched
+}
+
+void TestScrollStripView::expandMaximizesWhenTheActiveColumnIsAloneOnScreen()
+{
+    // Two 700px columns (strip positions 0 and 710) with the last focused:
+    // the view ends at offset 210, so a is clipped at the lead edge and b is
+    // the ONLY fully visible column. b is therefore about to take the whole
+    // viewport, which niri routes through the maximize toggle rather than a
+    // width write "as it lets you back out of it more intuitively".
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    for (const char* id : {"a", "b"}) {
+        QVERIFY(
+            strip.insertWindow(QString::fromLatin1(id), ColumnWidth::makeFixed(700), ColumnDisplay::Normal, params));
+    }
+    QCOMPARE(strip.fullyVisibleColumnIndices(params), QVector<int>({1}));
+
+    QVERIFY(strip.expandActiveColumnToAvailableWidth(params));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeProportion(1.0));
+    QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("b"))), ScrollTestUtils::kMainExtent);
+    // The toggle stored the pre-expand intent, so there IS a way back out —
+    // the behaviour a bare Fixed(viewport) write destroyed.
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(700));
+
+    // A column already filling the viewport has nowhere to expand, and must
+    // NOT fall into the toggle's un-maximize arm: this verb only ever grows.
+    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeProportion(1.0)));
+    QVERIFY(!strip.expandActiveColumnToAvailableWidth(params));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeProportion(1.0));
+}
+
+void TestScrollStripView::expandRefusesForAStraddlingActiveColumn()
+{
+    // The leftover is measured against a viewport position the active column
+    // does not fully occupy, so there is no meaningful answer: refuse rather
+    // than commit a width computed from a partial view (niri's
+    // `active_col_x.is_none()` bail).
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    for (const char* id : {"a", "b"}) {
+        QVERIFY(
+            strip.insertWindow(QString::fromLatin1(id), ColumnWidth::makeFixed(700), ColumnDisplay::Normal, params));
+    }
+    // b sits at the trailing edge; a pan toward the strip's start clips it.
+    QVERIFY(strip.scrollViewBy(-30, params));
+    const ResolvedStrip before = strip.relayout(params);
+    QVERIFY2(Ax::mainPos(rectOf(before, QStringLiteral("b"))) + Ax::mainLen(rectOf(before, QStringLiteral("b")))
+                 > ScrollTestUtils::kMainExtent,
+             "fixture: the active column must straddle the trailing edge");
+    const int anchorBefore = strip.viewAnchor();
+
+    QVERIFY(!strip.expandActiveColumnToAvailableWidth(params));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(700));
+    QCOMPARE(strip.viewAnchor(), anchorBefore);
+}
+
+void TestScrollStripView::expandMaximizesUnderACenteringPolicy()
+{
+    // Always-centering pins the active column to the middle of the viewport,
+    // so its position after the resize is not the strip's to choose and
+    // "fill what is left" has no stable answer. niri takes the simple way out
+    // and maximizes; so do we, and the toggle keeps it reversible.
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::Always;
+    ScrollStrip strip;
+    for (const char* id : {"a", "b"}) {
+        QVERIFY(
+            strip.insertWindow(QString::fromLatin1(id), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
+    }
+
+    QVERIFY(strip.expandActiveColumnToAvailableWidth(params));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeProportion(1.0));
+    QVERIFY(strip.toggleMaximizeActiveColumn(params));
+    QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(300));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripView)

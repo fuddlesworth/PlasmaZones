@@ -250,18 +250,34 @@ void TestScrollStripOps::widthPresetCycling()
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
 
-    // From a non-preset width the cycle enters at the nearest preset. The
-    // fixture width is a LITERAL, not a resolveColumnWidthPx call — this
-    // file's own rule (see the reconcile tests) forbids deriving fixture
-    // values through the code under test. The exact pixel does not matter
-    // for the verdict; 408 (≈ 0.34 of the viewport) sits comfortably nearer
-    // presets[0] (one third, ≈ 400px) than presets[1] (one half, ≈ 600px)
-    // under any of the resolver's gap conventions, so the entry preset is
-    // unambiguous.
+    // From a non-preset width the cycle enters where niri's does: a FORWARD
+    // press takes the first preset WIDER than the current extent, never the
+    // merely nearest one. The fixture width is a LITERAL, not a
+    // resolveColumnWidthPx call — this file's own rule (see the reconcile
+    // tests) forbids deriving fixture values through the code under test.
+    // 408 (≈ 0.34 of the viewport) sits just ABOVE presets[0] (one third,
+    // ≈ 400px) and well below presets[1] (one half, ≈ 600px) under any of the
+    // resolver's gap conventions, so it is exactly the case the two rules
+    // disagree on: nearest would answer presets[0] and SHRINK the column on a
+    // "wider" press.
     QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(408)));
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.kind, ColumnWidth::Preset);
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(1));
+
+    // And the backward press is its mirror: the last preset strictly
+    // NARROWER than the current extent, so the same 408 answers presets[0].
+    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(408)));
+    QVERIFY(strip.cycleActiveColumnPresetWidth(-1, params));
+    QVERIFY(strip.activeColumn());
+    QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
+
+    // Both ends WRAP rather than dead-ending: nothing is wider than the
+    // widest preset, so a forward press from it lands on the narrowest.
+    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makePreset(presets.at(2))));
+    QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
+    QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(0));
 }
 
@@ -412,14 +428,18 @@ void TestScrollStripOps::windowHeights()
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 395);
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("b"))), 395);
 
-    // Preset height on the active tile (b): enters the preset list at
-    // index 0 (1/3 of the column's cross extent, gap-aware).
+    // Preset height on the active tile (b). The tile is AUTO, so it has no
+    // fraction of its own and the entry has to come from what it RENDERS at:
+    // a forward press takes the first preset taller than its current 395px,
+    // which is 2/3 — not vocabulary entry 0, the answer the old
+    // no-determinate-fraction arm gave regardless of what was on screen (and
+    // which SHRANK the tile on a "taller" press).
     QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
     r = strip.relayout(params);
     const int presetPx = Ax::crossLen(rectOf(r, QStringLiteral("b")));
-    // Literal, not the implementation's own formula: 1/3 of the gap-aware
-    // 810 span is 270, minus the 10px gap = 260.
-    QCOMPARE(presetPx, 260);
+    // Literal, not the implementation's own formula: 2/3 of the gap-aware
+    // 810 span is 540, minus the 10px gap = 530.
+    QCOMPARE(presetPx, 530);
     // a absorbs the remainder.
     QCOMPARE(Ax::crossLen(rectOf(r, QStringLiteral("a"))), 790 - presetPx);
 }
@@ -636,9 +656,13 @@ void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
     // failure OSD per press): shrink by 10% of the 800px cross extent.
     QVERIFY(strip.adjustActiveWindowHeight(-10.0, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 720);
-    // Preset cycle enters from the preset nearest the current 720px:
-    // 2/3 of the gap-aware 810 span is 540, minus the 10px gap = 530.
+    // Preset cycle from 720px: no preset is TALLER than that (the tallest,
+    // 2/3 of the gap-aware 810 span, is 530), so the forward press wraps to
+    // the narrowest entry — 1/3 of that span is 270, minus the 10px gap.
     QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 260);
+    // And back down from 260 wraps the other way, to the tallest entry.
+    QVERIFY(strip.cycleActiveWindowPresetHeight(-1, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("solo"))), 530);
 }
 

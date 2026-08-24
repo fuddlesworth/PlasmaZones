@@ -653,6 +653,60 @@ inline qreal nearestPresetValue(const QList<qreal>& presets, qreal fraction, qre
     return presets.isEmpty() ? fallback : presets.at(nearestPresetIndex(presets, fraction));
 }
 
+/// A proportion resolves against the work extent PLUS one gap so that
+/// proportions summing to 1 tile edge-to-edge with the gaps between them
+/// (0.5 + 0.5 across a 1000px area with a 10px gap → 495 + 10 + 495).
+///
+/// Lives here rather than in relayout's anonymous namespace because the
+/// preset CYCLES have to resolve a vocabulary entry to the very pixels
+/// relayout will lay it out at — a second copy of this rounding is exactly
+/// the drift that makes a cycle press land one entry off.
+inline int proportionalPx(qreal proportion, int workExtent, int gap)
+{
+    return qMax(1, qRound(proportion * (workExtent + gap)) - gap);
+}
+
+/// The vocabulary index a preset CYCLE press lands on, given what the target
+/// currently measures on screen.
+///
+/// niri's rule (`Column::toggle_width` / `toggle_window_height`), ported: a
+/// forward press takes the first entry strictly WIDER/TALLER than the current
+/// extent and wraps to the first entry when nothing is bigger; a backward
+/// press takes the last entry strictly smaller and wraps to the last entry.
+/// The one-pixel allowance is niri's too, for fractional-scale rounding.
+///
+/// Anchored on the resolved EXTENT rather than on a stored vocabulary index,
+/// which is this engine's one deliberate divergence: a stored index lets a
+/// short template vocabulary rewrite an anchor's original intent, so the
+/// index was removed. For an ascending list (every shipped default, and
+/// every list a user would plausibly type) the two rules agree entry for
+/// entry — a list typed out of size order cycles in SIZE order here and in
+/// TYPED order under niri.
+///
+/// @p resolve maps a vocabulary index to the pixel extent that entry would
+/// render at. Returns -1 for an empty vocabulary.
+template<typename Resolver>
+int cyclePresetIndexByExtent(int count, int currentPx, int delta, Resolver resolve)
+{
+    if (count <= 0) {
+        return -1;
+    }
+    if (delta >= 0) {
+        for (int i = 0; i < count; ++i) {
+            if (currentPx + 1 < resolve(i)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+    for (int i = count - 1; i >= 0; --i) {
+        if (resolve(i) + 1 < currentPx) {
+            return i;
+        }
+    }
+    return count - 1;
+}
+
 /// One window in a column.
 struct Tile
 {
