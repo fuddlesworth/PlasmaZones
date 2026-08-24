@@ -638,7 +638,9 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
-        // A column spans the FULL cross extent; only its main extent varies.
+        // The default: a column spans the FULL cross extent and only its main
+        // extent varies. The tabbed branch below is the one exception and
+        // rewrites this rect from the shown tab's height intent.
         rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, crossExtent(params));
 
         QVector<int> visible;
