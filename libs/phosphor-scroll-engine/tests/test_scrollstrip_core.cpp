@@ -149,6 +149,7 @@ private Q_SLOTS:
     void focusNeverModePinsEnteredEdge();
     void focusAlwaysModeCenters();
     void focusOnOverflowMode();
+    void focusOnOverflowMeasuresAgainstTheTargetNeighbour();
     void alwaysCenterSingleColumn();
     void minimizeKeepsSlotAndRestores();
     void fullyMinimizedColumnCollapses();
@@ -335,6 +336,57 @@ void TestScrollStripCore::focusOnOverflowMode()
     r = wide.relayout(params);
     const QRect b = rectOf(r, QStringLiteral("b"));
     QCOMPARE(Ax::mainPos(b), (Ax::mainLen(params.workArea) - 700) / 2);
+}
+
+void TestScrollStripCore::focusOnOverflowMeasuresAgainstTheTargetNeighbour()
+{
+    // niri parity for OnOverflow's source column: the overflow test measures
+    // the target against the column that ends up NEXT TO IT, not against the
+    // one focus came from. The two are the same for an adjacent step (which is
+    // all focusOnOverflowMode above covers, and why this divergence stayed
+    // invisible), so it takes a jump of more than one column to tell them
+    // apart. Both rows below are built so the prevIdx reading fits — leaving
+    // the target pinned at the entering edge — while the neighbour reading
+    // overflows and centers.
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
+    const int viewMain = Ax::mainLen(params.workArea);
+
+    auto build = [&params](ScrollStrip& strip, const QList<int>& widths) {
+        int n = 0;
+        for (const int w : widths) {
+            const QString id = QStringLiteral("c%1").arg(n++);
+            QVERIFY(strip.insertWindow(id, ColumnWidth::makeFixed(w), ColumnDisplay::Normal, params));
+        }
+    };
+
+    {
+        // Forward jump (source is the LEAD neighbour). Focus lands on c3,
+        // whose lead neighbour c2 is wide enough that the pair overflows.
+        // Read against the far-off c0 instead, the pair is 300 + 300 and fits.
+        ScrollStrip strip;
+        build(strip, {300, 300, 1000, 300, 300, 300});
+        QVERIFY(strip.focusColumn(0, params));
+        QVERIFY(strip.focusColumn(3, params));
+
+        const QRect r = rectOf(strip.relayout(params), QStringLiteral("c3"));
+        QCOMPARE(Ax::mainLen(r), 300);
+        QCOMPARE(Ax::mainPos(r), (viewMain - 300) / 2);
+    }
+    {
+        // Backward jump (source is the TRAIL neighbour, niri's min(idx + 1)
+        // arm). Same shape mirrored: c2's trail neighbour c3 is the wide one.
+        ScrollStrip strip;
+        build(strip, {300, 300, 300, 1000, 300, 300});
+        // The last insert already left focus on c5, which is the jump's
+        // origin — asking for it again is a no-op, not a failure.
+        QCOMPARE(strip.activeColumnIndex(), 5);
+        QVERIFY(strip.focusColumn(2, params));
+
+        const QRect r = rectOf(strip.relayout(params), QStringLiteral("c2"));
+        QCOMPARE(Ax::mainLen(r), 300);
+        QCOMPARE(Ax::mainPos(r), (viewMain - 300) / 2);
+    }
 }
 
 void TestScrollStripCore::alwaysCenterSingleColumn()
