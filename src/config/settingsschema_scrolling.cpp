@@ -277,6 +277,22 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::wheelFocusInvertedKey(), CD::scrollingWheelFocusInverted(), QMetaType::Bool},
     };
 
+    // ─── Scrolling wheel chords (Scrolling.Wheel.Focus / .View) ──────────
+    // The two "scroll keys": hold this chord and turn the wheel to move
+    // column focus along the strip, or to pan the view without moving focus.
+    // Ordinary trigger lists: same generic Triggers leaf and same
+    // canonicalTriggerList validator as every other trigger-bearing node, so
+    // the settings editor, the profile diff and the config file all speak one
+    // vocabulary. Nothing marks these as wheel-driven, because the wheel is
+    // implicit in which GROUP the list sits in, the same way the drag lists
+    // leave the drag implicit.
+    schema.groups[CD::scrollingWheelFocusGroup()] = {
+        {CD::triggersKey(), CD::scrollingWheelFocusTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+    };
+    schema.groups[CD::scrollingWheelViewGroup()] = {
+        {CD::triggersKey(), CD::scrollingWheelViewTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+    };
+
     // ─── Scrolling tab indicator (Scrolling.TabIndicator) ────────────────
     // The indicator drawn alongside a tabbed column. The two enums get
     // validIntOr closed sets built from the SAME ConfigDefaults enumerators

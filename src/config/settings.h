@@ -425,6 +425,10 @@ public:
     // Input knobs on the plain Scrolling group beside the sizing defaults above,
     // not on Scrolling.Behavior: they say how a wheel event over the strip moves
     // the focus, not how the strip behaves once a window is placed.
+    Q_PROPERTY(QVariantList scrollingWheelFocusTriggers READ scrollingWheelFocusTriggers WRITE
+                   setScrollingWheelFocusTriggers NOTIFY scrollingWheelFocusTriggersChanged)
+    Q_PROPERTY(QVariantList scrollingWheelViewTriggers READ scrollingWheelViewTriggers WRITE
+                   setScrollingWheelViewTriggers NOTIFY scrollingWheelViewTriggersChanged)
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -1434,6 +1438,10 @@ public:
     void setScrollingDropIndicatorBorderRadius(int px) override;
     QString defaultScrollingTemplate() const;
     void setDefaultScrollingTemplate(const QString& templateId);
+    QVariantList scrollingWheelFocusTriggers() const override;
+    void setScrollingWheelFocusTriggers(const QVariantList& triggers) override;
+    QVariantList scrollingWheelViewTriggers() const override;
+    void setScrollingWheelViewTriggers(const QVariantList& triggers) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;

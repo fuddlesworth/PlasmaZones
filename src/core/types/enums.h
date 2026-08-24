@@ -26,8 +26,16 @@ enum class DragModifier {
     AltShift = 7, ///< Hold Alt+Shift while dragging
     AlwaysActive = 8, ///< Always show zones on any drag (no modifier needed)
     AltMeta = 9, ///< Hold Alt+Meta while dragging
-    CtrlAltMeta = 10 ///< Hold Ctrl+Alt+Meta while dragging
+    CtrlAltMeta = 10, ///< Hold Ctrl+Alt+Meta while dragging
+    MetaShift = 11, ///< Hold Meta+Shift while dragging
+    CtrlMeta = 12 ///< Hold Ctrl+Meta while dragging
 };
+
+/// Highest valid DragModifier enumerator. Every range check over the enum
+/// (schema validators, D-Bus setters, the trigger-list canonicaliser) reads
+/// this rather than naming the last combo, so adding a combo cannot leave a
+/// validator silently rejecting it.
+inline constexpr int MaxDragModifier = static_cast<int>(DragModifier::CtrlMeta);
 
 /**
  * @brief Position options for the zone selector bar

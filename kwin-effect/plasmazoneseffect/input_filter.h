@@ -107,8 +107,10 @@ private:
     /// is the intended reading of the action: "this app's scroll moves this
     /// much per notch" applies wherever that app's scroll is consumed,
     /// including its own title bar. Filters ABOVE this one (global shortcuts,
-    /// interactive move/resize, the Meta+wheel strip binding) are ordered
-    /// earlier and always see the raw delta.
+    /// interactive move/resize) are ordered earlier and always see the raw
+    /// delta. The strip's own wheel chords are matched in pointerAxis BEFORE
+    /// this runs and return early, so a chord-driven strip move is never
+    /// scaled by the underlying app's rule either.
     void applyScrollFactor(KWin::PointerAxisEvent* event);
 
     /// Forget the window the v120 residues belong to and zero them. Called on

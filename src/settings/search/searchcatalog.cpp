@@ -898,6 +898,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusEnabled"),
                PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("scroll")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusTriggers"),
+               PhosphorI18n::tr("Scroll key for column focus"),
+               {PhosphorI18n::tr("scroll key"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("trigger"),
+                PhosphorI18n::tr("modifier"), PhosphorI18n::tr("focus")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelViewTriggers"),
+               PhosphorI18n::tr("Scroll key for the view"),
+               {PhosphorI18n::tr("scroll key"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("trigger"),
+                PhosphorI18n::tr("modifier"), PhosphorI18n::tr("view"), PhosphorI18n::tr("pan")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusInverted"),
                PhosphorI18n::tr("Invert wheel direction"),
                {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("direction")});

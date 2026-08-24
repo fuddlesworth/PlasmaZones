@@ -141,6 +141,8 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
             {QStringLiteral("alwaysActive"), PhosphorI18n::tr("Always active")},
             {QStringLiteral("altMeta"), PhosphorI18n::tr("Alt + Meta")},
             {QStringLiteral("ctrlAltMeta"), PhosphorI18n::tr("Ctrl + Alt + Meta")},
+            {QStringLiteral("metaShift"), PhosphorI18n::tr("Meta + Shift")},
+            {QStringLiteral("ctrlMeta"), PhosphorI18n::tr("Ctrl + Meta")},
         };
         // Only the zone-span key uses this enum. Editor.FillOnDrop/Modifier has
         // the same accessor name but stores a Qt::KeyboardModifier bitmask, so

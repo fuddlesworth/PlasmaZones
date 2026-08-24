@@ -20,6 +20,7 @@
 #include "compositor/scrolltabindicatorpainter.h"
 
 #include <PhosphorCompositor/TilingState.h>
+#include <PhosphorCompositor/TriggerParser.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
 
@@ -364,12 +365,31 @@ public:
     void setScrollingFocusFollowsMouse(bool enabled);
     void handleCursorMoved(const QPointF& pos, const QString& screenId);
 
-    // Wheel configuration for BOTH wheel quads (Meta+wheel column focus and
-    // Meta+Shift+wheel view scroll). Disabling genuinely releases the axis
-    // chords back to the compositor (updateScrollWheelShortcuts' want
-    // predicate); inverting flips the wheel direction for both.
+    // Wheel configuration for BOTH wheel chords (column focus and view pan).
+    // Disabling makes the filter pass every axis event straight through, so
+    // the chords are genuinely left to the compositor and its other
+    // consumers; inverting flips the wheel direction for both.
     void setWheelFocusEnabled(bool enabled);
     void setWheelFocusInverted(bool inverted);
+    // The user-configured chords themselves ("scroll keys"). Each list is a
+    // parsed trigger list whose entries carry a wheel component alongside
+    // their modifier and mouse button.
+    void setWheelFocusTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers);
+    void setWheelViewTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers);
+
+    /// Route one axis event to a wheel chord. Returns true when a chord
+    /// matched and the event was acted on, and the caller must then CONSUME
+    /// it: forwarding a matched chord would scroll the app underneath as
+    /// well as the strip.
+    ///
+    /// @p delta is the event's own. The direction the strip moves is derived
+    /// here (sign of the delta, inversion setting) and the strip AXIS is
+    /// resolved downstream by the engine, so one rule serves a horizontal and
+    /// a vertical strip alike. The event's ORIENTATION is deliberately not a
+    /// parameter: a positive delta means "down" on a vertical wheel and
+    /// "right" on a tilted one, and both mean the same thing here — toward
+    /// the end of the strip.
+    bool handleWheelChord(qreal delta, Qt::KeyboardModifiers mods, Qt::MouseButtons buttons);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isManagedScreen(const QString& screenId) const;
@@ -551,10 +571,10 @@ public:
         // and a stale vertical-axis entry answers Vertical for a screen the
         // new daemon may lay out horizontally.
         clearScrollEffectBehaviourForTeardown();
-        // Release both wheel quads with the dead session (no repaint interplay,
-        // unlike the border sweep this path deliberately skips): a consumed
-        // axis chord with no daemon to serve it would just eat input.
-        updateScrollWheelShortcuts();
+        // The wheel chords need no teardown of their own. They are matched
+        // per event against the (now empty) scrolling-screen set rather than
+        // registered with the compositor, so a dead session simply stops
+        // matching and every axis event passes straight through.
     }
 
     /// Drop the dead session's resolved scroll-behaviour map (all three
@@ -578,10 +598,10 @@ public:
     /// guarantee, so between them m_scrollingScreens can transiently name a
     /// screen the union has already dropped; answering true there stamped
     /// Mode "scrolling" for an unmanaged screen and forwarded focusColumn to
-    /// an engine that no longer owns it. Note it does NOT un-consume the
-    /// wheel quads: updateScrollWheelShortcuts keys registration on the RAW
-    /// m_scrollingScreens, so KWin still swallows the chords in that window;
-    /// the wheel triggers simply no-op instead of acting.
+    /// an engine that no longer owns it. The wheel chords read this same
+    /// accessor through wheelTargetScreen, so in that window a matched chord
+    /// resolves to no screen and the axis event is passed through untouched
+    /// rather than swallowed.
     bool isScrollingScreen(const QString& screenId) const
     {
         return m_scrollingScreens.contains(screenId) && m_managedScreens.contains(screenId);
@@ -1113,23 +1133,16 @@ private:
     /// consulted per pointer move and needs nothing.
     void applyScrollEffectBehaviour(const QVariantMap& behaviour);
     void fetchActiveLayouts();
-    /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel), and
-    /// Meta+Shift+wheel for scrolling the VIEW one step without moving focus
-    /// (Karousel's scroll verbs; the keyboard carries the page-sized pan).
-    /// Registered while ANY screen runs the scrolling engine, unregistered
-    /// (by destroying the QActions — KWin drops an axis shortcut with its
-    /// action) when none does, so the chords are only consumed in sessions
-    /// that can actually use them. The triggers themselves re-gate on the
-    /// CURSOR's screen being a scrolling screen. One enable setting and one
-    /// inversion setting govern both quads: a user who inverted the wheel
-    /// for focus means the same direction for the view.
-    void updateScrollWheelShortcuts();
-    void wheelFocusColumn(int delta);
-    void wheelScrollView(int delta);
-    /// The cursor-screen resolution and ownership gate both wheel triggers
-    /// share. Empty when the chord should be consumed but stay inert.
+    /// The cursor-screen resolution and ownership gate both wheel chords
+    /// share, and the one place the inversion setting is applied (it flips
+    /// @p delta in place). Empty when the cursor is not over a screen the
+    /// scrolling engine owns, which the caller reads as "do not act, and do
+    /// not consume".
+    ///
+    /// Why the CURSOR and not the focused window: a wheel chord is a pointer
+    /// gesture. Scrolling over a strip on the second monitor should move that
+    /// strip, not the one holding focus.
     QString wheelTargetScreen(int& delta) const;
-    QList<QAction*> m_scrollWheelActions;
     /// Pause the effect's own focus-follows-mouse after an ENGINE-driven
     /// strip movement on a scrolling screen (tile batch or activation).
     /// Scrolling slides other columns under a stationary pointer, and the
@@ -1496,9 +1509,18 @@ private:
     {
         return !m_focusFollowsMouse && !m_scrollingFocusFollowsMouse && m_scrollFocusFollowsMouseScreens.isEmpty();
     }
-    // ── Wheel quads (Meta+wheel column focus, Meta+Shift+wheel view scroll) ──
+    // ── Wheel chords (column focus, view pan) ──
     bool m_wheelFocusEnabled = true;
     bool m_wheelFocusInverted = false;
+    // Seeded with the shipped defaults (Meta focuses, Meta+Shift pans) so the
+    // chords work in the window before the daemon's first settings reply
+    // lands, matching how every other cached setting in the effect behaves.
+    // The modifiers are DragModifier WIRE VALUES (4 = Meta, 11 = Meta+Shift),
+    // not enumerators: DragModifier lives in a daemon header the effect
+    // cannot include, which is the same reason TriggerParser::checkModifier
+    // switches on bare ints. Keep both in step with that table.
+    QVector<PhosphorCompositor::ParsedTrigger> m_wheelFocusTriggers{{4, 0}};
+    QVector<PhosphorCompositor::ParsedTrigger> m_wheelViewTriggers{{11, 0}};
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

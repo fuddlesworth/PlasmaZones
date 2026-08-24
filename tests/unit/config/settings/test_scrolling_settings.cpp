@@ -671,6 +671,30 @@ private Q_SLOTS:
         const auto* wheelInverted = findKey(schema, group, ConfigDefaults::wheelFocusInvertedKey());
         QVERIFY(wheelInverted);
         QCOMPARE(wheelInverted->defaultValue.toBool(), ConfigDefaults::scrollingWheelFocusInverted());
+        // The two scroll keys live in their own groups, so assert them
+        // against those rather than the Scrolling group the switches use.
+        const auto* wheelFocusTriggers =
+            findKey(schema, ConfigDefaults::scrollingWheelFocusGroup(), ConfigDefaults::triggersKey());
+        QVERIFY(wheelFocusTriggers && wheelFocusTriggers->validator);
+        QCOMPARE(wheelFocusTriggers->defaultValue, ConfigDefaults::scrollingWheelFocusTriggers());
+        const auto* wheelViewTriggers =
+            findKey(schema, ConfigDefaults::scrollingWheelViewGroup(), ConfigDefaults::triggersKey());
+        QVERIFY(wheelViewTriggers && wheelViewTriggers->validator);
+        QCOMPARE(wheelViewTriggers->defaultValue, ConfigDefaults::scrollingWheelViewTriggers());
+        // Both defaults must survive their own validator untouched. A default
+        // the canonicaliser rewrites would never compare equal to what is
+        // stored, and sparse persistence decides what to WRITE by exactly
+        // that comparison — the failure mode is a key that reappears on every
+        // save.
+        QCOMPARE(wheelFocusTriggers->validator(wheelFocusTriggers->defaultValue), wheelFocusTriggers->defaultValue);
+        QCOMPARE(wheelViewTriggers->validator(wheelViewTriggers->defaultValue), wheelViewTriggers->defaultValue);
+        // Meta+Shift is the whole reason DragModifier grew a MetaShift
+        // enumerator: without one the view default canonicalises away to
+        // plain Shift, which is a DIFFERENT chord the user never asked for.
+        const QVariantMap viewTrigger = wheelViewTriggers->defaultValue.toList().first().toMap();
+        QCOMPARE(viewTrigger.value(ConfigDefaults::triggerModifierField()).toInt(),
+                 static_cast<int>(DragModifier::MetaShift));
+
         const auto* alwaysCenter = findKey(schema, group, ConfigDefaults::alwaysCenterSingleColumnKey());
         QVERIFY(alwaysCenter);
         QCOMPARE(alwaysCenter->defaultValue.toBool(), ConfigDefaults::scrollingAlwaysCenterSingleColumn());

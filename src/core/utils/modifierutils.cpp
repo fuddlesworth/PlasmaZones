@@ -39,6 +39,10 @@ int dragModifierToBitmask(int enumValue)
         return AltModifier | MetaModifier; // Alt+Meta
     case 10:
         return ControlModifier | AltModifier | MetaModifier; // Ctrl+Alt+Meta
+    case 11:
+        return MetaModifier | ShiftModifier; // Meta+Shift
+    case 12:
+        return ControlModifier | MetaModifier; // Ctrl+Meta
     default:
         return 0;
     }
@@ -65,6 +69,10 @@ int bitmaskToDragModifier(int bitmask)
         return 4; // Meta
 
     // Two- and three-modifier combinations
+    if (hasMeta && hasShift && !hasCtrl && !hasAlt)
+        return 11; // Meta+Shift
+    if (hasCtrl && hasMeta && !hasAlt && !hasShift)
+        return 12; // Ctrl+Meta
     if (hasAlt && hasMeta && !hasCtrl && !hasShift)
         return 9; // Alt+Meta
     if (hasCtrl && hasAlt && hasMeta && !hasShift)
@@ -80,6 +88,10 @@ int bitmaskToDragModifier(int bitmask)
     // This allows UI flexibility while maintaining enum compatibility
     if (hasCtrl && hasAlt && hasMeta)
         return 10; // Ctrl+Alt+Meta (e.g. all four modifiers)
+    if (hasMeta && hasShift)
+        return 11; // Meta+Shift (closest)
+    if (hasCtrl && hasMeta)
+        return 12; // Ctrl+Meta (closest)
     if (hasCtrl && hasAlt)
         return 5; // Ctrl+Alt (closest)
     if (hasCtrl && hasShift)

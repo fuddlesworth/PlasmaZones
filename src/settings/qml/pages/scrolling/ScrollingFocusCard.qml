@@ -12,17 +12,28 @@ import org.kde.kirigami as Kirigami
  * SnappingFocusCard. Alongside the two focus rows those siblings carry, it
  * holds the viewport rows the strip needs: how the view follows the focused
  * column, how a column at the screen edge is shown (crop versus resize), and
- * the Meta+wheel column-focus gesture. All belong with focus rather than on
+ * the two wheel chords ("scroll keys") that drive the strip. All belong with focus rather than on
  * a page of their own, so the card hosts them and the former Scrolling →
  * View leaf is gone. Which way the strip runs is the Strip direction card
  * above this one — it moved out to take a per-monitor scope chip.
  *
- * All rows bind the appSettings context property, so the card carries no
+ * Most rows bind the appSettings context property, so the card carries no
  * per-page state. App-wide only, matching the tiling/snapping window pages:
  * per-context centering is a rules job (the SetCenterFocusedColumn context
- * action), not a per-monitor chip.
+ * action), not a per-monitor chip. The two scroll-key rows are the
+ * exception: trigger lists need the bitmask/enum conversion the
+ * scrollingBehaviorPage sub-controller performs, exactly as the drag
+ * re-insert card's trigger row does.
  */
 SettingsCard {
+    id: root
+
+    readonly property var behaviorBridge: settingsController.scrollingBehaviorPage
+    // Explicit width for the SettingsRow control slot (a plain Row
+    // positioner — Layout.* is ignored there), hoisted the same way and for
+    // the same reason as ScrollingDragInsertCard's.
+    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
+
     headerText: i18n("Focus and view")
     searchAnchor: "scrollingFocus"
     collapsible: true
@@ -114,13 +125,56 @@ SettingsCard {
         SettingsRow {
             title: i18n("Scroll the strip with the mouse wheel")
             searchAnchor: "wheelFocusEnabled"
-            description: i18n("Hold Meta and scroll to move column focus along the strip, or Meta+Shift and scroll to move the view without changing focus. When this is off, the compositor keeps both wheel shortcuts.")
+            description: i18n("Turn the wheel with a scroll key held to move along the strip. When this is off, both scroll keys are left to the compositor.")
 
             SettingsSwitch {
+                id: wheelEnabledSwitch
+
                 checked: appSettings.scrollingWheelFocusEnabled
                 accessibleName: i18n("Scroll the strip with the mouse wheel")
                 onToggled: function (newValue) {
                     appSettings.scrollingWheelFocusEnabled = newValue;
+                }
+            }
+        }
+
+        // The two scroll keys hug the switch that gates them, and stay
+        // visible while disabled so a deep link can still reveal their
+        // anchors (the same reasoning the invert row below spells out).
+        SettingsRow {
+            title: i18n("Scroll key for column focus")
+            searchAnchor: "wheelFocusTriggers"
+            description: i18n("Hold this and turn the wheel to move focus from column to column.")
+            enabled: wheelEnabledSwitch.checked
+            visible: true
+
+            ModifierAndMouseCheckBoxes {
+                width: root.triggerPreferredWidth
+                acceptMode: acceptModeAll
+                triggers: root.behaviorBridge.scrollingWheelFocusTriggers
+                defaultTriggers: root.behaviorBridge.defaultScrollingWheelFocusTriggers
+                tooltipEnabled: false
+                onTriggersModified: triggers => {
+                    root.behaviorBridge.scrollingWheelFocusTriggers = triggers;
+                }
+            }
+        }
+
+        SettingsRow {
+            title: i18n("Scroll key for the view")
+            searchAnchor: "wheelViewTriggers"
+            description: i18n("Hold this and turn the wheel to move the view along the strip without changing which column has focus.")
+            enabled: wheelEnabledSwitch.checked
+            visible: true
+
+            ModifierAndMouseCheckBoxes {
+                width: root.triggerPreferredWidth
+                acceptMode: acceptModeAll
+                triggers: root.behaviorBridge.scrollingWheelViewTriggers
+                defaultTriggers: root.behaviorBridge.defaultScrollingWheelViewTriggers
+                tooltipEnabled: false
+                onTriggersModified: triggers => {
+                    root.behaviorBridge.scrollingWheelViewTriggers = triggers;
                 }
             }
         }
@@ -136,8 +190,8 @@ SettingsCard {
         SettingsRow {
             title: i18n("Invert wheel direction")
             searchAnchor: "wheelFocusInverted"
-            description: i18n("Scrolling down moves toward the start of the strip instead of the end, for both wheel shortcuts.")
-            enabled: appSettings.scrollingWheelFocusEnabled
+            description: i18n("Scrolling down moves toward the start of the strip instead of the end, for both scroll keys.")
+            enabled: wheelEnabledSwitch.checked
             visible: true
 
             SettingsSwitch {

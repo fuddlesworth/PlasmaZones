@@ -159,6 +159,13 @@ public:
     virtual bool scrollingDragInsertToggle() const = 0;
     virtual void setScrollingDragInsertToggle(bool enable) = 0;
 
+    /// The two scrolling wheel chords. Each entry carries a wheel component
+    /// alongside its modifier and mouse button — see ConfigKeys.
+    virtual QVariantList scrollingWheelFocusTriggers() const = 0;
+    virtual void setScrollingWheelFocusTriggers(const QVariantList& triggers) = 0;
+    virtual QVariantList scrollingWheelViewTriggers() const = 0;
+    virtual void setScrollingWheelViewTriggers(const QVariantList& triggers) = 0;
+
     // Per-algorithm autotile settings map. Settings inherits from
     // PhosphorEngine::IAutotileSettings (which also declares these),
     // so the override in Settings covers both bases — the redundant
@@ -1008,6 +1015,8 @@ Q_SIGNALS:
     void scrollingPresetWindowHeightsChanged();
 
     void defaultScrollingTemplateChanged();
+    void scrollingWheelFocusTriggersChanged();
+    void scrollingWheelViewTriggersChanged();
     void scrollingWheelFocusEnabledChanged();
     void scrollingWheelFocusInvertedChanged();
 

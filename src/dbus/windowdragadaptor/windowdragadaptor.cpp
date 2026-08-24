@@ -163,6 +163,10 @@ bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers
         return altHeld && metaHeld;
     case static_cast<int>(DragModifier::CtrlAltMeta):
         return ctrlHeld && altHeld && metaHeld;
+    case static_cast<int>(DragModifier::MetaShift):
+        return metaHeld && shiftHeld;
+    case static_cast<int>(DragModifier::CtrlMeta):
+        return ctrlHeld && metaHeld;
     default:
         return false;
     }

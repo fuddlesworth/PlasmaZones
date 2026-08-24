@@ -154,6 +154,26 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     if (!event) {
         return false;
     }
+    // Wheel chords FIRST, before the overhang test. The chord is a global
+    // gesture over the strip, and the overhang is part of that strip: an
+    // event landing on a straddler's clipped-away region is exactly the case
+    // where the user is scrolling "the strip" rather than any one window, so
+    // deferring to the overhang branch would make the chord dead in a band at
+    // the screen edge.
+    //
+    // A matched chord is CONSUMED. This filter sits at Popup weight, below
+    // KWin's global-shortcut filter, so a chord the user has also bound to a
+    // compositor axis shortcut loses to that binding rather than to us; the
+    // chord we do claim never reaches the app underneath, which would
+    // otherwise scroll its own content at the same time as the strip.
+    if (TilingHandler* tiling = m_effect->tilingHandler();
+        tiling && tiling->handleWheelChord(event->delta, event->modifiers, event->buttons)) {
+        // A claimed chord ends whatever ScrollFactor stream was running: the
+        // client never sees this tick, so its fractional remainder must not
+        // survive to be applied to the next tick it does see.
+        resetScrollFactorStream();
+        return true;
+    }
     // Scrolling over the invisible overhang must not reach the straddler;
     // consuming (rather than retargeting) matches how the region reads
     // visually — inert until clicked.
@@ -165,9 +185,9 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
         resetScrollFactorStream();
         return true;
     }
-    // ScrollFactor rule: rescale the event in place and pass it on. Ordering
-    // note: this runs at Popup weight, after the global-shortcut filter, so
-    // the Meta+wheel strip binding is consumed before it can be scaled.
+    // ScrollFactor rule: rescale the event in place and pass it on. Only
+    // events no strip chord claimed reach here (the branch above returns),
+    // so a chord-driven strip move is never scaled by an app's rule.
     applyScrollFactor(event);
     return false;
 }

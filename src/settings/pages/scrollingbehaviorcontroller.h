@@ -36,6 +36,16 @@ class ScrollingBehaviorController : public PhosphorControl::PageController
     Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
                    setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
     Q_PROPERTY(QVariantList defaultScrollingDragInsertTriggers READ defaultScrollingDragInsertTriggers CONSTANT)
+    // The two wheel chords. No AlwaysActive sentinel lives in either list —
+    // "always" is meaningless for a chord whose whole job is to distinguish
+    // one wheel gesture from a plain one — so these need none of the strip /
+    // merge dance above and are a straight bitmask conversion each way.
+    Q_PROPERTY(QVariantList scrollingWheelFocusTriggers READ scrollingWheelFocusTriggers WRITE
+                   setScrollingWheelFocusTriggers NOTIFY scrollingWheelFocusTriggersChanged)
+    Q_PROPERTY(QVariantList defaultScrollingWheelFocusTriggers READ defaultScrollingWheelFocusTriggers CONSTANT)
+    Q_PROPERTY(QVariantList scrollingWheelViewTriggers READ scrollingWheelViewTriggers WRITE
+                   setScrollingWheelViewTriggers NOTIFY scrollingWheelViewTriggersChanged)
+    Q_PROPERTY(QVariantList defaultScrollingWheelViewTriggers READ defaultScrollingWheelViewTriggers CONSTANT)
 
 public:
     explicit ScrollingBehaviorController(ISettings& settings, QObject* parent = nullptr);
@@ -55,12 +65,21 @@ public:
     QVariantList scrollingDragInsertTriggers() const;
     QVariantList defaultScrollingDragInsertTriggers() const;
 
+    QVariantList scrollingWheelFocusTriggers() const;
+    QVariantList defaultScrollingWheelFocusTriggers() const;
+    QVariantList scrollingWheelViewTriggers() const;
+    QVariantList defaultScrollingWheelViewTriggers() const;
+
     void setAlwaysReinsertIntoStrip(bool enabled);
     void setScrollingDragInsertTriggers(const QVariantList& triggers);
+    void setScrollingWheelFocusTriggers(const QVariantList& triggers);
+    void setScrollingWheelViewTriggers(const QVariantList& triggers);
 
 Q_SIGNALS:
     void alwaysReinsertIntoStripChanged();
     void scrollingDragInsertTriggersChanged();
+    void scrollingWheelFocusTriggersChanged();
+    void scrollingWheelViewTriggersChanged();
 
 private:
     ISettings* m_settings = nullptr;

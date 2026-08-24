@@ -90,7 +90,7 @@ void SettingsAdaptor::initializeRegistrySnapping()
         if (!modOk) {
             return false; // non-numeric payload: refuse, do not coerce to the zero member
         }
-        if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
+        if (mod >= 0 && mod <= MaxDragModifier) {
             m_settings->setZoneSpanModifier(static_cast<DragModifier>(mod));
             return true;
         }

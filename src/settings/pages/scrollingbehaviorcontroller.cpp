@@ -38,6 +38,51 @@ ScrollingBehaviorController::ScrollingBehaviorController(ISettings& settings, QO
             Q_EMIT alwaysReinsertIntoStripChanged();
         }
     });
+
+    // Straight forwards, no cached compare: neither wheel list carries a
+    // sentinel, so the ISettings NOTIFY already fires exactly when the
+    // QML-visible list changes (Settings::writeTriggerList compares the
+    // canonicalised before/after and stays silent otherwise).
+    connect(m_settings, &ISettings::scrollingWheelFocusTriggersChanged, this,
+            &ScrollingBehaviorController::scrollingWheelFocusTriggersChanged);
+    connect(m_settings, &ISettings::scrollingWheelViewTriggersChanged, this,
+            &ScrollingBehaviorController::scrollingWheelViewTriggersChanged);
+}
+
+QVariantList ScrollingBehaviorController::scrollingWheelFocusTriggers() const
+{
+    return TriggerUtils::convertTriggersForQml(m_settings->scrollingWheelFocusTriggers());
+}
+
+QVariantList ScrollingBehaviorController::defaultScrollingWheelFocusTriggers() const
+{
+    return TriggerUtils::convertTriggersForQml(ConfigDefaults::scrollingWheelFocusTriggers());
+}
+
+QVariantList ScrollingBehaviorController::scrollingWheelViewTriggers() const
+{
+    return TriggerUtils::convertTriggersForQml(m_settings->scrollingWheelViewTriggers());
+}
+
+QVariantList ScrollingBehaviorController::defaultScrollingWheelViewTriggers() const
+{
+    return TriggerUtils::convertTriggersForQml(ConfigDefaults::scrollingWheelViewTriggers());
+}
+
+void ScrollingBehaviorController::setScrollingWheelFocusTriggers(const QVariantList& triggers)
+{
+    const QVariantList next = TriggerUtils::convertTriggersForStorage(triggers);
+    if (m_settings->scrollingWheelFocusTriggers() != next) {
+        m_settings->setScrollingWheelFocusTriggers(next);
+    }
+}
+
+void ScrollingBehaviorController::setScrollingWheelViewTriggers(const QVariantList& triggers)
+{
+    const QVariantList next = TriggerUtils::convertTriggersForStorage(triggers);
+    if (m_settings->scrollingWheelViewTriggers() != next) {
+        m_settings->setScrollingWheelViewTriggers(next);
+    }
 }
 
 bool ScrollingBehaviorController::alwaysReinsertIntoStrip() const

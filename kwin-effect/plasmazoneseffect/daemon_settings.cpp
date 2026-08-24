@@ -925,8 +925,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     // Type-guard matters doubly here: scrollingWheelFocusEnabled defaults to
-    // TRUE, so a non-bool reply would invert it and tear down the registered
-    // Meta+wheel QActions for the duration of the skew.
+    // TRUE, so a non-bool reply would invert it and leave every wheel chord
+    // inert for the duration of the skew.
     loadSettingAsync(QStringLiteral("scrollingWheelFocusEnabled"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
@@ -934,6 +934,26 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_tilingHandler->setWheelFocusEnabled(v.toBool());
     });
 
+    // The two wheel chords, parsed exactly like the drag trigger lists —
+    // nothing in the storage marks them as wheel-driven. What differs is the
+    // MATCHER the handler reads them with (anyTriggerHeldExact, not
+    // anyTriggerHeld), so that Meta and Meta+Shift stay distinct chords.
+    // An empty or all-zero reply fails closed: no chord matches, and every
+    // axis event passes through to the app underneath.
+    loadSettingAsync(QStringLiteral("scrollingWheelFocusTriggers"), [this](const QVariant& v) {
+        if (!m_tilingHandler) {
+            return;
+        }
+        m_tilingHandler->setWheelFocusTriggers(
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField));
+    });
+    loadSettingAsync(QStringLiteral("scrollingWheelViewTriggers"), [this](const QVariant& v) {
+        if (!m_tilingHandler) {
+            return;
+        }
+        m_tilingHandler->setWheelViewTriggers(
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField));
+    });
     loadSettingAsync(QStringLiteral("scrollingWheelFocusInverted"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;

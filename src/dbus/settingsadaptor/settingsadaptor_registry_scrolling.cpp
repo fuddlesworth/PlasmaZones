@@ -612,6 +612,31 @@ void SettingsAdaptor::initializeRegistryScrolling()
         // the settings app's ONLY channel to the daemon, so an unregistered
         // key looks wired and does nothing.
 
+        m_getters[QStringLiteral("scrollingWheelFocusTriggers")] = [this]() {
+            return QVariant::fromValue(m_settings->scrollingWheelFocusTriggers());
+        };
+        // Same refuse-don't-coerce posture as scrollingDragInsertTriggers
+        // above, for the same reason: toList() on a non-list yields an empty
+        // list, which here would clear the scroll key while reporting success.
+        m_setters[QStringLiteral("scrollingWheelFocusTriggers")] = [this](const QVariant& v) {
+            if (v.typeId() != QMetaType::QVariantList) {
+                return false;
+            }
+            m_settings->setScrollingWheelFocusTriggers(v.toList());
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingWheelFocusTriggers")] = QStringLiteral("maplist");
+        m_getters[QStringLiteral("scrollingWheelViewTriggers")] = [this]() {
+            return QVariant::fromValue(m_settings->scrollingWheelViewTriggers());
+        };
+        m_setters[QStringLiteral("scrollingWheelViewTriggers")] = [this](const QVariant& v) {
+            if (v.typeId() != QMetaType::QVariantList) {
+                return false;
+            }
+            m_settings->setScrollingWheelViewTriggers(v.toList());
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingWheelViewTriggers")] = QStringLiteral("maplist");
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
                                setScrollingWheelFocusInverted)

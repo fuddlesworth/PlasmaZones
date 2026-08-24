@@ -142,7 +142,7 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
 }
 void Settings::setZoneSpanModifierInt(int modifier)
 {
-    if (modifier >= 0 && modifier <= static_cast<int>(DragModifier::CtrlAltMeta)) {
+    if (modifier >= 0 && modifier <= MaxDragModifier) {
         setZoneSpanModifier(static_cast<DragModifier>(modifier));
     }
 }

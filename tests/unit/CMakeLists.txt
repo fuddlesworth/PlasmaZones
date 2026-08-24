@@ -1879,6 +1879,10 @@ add_executable(test_floating_cache compositor-common/test_floating_cache.cpp)
 target_link_libraries(test_floating_cache PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_floating_cache COMMAND test_floating_cache)
 
+add_executable(test_exact_trigger_match compositor-common/test_exact_trigger_match.cpp)
+target_link_libraries(test_exact_trigger_match PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_exact_trigger_match COMMAND test_exact_trigger_match)
+
 add_executable(test_tiling_state compositor-common/test_tiling_state.cpp)
 target_link_libraries(test_tiling_state PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
                                                   PhosphorIdentity::PhosphorIdentity)

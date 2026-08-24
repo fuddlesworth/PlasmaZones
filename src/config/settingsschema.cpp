@@ -165,8 +165,7 @@ QVariant canonicalTriggerList(const QVariant& v)
         // whose int cast is -1, and `x & ~(-1)` is always 0 — a check that
         // rejects nothing. AllButtons is the real any-valid-button set, and
         // a negative int's sign bit lies outside it, so negatives fail too.
-        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled)
-            || modifier > static_cast<int>(DragModifier::CtrlAltMeta)
+        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled) || modifier > MaxDragModifier
             || (mouseButton & ~static_cast<int>(Qt::AllButtons)) != 0) {
             continue;
         }
@@ -858,7 +857,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
          {},
          // DragModifier int values are contiguous but not ordered — each is a
          // discrete named modifier combo. clampInt on an unknown value would
-         // reinterpret e.g. 99 as the highest valid enum (CtrlAltMeta),
+         // reinterpret e.g. 99 as the highest valid enum (CtrlMeta),
          // silently giving the user a much stricter capture rule than they
          // asked for. Snap-to-default (Disabled = 0) instead so upgrade-
          // mismatches or hand-edited configs fall back to "off" rather than
@@ -868,7 +867,8 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      static_cast<int>(DragModifier::Meta), static_cast<int>(DragModifier::CtrlAlt),
                      static_cast<int>(DragModifier::CtrlShift), static_cast<int>(DragModifier::AltShift),
                      static_cast<int>(DragModifier::AlwaysActive), static_cast<int>(DragModifier::AltMeta),
-                     static_cast<int>(DragModifier::CtrlAltMeta)},
+                     static_cast<int>(DragModifier::CtrlAltMeta), static_cast<int>(DragModifier::MetaShift),
+                     static_cast<int>(DragModifier::CtrlMeta)},
                     static_cast<int>(DragModifier::Disabled)),
          intChoices({{static_cast<int>(DragModifier::Disabled), "disabled"_L1},
                      {static_cast<int>(DragModifier::Shift), "shift"_L1},
@@ -880,7 +880,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(DragModifier::AltShift), "altShift"_L1},
                      {static_cast<int>(DragModifier::AlwaysActive), "alwaysActive"_L1},
                      {static_cast<int>(DragModifier::AltMeta), "altMeta"_L1},
-                     {static_cast<int>(DragModifier::CtrlAltMeta), "ctrlAltMeta"_L1}})},
+                     {static_cast<int>(DragModifier::CtrlAltMeta), "ctrlAltMeta"_L1},
+                     {static_cast<int>(DragModifier::MetaShift), "metaShift"_L1},
+                     {static_cast<int>(DragModifier::CtrlMeta), "ctrlMeta"_L1}})},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
     };

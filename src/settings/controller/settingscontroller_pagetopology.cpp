@@ -492,6 +492,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingGroup(), CD::cropStraddlersKey()},
              {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
              {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
+             // The two scroll keys, on the same Focus and view card as the
+             // switches above.
+             {CD::scrollingWheelFocusGroup(), CD::triggersKey()},
+             {CD::scrollingWheelViewGroup(), CD::triggersKey()},
              // Scrolling.Behavior — the strip's window-handling and focus
              // knobs. Smart gaps is deliberately absent: scrolling forwards
              // the shared Tiling.Gaps/SmartGaps value, whose (group, key)

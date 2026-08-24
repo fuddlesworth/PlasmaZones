@@ -134,6 +134,12 @@ public:
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
     P_CONFIG_GROUP(scrollingGroup, "Scrolling")
     P_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
+    // Scrolling.Wheel.* — the two wheel chords ("scroll keys"): which chord
+    // moves column FOCUS along the strip, and which pans the VIEW without
+    // changing focus. One group each, carrying the shared Triggers leaf, so
+    // each reads like the other trigger-bearing nodes in the tree.
+    P_CONFIG_GROUP(scrollingWheelFocusGroup, "Scrolling.Wheel.Focus")
+    P_CONFIG_GROUP(scrollingWheelViewGroup, "Scrolling.Wheel.View")
     // Scrolling.Behavior.DragScroll — edge auto-scroll during a drag
     // re-insert (niri's dnd-edge-view-scroll). Its own subtree rather than
     // four DragScroll*-prefixed leaves on Scrolling.Behavior, so the card,
