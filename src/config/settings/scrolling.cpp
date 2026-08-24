@@ -27,17 +27,24 @@ namespace PlasmaZones {
 using settings_detail::clampColumnWidthForKind;
 using settings_detail::reseedColumnWidthForKind;
 
-// ISettings gives three scrolling getters a defaulted body returning a
+// ISettings gives four scrolling getters a defaulted body returning a
 // hardcoded value, so a stub or a partial implementer answers without
 // reaching a Settings instance. That header cannot call ConfigDefaults (the
 // interface layer does not depend on the config layer), so the agreement is
-// pinned here, in a TU that sees both: two of the three just below, and the
+// pinned here, in a TU that sees both: three of the four just below, and the
 // drop-indicator default with its paint block further down. See the note
-// above the three defaults in isettings.h.
+// above the four defaults in isettings.h.
 static_assert(ConfigDefaults::scrollingTabIndicatorEnabled(),
               "ISettings::scrollingTabIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
               "ISettings::scrollingRestoreFloatedWindowsOnLogin defaults to true — update it with this default");
+static_assert(!ConfigDefaults::scrollingKeepFloatingAbove(),
+              "ISettings::scrollingKeepFloatingAbove defaults to false — update it with this default");
+// The scrolling literal also claims parity with the autotile canonical (the
+// scrolling chain link cannot reference the leaf configdefaults.h); this TU
+// sees both, so the claim is a compile-time pin rather than a comment.
+static_assert(ConfigDefaults::scrollingKeepFloatingAbove() == ConfigDefaults::autotileKeepFloatingAbove(),
+              "scrollingKeepFloatingAbove must match the autotileKeepFloatingAbove canonical");
 // IScrollSettings (the LGPL engine interface) carries its own defaulted
 // getter for crop mode, returning `false` — the safe clamp for every
 // implementor that has not heard of the option. Same duplication class,
@@ -567,6 +574,10 @@ P_STORE_SET_BOOL(setScrollingRestoreStripsOnLogin, scrollingBehaviorGroup, resto
 P_STORE_GET(bool, scrollingRestoreFloatedWindowsOnLogin, scrollingBehaviorGroup, restoreFloatedOnLoginKey, bool)
 P_STORE_SET_BOOL(setScrollingRestoreFloatedWindowsOnLogin, scrollingBehaviorGroup, restoreFloatedOnLoginKey,
                  scrollingRestoreFloatedWindowsOnLoginChanged)
+
+P_STORE_GET(bool, scrollingKeepFloatingAbove, scrollingBehaviorGroup, keepFloatingAboveKey, bool)
+P_STORE_SET_BOOL(setScrollingKeepFloatingAbove, scrollingBehaviorGroup, keepFloatingAboveKey,
+                 scrollingKeepFloatingAboveChanged)
 
 P_STORE_GET(int, scrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey, int)
 P_STORE_SET_INT(setScrollingColumnWidthStepPercent, scrollingBehaviorGroup, columnWidthStepPercentKey,

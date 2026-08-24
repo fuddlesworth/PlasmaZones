@@ -27,12 +27,14 @@ namespace PlasmaZones {
 
 void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowId)
 {
-    // Run when there are rules OR a config-default border / hidden title bar OR any
-    // decoration-tree chain could apply: all are placement-sensitive (rule scopes,
-    // appearance scope gating, and the placement-derived surface paths the tree
-    // resolves through), so a snap / unsnap / zone change must re-resolve the
-    // window's appearance. With none of them, a placement change can't change any
-    // window's appearance — skip.
+    // Run when there are rules OR a config-default border / hidden title bar /
+    // opacity tint / keep-floating-above layer OR any decoration-tree chain
+    // could apply: all are placement-sensitive (rule scopes, appearance scope
+    // gating, the float state the layer default keys on, and the
+    // placement-derived surface paths the tree resolves through), so a snap /
+    // unsnap / float / zone change must re-resolve the window's appearance.
+    // With none of them, a placement change can't change any window's
+    // appearance — skip.
     // The exclusion terms matter: exclusion verdicts are ALSO cached per
     // (windowId, revision) — window_filtering.cpp resolves them through
     // resolveCached — and an exclusion rule can scope on the same placement
@@ -238,7 +240,8 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     if (!m_shaderManager.effectVerdictRuleSet().isEmpty()) {
         m_shaderManager.effectVerdictRuleEvaluator().clearCache();
     }
-    if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
+    if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()
+        && !m_windowAppearanceDefault.anyKeepFloatingAbove()) {
         return;
     }
     // A bulk placement change (daemon loss clears the zone/floating caches; the
@@ -272,7 +275,15 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     // must keep their applied layer. Gated on hasWindowLayerRules so a
     // session whose rules never touch the layer skips the cache-cold
     // per-window resolution (a lingering snapshot still sweeps to drain).
-    if (KWin::effects && (m_shaderManager.hasWindowLayerRules() || !m_ruleWindowLayerSnapshots.isEmpty())) {
+    // The per-mode keep-floating-above default opens the gate the same way a
+    // layer rule does, mirroring reconcileRuleWindowLayer's own fast path: it
+    // fills the layer slot from the float state this bulk edge just moved.
+    // On daemon loss the floats are already cleared, so the walk is the
+    // restore branch for every default-held window (each holds a snapshot,
+    // which also opens the gate on its own); on the re-seeds it is the apply.
+    if (KWin::effects
+        && (m_shaderManager.hasWindowLayerRules() || m_windowAppearanceDefault.anyKeepFloatingAbove()
+            || !m_ruleWindowLayerSnapshots.isEmpty())) {
         const auto layerWindows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* lw : layerWindows) {
             if (lw && !lw->isDeleted()) {

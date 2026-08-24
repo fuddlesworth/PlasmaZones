@@ -102,6 +102,10 @@ void SettingsAdaptor::initializeRegistryAutotile()
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
     REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,
                           setAutotileRestoreFloatedWindowsOnLogin)
+    // Effect-only consumer (reconcileRuleWindowLayer): keep autotile-floated
+    // windows stacked above the tiles. Through the interface like its restore
+    // twin, so a non-Settings backend keeps the key.
+    REGISTER_BOOL_SETTING("autotileKeepFloatingAbove", autotileKeepFloatingAbove, setAutotileKeepFloatingAbove)
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     // The three enum knobs get validated setters (closed ranges), same shape
     // as the concrete enum setters below.

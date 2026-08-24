@@ -96,6 +96,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Keep floating windows above")
+            searchAnchor: "scrollingKeepFloatingAbove"
+            description: i18n("Keep the windows you float stacked above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingKeepFloatingAbove
+                accessibleName: i18n("Keep floating windows above")
+                onToggled: function (newValue) {
+                    appSettings.scrollingKeepFloatingAbove = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Sticky windows")
             searchAnchor: "scrollingStickyWindows"
             description: i18n("How to handle windows that are shown on all virtual desktops")

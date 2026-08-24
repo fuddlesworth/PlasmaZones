@@ -289,6 +289,12 @@ P_STORE_SET_BOOL(setSnappingRestoreFloatedWindowsOnLogin, snappingBehaviorWindow
 P_STORE_GET(bool, autotileRestoreFloatedWindowsOnLogin, tilingBehaviorGroup, restoreFloatedOnLoginKey, bool)
 P_STORE_SET_BOOL(setAutotileRestoreFloatedWindowsOnLogin, tilingBehaviorGroup, restoreFloatedOnLoginKey,
                  autotileRestoreFloatedWindowsOnLoginChanged)
+P_STORE_GET(bool, snappingKeepFloatingAbove, snappingBehaviorWindowHandlingGroup, keepFloatingAboveKey, bool)
+P_STORE_SET_BOOL(setSnappingKeepFloatingAbove, snappingBehaviorWindowHandlingGroup, keepFloatingAboveKey,
+                 snappingKeepFloatingAboveChanged)
+P_STORE_GET(bool, autotileKeepFloatingAbove, tilingBehaviorGroup, keepFloatingAboveKey, bool)
+P_STORE_SET_BOOL(setAutotileKeepFloatingAbove, tilingBehaviorGroup, keepFloatingAboveKey,
+                 autotileKeepFloatingAboveChanged)
 P_STORE_GET(bool, snapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGroup, unfloatFallbackToZoneKey, bool)
 P_STORE_SET_BOOL(setSnapUnfloatFallbackToZone, snappingBehaviorWindowHandlingGroup, unfloatFallbackToZoneKey,
                  snapUnfloatFallbackToZoneChanged)

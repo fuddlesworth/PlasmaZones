@@ -116,6 +116,22 @@ SettingsCard {
         SettingsSeparator {}
 
         SettingsRow {
+            title: i18n("Keep floating windows above")
+            searchAnchor: "keepFloatingAbove"
+            description: i18n("Keep the windows you float stacked above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.")
+
+            SettingsSwitch {
+                checked: appSettings.snappingKeepFloatingAbove
+                accessibleName: i18n("Keep floating windows above")
+                onToggled: function (newValue) {
+                    appSettings.snappingKeepFloatingAbove = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Unfloat to a zone when there is no previous zone")
             searchAnchor: "unfloatToZoneFallback"
             description: i18n("When you unfloat a window that was never snapped, snap it to a fallback zone (last used, then first empty, then the first zone) instead of leaving it floating.")

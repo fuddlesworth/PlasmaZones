@@ -272,8 +272,10 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     // themselves; a window raised by a SetWindowLayer rule must NOT be
     // misclassified as one of those, or the headline "floating windows above
     // tiled windows" rule would silently strip the matched window's
-    // decoration and drop it from snap/tile management. While a layer rule
-    // owns the pair, the pre-rule snapshot holds the window's own flag.
+    // decoration and drop it from snap/tile management. While a layer rule or
+    // the per-mode keep-floating-above default owns the pair (both write
+    // through reconcileRuleWindowLayer and share its snapshot map), the
+    // pre-write snapshot holds the window's own flag.
     //
     // Empty-map fast path: with no window rule-raised, the own flag IS the
     // live flag. Keeps the gates getWindowId-free for the common no-layer-rule

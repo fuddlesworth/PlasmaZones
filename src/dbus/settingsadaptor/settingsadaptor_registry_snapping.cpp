@@ -147,6 +147,10 @@ void SettingsAdaptor::initializeRegistrySnapping()
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
     REGISTER_BOOL_SETTING("snappingRestoreFloatedWindowsOnLogin", snappingRestoreFloatedWindowsOnLogin,
                           setSnappingRestoreFloatedWindowsOnLogin)
+    // Effect-only consumer (reconcileRuleWindowLayer): keep snap-floated
+    // windows stacked above the zones. Through the interface like its restore
+    // twin, so a non-Settings backend keeps the key.
+    REGISTER_BOOL_SETTING("snappingKeepFloatingAbove", snappingKeepFloatingAbove, setSnappingKeepFloatingAbove)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,

@@ -42,7 +42,8 @@ struct FocusFadeState
     qint64 lastMs = -1;
 };
 
-/// Config-backed window-decoration appearance default, filling the slots a
+/// Config-backed window appearance default: the decoration slots plus the
+/// per-mode keep-floating-above window-layer slot, filling the slots a
 /// window's per-window rules leave unset (rules win per slot). See
 /// PlasmaZonesEffect::m_windowAppearanceDefault.
 struct WindowAppearanceDefault
@@ -65,6 +66,18 @@ struct WindowAppearanceDefault
     double opacity = 1.0;
     double tintStrength = 0.0;
     QString tintColor;
+    // Keep-floating-above per placement mode (Snapping.Behavior.WindowHandling /
+    // Tiling.Behavior / Scrolling.Behavior KeepFloatingAbove). Fills the window
+    // LAYER slot with "above" for a floated window on a screen running that
+    // mode when no SetWindowLayer rule owns it; see reconcileRuleWindowLayer.
+    bool keepFloatingAboveSnapping = false;
+    bool keepFloatingAboveTiling = false;
+    bool keepFloatingAboveScrolling = false;
+
+    bool anyKeepFloatingAbove() const
+    {
+        return keepFloatingAboveSnapping || keepFloatingAboveTiling || keepFloatingAboveScrolling;
+    }
 };
 
 /// Debounced frame-geometry shadow push state per window. The window pointer
@@ -108,8 +121,9 @@ private:
     CompiledSurfacePack* (*m_invoke)(void*, const QString&);
 };
 
-/// Pre-rule keepAbove/keepBelow pair captured the first time a SetWindowLayer rule
-/// is applied to a window. See PlasmaZonesEffect::m_ruleWindowLayerSnapshots.
+/// Pre-write keepAbove/keepBelow pair captured the first time a SetWindowLayer
+/// rule or the keep-floating-above default is applied to a window. See
+/// PlasmaZonesEffect::m_ruleWindowLayerSnapshots.
 struct WindowLayerSnapshot
 {
     bool keepAbove = false;
