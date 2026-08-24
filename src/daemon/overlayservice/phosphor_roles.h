@@ -74,15 +74,43 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 /// equally to every consumer of this shell, but it is a real cost rather
 /// than the no-op the previous wording claimed.
 ///
-/// Layer downgrade from Overlay to Top is deliberate (issue #516). A
-/// fullscreen wlr Overlay-layer surface above the active toplevel masks
-/// KWin's Translucency-while-moving effect, and on hybrid Intel+NVIDIA
-/// systems forces a slower compositional path that produces visible drag
-/// artifacts and post-snap flicker. Top still draws the zone preview
-/// above normal toplevels (it is what KDE's own panel uses) but lets
-/// KWin keep the translucency render path and the fast composition
-/// route. Fullscreen apps on Overlay still draw above the zone preview,
-/// which is the correct behaviour anyway.
+/// The layer is the Hud pattern's Overlay, and that is load-bearing. On
+/// Top, KWin stacks the shell in AboveLayer, which is exactly where a
+/// keepAbove toplevel lands, so the two share a layer and ordinary raise
+/// order decides which one wins. That put a floated window in front of
+/// the OSD whenever the per-mode "keep floating windows above" default
+/// was on (see keepFloatingAboveDefault in the effect's
+/// decoration_rules.cpp). Overlay puts the shell in its own layer above
+/// AboveLayer, so no toplevel flag can reorder it.
+///
+/// The shell ran on Top between 53158e03a and this change, attributed to
+/// issue #516 (drag artifacts and post-snap flicker on a hybrid
+/// Intel+NVIDIA setup). That attribution does not survive scrutiny: the
+/// mechanism it claimed, an Overlay surface making KWin skip its
+/// Translucency-while-moving render path, is not something KWin does.
+/// That effect is a paintWindow opacity multiplier keyed off
+/// windowStartUserMovedResized and never inspects layer-shell surfaces.
+/// The downgrade was reasoned, not measured, and was never verified
+/// against the reporter's setup. #516 itself has since been deleted, so
+/// the video and the thread are gone. The leading suspect for those
+/// symptoms is KWin's own Dim Inactive effect fading the dragged window
+/// out and back on the focus change, which matches a gray ring on one
+/// window's decoration far better than a whole-frame path change does.
+///
+/// On Overlay the shell also draws above fullscreen apps. That is the
+/// wanted behaviour for content the user explicitly asked for (an OSD,
+/// snap assist, the picker); the old comment framed fullscreen-wins as
+/// correct, but that was a rationalisation of the downgrade rather than
+/// a requirement anyone stated.
+///
+/// If the #516 artifacts do resurface, get a reproduction first. The
+/// per-slot alternative is to keep the drag-path slots (main zone
+/// overlay, zone selector, scroll drop indicator) on Top and promote
+/// only the passive ones, driven off the same slot predicates
+/// syncPassiveShellSurfaceState already computes; runtime set_layer is
+/// plumbed through ILayerShellTransport and needs only a Surface-level
+/// passthrough. Do not re-apply a blanket downgrade, it reopens the
+/// keepAbove collision above.
 ///
 /// Each per-content slot is animated by the SurfaceAnimator keyed on
 /// (PassiveShell surface, slot QQuickItem). Per-content motion / shader
@@ -93,9 +121,8 @@ inline const PhosphorLayer::Role Osd = PhosphorShellPatterns::Hud().withScopePre
 ///
 /// See `PassiveOverlayShell.qml` for the QML side and the unified-shell
 /// migration commits for the per-consumer rewrite.
-inline const PhosphorLayer::Role PassiveShell = PhosphorShellPatterns::Hud()
-                                                    .withLayer(PhosphorLayer::Layer::Top)
-                                                    .withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
+inline const PhosphorLayer::Role PassiveShell =
+    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-passive-shell"));
 
 /// Snap-assist config-only role. The wl_surface lifetime moved to the
 /// unified PassiveShell post-shell-migration; this role is preserved
