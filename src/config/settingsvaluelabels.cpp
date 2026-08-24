@@ -288,6 +288,13 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()), number(ms));
         t.insert(pairKey(CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()), number(QStringLiteral("s")));
 
+        // ── Trigger release grace, one per family with a hold mode. Zero is
+        // the off switch here, same as the window-size filters below. ───────
+        for (const QString& group : {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(),
+                                     CD::tilingBehaviorGroup(), CD::scrollingBehaviorGroup()}) {
+            t.insert(pairKey(group, CD::releaseGraceMsKey()), number(ms, 1.0, true));
+        }
+
         // ── Blur density multiplier, percent-rendered ───────────────────────
         // A MULTIPLIER (band 0.25-2.0), not a 0-1 ratio like the percent block
         // above: the tiers the UI offers read as 50% / 100% / 200% here, which

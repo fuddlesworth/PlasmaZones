@@ -40,6 +40,26 @@ private Q_SLOTS:
     }
 
     /**
+     * All four hold-mode release graces ship the same 150 ms.
+     *
+     * Pins the shipped VALUE, which the bounds tripwire cannot: three of the
+     * four accessors currently delegate to dragActivationGraceMs(), so a bounds
+     * check on them is satisfied by construction. Giving one mode arm its own
+     * different default is a deliberate act, and this is the test that has to
+     * be updated to do it.
+     */
+    void testTriggerGrace_defaultsAgreeAcross150()
+    {
+        QCOMPARE(ConfigDefaults::dragActivationGraceMs(), 150);
+        QCOMPARE(ConfigDefaults::zoneSpanGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        QCOMPARE(ConfigDefaults::autotileDragInsertGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        QCOMPARE(ConfigDefaults::scrollingDragInsertGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        // 0 must stay reachable: it is the documented off switch.
+        QCOMPARE(ConfigDefaults::triggerGraceMsMin(), 0);
+        QVERIFY(ConfigDefaults::triggerGraceMsMax() > ConfigDefaults::dragActivationGraceMs());
+    }
+
+    /**
      * Every numeric default must fall within the min/max bounds declared in
      * ConfigDefaults. This prevents drift between default values and their bounds.
      */
@@ -49,6 +69,13 @@ private Q_SLOTS:
         // (not magic literals) so the tripwire tracks the enum if it grows.
         QVERIFY(ConfigDefaults::zoneSpanModifier() >= static_cast<int>(DragModifier::Disabled));
         QVERIFY(ConfigDefaults::zoneSpanModifier() <= static_cast<int>(DragModifier::CtrlAltMeta));
+
+        // One pair only. The other three grace accessors currently DELEGATE to
+        // this one, so repeating the range check for them asserts nothing that
+        // this line does not already cover. Their independence, and the shipped
+        // value, are pinned by testTriggerGrace_defaultsAgreeAcross150 instead.
+        QVERIFY(ConfigDefaults::dragActivationGraceMs() >= ConfigDefaults::triggerGraceMsMin());
+        QVERIFY(ConfigDefaults::dragActivationGraceMs() <= ConfigDefaults::triggerGraceMsMax());
 
         // Display
         QVERIFY(ConfigDefaults::osdStyle() >= ConfigDefaults::osdStyleMin());
@@ -83,14 +110,6 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::outerGapRight() <= ConfigDefaults::outerGapRightMax());
         QVERIFY(ConfigDefaults::adjacentThreshold() >= ConfigDefaults::adjacentThresholdMin());
         QVERIFY(ConfigDefaults::adjacentThreshold() <= ConfigDefaults::adjacentThresholdMax());
-        QVERIFY(ConfigDefaults::dragActivationGraceMs() >= ConfigDefaults::triggerGraceMsMin());
-        QVERIFY(ConfigDefaults::dragActivationGraceMs() <= ConfigDefaults::triggerGraceMsMax());
-        QVERIFY(ConfigDefaults::autotileDragInsertGraceMs() >= ConfigDefaults::triggerGraceMsMin());
-        QVERIFY(ConfigDefaults::autotileDragInsertGraceMs() <= ConfigDefaults::triggerGraceMsMax());
-        QVERIFY(ConfigDefaults::scrollingDragInsertGraceMs() >= ConfigDefaults::triggerGraceMsMin());
-        QVERIFY(ConfigDefaults::scrollingDragInsertGraceMs() <= ConfigDefaults::triggerGraceMsMax());
-        QVERIFY(ConfigDefaults::zoneSpanGraceMs() >= ConfigDefaults::triggerGraceMsMin());
-        QVERIFY(ConfigDefaults::zoneSpanGraceMs() <= ConfigDefaults::triggerGraceMsMax());
         QVERIFY(ConfigDefaults::pollIntervalMs() >= ConfigDefaults::pollIntervalMsMin());
         QVERIFY(ConfigDefaults::pollIntervalMs() <= ConfigDefaults::pollIntervalMsMax());
         QVERIFY(ConfigDefaults::minimumZoneSizePx() >= ConfigDefaults::minimumZoneSizePxMin());

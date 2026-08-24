@@ -58,14 +58,14 @@ public:
     {
         return false;
     }
-    // Hold-mode release grace, one per placement mode that has a trigger
-    // list with a toggle mode (snapping activation, the two engines'
-    // drag re-insert). A mouse-button trigger is released by the same hand
+    // Hold-mode release grace, one per trigger list that has a toggle mode:
+    // snapping activation, the snapping zone span modifier, and the two
+    // engines' drag re-insert. A mouse-button trigger is released by the same hand
     // that drops the window, so the button often lifts a few milliseconds
     // before the drop. The trigger keeps reading as held for this long
     // after its last physically-held tick, so that drop still snaps. Only
     // hold mode uses it (toggle mode has no release to extend), and 0
-    // turns it off. The range is shared by all three.
+    // turns it off. The range is shared by all four.
     static int dragActivationGraceMs()
     {
         return 150;

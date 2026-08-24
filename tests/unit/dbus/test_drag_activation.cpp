@@ -3,18 +3,25 @@
 
 /**
  * @file test_drag_activation.cpp
- * @brief Truth-table guard for resolveActivationActive() — the pure
- *        per-tick decision the WindowDragAdaptor uses to decide whether
- *        the snap overlay should be shown.
+ * @brief Guards the two pure per-tick resolvers the WindowDragAdaptor decides
+ *        drag trigger state with.
  *
- * The function lives in src/dbus/windowdragadaptor/dragactivation.cpp so the
- * truth table can be exercised without standing up the adaptor + its
- * compositor dependencies. Pinning the table here means the always-active
- * inversion (#249) — where the same activation triggers serve double duty
- * as deactivate-while-held / toggle-off — can't drift.
+ * resolveActivationActive() decides whether the snap overlay should be shown.
+ * resolveHoldGrace() decides whether a physically-released hold-mode trigger
+ * still counts as held, which is what lets a drop that lands just after the
+ * button lifts still snap.
+ *
+ * Both live in src/dbus/windowdragadaptor/dragactivation.cpp so they can be
+ * exercised without standing up the adaptor + its compositor dependencies.
+ * Pinning the activation table here means the always-active inversion (#249),
+ * where the same activation triggers serve double duty as
+ * deactivate-while-held / toggle-off, can't drift. Pinning the grace contract
+ * means the boundary cases stay fixed: zero disables it, a never-held trigger
+ * has nothing to extend, and the window closes strictly after graceMs.
  */
 
 #include <QTest>
+#include <limits>
 #include <QObject>
 
 #include "dbus/windowdragadaptor/dragactivation.h"
@@ -217,6 +224,95 @@ private Q_SLOTS:
         // stamp being re-seeded) must fail closed, not extend forever.
         const auto g = resolveHoldGrace(false, 10, 500, 150);
         QVERIFY(!g.held);
+    }
+
+    /**
+     * Two full grace cycles inside ONE drag, driven as a tick sequence.
+     *
+     * The single-shot slots above each exercise one invocation, but the
+     * feature's whole point is the repeat: a re-press has to REFRESH the stamp
+     * so the second release gets a full grace of its own rather than inheriting
+     * the first one's remaining time. Feeding nextLastHeldMs forward the way
+     * the adaptor does is what makes that visible.
+     */
+    void grace_twoCyclesInOneDrag_secondReleaseGetsAFullWindow()
+    {
+        const int graceMs = 150;
+        qint64 lastHeld = -1;
+
+        // Held at t=0, released at t=10. Still inside the first window at 100.
+        auto g = resolveHoldGrace(true, 0, lastHeld, graceMs);
+        lastHeld = g.nextLastHeldMs;
+        QCOMPARE(lastHeld, qint64(0));
+
+        g = resolveHoldGrace(false, 100, lastHeld, graceMs);
+        lastHeld = g.nextLastHeldMs;
+        QVERIFY2(g.held, "100ms after the last held tick is inside a 150ms grace");
+        QCOMPARE(g.remainingMs, qint64(50));
+        // A released tick must NOT advance the stamp, or the window would
+        // slide forward on every tick and never close.
+        QCOMPARE(lastHeld, qint64(0));
+
+        // Re-pressed at t=120, inside the first grace. The stamp refreshes.
+        g = resolveHoldGrace(true, 120, lastHeld, graceMs);
+        lastHeld = g.nextLastHeldMs;
+        QVERIFY(g.held);
+        QCOMPARE(lastHeld, qint64(120));
+
+        // t=200 is 200ms after the ORIGINAL press, so the first window is long
+        // gone — but only 80ms after the re-press, so this is still held. This
+        // is the assertion a single-invocation test cannot make.
+        g = resolveHoldGrace(false, 200, lastHeld, graceMs);
+        lastHeld = g.nextLastHeldMs;
+        QVERIFY2(g.held, "the re-press must start a fresh window, not inherit the first one's remainder");
+        QCOMPARE(g.remainingMs, qint64(70));
+
+        // t=271 is one past the second window. Now it resolves released, and
+        // the stamp stays put so no later tick can resurrect it.
+        g = resolveHoldGrace(false, 271, lastHeld, graceMs);
+        QVERIFY(!g.held);
+        QCOMPARE(g.remainingMs, qint64(0));
+        QCOMPARE(g.nextLastHeldMs, qint64(120));
+    }
+
+    /**
+     * The replay deadline is one PAST the remaining grace.
+     *
+     * Landing exactly on the deadline would replay a tick that resolveHoldGrace
+     * still answers "held" for (elapsed == graceMs is inside the window, pinned
+     * by grace_atExactBoundary_held), so the replay would re-arm instead of
+     * resolving the release, and the drag would never settle.
+     */
+    void graceExpiryDue_isOnePastTheDeadline()
+    {
+        QCOMPARE(graceExpiryDueMs(50), 51);
+        QCOMPARE(graceExpiryDueMs(149), 150);
+        // Floored at 1: a 0ms single-shot would re-enter every event loop pass.
+        QCOMPARE(graceExpiryDueMs(0), 1);
+        QCOMPARE(graceExpiryDueMs(-5), 1);
+        // Saturates instead of overflowing to a negative interval.
+        QCOMPARE(graceExpiryDueMs(std::numeric_limits<qint64>::max()), std::numeric_limits<int>::max());
+    }
+
+    /**
+     * Earlier deadline wins when the three families share one timer.
+     *
+     * A family arming with a LATER deadline must not push out a nearer pending
+     * one, or the nearer family's release resolves late. The overtaken family
+     * re-arms from its own replay tick, so ignoring it here loses nothing.
+     */
+    void graceRearm_keepsTheEarlierDeadline()
+    {
+        // Nothing pending: always arm.
+        QVERIFY(shouldRearmGraceExpiry(/*timerActive=*/false, /*timerRemainingMs=*/0, /*dueMs=*/151));
+        QVERIFY(shouldRearmGraceExpiry(false, 999, 1));
+        // Pending deadline is LATER than the new one: the new one wins.
+        QVERIFY(shouldRearmGraceExpiry(true, 151, 41));
+        // Pending deadline is EARLIER: leave it alone.
+        QVERIFY(!shouldRearmGraceExpiry(true, 41, 151));
+        // Equal: no reason to restart, and restarting would push the deadline
+        // out by the time already elapsed.
+        QVERIFY(!shouldRearmGraceExpiry(true, 100, 100));
     }
 };
 

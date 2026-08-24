@@ -53,7 +53,12 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        m_settings->setter(v.toInt());                                                                                 \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");

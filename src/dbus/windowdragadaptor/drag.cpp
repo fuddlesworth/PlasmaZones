@@ -628,7 +628,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // keep-alive arm and the main span read below, with the same hold-mode
     // grace. The sentinel is excluded for the reason given at the main read.
     const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
-    const bool zoneSpanHoldMode = m_settings && !m_settings->zoneSpanToggleMode();
+    // Gated on zoneSpanEnabled() as well as the mode: with the feature off the
+    // sole consumer below skips the span read entirely, so arming a grace there
+    // would schedule a whole replay tick that cannot change any outcome.
+    const bool zoneSpanHoldMode = m_settings && m_settings->zoneSpanEnabled() && !m_settings->zoneSpanToggleMode();
     const HoldGraceDecision zoneSpanGrace = resolveHoldGrace(rawZoneSpanHeld, nowMs, m_zoneSpanLastHeldMs,
                                                              zoneSpanHoldMode ? m_settings->zoneSpanGraceMs() : 0);
     m_zoneSpanLastHeldMs = zoneSpanGrace.nextLastHeldMs;
@@ -950,7 +953,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     if (m_snapCancelled) {
         // Allow retriggering the overlay after Escape: the user must release the
         // activation trigger and then press it again (a full release→press cycle).
-        if (!triggerHeld) {
+        //
+        // Reads rawTriggerHeld, NOT the graced triggerHeld. The gesture here is a
+        // deliberate physical release followed by a press, which is exactly what
+        // the release grace exists to paper over: gated on the graced value, a
+        // cycle performed faster than dragActivationGraceMs would never latch
+        // m_triggerReleasedAfterCancel, and the drag would stay cancelled for the
+        // rest of its life with no way to recover.
+        if (!rawTriggerHeld) {
             m_triggerReleasedAfterCancel = true;
         } else if (m_triggerReleasedAfterCancel) {
             // Trigger released and re-pressed: clear cancel, resume zone snapping.

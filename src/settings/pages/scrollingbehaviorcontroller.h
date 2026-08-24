@@ -18,7 +18,8 @@ class ISettings;
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.scrollingBehaviorPage.scrollingDragInsertTriggers`
 /// etc. Covers the trigger list plus its derived `alwaysReinsertIntoStrip`
-/// boolean (the AlwaysActive sentinel stored inside the list). Trigger-list
+/// boolean (the AlwaysActive sentinel stored inside the list) and the shared
+/// trigger release-grace bounds. Trigger-list
 /// conversion lives in `PlasmaZones::TriggerUtils`, shared with the snapping
 /// and tiling controllers.
 ///

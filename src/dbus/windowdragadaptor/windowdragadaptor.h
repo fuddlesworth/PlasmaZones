@@ -678,9 +678,9 @@ private:
     bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
     // Hold-mode release grace (resolveHoldGrace in dragactivation.h). The
     // timestamps sit on m_dragClock, started at beginDrag; -1 means the
-    // trigger has not been physically held during this drag. Activation and
-    // drag-insert keep their own, since the two lists may bind different
-    // buttons and are released at different moments.
+    // trigger has not been physically held during this drag. Activation, zone
+    // span and drag-insert each keep their own, since the three lists may bind
+    // different buttons and are released at different moments.
     QElapsedTimer m_dragClock;
     qint64 m_activationLastHeldMs = -1;
     qint64 m_dragInsertLastHeldMs = -1;
@@ -695,8 +695,6 @@ private:
     int m_lastTickCursorY = 0;
     int m_lastTickModifiers = 0;
     int m_lastTickMouseButtons = 0;
-    void armGraceExpiry(qint64 remainingMs);
-    void stopGraceExpiry();
     // Drag-to-reorder mode is active for the cursor's current ENGINE screen
     // (autotile or scrolling): cached so per-tick dragMoved work (60+ Hz)
     // doesn't re-query settings + engine per cursor update. Seeded at
@@ -818,6 +816,11 @@ private:
     QString m_dragScrollWindowId;
     void ensureDragScrollTimerRunning(const QString& windowId);
     void stopDragScrollTimer();
+    /// Arm / cancel the hold-mode release grace expiry replay. Arming keeps the
+    /// earlier of any pending deadline, so the three trigger families can share
+    /// the one timer.
+    void armGraceExpiry(qint64 remainingMs);
+    void stopGraceExpiry();
     /// One heartbeat. Named as a verb rather than `onDragScrollTick`: the
     /// `on*` prefix in this class marks a Qt slot (onLayoutChanged,
     /// onSnapAssistDismissed, both under `private Q_SLOTS:`), and this is a

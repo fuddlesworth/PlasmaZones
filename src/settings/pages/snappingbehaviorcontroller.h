@@ -16,8 +16,9 @@ class ISettings;
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.snappingBehaviorPage.alwaysActivateOnDrag` etc.
 /// Covers the three trigger lists (drag activation, zone span, snap
-/// assist) plus the "always active" booleans derived from them, and the
-/// adjacent-threshold slider bounds.
+/// assist) plus the "always active" booleans derived from them, the
+/// adjacent-threshold slider bounds, and the shared trigger release-grace
+/// bounds.
 ///
 /// Trigger lists round-trip between the on-disk `DragModifier` enum form
 /// and the Qt-bitmask form QML widgets expect; conversion lives in

@@ -211,6 +211,14 @@ private Q_SLOTS:
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
+        // The four release graces, deliberately given FOUR DISTINCT values.
+        // They all share one key spelling ("ReleaseGraceMs") and are told apart
+        // only by their group, so writing the same number to all four would
+        // pass even if two of them aliased each other onto one group.
+        settings.setDragActivationGraceMs(110);
+        settings.setZoneSpanGraceMs(120);
+        settings.setAutotileDragInsertGraceMs(130);
+        settings.setScrollingDragInsertGraceMs(140);
 
         settings.save();
 
@@ -243,11 +251,26 @@ private Q_SLOTS:
             QCOMPARE(behavior->readBool(ConfigDefaults::toggleActivationKey(), false), true);
             QCOMPARE(behavior->readBool(ConfigDefaults::focusNewWindowsKey(), false), true);
             QCOMPARE(behavior->readBool(ConfigDefaults::focusFollowsMouseKey(), false), true);
+            QCOMPARE(behavior->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 110);
         }
 
         {
             auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
             QCOMPARE(zoneSpan->readBool(ConfigDefaults::toggleActivationKey(), false), true);
+            // Its own value, not the parent group's 110. Snapping.Behavior and
+            // Snapping.Behavior.ZoneSpan hold the same key name, and on disk the
+            // parent's scalar sits as a sibling of the ZoneSpan child object.
+            QCOMPARE(zoneSpan->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 120);
+        }
+
+        {
+            auto tiling = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            QCOMPARE(tiling->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 130);
+        }
+
+        {
+            auto scrolling = backend->group(ConfigDefaults::scrollingBehaviorGroup());
+            QCOMPARE(scrolling->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 140);
         }
 
         {

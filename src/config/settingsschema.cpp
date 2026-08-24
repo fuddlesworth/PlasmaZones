@@ -840,8 +840,8 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
-    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // Snapping.Behavior owns FIVE scalar keys directly — Triggers,
+    // ToggleActivation, ReleaseGraceMs, FocusNewWindows and FocusFollowsMouse — while the
     // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {

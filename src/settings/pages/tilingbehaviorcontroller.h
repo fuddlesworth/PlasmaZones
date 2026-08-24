@@ -16,7 +16,8 @@ class ISettings;
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.tilingBehaviorPage.autotileDragInsertTriggers` etc.
 /// Covers the autotile drag-insert trigger list plus its derived
-/// `alwaysReinsertIntoStack` boolean. Trigger-list conversion lives in
+/// `alwaysReinsertIntoStack` boolean and the shared trigger release-grace
+/// bounds. Trigger-list conversion lives in
 /// `PlasmaZones::TriggerUtils`, shared with SnappingBehaviorController.
 ///
 /// Dirty tracking: the underlying `autotileDragInsertTriggers` property
