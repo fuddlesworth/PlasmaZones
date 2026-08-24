@@ -221,12 +221,12 @@ public:
     }
     /// Editing granularity for the two width controls, shipped to QML through
     /// SettingsController::scrollingConstants(). The proportion step is a
-    /// work-area fraction (5% per slider notch); the fixed step is whole
+    /// work-area fraction (1% per slider notch); the fixed step is whole
     /// pixels. Both are doubles so the pair travels through one QVariantMap
     /// shape alongside the min/max accessors above.
     static constexpr qreal scrollingDefaultColumnWidthProportionStep()
     {
-        return 0.05;
+        return 0.01;
     }
     static constexpr qreal scrollingDefaultColumnWidthFixedStep()
     {
