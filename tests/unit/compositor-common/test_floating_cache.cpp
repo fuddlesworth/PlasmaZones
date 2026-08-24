@@ -292,7 +292,12 @@ private Q_SLOTS:
         QVERIFY(checkModifier(8, Qt::NoModifier)); // AlwaysActive
         QVERIFY(checkModifier(9, Qt::AltModifier | Qt::MetaModifier)); // AltMeta
         QVERIFY(checkModifier(10, Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)); // CtrlAltMeta
+        QVERIFY(checkModifier(11, Qt::MetaModifier | Qt::ShiftModifier)); // MetaShift
+        QVERIFY(checkModifier(12, Qt::ControlModifier | Qt::MetaModifier)); // CtrlMeta
         QVERIFY(!checkModifier(99, Qt::ShiftModifier)); // Unknown
+        // This table is meant to be exhaustive over the DragModifier wire
+        // values, so it has to grow with the enum. MaxDragModifier (12 today,
+        // in src/core/types/enums.h) is the authority on where it ends.
     }
 
     // =================================================================

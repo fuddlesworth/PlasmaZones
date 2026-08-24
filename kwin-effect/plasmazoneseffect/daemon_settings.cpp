@@ -939,20 +939,25 @@ void PlasmaZonesEffect::loadCachedSettings()
     // MATCHER the handler reads them with (anyTriggerHeldExact, not
     // anyTriggerHeld), so that Meta and Meta+Shift stay distinct chords.
     // An empty or all-zero reply fails closed: no chord matches, and every
-    // axis event passes through to the app underneath.
+    // axis event passes through to the app underneath. That is the safe
+    // direction, but it is silent, so both loaders log it for the same reason
+    // the drag-insert pair below does — an older daemon answering an unknown
+    // key returns a VALID but empty reply, and the only trace is this line.
     loadSettingAsync(QStringLiteral("scrollingWheelFocusTriggers"), [this](const QVariant& v) {
-        if (!m_tilingHandler) {
-            return;
+        const auto parsed = TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (parsed.isEmpty()) {
+            qCWarning(lcEffect) << "scrollingWheelFocusTriggers parsed to an EMPTY list — the column-focus scroll key "
+                                   "is unreachable until one is configured";
         }
-        m_tilingHandler->setWheelFocusTriggers(
-            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField));
+        m_tilingHandler->setWheelFocusTriggers(parsed);
     });
     loadSettingAsync(QStringLiteral("scrollingWheelViewTriggers"), [this](const QVariant& v) {
-        if (!m_tilingHandler) {
-            return;
+        const auto parsed = TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (parsed.isEmpty()) {
+            qCWarning(lcEffect) << "scrollingWheelViewTriggers parsed to an EMPTY list — the view-pan scroll key is "
+                                   "unreachable until one is configured";
         }
-        m_tilingHandler->setWheelViewTriggers(
-            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField));
+        m_tilingHandler->setWheelViewTriggers(parsed);
     });
     loadSettingAsync(QStringLiteral("scrollingWheelFocusInverted"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {

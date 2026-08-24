@@ -69,7 +69,9 @@ private Q_SLOTS:
         QVERIFY(!TriggerParser::anyTriggerHeld(empty, Qt::NoModifier, Qt::NoButton));
     }
 
-    // A mouse button is ANDed with the modifiers, matching the drag half.
+    // A named mouse button must be held as well as the modifiers, matching
+    // the drag half. See buttonAxisIsSubsetNotExact for what "as well as"
+    // does NOT mean here.
     void mouseButtonMustAlsoBeHeld()
     {
         const QVector<ParsedTrigger> chord{trigger(ModAlt, Qt::RightButton)};
@@ -81,12 +83,71 @@ private Q_SLOTS:
         QVERIFY(TriggerParser::anyTriggerHeldExact(chord, Qt::AltModifier, Qt::RightButton | Qt::MiddleButton));
     }
 
-    // Lock and keypad modifiers ride along on real events. Folding them into
-    // the comparison would make every chord fail under Num Lock.
+    // Keypad and group-switch modifiers ride along on real events. Folding
+    // them into the comparison would make every chord fail under Num Lock.
+    // (Caps/Num Lock STATE is not carried in Qt::KeyboardModifiers at all, so
+    // there is no lock flag to test here — only the keypad and group bits.)
     void nonChordModifiersAreIgnored()
     {
         const QVector<ParsedTrigger> focus{trigger(ModMeta)};
         QVERIFY(TriggerParser::anyTriggerHeldExact(focus, Qt::MetaModifier | Qt::KeypadModifier, Qt::NoButton));
+        QVERIFY(TriggerParser::anyTriggerHeldExact(focus, Qt::MetaModifier | Qt::GroupSwitchModifier, Qt::NoButton));
+        QVERIFY(TriggerParser::anyTriggerHeldExact(
+            focus, Qt::MetaModifier | Qt::KeypadModifier | Qt::GroupSwitchModifier, Qt::NoButton));
+    }
+
+    // An empty list matches nothing. The loop body never runs, and both
+    // matchers must fall through to false rather than to a default-true.
+    void emptyListMatchesNothing()
+    {
+        const QVector<ParsedTrigger> none;
+        QVERIFY(!TriggerParser::anyTriggerHeldExact(none, Qt::MetaModifier, Qt::NoButton));
+        QVERIFY(!TriggerParser::anyTriggerHeld(none, Qt::MetaModifier, Qt::NoButton));
+    }
+
+    // A malformed entry must not stop the scan: the all-zero skip is a
+    // `continue`, so a good entry AFTER it still has to match. A one-element
+    // list cannot tell that apart from falling out of the loop.
+    void malformedEntryDoesNotShadowLaterOnes()
+    {
+        const QVector<ParsedTrigger> list{trigger(0), trigger(ModMeta)};
+        QVERIFY(TriggerParser::anyTriggerHeldExact(list, Qt::MetaModifier, Qt::NoButton));
+        // And a multi-entry list matches on either member, not just the first.
+        const QVector<ParsedTrigger> pair{trigger(ModMeta), trigger(ModCtrlMeta)};
+        QVERIFY(TriggerParser::anyTriggerHeldExact(pair, Qt::MetaModifier, Qt::NoButton));
+        QVERIFY(TriggerParser::anyTriggerHeldExact(pair, Qt::ControlModifier | Qt::MetaModifier, Qt::NoButton));
+    }
+
+    // AlwaysActive means "match whatever is held" to the subset matcher, but
+    // modifierMaskFor has no case for it, so under exact matching it folds to
+    // NoModifier and comes to mean the OPPOSITE: match only when nothing is
+    // held. That inversion is why canonicalWheelTriggerList drops the
+    // sentinel from any list read with this matcher. Pinned here so the
+    // divergence cannot be "fixed" in the matcher by accident.
+    void alwaysActiveInvertsUnderExactMatching()
+    {
+        constexpr int ModAlwaysActive = 8;
+        const QVector<ParsedTrigger> sentinel{trigger(ModAlwaysActive)};
+
+        QVERIFY(TriggerParser::anyTriggerHeld(sentinel, Qt::MetaModifier, Qt::NoButton));
+        QVERIFY(!TriggerParser::anyTriggerHeldExact(sentinel, Qt::MetaModifier, Qt::NoButton));
+        QVERIFY(TriggerParser::anyTriggerHeldExact(sentinel, Qt::NoModifier, Qt::NoButton));
+    }
+
+    // The button axis is SUBSET-matched even here, unlike the modifier axis.
+    // A modifier-only chord therefore shadows the same modifier plus a
+    // button, which is the reason the scroll-key rows offer modifiers only.
+    void buttonAxisIsSubsetNotExact()
+    {
+        const QVector<ParsedTrigger> modifierOnly{trigger(ModMeta)};
+        QVERIFY(TriggerParser::anyTriggerHeldExact(modifierOnly, Qt::MetaModifier, Qt::MiddleButton));
+
+        // A button-only entry demands no chord modifier under exact matching,
+        // where the subset peer reads modifier 0 as "any modifier".
+        const QVector<ParsedTrigger> buttonOnly{trigger(0, Qt::RightButton)};
+        QVERIFY(TriggerParser::anyTriggerHeldExact(buttonOnly, Qt::NoModifier, Qt::RightButton));
+        QVERIFY(!TriggerParser::anyTriggerHeldExact(buttonOnly, Qt::MetaModifier, Qt::RightButton));
+        QVERIFY(TriggerParser::anyTriggerHeld(buttonOnly, Qt::MetaModifier, Qt::RightButton));
     }
 
     // The two combos added alongside the scroll keys. Meta+Shift used to have

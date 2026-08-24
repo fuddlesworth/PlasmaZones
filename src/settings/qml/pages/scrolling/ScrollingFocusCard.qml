@@ -12,8 +12,9 @@ import org.kde.kirigami as Kirigami
  * SnappingFocusCard. Alongside the two focus rows those siblings carry, it
  * holds the viewport rows the strip needs: how the view follows the focused
  * column, how a column at the screen edge is shown (crop versus resize), and
- * the two wheel chords ("scroll keys") that drive the strip. All belong with focus rather than on
- * a page of their own, so the card hosts them and the former Scrolling →
+ * the two wheel chords ("scroll keys") that drive the strip. All belong with
+ * focus rather than on a page of their own, so the card hosts them and the
+ * former Scrolling →
  * View leaf is gone. Which way the strip runs is the Strip direction card
  * above this one — it moved out to take a per-monitor scope chip.
  *
@@ -140,7 +141,13 @@ SettingsCard {
 
         // The two scroll keys hug the switch that gates them, and stay
         // visible while disabled so a deep link can still reveal their
-        // anchors (the same reasoning the invert row below spells out).
+        // anchors.
+        //
+        // CAVEAT for all three of the rows that follow (both scroll keys and
+        // the invert row): the sanctioned `visible: true` idiom drops BOTH of
+        // SettingsRow's gates, so marking any of them advancedOnly later
+        // would silently keep it visible in simple mode. Re-plumb the visible
+        // binding if that curation ever happens.
         SettingsRow {
             title: i18n("Scroll key for column focus")
             searchAnchor: "wheelFocusTriggers"
@@ -150,7 +157,16 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: root.triggerPreferredWidth
-                acceptMode: acceptModeAll
+                // Modifiers only, matching the "scroll key" these rows are
+                // named for. The exact matcher compares buttons as a SUBSET
+                // even though it compares modifiers exactly, so a
+                // modifier-only chord would shadow a button-bearing one and
+                // the longer binding could never be reached. This is the UI
+                // half of that rule; canonicalWheelTriggerList enforces it in
+                // storage, so a hand-edited config cannot get a button in
+                // either.
+                acceptMode: acceptModeMetaOnly
+                accessibleContext: i18nc("@info:accessibility a sentence fragment substituted into 'Remove trigger for %1' and 'Reset %1 to defaults'", "the column focus scroll key")
                 triggers: root.behaviorBridge.scrollingWheelFocusTriggers
                 defaultTriggers: root.behaviorBridge.defaultScrollingWheelFocusTriggers
                 tooltipEnabled: false
@@ -169,7 +185,9 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: root.triggerPreferredWidth
-                acceptMode: acceptModeAll
+                // Modifiers only, for the same reason as the focus row above.
+                acceptMode: acceptModeMetaOnly
+                accessibleContext: i18nc("@info:accessibility a sentence fragment substituted into 'Remove trigger for %1' and 'Reset %1 to defaults'", "the view scroll key")
                 triggers: root.behaviorBridge.scrollingWheelViewTriggers
                 defaultTriggers: root.behaviorBridge.defaultScrollingWheelViewTriggers
                 tooltipEnabled: false
@@ -182,11 +200,8 @@ SettingsCard {
         // Dependent row: it hugs the row that gates it (no separator between
         // them, the card's convention) and stays visible while disabled rather
         // than taking SettingsRow's default collapse, because it carries a
-        // search anchor a deep link must reveal. CAVEAT the sanctioned
-        // `visible: true` idiom hides: this override drops BOTH of
-        // SettingsRow's gates, so marking this row advancedOnly later would
-        // silently keep it visible in simple mode — re-plumb the visible
-        // binding if that curation ever happens.
+        // search anchor a deep link must reveal. See the caveat above the two
+        // scroll-key rows for what the `visible: true` override costs.
         SettingsRow {
             title: i18n("Invert wheel direction")
             searchAnchor: "wheelFocusInverted"

@@ -37,8 +37,11 @@ namespace TriggerParser {
 /**
  * @brief Map DragModifier enum value to Qt modifier flags
  *
- * Must stay in sync with WindowDragAdaptor::checkModifier() in the daemon.
- * The enum values are defined in src/core/interfaces.h (DragModifier).
+ * The single table. WindowDragAdaptor::checkModifier() in the daemon used to
+ * carry a hand-synced copy and now delegates here, so a new enumerator is
+ * added in one place.
+ * The enum values are defined in src/core/types/enums.h (DragModifier), whose
+ * MaxDragModifier is the authority on the last valid one.
  */
 inline bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods)
 {
@@ -140,13 +143,26 @@ inline bool exactModifierMatch(int modifierSetting, Qt::KeyboardModifiers mods)
 }
 
 /**
- * @brief Whether any trigger matches the current state EXACTLY.
+ * @brief Whether any trigger matches the current state exactly on MODIFIERS.
  *
  * The strict peer of anyTriggerHeld, for consumers whose chords must not
  * shadow one another (the scrolling wheel chords). Nothing distinguishes
  * these triggers from drag triggers in storage — a trigger list is a trigger
  * list — so the caller decides which matcher a list is read with, and it
  * decides that by which SETTING the list came from.
+ *
+ * Exact on modifiers, SUBSET on buttons, and the asymmetry is deliberate
+ * rather than an oversight: a trigger naming no button matches with any
+ * buttons held, so wheeling while a button happens to be down still works.
+ * The cost is that the shadowing this matcher prevents on the modifier axis
+ * survives on the button axis — a modifier-only chord swallows events meant
+ * for the same modifier plus a button. Callers that care should offer
+ * modifiers only, which is what the scroll-key rows do.
+ *
+ * DragModifier::AlwaysActive does NOT survive this matcher's semantics:
+ * modifierMaskFor has no case for it, so it folds to Qt::NoModifier and the
+ * entry comes to mean "only when nothing is held". Lists read with this
+ * matcher are validated by canonicalWheelTriggerList, which drops it.
  *
  * A trigger with neither modifier nor button is skipped here as it is in
  * anyTriggerHeld: an all-zero entry is malformed config, and honouring it

@@ -21,6 +21,7 @@
 
 #include "tilinghandler.h"
 #include "compositor/scrollbehaviourparse.h"
+#include "handlers/dragtracker.h"
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/effectlogging.h"
@@ -30,7 +31,6 @@
 
 #include <effect/effectwindow.h>
 
-#include <QAction>
 #include <QDBusVariant>
 #include <QHash>
 #include <QList>
@@ -38,9 +38,18 @@
 #include <QMetaType>
 #include <QVariant>
 
+#include <cmath>
 #include <optional>
 
 namespace PlasmaZones {
+
+namespace {
+/// Most strip steps one axis event may spend. Bounds both the work done on
+/// KWin's main thread and the D-Bus fan-out, since each step is its own
+/// message. A real wheel notch is 1.0 and even a coalesced high-resolution
+/// frame stays in single digits, so this only ever truncates garbage.
+constexpr int kMaxWheelStepsPerEvent = 16;
+} // namespace
 
 void TilingHandler::clearTiledTracking()
 {
@@ -569,19 +578,61 @@ void TilingHandler::clearActiveLayoutsForTeardown()
     m_effect->sliceActiveLayoutRulesForUnseededMap();
 }
 
-bool TilingHandler::handleWheelChord(qreal delta, Qt::KeyboardModifiers mods, Qt::MouseButtons buttons)
+bool TilingHandler::handleWheelChord(qreal delta, Qt::Orientation orientation, Qt::KeyboardModifiers mods,
+                                     Qt::MouseButtons buttons)
 {
     // Fast path first, in the order that costs least: the enable setting,
     // then "does any screen run the strip at all". Every axis event in the
     // session reaches here, so a session with no scrolling screen pays two
     // reads and nothing more.
+    // Any bail below drops the banked sub-notch remainder. A partial notch is
+    // only meaningful inside the gesture that produced it, and the gesture is
+    // over the moment we stop claiming events: the user releases the chord,
+    // starts a drag, wheels onto a screen with no strip, or turns the feature
+    // off. Carrying a residue across that boundary makes the NEXT gesture
+    // fire its first step early, or late, depending on the sign.
+    //
+    // Two endings this cannot catch, both benign. The residue they carry is
+    // normally under one notch, so at most one step fires early; the
+    // exception is an event that hit the per-event step cap, which leaves
+    // whatever the cap did not spend:
+    //
+    // A user who stops scrolling and only THEN releases the modifier sends no
+    // further axis event, so nothing runs to clear the residue and it is
+    // spent on the next gesture's first event. Dropping it on entry to every
+    // non-claiming path rather than only the no-match one is what keeps that
+    // window as small as it can be without a timer.
+    //
+    // Switching chord mid-scroll (holding Meta, then adding Shift) is a new
+    // gesture on the same axis, and nothing here keys the accumulator on
+    // WHICH chord claimed the event, so the focus chord's residue carries
+    // into the view chord's first step. Tracking the claiming chord would
+    // close it, at the cost of more state in the one place on this path that
+    // has any.
     if (!m_wheelFocusEnabled || m_scrollingScreens.isEmpty()) {
+        resetWheelAccumulators();
         return false;
     }
     // A zero delta carries no direction to act on. It reaches us as the
     // stop/cancel tick that ends a kinetic touchpad stream, and turning it
     // into a signed verb would scroll the strip one step on every stream end.
-    if (qFuzzyIsNull(delta)) {
+    // That tick IS the end of a stream, so it takes the residue with it.
+    //
+    // Non-finite is refused in the same breath, and it has to be refused
+    // BEFORE the accumulator: NaN passes qFuzzyIsNull, poisons the running
+    // total, and then fails every subsequent magnitude comparison, so the
+    // chord would swallow every event on that axis while firing nothing.
+    if (qFuzzyIsNull(delta) || !std::isfinite(delta)) {
+        resetWheelAccumulators();
+        return false;
+    }
+    // Not while a window drag is in flight. The shipped defaults cannot
+    // collide (drag activation is Alt, the chords are Meta and Meta+Shift),
+    // but both sides are user-configurable now, and a user who binds the same
+    // modifier to both would otherwise reflow the strip out from under the
+    // window they are dragging, once per wheel notch.
+    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
+        resetWheelAccumulators();
         return false;
     }
     // Focus is tested BEFORE view. The two chords are matched exactly (see
@@ -593,44 +644,94 @@ bool TilingHandler::handleWheelChord(qreal delta, Qt::KeyboardModifiers mods, Qt
     const bool focusMatch = TriggerParser::anyTriggerHeldExact(m_wheelFocusTriggers, mods, buttons);
     const bool viewMatch = !focusMatch && TriggerParser::anyTriggerHeldExact(m_wheelViewTriggers, mods, buttons);
     if (!focusMatch && !viewMatch) {
+        resetWheelAccumulators();
         return false;
     }
+    // Resolve the target BEFORE touching the accumulators. wheelTargetScreen
+    // is empty when the chord matched over a screen that does not run the
+    // strip, and that event must pass through to the app underneath whole —
+    // including the sub-notch events, which the accumulator branch below
+    // would otherwise swallow.
+    const QString screenId = wheelTargetScreen();
+    if (screenId.isEmpty()) {
+        resetWheelAccumulators();
+        return false;
+    }
+    // Accumulate to a whole notch before acting, which is the threshold
+    // KWin's axis-shortcut path applied for us before the matching moved
+    // here. A discrete wheel notch arrives as |delta| == 1.0 and so still
+    // fires on its first event; a touchpad or high-resolution wheel now
+    // spends several fractional events per step instead of one verb each.
+    qreal& accum = orientation == Qt::Vertical ? m_wheelAccumVertical : m_wheelAccumHorizontal;
+    qreal& other = orientation == Qt::Vertical ? m_wheelAccumHorizontal : m_wheelAccumVertical;
+    accum += delta;
+    if (qAbs(accum) < 1.0) {
+        // Sub-notch, but still part of the chord gesture: consume it so the
+        // app underneath does not scroll its own content while the user is
+        // mid-step on the strip.
+        return true;
+    }
+    // The sign is fixed for this event; only the magnitude is spent below.
+    const qreal whole = accum > 0 ? 1.0 : -1.0;
+    // Spend the WHOLE accumulated magnitude, not one notch of it. A fast
+    // discrete wheel and a coalesced high-resolution frame both deliver
+    // |delta| well above 1.0 in a single event, and taking one step per event
+    // there would bank the rest forever: the strip would lag the wheel by a
+    // growing margin and the unspent remainder would be dropped at the end of
+    // the gesture.
+    //
+    // Computed arithmetically and CAPPED rather than looped down. A loop here
+    // is a compositor hang waiting to happen: it runs on KWin's main thread,
+    // and a delta large enough that subtracting 1.0 no longer changes it
+    // never terminates. The cap also bounds the D-Bus fan-out below, since
+    // each step is its own message and no real gesture needs more than a
+    // handful per event.
+    const int steps = static_cast<int>(qMin(qAbs(accum), static_cast<qreal>(kMaxWheelStepsPerEvent)));
+    accum -= steps * whole;
+    // This gesture belongs to one axis. Zeroing the other stops a diagonal
+    // drift from banking a second, opposite step on the axis the user is not
+    // actually scrolling along.
+    other = 0.0;
     // Sign, not magnitude: one notch is one column (or one view step), and
     // the engine owns the step size. A wheel DOWN or RIGHT moves toward the
     // end of the strip, matching niri and the scroll direction of the axis.
     // Which way that points on screen is resolved downstream against the
     // screen's own strip axis, so one rule serves a horizontal and a vertical
     // strip alike and a horizontal (tilted) wheel needs no separate arm.
-    int step = delta > 0 ? 1 : -1;
-    // wheelTargetScreen applies the inversion setting and resolves the strip
-    // under the CURSOR (a wheel chord is a pointer gesture, not a focus
-    // verb). An empty answer means the chord matched over a screen that does
-    // not run the strip, and the event is left alone rather than swallowed:
-    // there is nothing here to act on and the app underneath should scroll.
-    const QString screenId = wheelTargetScreen(step);
-    if (screenId.isEmpty()) {
-        return false;
+    int step = whole > 0 ? 1 : -1;
+    if (m_wheelFocusInverted) {
+        step = -step;
     }
     const QLatin1String verb = focusMatch ? QLatin1String("focusColumn") : QLatin1String("scrollView");
-    qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "on" << screenId;
-    PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling, QString(verb),
-                                                   {screenId, step}, QString(verb));
+    qCDebug(lcEffect) << "Wheel chord:" << verb << "step" << step << "x" << steps << "on" << screenId;
+    // One verb per notch. The engine owns the step SIZE, so a two-notch event
+    // is two single steps rather than one double-sized one, which keeps the
+    // strip's own animation identical to scrolling those notches separately.
+    for (int i = 0; i < steps; ++i) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Scrolling,
+                                                       QString(verb), {screenId, step}, QString(verb));
+    }
     return true;
 }
 
-QString TilingHandler::wheelTargetScreen(int& delta) const
+void TilingHandler::resetWheelAccumulators()
 {
-    if (!m_effect->m_daemonGate.serviceRegistered) {
+    m_wheelAccumVertical = 0.0;
+    m_wheelAccumHorizontal = 0.0;
+}
+
+QString TilingHandler::wheelTargetScreen() const
+{
+    if (!m_effect->m_daemonGate.serviceRegistered || !KWin::effects) {
         return QString();
-    }
-    if (m_wheelFocusInverted) {
-        delta = -delta;
     }
     // The strip that moves is the one under the CURSOR (a wheel chord is a
     // pointer gesture, not a focus verb): resolve the cursor's effective
     // screen — virtual subdivisions included — and only forward when it
-    // actually runs the scrolling engine. On any other screen the chord is
-    // consumed but inert; registration is per-session, not per-screen.
+    // actually runs the scrolling engine. On any other screen this returns
+    // empty and the caller passes the event through untouched: matching is
+    // per event, not a registration, so nothing is consumed and the app
+    // underneath scrolls normally.
     const QPointF pos = KWin::effects->cursorPos();
     const QPoint rounded(qRound(pos.x()), qRound(pos.y()));
     const auto* output = KWin::effects->screenAt(rounded);

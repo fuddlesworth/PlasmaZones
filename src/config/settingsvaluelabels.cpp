@@ -365,9 +365,14 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         // ── Triggers ────────────────────────────────────────────────────────
         // the tiling drag-insert triggers are a leaf of Tiling.Behavior, not a sub-group of their own —
         // the tiling triggers live in Tiling.Behavior itself.
+        // The two wheel chords sit in groups of their own
+        // (Scrolling.Wheel.Focus and .View), so they need their own entries
+        // here. A trigger list this loop does not name renders as a raw
+        // maplist in the profile diff instead of as a chord.
         for (const QString& group :
              {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(), CD::snappingBehaviorSnapAssistGroup(),
-              CD::tilingBehaviorGroup(), CD::scrollingBehaviorGroup()}) {
+              CD::tilingBehaviorGroup(), CD::scrollingBehaviorGroup(), CD::scrollingWheelFocusGroup(),
+              CD::scrollingWheelViewGroup()}) {
             t.insert(pairKey(group, CD::triggersKey()), idKind(ValueKind::Trigger));
         }
         t.insert(pairKey(CD::editorSnappingGroup(), CD::overrideModifierKey()), idKind(ValueKind::Trigger));

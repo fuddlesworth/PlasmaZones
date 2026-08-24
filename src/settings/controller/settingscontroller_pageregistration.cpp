@@ -332,9 +332,9 @@ void SettingsController::buildApplicationController()
     // The advanced tree mirrors Tiling's per-concern split: Columns
     // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
     // eighteen-knob family), Window (window handling plus the Focus and view
-    // card, which carries viewport centering and the Meta+wheel gesture —
-    // those follow focus, so they sit with it rather than on a View leaf of
-    // their own), Strip Selector (the drag popup), then the shared
+    // card, which carries viewport centering and the two scroll-key trigger
+    // rows — those follow focus, so they sit with it rather than on a View
+    // leaf of their own), Strip Selector (the drag popup), then the shared
     // Configuration category (Priority + Quick Shortcuts) registered further
     // down. Columns is the simple page's counterpart, like tiling-simple ↔
     // tiling-algorithm.

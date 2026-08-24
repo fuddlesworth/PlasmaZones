@@ -159,8 +159,11 @@ public:
     virtual bool scrollingDragInsertToggle() const = 0;
     virtual void setScrollingDragInsertToggle(bool enable) = 0;
 
-    /// The two scrolling wheel chords. Each entry carries a wheel component
-    /// alongside its modifier and mouse button — see ConfigKeys.
+    /// The two scrolling wheel chords. Ordinary trigger lists, with no wheel
+    /// marker of any kind: each entry carries only a modifier and a mouse
+    /// button, and the wheel is implicit in which setting the list came from.
+    /// They are read with anyTriggerHeldExact rather than anyTriggerHeld, so
+    /// an extra held modifier means "not this chord".
     virtual QVariantList scrollingWheelFocusTriggers() const = 0;
     virtual void setScrollingWheelFocusTriggers(const QVariantList& triggers) = 0;
     virtual QVariantList scrollingWheelViewTriggers() const = 0;

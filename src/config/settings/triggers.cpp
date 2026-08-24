@@ -42,8 +42,9 @@ P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey
 P_STORE_GET(bool, zoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, zoneSpanToggleModeChanged)
 
-// Shared helper for the four "plain" trigger-list setters (activation,
-// snap-assist, autotile-insert, scrolling-insert in settings/scrolling.cpp). Post-write compare — the schema's
+// Shared helper for the "plain" trigger-list setters (activation,
+// snap-assist, autotile-insert, and scrolling-insert plus the two wheel
+// chords in settings/scrolling.cpp). Post-write compare — the schema's
 // canonicalTriggerList validator drops non-map entries, strips unknown keys,
 // and caps the list. A pre-write equality check against the stored canonical
 // form would fire a spurious changed signal whenever the caller passed a
@@ -208,7 +209,7 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
     for (const auto& t : storedTriggers) {
         const int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
         if (mod != 0) {
-            synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
+            synced = static_cast<DragModifier>(qBound(0, mod, MaxDragModifier));
             break;
         }
     }

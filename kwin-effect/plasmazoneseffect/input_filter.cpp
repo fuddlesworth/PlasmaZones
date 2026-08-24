@@ -167,7 +167,7 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     // chord we do claim never reaches the app underneath, which would
     // otherwise scroll its own content at the same time as the strip.
     if (TilingHandler* tiling = m_effect->tilingHandler();
-        tiling && tiling->handleWheelChord(event->delta, event->modifiers, event->buttons)) {
+        tiling && tiling->handleWheelChord(event->delta, event->orientation, event->modifiers, event->buttons)) {
         // A claimed chord ends whatever ScrollFactor stream was running: the
         // client never sees this tick, so its fractional remainder must not
         // survive to be applied to the next tick it does see.

@@ -48,7 +48,7 @@ private Q_SLOTS:
         // Activation. Enum-valued settings derive their bounds from the enum
         // (not magic literals) so the tripwire tracks the enum if it grows.
         QVERIFY(ConfigDefaults::zoneSpanModifier() >= static_cast<int>(DragModifier::Disabled));
-        QVERIFY(ConfigDefaults::zoneSpanModifier() <= static_cast<int>(DragModifier::CtrlAltMeta));
+        QVERIFY(ConfigDefaults::zoneSpanModifier() <= MaxDragModifier);
 
         // Display
         QVERIFY(ConfigDefaults::osdStyle() >= ConfigDefaults::osdStyleMin());

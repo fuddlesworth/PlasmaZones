@@ -103,10 +103,19 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return QVariant::fromValue(m_settings->zoneSpanTriggers());
     };
     m_setters[QStringLiteral("zoneSpanTriggers")] = [this](const QVariant& v) {
+        // Refuse non-QVariantList payloads rather than coercing: toList() on an
+        // int, bool, map or string yields an EMPTY list, which writes straight
+        // through and wipes the user's binding while reporting success.
+        if (v.typeId() != QMetaType::QVariantList) {
+            return false;
+        }
         m_settings->setZoneSpanTriggers(v.toList());
         return true;
     };
-    m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
+    // "maplist", not "stringlist": the payload is a QVariantList of trigger
+    // MAPS and the setter refuses anything else, so a schema-honouring client
+    // that sent an actual string list would be silently refused.
+    m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
@@ -165,10 +174,14 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return QVariant::fromValue(m_settings->snapAssistTriggers());
     };
     m_setters[QStringLiteral("snapAssistTriggers")] = [this](const QVariant& v) {
+        // Refuse rather than coerce, same as zoneSpanTriggers above.
+        if (v.typeId() != QMetaType::QVariantList) {
+            return false;
+        }
         m_settings->setSnapAssistTriggers(v.toList());
         return true;
     };
-    m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("stringlist");
+    m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("maplist");
 
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)

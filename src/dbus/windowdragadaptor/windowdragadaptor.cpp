@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowdragadaptor.h"
+
+#include <PhosphorCompositor/TriggerParser.h>
+
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QScreen>
@@ -59,7 +62,9 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     , m_settings(settings)
     , m_windowTracking(windowTracking)
 {
-    // Every dep is mandatory — a misordered Daemon wiring that
+    // Every dep below is mandatory (screenManager is the deliberate
+    // exception: every use of it carries a fallback, so it stays optional and
+    // is not checked here) — a misordered Daemon wiring that
     // constructs WindowDragAdaptor before its dependencies would
     // otherwise produce a silently-no-op (but D-Bus-callable) object
     // that crashes on the first slot dispatch instead of at
@@ -135,41 +140,12 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
 
 bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const
 {
-    bool shiftHeld = mods.testFlag(Qt::ShiftModifier);
-    bool ctrlHeld = mods.testFlag(Qt::ControlModifier);
-    bool altHeld = mods.testFlag(Qt::AltModifier);
-    bool metaHeld = mods.testFlag(Qt::MetaModifier);
-
-    switch (modifierSetting) {
-    case static_cast<int>(DragModifier::Disabled):
-        return false;
-    case static_cast<int>(DragModifier::Shift):
-        return shiftHeld;
-    case static_cast<int>(DragModifier::Ctrl):
-        return ctrlHeld;
-    case static_cast<int>(DragModifier::Alt):
-        return altHeld;
-    case static_cast<int>(DragModifier::Meta):
-        return metaHeld;
-    case static_cast<int>(DragModifier::CtrlAlt):
-        return ctrlHeld && altHeld;
-    case static_cast<int>(DragModifier::CtrlShift):
-        return ctrlHeld && shiftHeld;
-    case static_cast<int>(DragModifier::AltShift):
-        return altHeld && shiftHeld;
-    case static_cast<int>(DragModifier::AlwaysActive):
-        return true;
-    case static_cast<int>(DragModifier::AltMeta):
-        return altHeld && metaHeld;
-    case static_cast<int>(DragModifier::CtrlAltMeta):
-        return ctrlHeld && altHeld && metaHeld;
-    case static_cast<int>(DragModifier::MetaShift):
-        return metaHeld && shiftHeld;
-    case static_cast<int>(DragModifier::CtrlMeta):
-        return ctrlHeld && metaHeld;
-    default:
-        return false;
-    }
+    // Delegated rather than duplicated. This switch used to be a second copy
+    // of TriggerParser::checkModifier kept in step by hand, which is a cost
+    // that came due: adding MetaShift and CtrlMeta meant editing the same
+    // table in two files, and a miss in either would have made a chord match
+    // in the effect but not in the daemon (or the reverse). One table now.
+    return PhosphorCompositor::TriggerParser::checkModifier(modifierSetting, mods);
 }
 
 bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const

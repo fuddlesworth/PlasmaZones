@@ -84,8 +84,22 @@ int bitmaskToDragModifier(int bitmask)
     if (hasAlt && hasShift && !hasCtrl && !hasMeta)
         return 7; // Alt+Shift
 
-    // For other combinations not in enum, map to closest match or default
-    // This allows UI flexibility while maintaining enum compatibility
+    // For other combinations not in enum, map to closest match or default.
+    // This allows UI flexibility while maintaining enum compatibility.
+    //
+    // ORDER MATTERS here, and adding an enumerator can silently re-point an
+    // existing combination. The Meta+Shift arm below sits ahead of the
+    // Alt+Shift one, so Meta+Alt+Shift now resolves to Meta+Shift where it
+    // used to resolve to Alt+Shift before MetaShift existed; likewise
+    // Ctrl+Meta+Shift moved off Ctrl+Shift. Both keep Meta rather than
+    // dropping it, which is the better of two lossy answers, but the choice
+    // is deliberate rather than incidental.
+    //
+    // Nothing here includes the DragModifier enum it mirrors — the switch is
+    // written against bare wire values, so a new enumerator can never fail to
+    // compile in this file. tests/unit/core/test_modifier_utils.cpp is what
+    // ties the two together: it walks every enumerator up to MaxDragModifier
+    // and pins this tail's order.
     if (hasCtrl && hasAlt && hasMeta)
         return 10; // Ctrl+Alt+Meta (e.g. all four modifiers)
     if (hasMeta && hasShift)

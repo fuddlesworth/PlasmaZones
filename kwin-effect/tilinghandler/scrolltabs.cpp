@@ -1096,10 +1096,13 @@ void TilingHandler::setScrollTabHoverCursor(bool overPill)
     // and the interception ends the moment the pointer leaves the pill. Held
     // for the pill's span only, so no column ever loses input it should have
     // had. The one cost, accepted: while held, KWin consumes EVERY pointer
-    // event for the effect, so a wheel tick, a right or a middle press over a
-    // pill reach nothing (there is no effect-side way to forward them to the
-    // window underneath). The pills are thin and the hand makes the span
-    // visible, which is the same trade a toolkit tab bar makes.
+    // event for the effect, so a right or a middle press over a pill reaches
+    // nothing (there is no effect-side way to forward them to the window
+    // underneath). The pills are thin and the hand makes the span visible,
+    // which is the same trade a toolkit tab bar makes. A wheel tick is the
+    // exception: PlasmaZonesEffect::pointerAxis routes the strip's wheel
+    // chords itself here, because the filter that normally matches them sits
+    // below the Effects filter and never sees an intercepted event.
     if (hold) {
         KWin::effects->startMouseInterception(m_effect, Qt::PointingHandCursor);
     } else {

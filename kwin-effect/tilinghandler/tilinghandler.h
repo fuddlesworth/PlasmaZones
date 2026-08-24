@@ -371,9 +371,11 @@ public:
     // consumers; inverting flips the wheel direction for both.
     void setWheelFocusEnabled(bool enabled);
     void setWheelFocusInverted(bool inverted);
-    // The user-configured chords themselves ("scroll keys"). Each list is a
-    // parsed trigger list whose entries carry a wheel component alongside
-    // their modifier and mouse button.
+    // The user-configured chords themselves ("scroll keys"). Each list is an
+    // ordinary parsed trigger list: the entries carry only a modifier and a
+    // mouse button, and the wheel is implicit in which setting the list came
+    // from. What makes them scroll keys is the MATCHER the caller reads them
+    // with (anyTriggerHeldExact, not anyTriggerHeld).
     void setWheelFocusTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers);
     void setWheelViewTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers);
 
@@ -382,14 +384,22 @@ public:
     /// it: forwarding a matched chord would scroll the app underneath as
     /// well as the strip.
     ///
+    /// Returns true when the chord CLAIMED the event, which is not the same
+    /// as having acted on it: a sub-notch delta is claimed and banked without
+    /// firing a verb, so the app underneath does not scroll its own content
+    /// while the user is mid-step on the strip.
+    ///
     /// @p delta is the event's own. The direction the strip moves is derived
-    /// here (sign of the delta, inversion setting) and the strip AXIS is
-    /// resolved downstream by the engine, so one rule serves a horizontal and
-    /// a vertical strip alike. The event's ORIENTATION is deliberately not a
-    /// parameter: a positive delta means "down" on a vertical wheel and
-    /// "right" on a tilted one, and both mean the same thing here — toward
-    /// the end of the strip.
-    bool handleWheelChord(qreal delta, Qt::KeyboardModifiers mods, Qt::MouseButtons buttons);
+    /// here (sign of the accumulated notch, inversion setting) and the strip
+    /// AXIS is resolved downstream by the engine, so one rule serves a
+    /// horizontal and a vertical strip alike: a whole notch means "toward the
+    /// end of the strip" whether it came from a vertical wheel or a tilted
+    /// one. @p orientation does not pick a direction, then. It picks which
+    /// per-axis ACCUMULATOR the delta lands in, because KWin delivers
+    /// horizontal and vertical scroll as two independent streams and a
+    /// diagonal touchpad drift feeds both at once.
+    bool handleWheelChord(qreal delta, Qt::Orientation orientation, Qt::KeyboardModifiers mods,
+                          Qt::MouseButtons buttons);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isManagedScreen(const QString& screenId) const;
@@ -1142,7 +1152,12 @@ private:
     /// Why the CURSOR and not the focused window: a wheel chord is a pointer
     /// gesture. Scrolling over a strip on the second monitor should move that
     /// strip, not the one holding focus.
-    QString wheelTargetScreen(int& delta) const;
+    QString wheelTargetScreen() const;
+
+    /// Drop any banked sub-notch remainder. Called from every path that stops
+    /// claiming axis events, so a partial notch cannot outlive the gesture
+    /// that produced it.
+    void resetWheelAccumulators();
     /// Pause the effect's own focus-follows-mouse after an ENGINE-driven
     /// strip movement on a scrolling screen (tile batch or activation).
     /// Scrolling slides other columns under a stationary pointer, and the
@@ -1519,8 +1534,33 @@ private:
     // not enumerators: DragModifier lives in a daemon header the effect
     // cannot include, which is the same reason TriggerParser::checkModifier
     // switches on bare ints. Keep both in step with that table.
+    //
+    // The seed's failure direction is to CONSUME, unlike the drag lists,
+    // whose pre-load latch is deliberately permissive. loadSettingAsync only
+    // invokes its callback on a VALID reply, so if the reply is lost these
+    // shipped chords stay live: a user who rebound the focus chord elsewhere
+    // would find Meta+wheel still claimed by the strip rather than passed to
+    // their app. Accepted rather than gated, because gating would make both
+    // chords dead for the whole pre-reply window to cover a case the next
+    // settingsChanged re-requests anyway.
     QVector<PhosphorCompositor::ParsedTrigger> m_wheelFocusTriggers{{4, 0}};
     QVector<PhosphorCompositor::ParsedTrigger> m_wheelViewTriggers{{11, 0}};
+    // Smooth-delta accumulators, one per axis, in wheel-notch units.
+    //
+    // Matching used to run through KWin's registerAxisShortcut, whose
+    // processAxis only fires once the accumulated |delta| clears 1.0. Doing
+    // the matching ourselves means owning that threshold too: a touchpad or a
+    // high-resolution wheel delivers many fractional events per notch, and
+    // one strip verb per libinput event would send dozens of column steps
+    // per flick.
+    //
+    // Kept per axis because KWin delivers horizontal and vertical scroll as
+    // two independent event streams. A diagonal two-finger drift feeds both,
+    // and the axes can carry opposite signs, so a single accumulator would
+    // interleave +1 and -1 steps. The axis that crosses first wins the
+    // gesture and zeroes the other.
+    qreal m_wheelAccumVertical = 0.0;
+    qreal m_wheelAccumHorizontal = 0.0;
     // ── Border state — uses shared BorderState from compositor-common ──
     BorderState m_border;
 };

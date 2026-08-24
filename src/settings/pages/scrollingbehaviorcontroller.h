@@ -11,22 +11,25 @@ namespace PlasmaZones {
 
 class ISettings;
 
-/// Q_PROPERTY surface for the scrolling drag re-insert triggers (the
-/// Triggers card on the "Scrolling → Window" page) — the scrolling twin of
-/// TilingBehaviorController.
+/// Q_PROPERTY surface for the scrolling trigger lists on the
+/// "Scrolling → Window" page: the drag re-insert triggers (the Triggers
+/// card) and the two wheel chords, or "scroll keys" (the Focus and view
+/// card). The scrolling twin of TilingBehaviorController.
 ///
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.scrollingBehaviorPage.scrollingDragInsertTriggers`
-/// etc. Covers the trigger list plus its derived `alwaysReinsertIntoStrip`
-/// boolean (the AlwaysActive sentinel stored inside the list). Trigger-list
-/// conversion lives in `PlasmaZones::TriggerUtils`, shared with the snapping
-/// and tiling controllers.
+/// etc. The drag re-insert list also carries a derived
+/// `alwaysReinsertIntoStrip` boolean (the AlwaysActive sentinel stored
+/// inside the list); the two wheel lists cannot carry that sentinel at all,
+/// because canonicalWheelTriggerList drops it. Trigger-list conversion lives
+/// in `PlasmaZones::TriggerUtils`, shared with the snapping and tiling
+/// controllers.
 ///
-/// Dirty tracking: the underlying `scrollingDragInsertTriggers` property IS
-/// Q_PROPERTY on Settings, so SettingsController's meta-object loop already
-/// wires the NOTIFY to `onSettingsPropertyChanged()`. This class just
-/// forwards the NOTIFY to QML and caches the derived boolean so it only
-/// fires when it actually flips.
+/// Dirty tracking: all three underlying properties ARE Q_PROPERTY on
+/// Settings, so SettingsController's meta-object loop already wires their
+/// NOTIFY to `onSettingsPropertyChanged()`. This class just forwards those
+/// to QML, and caches the derived boolean so it only fires when it actually
+/// flips.
 class ScrollingBehaviorController : public PhosphorControl::PageController
 {
     Q_OBJECT
