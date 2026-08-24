@@ -141,17 +141,22 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         if (m_scrollDropIndicatorHidePending.contains(screenId)) {
             return;
         }
-        // Generation-guard the animated hide. ShellHost::hideSlot fires this
-        // completion SYNCHRONOUSLY on its benign no-op early returns (no
-        // state, no surface, no slot entry, item already invisible), so it can
-        // land after a later show has written loaded=true and setVisible(true)
-        // — which this callback would otherwise clobber. The guard makes such
-        // a completion stale-return instead.
+        // Generation-guard the animated hide. Defence in depth: no currently
+        // reachable path fires it stale, and it is kept rather than removed
+        // because the teardown below is destructive and the cost is one
+        // integer compare.
         //
-        // It does NOT guard against a superseded animation completion:
-        // SurfaceAnimator drops those on both the enabled and the gate-off
-        // path (see the contract note on SurfaceAnimator::setEnabled), so a
-        // preempted hide never calls back at all.
+        // Stated honestly because two earlier versions of this comment each
+        // asserted a mechanism that does not hold. The two candidates, and why
+        // neither reaches:
+        //   - hideSlot's benign no-op returns DO run this completion
+        //     synchronously, but they run it inside the hideSlot call below,
+        //     so it cannot land after a later show.
+        //   - a superseded animation completion never runs at all:
+        //     SurfaceAnimator drops it on both the enabled and the gate-off
+        //     path (see the contract note on SurfaceAnimator::setEnabled).
+        // The re-entry guard above and the hideWasInFlight handshake in the
+        // show path are what actually carry the correctness here.
         const quint64 hideGeneration = ++m_scrollDropIndicatorHideGuard[screenId];
         m_scrollDropIndicatorHidePending.insert(screenId);
         m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollDropIndicator(), [this, screenId, hideGeneration]() {

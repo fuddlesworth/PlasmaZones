@@ -382,12 +382,6 @@ private Q_SLOTS:
         delete surface;
     }
 
-    /// cancel(surface) must NOT fire the consumer's onComplete.
-    /// Cancellation is the documented non-completion termination path;
-    /// the contract is "consumers that need a settled signal regardless
-    /// of completion-vs-cancellation must wrap the callback themselves."
-    /// `dtor_cancels_leftover_tracks` exercises this in the dtor scenario;
-    /// this test pins the same invariant on the explicit `cancel()` path.
     /// A superseded operation's onComplete is DROPPED on the gate-off path,
     /// exactly as it is on the enabled path.
     ///
@@ -454,6 +448,12 @@ private Q_SLOTS:
         delete surface;
     }
 
+    /// cancel(surface) must NOT fire the consumer's onComplete.
+    /// Cancellation is the documented non-completion termination path;
+    /// the contract is "consumers that need a settled signal regardless
+    /// of completion-vs-cancellation must wrap the callback themselves."
+    /// `dtor_cancels_leftover_tracks` exercises this in the dtor scenario;
+    /// this test pins the same invariant on the explicit `cancel()` path.
     void cancel_does_not_fire_oncomplete()
     {
         PhosphorLayer::Testing::MockTransport t;

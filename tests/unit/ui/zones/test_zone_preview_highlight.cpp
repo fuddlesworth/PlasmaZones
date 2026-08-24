@@ -262,6 +262,47 @@ private:
         return nullptr;
     }
 
+    /// A StripEmptyState's live metrics at @p width: the caption's height plus
+    /// the Column's spacing, and the constant arrowhead extent. MEASURED, not
+    /// assumed — both are font, DPI and gridUnit products, so a fixture that
+    /// hardcodes them only discriminates on the machine it was written on.
+    /// Returns false if the component could not be built.
+    ///
+    /// Deliberately OUTSIDE the private Q_SLOTS block below: moc registers
+    /// everything in there as a slot, and a helper that later lost its
+    /// parameters would start running as a silent extra "test".
+    bool stripEmptyStateMetrics(qreal width, const QString& caption, qreal* capPlusSpacing, qreal* headExtent)
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.StripEmptyState { }\n",
+            QUrl(QStringLiteral("qrc:/test_strip_empty_state_probe.qml")));
+        if (!component.isReady()) {
+            return false;
+        }
+        QVariantMap initial;
+        initial[QStringLiteral("caption")] = caption;
+        // Horizontal on purpose: there _arrowStackExtent is the CONSTANT
+        // arrowhead box, so the rest of _stackHeight is exactly the caption
+        // plus the Column's spacing. The caption's own height depends only on
+        // the WIDTH (its width binding bounds it against root.width), so a
+        // measurement taken here is valid at any height and on either axis.
+        initial[QStringLiteral("verticalAxis")] = false;
+        initial[QStringLiteral("width")] = width;
+        initial[QStringLiteral("height")] = 400.0;
+        // Owned before the cast, so a non-Item result is still destroyed.
+        std::unique_ptr<QObject> created(component.createWithInitialProperties(initial));
+        auto* probe = qobject_cast<QQuickItem*>(created.get());
+        if (!probe) {
+            return false;
+        }
+        *headExtent = probe->property("_arrowStackExtent").toReal();
+        *capPlusSpacing = probe->property("_stackHeight").toReal() - *headExtent;
+        return *headExtent > 0 && *capPlusSpacing > 0;
+    }
+
 private Q_SLOTS:
     /// A layout host must draw NO ticks. ZonePreview is shared with the
     /// picker, the OSD and every settings thumbnail, and a chevron on a snap
@@ -736,42 +777,6 @@ private Q_SLOTS:
         }
     }
 
-    /// A well too short for the arrow drops it rather than clipping the
-    /// caption. The hosts clip this component, so without the drop the
-    /// sentence that carries the whole message loses its bottom line.
-    /// A StripEmptyState's live metrics at @p width: the caption's height plus
-    /// the Column's spacing, and the constant arrowhead extent. MEASURED, not
-    /// assumed — both are font, DPI and gridUnit products, so a fixture that
-    /// hardcodes them only discriminates on the machine it was written on.
-    /// Returns false if the component could not be built.
-    bool stripEmptyStateMetrics(qreal width, const QString& caption, qreal* capPlusSpacing, qreal* headExtent)
-    {
-        QQmlComponent component(&m_engine);
-        component.setData(
-            "import QtQuick\n"
-            "import org.plasmazones.common as QFZCommon\n"
-            "QFZCommon.StripEmptyState { }\n",
-            QUrl(QStringLiteral("qrc:/test_strip_empty_state_probe.qml")));
-        if (!component.isReady()) {
-            return false;
-        }
-        QVariantMap initial;
-        initial[QStringLiteral("caption")] = caption;
-        // Horizontal on purpose: there _arrowStackExtent is the CONSTANT
-        // arrowhead box, so the rest of _stackHeight is exactly the caption
-        // plus the Column's spacing.
-        initial[QStringLiteral("verticalAxis")] = false;
-        initial[QStringLiteral("width")] = width;
-        initial[QStringLiteral("height")] = 400.0;
-        std::unique_ptr<QQuickItem> probe(qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial)));
-        if (!probe) {
-            return false;
-        }
-        *headExtent = probe->property("_arrowStackExtent").toReal();
-        *capPlusSpacing = probe->property("_stackHeight").toReal() - *headExtent;
-        return *headExtent > 0 && *capPlusSpacing > 0;
-    }
-
     void testStripEmptyStateDropsTheArrowBeforeTheCaption_data()
     {
         QTest::addColumn<bool>("verticalAxis");
@@ -808,13 +813,25 @@ private Q_SLOTS:
         // If the running theme leaves that band empty the row is skipped
         // rather than failing, because there is then no height at which this
         // component can distinguish the two.
+        bool verticalRowEmitted = false;
         if (stripEmptyStateMetrics(90.0, caption, &capPlusSpacing, &headExtent)) {
             const qreal lo = headExtent + capPlusSpacing;
-            const qreal hi = capPlusSpacing / 0.55;
+            // The 0.5 absorbs Math.round: the component computes its span as
+            // round(0.45h), so solving against exact 0.45h can land a height
+            // where the rounded span makes the arrow fit after all.
+            const qreal hi = (capPlusSpacing - 0.5) / 0.55;
             const qreal h = std::floor(lo) + 1.0;
             if (lo < hi && h < hi) {
                 QTest::newRow("vertical") << true << 90.0 << h;
+                verticalRowEmitted = true;
             }
+        }
+        // A vanished vertical row is the axis-asymmetry hole this case exists
+        // to close, so losing it must be LOUD. An emitted-but-skipping row
+        // shows up in the ctest output; a silently absent one leaves a green
+        // suite with horizontal coverage only.
+        if (!verticalRowEmitted) {
+            QTest::newRow("vertical (no discriminating height on this theme)") << true << 90.0 << qreal(-1.0);
         }
     }
 
@@ -854,11 +871,22 @@ private Q_SLOTS:
         }
     }
 
+    /// A well too short for the arrow drops it rather than clipping the
+    /// caption. A host may clip this component, so without the drop the
+    /// sentence that carries the whole message loses its bottom line.
     void testStripEmptyStateDropsTheArrowBeforeTheCaption()
     {
         QFETCH(bool, verticalAxis);
         QFETCH(qreal, width);
         QFETCH(qreal, height);
+
+        // The sentinel the _data function emits when the running theme offers
+        // no height at which this axis can tell the correct fit formula from
+        // the one it replaced. Skipping is visible in the ctest output; an
+        // absent row would not be.
+        if (height < 0) {
+            QSKIP("no height on this theme distinguishes the arrow's span from its head box");
+        }
 
         QQmlComponent component(&m_engine);
         component.setData(
