@@ -6,12 +6,12 @@
     <message>
         <location filename="../libs/phosphor-control/qml/AboutPageShell.qml" line="79"/>
         <source>About %1</source>
-        <translation type="unfinished"></translation>
+        <translation>О программе %1</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/AboutPageShell.qml" line="79"/>
         <source>About</source>
-        <translation type="unfinished">О программе</translation>
+        <translation>О программе</translation>
     </message>
 </context>
 <context>
@@ -19,37 +19,37 @@
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="36"/>
         <source>Discard unsaved changes?</source>
-        <translation type="unfinished">Отменить несохранённые изменения?</translation>
+        <translation>Отменить несохранённые изменения?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
         <source>You have unsaved settings. Apply them now, or close without saving?</source>
-        <translation type="unfinished"></translation>
+        <translation>Есть несохранённые параметры. Применить их сейчас или закрыть без сохранения?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
         <source>You have unsaved settings. Closing now will discard them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Есть несохранённые параметры. Если закрыть сейчас, они будут потеряны.</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="52"/>
         <source>Apply</source>
-        <translation type="unfinished">Применить</translation>
+        <translation>Применить</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="67"/>
         <source>Discard</source>
-        <translation type="unfinished">Отменить</translation>
+        <translation>Отменить</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="81"/>
         <source>Cancel</source>
-        <translation type="unfinished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="81"/>
         <source>Keep Editing</source>
-        <translation type="unfinished"></translation>
+        <translation>Продолжить правку</translation>
     </message>
 </context>
 <context>
@@ -57,7 +57,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/PageHost.qml" line="281"/>
         <source>Select a page from the sidebar</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите страницу на боковой панели</translation>
     </message>
 </context>
 <context>
@@ -66,7 +66,7 @@
         <location filename="../libs/phosphor-control/qml/PageLoadingIndicator.qml" line="28"/>
         <location filename="../libs/phosphor-control/qml/PageLoadingIndicator.qml" line="70"/>
         <source>Loading…</source>
-        <translation type="unfinished"></translation>
+        <translation>Загрузка…</translation>
     </message>
 </context>
 <context>
@@ -74,17 +74,17 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="142"/>
         <source>Settings</source>
-        <translation type="unfinished">Параметры</translation>
+        <translation>Параметры</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="553"/>
         <source>Back</source>
-        <translation type="unfinished">Назад</translation>
+        <translation>Назад</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="567"/>
         <source>Forward</source>
-        <translation type="unfinished">Вперёд</translation>
+        <translation>Вперёд</translation>
     </message>
 </context>
 <context>
@@ -92,7 +92,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/Sidebar.qml" line="563"/>
         <source>Search...</source>
-        <translation type="unfinished"></translation>
+        <translation>Поиск…</translation>
     </message>
 </context>
 <context>
@@ -100,13 +100,13 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
         <source>Back to %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Назад: %1</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="88"/>
         <source>Back</source>
-        <translation type="unfinished">Назад</translation>
+        <translation>Назад</translation>
     </message>
 </context>
 <context>
@@ -114,12 +114,12 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
         <source>%1 section, expanded</source>
-        <translation type="unfinished"></translation>
+        <translation>Раздел «%1», развёрнут</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
         <source>%1 section, collapsed</source>
-        <translation type="unfinished"></translation>
+        <translation>Раздел «%1», свёрнут</translation>
     </message>
 </context>
 <context>
@@ -127,53 +127,53 @@
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="173"/>
         <source>Unsaved changes</source>
-        <translation type="unfinished">Несохранённые изменения</translation>
+        <translation>Несохранённые изменения</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
         <source>Discarding…</source>
-        <translation type="unfinished"></translation>
+        <translation>Отмена…</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="245"/>
         <source>Discard</source>
-        <translation type="unfinished">Отменить</translation>
+        <translation>Отменить</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="187"/>
         <source>Discard changes</source>
-        <translation type="unfinished"></translation>
+        <translation>Отменить изменения</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="196"/>
         <source>Saving…</source>
-        <translation type="unfinished"></translation>
+        <translation>Сохранение…</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="196"/>
         <source>Save</source>
-        <translation type="unfinished">Сохранить</translation>
+        <translation>Сохранить</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="200"/>
         <source>Save settings</source>
-        <translation type="unfinished"></translation>
+        <translation>Сохранить параметры</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="240"/>
         <source>Discard Changes</source>
-        <translation type="unfinished"></translation>
+        <translation>Отменить изменения</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="241"/>
         <source>Are you sure you want to discard all unsaved changes?</source>
-        <translation type="unfinished"></translation>
+        <translation>Отменить все несохранённые изменения?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="254"/>
         <source>Cancel</source>
-        <translation type="unfinished">Отмена</translation>
+        <translation>Отмена</translation>
     </message>
 </context>
 <context>
@@ -181,47 +181,47 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="43"/>
         <source>PlasmaZones</source>
-        <translation type="unfinished">PlasmaZones</translation>
+        <translation>PlasmaZones</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="49"/>
         <source>Version %1</source>
-        <translation type="unfinished">Версия %1</translation>
+        <translation>Версия %1</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="49"/>
         <source>Version unknown</source>
-        <translation type="unfinished">Версия неизвестна</translation>
+        <translation>Версия неизвестна</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="59"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание, мозаика и прокрутка окон для композиторов Wayland</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="72"/>
         <source>Open PlasmaZones Settings</source>
-        <translation type="unfinished">Открыть параметры PlasmaZones</translation>
+        <translation>Открыть параметры PlasmaZones</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="83"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation type="unfinished"></translation>
+        <translation>Настройка зон, мозаики, прокрутки, внешнего вида, комбинаций клавиш и другого</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="100"/>
         <source>GitHub</source>
-        <translation type="unfinished">GitHub</translation>
+        <translation>GitHub</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="107"/>
         <source>Report Bug</source>
-        <translation type="unfinished">Сообщить об ошибке</translation>
+        <translation>Сообщить об ошибке</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="114"/>
         <source>Documentation</source>
-        <translation type="unfinished">Документация</translation>
+        <translation>Документация</translation>
     </message>
 </context>
 <context>
@@ -336,7 +336,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
         <source>Switch Focus Between Floating and Placed Windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить фокус между плавающими и размещёнными окнами</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="163"/>
@@ -501,42 +501,42 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Consume or Expel Toward the Strip Start</source>
-        <translation type="unfinished"></translation>
+        <translation>Втянуть или вытолкнуть к началу ленты</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Consume or Expel Toward the Strip End</source>
-        <translation type="unfinished"></translation>
+        <translation>Втянуть или вытолкнуть к концу ленты</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
         <source>Focus First Window in Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на первое окно в столбце</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="446"/>
         <source>Focus Last Window in Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на последнее окно в столбце</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="452"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на предыдущий столбец с остановкой у края</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="458"/>
         <source>Focus Next Column, Stopping at the Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на следующий столбец с остановкой у края</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="464"/>
         <source>Focus Previous Column, Wrapping</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на предыдущий столбец по кругу</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="470"/>
         <source>Focus Next Column, Wrapping</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на следующий столбец по кругу</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
@@ -551,7 +551,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Toggle Windowed Fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить полный экран в окне</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
@@ -581,7 +581,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Grow Column into Empty Space</source>
-        <translation type="unfinished"></translation>
+        <translation>Расширить столбец на свободное место</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
@@ -591,7 +591,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="416"/>
         <source>Cycle Window Height Preset Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить предустановку высоты окна назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
@@ -611,37 +611,37 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
         <source>Center Visible Columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрировать видимые столбцы</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="475"/>
         <source>Move Window to Floating</source>
-        <translation type="unfinished"></translation>
+        <translation>Сделать окно плавающим</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
         <source>Move Window to Tiled</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть окно в мозаику</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="491"/>
         <source>Scroll View Back a Page</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокрутить вид на страницу назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="496"/>
         <source>Scroll View Forward a Page</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокрутить вид на страницу вперёд</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="501"/>
         <source>Equalize Column Widths</source>
-        <translation type="unfinished"></translation>
+        <translation>Выровнять ширину столбцов</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="506"/>
         <source>Minimize Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Минимизировать ширину столбца</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="513"/>
@@ -652,7 +652,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="149"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="620"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="623"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
@@ -669,67 +669,67 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="168"/>
         <source>Switch Floating and Placed Focus</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить фокус между плавающими и размещёнными</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
         <source>Moves focus between the floating windows and the placed layout. It returns to the window that last had focus there when that window is still available.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус между плавающими окнами и размещённой раскладкой. Фокус возвращается к окну, которое было активным там в последний раз, если оно ещё доступно.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="172"/>
         <source>Moves focus between the floating windows and the scrolling columns. It returns to the window that last had focus there when that window is still available.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус между плавающими окнами и столбцами прокрутки. Фокус возвращается к окну, которое было активным там в последний раз, если оно ещё доступно.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="182"/>
         <source>Switches this screen to the previous layout in the list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает этот экран на предыдущую раскладку в списке.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="185"/>
         <source>Switches this screen to the next layout in the list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает этот экран на следующую раскладку в списке.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="188"/>
         <source>Opens a picker to choose this screen&apos;s layout.</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывает выбор раскладки для этого экрана.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
         <source>Locks this screen&apos;s layout so nothing switches it until unlocked.</source>
-        <translation type="unfinished"></translation>
+        <translation>Блокирует раскладку этого экрана, чтобы ничто не меняло её до разблокировки.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
         <source>Locks this screen&apos;s column template so nothing switches it until unlocked.</source>
-        <translation type="unfinished"></translation>
+        <translation>Блокирует шаблон столбцов этого экрана, чтобы ничто не меняло его до разблокировки.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="203"/>
         <source>Arrange All Windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Расположить все окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
         <source>Move Focus Left</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить фокус влево</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="230"/>
         <source>Move Focus Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить фокус вправо</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
         <source>Move Focus Up</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить фокус вверх</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
         <source>Move Focus Down</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить фокус вниз</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
@@ -746,12 +746,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
         <source>Cycle Focus Forward</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить фокус вперёд</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="262"/>
         <source>Cycle Focus Backward</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить фокус назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="264"/>
@@ -776,32 +776,32 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
         <source>Re-applies the tiling algorithm to every window on the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Заново применяет алгоритм мозаики ко всем окнам на экране.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="158"/>
         <source>Puts every column back to the screen&apos;s default width and display, and every window back to an even share of its column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Возвращает каждому столбцу ширину и отображение по умолчанию для экрана, а каждому окну — равную долю его столбца.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
         <source>Moves focus to the first column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на первый столбец.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="294"/>
         <source>Moves focus to the last column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на последний столбец.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="325"/>
         <source>Moves the focused column to the first position.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перемещает активный столбец на первую позицию.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="327"/>
         <source>Moves the focused column to the last position.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перемещает активный столбец на последнюю позицию.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="329"/>
@@ -816,17 +816,17 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="399"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокручивает вид так, чтобы активный столбец оказался по центру экрана.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="345"/>
         <source>Switches the focused column between stacked windows and tabs.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает активный столбец между стопкой окон и вкладками.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="413"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит активное окно в полноэкранный режим, но окно остаётся на своём месте в столбце и не закрывает экран. Нажмите ещё раз для выхода.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="352"/>
@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает активный столбец по предустановкам размера экрана вдоль ленты.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,218 +846,218 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает активный столбец по предустановкам размера экрана вдоль ленты в обратном порядке.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
         <source>Grows the focused column along the strip by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Увеличивает активный столбец вдоль ленты на заданный шаг.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="350"/>
         <source>Shrinks the focused column along the strip by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Уменьшает активный столбец вдоль ленты на заданный шаг.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="366"/>
         <source>Toggles the focused column between filling the work area and a smaller size.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает активный столбец между заполнением рабочей области и меньшим размером.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает активное окно по предустановкам размера экрана в пределах его столбца.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает активное окно по предустановкам размера экрана в пределах его столбца в обратном порядке.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
         <source>Grows the focused window within its column by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Увеличивает активное окно в пределах его столбца на заданный шаг.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="383"/>
         <source>Shrinks the focused window within its column by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Уменьшает активное окно в пределах его столбца на заданный шаг.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="394"/>
         <source>Clears manual window sizes in the focused column so its windows share the column&apos;s space evenly.</source>
-        <translation type="unfinished"></translation>
+        <translation>Сбрасывает заданные вручную размеры окон в активном столбце, чтобы окна поделили его пространство поровну.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="369"/>
         <source>Grow into Empty Space</source>
-        <translation type="unfinished"></translation>
+        <translation>Расширить на свободное место</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="370"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
-        <translation type="unfinished"></translation>
+        <translation>Расширяет активный столбец так, чтобы он занял свободное место на экране. Другие столбцы сохраняют размер.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="401"/>
         <source>Scrolls the view so the fully visible columns sit centered as a group.</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокручивает вид так, чтобы полностью видимые столбцы располагались по центру как группа.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="320"/>
         <source>Moves focus to the first window of the focused column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на первое окно активного столбца.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="322"/>
         <source>Moves focus to the last window of the focused column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на последнее окно активного столбца.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
         <source>Move to Floating</source>
-        <translation type="unfinished"></translation>
+        <translation>Сделать плавающим</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="420"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
-        <translation type="unfinished"></translation>
+        <translation>Делает активное окно плавающим. В отличие от переключателя плавания, никогда не возвращает окно в мозаику.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="423"/>
         <source>Move to Tiled</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть в мозаику</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
         <source>Returns the focused floating window to its column. Unlike the float toggle, it never floats.</source>
-        <translation type="unfinished"></translation>
+        <translation>Возвращает активное плавающее окно в его столбец. В отличие от переключателя плавания, никогда не делает окно плавающим.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="447"/>
         <source>Applies the numbered layout to this screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Применяет пронумерованную раскладку к этому экрану.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="448"/>
         <source>Applies the numbered column template to this screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Применяет пронумерованный шаблон столбцов к этому экрану.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="463"/>
         <source>Sends the focused window to the numbered slot on this screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Отправляет активное окно в пронумерованное место на этом экране.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="603"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
-        <translation type="unfinished">Применить раскладку %1</translation>
+        <translation>Применить раскладку %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="385"/>
         <source>Cycle Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить высоту окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="183"/>
         <source>Switches this screen to the previous column template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает этот экран на предыдущий шаблон столбцов.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="186"/>
         <source>Switches this screen to the next column template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает этот экран на следующий шаблон столбцов.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <source>Opens a picker to choose this screen&apos;s column template. Its column widths become the widths columns cycle through.</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывает выбор шаблона столбцов для этого экрана. Его ширины столбцов становятся ширинами, по которым перебираются столбцы.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="330"/>
         <source>Pulls a window from the next column into the focused column, stacking them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переносит окно из следующего столбца в активный, складывая их в стопку.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="334"/>
         <source>Moves the focused window out of a shared column into a new column after it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выносит активное окно из общего столбца в новый столбец после него.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="337"/>
         <source>Splits the focused window out of a shared column toward the start of the strip. A window alone in its column merges into the previous column instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выделяет активное окно из общего столбца в сторону начала ленты. Окно, находящееся в столбце одно, вместо этого сливается с предыдущим столбцом.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
         <source>Splits the focused window out of a shared column toward the end of the strip. A window alone in its column merges into the next column instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выделяет активное окно из общего столбца в сторону конца ленты. Окно, находящееся в столбце одно, вместо этого сливается со следующим столбцом.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
         <source>Cycle Window Height Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключить высоту окна назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
         <source>Focus Previous Column (Edge Stop)</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на предыдущий столбец (остановка у края)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на один столбец к началу ленты и останавливается у края. Обычная комбинация фокуса вместо этого переходит на следующий монитор.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
         <source>Focus Next Column (Edge Stop)</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на следующий столбец (остановка у края)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на один столбец к концу ленты и останавливается у края. Обычная комбинация фокуса вместо этого переходит на следующий монитор.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
         <source>Focus Previous Column (Wrap)</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на предыдущий столбец (по кругу)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="307"/>
         <source>Moves focus one column toward the start of the strip, wrapping to the last column at the edge.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на один столбец к началу ленты, у края переходя на последний столбец.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="311"/>
         <source>Focus Next Column (Wrap)</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на следующий столбец (по кругу)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="312"/>
         <source>Moves focus one column toward the end of the strip, wrapping to the first column at the edge.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переводит фокус на один столбец к концу ленты, у края переходя на первый столбец.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="405"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокручивает вид на целый экран к началу ленты. Фокус остаётся на месте.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокручивает вид на целый экран к концу ленты. Фокус остаётся на месте.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="376"/>
         <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
-        <translation type="unfinished"></translation>
+        <translation>Даёт каждому полностью видимому столбцу равную долю экрана. Столбцы, обрезанные краем, остаются без изменений.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
-        <translation type="unfinished"></translation>
+        <translation>Уменьшает активный столбец до наименьшей предустановки размера.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="569"/>
@@ -1072,7 +1072,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="619"/>
         <source>Move Focus</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить фокус</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="624"/>
@@ -1147,7 +1147,7 @@
     <message>
         <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="729"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбор раскладки: подтвердить (Enter на цифровой клавиатуре)</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="22"/>
@@ -1241,12 +1241,12 @@
     <message>
         <location filename="../src/editor/main.cpp" line="182"/>
         <source>Scrolling template ID to edit</source>
-        <translation type="unfinished"></translation>
+        <translation>Идентификатор шаблона прокрутки для правки</translation>
     </message>
     <message>
         <location filename="../src/editor/main.cpp" line="184"/>
         <source>Create new scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Создать шаблон прокрутки</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/clipboard.cpp" line="96"/>
@@ -1344,57 +1344,57 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="606"/>
         <source>No windows on the strip yet</source>
         <comment>scrolling strip preview, empty strip</comment>
-        <translation type="unfinished"></translation>
+        <translation>На ленте пока нет окон</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="145"/>
         <source>This screen could not be measured</source>
         <comment>scrolling strip preview, screen geometry lookup failed</comment>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось определить размеры этого экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="364"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="367"/>
         <source>Layout Locked</source>
         <translation>Раскладка заблокирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="378"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="381"/>
         <source>Layout Unlocked</source>
-        <translation type="unfinished"></translation>
+        <translation>Раскладка разблокирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="457"/>
         <source>Disabled on this monitor</source>
         <translation>Отключено на этом экране</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="465"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="468"/>
         <source>Desktop %1</source>
         <translation>Рабочий стол %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="478"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="470"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="481"/>
         <source>Disabled on %1</source>
         <translation>Отключено на %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="476"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="479"/>
         <source>Disabled on this activity</source>
         <translation>Отключено в этой комнате</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="506"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="509"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation>Раскладка не назначена</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="673"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="676"/>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон столбцов — %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/cheatsheet.cpp" line="117"/>
@@ -1407,7 +1407,7 @@
         <translation>Служба раскладок не инициализирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="337"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="340"/>
         <source>Layout: %1</source>
         <translation>Раскладка: %1</translation>
     </message>
@@ -1459,7 +1459,7 @@
     <message>
         <location filename="../src/daemon/main.cpp" line="250"/>
         <source>Window snapping, tiling and scrolling</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание, мозаика и прокрутка окон</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="255"/>
@@ -1548,7 +1548,7 @@
         <translation>Имя целевого экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="739"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="742"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation>Мозаичное размещение: %1</translation>
@@ -1821,19 +1821,19 @@
     <message numerus="yes">
         <location filename="../src/settings/pages/animationspagecontroller.cpp" line="732"/>
         <source>Could not restore %n profile file. It remains pending.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Не удалось восстановить %n файл профиля. Он остаётся в ожидании.</numerusform>
+            <numerusform>Не удалось восстановить %n файла профиля. Они остаются в ожидании.</numerusform>
+            <numerusform>Не удалось восстановить %n файлов профиля. Они остаются в ожидании.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/pages/animationspagecontroller.cpp" line="734"/>
         <source>Could not restore %n profile files. They remain pending.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Не удалось восстановить %n файл профиля. Он остаётся в ожидании.</numerusform>
+            <numerusform>Не удалось восстановить %n файла профиля. Они остаются в ожидании.</numerusform>
+            <numerusform>Не удалось восстановить %n файлов профиля. Они остаются в ожидании.</numerusform>
         </translation>
     </message>
     <message>
@@ -1866,37 +1866,37 @@
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="77"/>
         <source>Imported %n layout from KZones</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Из KZones импортирована %n раскладка</numerusform>
+            <numerusform>Из KZones импортированы %n раскладки</numerusform>
+            <numerusform>Из KZones импортировано %n раскладок</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="78"/>
         <source>Imported %n layouts from KZones</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Из KZones импортирована %n раскладка</numerusform>
+            <numerusform>Из KZones импортированы %n раскладки</numerusform>
+            <numerusform>Из KZones импортировано %n раскладок</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="122"/>
         <source>Imported %n layout from KZones file</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Из файла KZones импортирована %n раскладка</numerusform>
+            <numerusform>Из файла KZones импортированы %n раскладки</numerusform>
+            <numerusform>Из файла KZones импортировано %n раскладок</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="123"/>
         <source>Imported %n layouts from KZones file</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Из файла KZones импортирована %n раскладка</numerusform>
+            <numerusform>Из файла KZones импортированы %n раскладки</numerusform>
+            <numerusform>Из файла KZones импортировано %n раскладок</numerusform>
         </translation>
     </message>
     <message>
@@ -2009,7 +2009,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="110"/>
         <source>The window&apos;s class as the compositor reports it, which is the WM_CLASS pair &quot;resourceName resourceClass&quot;. Konsole, for example, reports &quot;konsole konsole&quot;, not just &quot;konsole&quot;, so use contains or ends with rather than is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Класс окна в том виде, в каком его сообщает композитор, то есть пара WM_CLASS «resourceName resourceClass». Например, Konsole сообщает «konsole konsole», а не просто «konsole», поэтому используйте содержит или заканчивается на вместо равно.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="116"/>
@@ -2049,7 +2049,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="133"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
-        <translation type="unfinished"></translation>
+        <translation>Окно прокрутки в полноэкранном режиме в окне считается здесь полноэкранным.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="135"/>
@@ -2174,12 +2174,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
-        <translation type="unfinished"></translation>
+        <translation>Раскладка, активная сейчас на мониторе, или используемый там шаблон прокрутки. Позволяет правилу менять зазоры, наложение или состояние блокировки для экрана, показывающего заданную раскладку или шаблон. Изменить назначенную раскладку правило не может, это было бы замкнутым кругом.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation type="unfinished"></translation>
+        <translation>Светлая или тёмная цветовая схема системы. Позволяет правилу выбирать другие зазоры, цвета наложения или раскладки, когда рабочий стол переключается между дневной и ночной темой. Правила применяются заново сразу после смены темы.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2274,7 +2274,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="99"/>
         <source>Open maximized (off = open at the default width)</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать развёрнутым (выкл. — открывать с шириной по умолчанию)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="211"/>
@@ -2286,12 +2286,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="233"/>
         <source>Return the window to its previous zone when it reopens (off = don&apos;t restore)</source>
-        <translation type="unfinished"></translation>
+        <translation>Возвращать окно в его прежнюю зону при повторном открытии (выкл. — не восстанавливать)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="249"/>
         <source>Scroll speed (below 100% is slower, above 100% is faster)</source>
-        <translation type="unfinished"></translation>
+        <translation>Скорость прокрутки (меньше 100 % — медленнее, больше 100 % — быстрее)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="277"/>
@@ -2476,7 +2476,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="51"/>
         <source>Template layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Раскладка шаблона</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="57"/>
@@ -2506,12 +2506,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="88"/>
         <source>New column position</source>
-        <translation type="unfinished"></translation>
+        <translation>Положение нового столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="93"/>
         <source>Window height (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота окна (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="96"/>
@@ -2521,58 +2521,58 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="102"/>
         <source>Handling</source>
-        <translation type="unfinished"></translation>
+        <translation>Обработка</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="108"/>
         <source>Focus the window when it opens (off = keep the current focus)</source>
-        <translation type="unfinished"></translation>
+        <translation>Передавать фокус окну при открытии (выкл. — сохранять текущий фокус)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Open in fullscreen (off = block the app&apos;s own fullscreen at open)</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать в полноэкранном режиме (выкл. — блокировать собственный полный экран приложения при открытии)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="122"/>
         <source>Center a lone column (off = leave it where it sits)</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрировать одиночный столбец (выкл. — оставлять на месте)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="125"/>
         <source>Respect minimum window sizes (off = let columns go narrower)</source>
-        <translation type="unfinished"></translation>
+        <translation>Учитывать минимальные размеры окон (выкл. — разрешить столбцам быть уже)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="128"/>
         <source>Crop columns at the screen edge (off = keep them whole)</source>
-        <translation type="unfinished"></translation>
+        <translation>Обрезать столбцы у края экрана (выкл. — оставлять целиком)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="131"/>
         <source>Focus new windows (off = keep focus where it is)</source>
-        <translation type="unfinished"></translation>
+        <translation>Передавать фокус новым окнам (выкл. — оставлять фокус на месте)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="134"/>
         <source>Drop the outer gaps for a lone column (off = keep them)</source>
-        <translation type="unfinished"></translation>
+        <translation>Убирать внешние зазоры для одиночного столбца (выкл. — сохранять их)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="137"/>
         <source>Focus follows the mouse (off = focus stays until you click)</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус следует за мышью (выкл. — фокус сохраняется до щелчка)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="145"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="199"/>
         <source>Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="148"/>
         <source>Show the indicator over tabbed columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать индикатор над столбцами с вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="154"/>
@@ -2581,87 +2581,87 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="280"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="161"/>
         <source>Position</source>
-        <translation type="unfinished"></translation>
+        <translation>Положение</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="157"/>
         <source>Hide it when the column holds one window</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать, когда в столбце одно окно</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="160"/>
         <source>Make room for it inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Освободить для него место в столбце</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="163"/>
         <source>Gap (px, negative draws over the window)</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор (пикс., отрицательное значение рисует поверх окна)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="166"/>
         <source>Thickness (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Толщина (пикс.)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="169"/>
         <source>Length (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Длина (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="172"/>
         <source>Gap between tabs (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор между вкладками (пикс.)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="175"/>
         <source>Corner radius (px, -1 is fully rounded)</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления (пикс., -1 — полностью скруглённый)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="180"/>
         <source>Font (leave empty for the system font)</source>
-        <translation type="unfinished"></translation>
+        <translation>Шрифт (оставьте пустым для системного шрифта)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="183"/>
         <source>Weight (100 is thinnest, 900 is boldest)</source>
-        <translation type="unfinished"></translation>
+        <translation>Насыщенность (100 — самая тонкая, 900 — самая жирная)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="186"/>
         <source>Show the tab labels in italic</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать подписи вкладок курсивом</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="189"/>
         <source>Underline the tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Подчёркивать подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="192"/>
         <source>Draw a line through the tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Зачёркивать подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="202"/>
         <source>Show the indicator while dragging</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать индикатор при перетаскивании</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="205"/>
         <source>Fill opacity (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность заливки (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="223"/>
         <source>Zone names</source>
-        <translation type="unfinished"></translation>
+        <translation>Названия зон</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="230"/>
         <source>Restore the window&apos;s previous position (off = don&apos;t restore)</source>
-        <translation type="unfinished"></translation>
+        <translation>Восстанавливать прежнее положение окна (выкл. — не восстанавливать)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="236"/>
@@ -2671,7 +2671,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="239"/>
         <source>Place in a zone when no zone is remembered (off = stay floating)</source>
-        <translation type="unfinished"></translation>
+        <translation>Помещать в зону, если зона не запомнена (выкл. — оставлять плавающим)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="242"/>
@@ -2681,12 +2681,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="252"/>
         <source>Show on-screen displays here (off = hide them)</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать экранные сообщения здесь (выкл. — скрывать их)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="255"/>
         <source>Show the drag selector here (off = hide it)</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать выбор при перетаскивании здесь (выкл. — скрывать его)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="280"/>
@@ -2733,12 +2733,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="391"/>
         <source>Zone numbers like “1, 2”, or a range like “1-3”. Multiple zones snap the window to their combined area.</source>
-        <translation type="unfinished"></translation>
+        <translation>Номера зон, например «1, 2», или диапазон, например «1-3». Несколько зон прилепляют окно к их общей области.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="396"/>
         <source>Zone names like “Editor, Terminal”, found in whichever layout is active. Give numbers, names, or both.</source>
-        <translation type="unfinished"></translation>
+        <translation>Названия зон, например «Editor, Terminal», из той раскладки, которая активна. Укажите номера, названия или и то и другое.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="219"/>
@@ -2753,7 +2753,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="225"/>
         <source>Set scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать шаблон прокрутки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="231"/>
@@ -2803,12 +2803,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="258"/>
         <source>Set new column position</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать положение нового столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="261"/>
         <source>Set default window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать высоту окна по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="264"/>
@@ -2818,7 +2818,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="267"/>
         <source>Open at window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать с этой высотой окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="270"/>
@@ -2835,35 +2835,35 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="279"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="657"/>
         <source>Respect minimum window sizes</source>
-        <translation type="unfinished"></translation>
+        <translation>Учитывать минимальные размеры окон</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="291"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Focus follows the mouse</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус следует за мышью</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="294"/>
         <source>Set sticky window handling</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать обработку прикреплённых окон</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="300"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="647"/>
         <source>Open maximized</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать развёрнутым</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="303"/>
         <source>Focus when opened</source>
-        <translation type="unfinished"></translation>
+        <translation>Передавать фокус при открытии</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="306"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="682"/>
         <source>Open in fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать в полноэкранном режиме</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="314"/>
@@ -2875,149 +2875,149 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="112"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="118"/>
         <source>Show the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать индикатор вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="317"/>
         <source>Set tab indicator style</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать стиль индикатора вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="320"/>
         <source>Set tab indicator position</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать положение индикатора вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="323"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="691"/>
         <source>Hide the tab indicator for a single tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать индикатор вкладок при одной вкладке</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="326"/>
         <source>Place the tab indicator inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Размещать индикатор вкладок внутри столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="329"/>
         <source>Set the gap around the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать зазор вокруг индикатора вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="332"/>
         <source>Set tab indicator thickness</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать толщину индикатора вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="335"/>
         <source>Set tab indicator length</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать длину индикатора вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="338"/>
         <source>Set the gap between tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать зазор между вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="341"/>
         <source>Set tab corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать радиус скругления вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="344"/>
         <source>Set the active tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет активной вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="347"/>
         <source>Set the inactive tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет неактивной вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="350"/>
         <source>Set the urgent tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет срочной вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="357"/>
         <source>Set the tab label font</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать шрифт подписи вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="360"/>
         <source>Set the tab label weight</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать насыщенность подписи вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="363"/>
         <source>Make tab labels italic</source>
-        <translation type="unfinished"></translation>
+        <translation>Сделать подписи вкладок курсивными</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="366"/>
         <source>Underline tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Подчеркнуть подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="369"/>
         <source>Strike through tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Зачеркнуть подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="372"/>
         <source>Set this window&apos;s active tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет активной вкладки этого окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="375"/>
         <source>Set this window&apos;s inactive tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет неактивной вкладки этого окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="378"/>
         <source>Set this window&apos;s urgent tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет срочной вкладки этого окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="383"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="713"/>
         <source>Show the drop indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать индикатор сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="386"/>
         <source>Set the drop indicator fill color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет заливки индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="389"/>
         <source>Set the drop indicator border color</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет рамки индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="392"/>
         <source>Set the drop indicator fill opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать непрозрачность заливки индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="395"/>
         <source>Set the drop indicator border width</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать ширину рамки индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="398"/>
         <source>Set the drop indicator corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать радиус скругления индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="405"/>
         <source>Set the drop indicator fill color when dragging this window</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет заливки индикатора сброса при перетаскивании этого окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="408"/>
         <source>Set the drop indicator border color when dragging this window</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать цвет рамки индикатора сброса при перетаскивании этого окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="411"/>
@@ -3033,191 +3033,191 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="426"/>
         <source>Exclude from placement and decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключить из размещения и оформления</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="429"/>
         <source>Exclude from placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключить из размещения</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="435"/>
         <source>Snap to zones</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилеплять к зонам</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="438"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <source>Restore previous position</source>
-        <translation type="unfinished"></translation>
+        <translation>Восстановить прежнее положение</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="447"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
         <source>Restore to previous zone</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть в прежнюю зону</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="453"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="604"/>
         <source>Fall back to a zone on unfloat</source>
-        <translation type="unfinished"></translation>
+        <translation>Использовать зону при отмене плавания</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="459"/>
         <source>Set scroll speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать скорость прокрутки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="462"/>
         <source>Show on-screen displays</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать экранные сообщения</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="470"/>
         <source>Show the drag selector</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать выбор при перетаскивании</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="488"/>
         <source>Override overlay shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Переопределить шейдер наложения</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="491"/>
         <source>Override overlay style</source>
-        <translation type="unfinished"></translation>
+        <translation>Переопределить стиль наложения</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="526"/>
         <source>Exclude from decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключить из оформления</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
         <source>Don&apos;t restore to previous zone</source>
-        <translation type="unfinished"></translation>
+        <translation>Не возвращать в прежнюю зону</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
         <source>Stay floating when no zone is remembered</source>
-        <translation type="unfinished"></translation>
+        <translation>Оставлять плавающим, если зона не запомнена</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Show on-screen displays here</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать экранные сообщения здесь</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Hide on-screen displays here</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать экранные сообщения здесь</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
         <source>Show the drag selector here</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать выбор при перетаскивании здесь</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
         <source>Hide the drag selector here</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать выбор при перетаскивании здесь</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="647"/>
         <source>Open at the default width</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывать с шириной по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="654"/>
         <source>Leave a lone column where it sits</source>
-        <translation type="unfinished"></translation>
+        <translation>Оставлять одиночный столбец на месте</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="657"/>
         <source>Ignore minimum window sizes</source>
-        <translation type="unfinished"></translation>
+        <translation>Игнорировать минимальные размеры окон</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="661"/>
         <source>Keep columns whole at the screen edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Оставлять столбцы целыми у края экрана</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
         <source>Keep focus where it is</source>
-        <translation type="unfinished"></translation>
+        <translation>Оставлять фокус на месте</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="288"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="667"/>
         <source>Drop the outer gaps for a lone column</source>
-        <translation type="unfinished"></translation>
+        <translation>Убирать внешние зазоры для одиночного столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
         <source>Set maximum tiled windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать максимум окон в мозаике</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Keep the outer gaps for a lone column</source>
-        <translation type="unfinished"></translation>
+        <translation>Сохранять внешние зазоры для одиночного столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Focus stays until you click</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус сохраняется до щелчка</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="676"/>
         <source>Focus the window when it opens</source>
-        <translation type="unfinished"></translation>
+        <translation>Передавать фокус окну при открытии</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="677"/>
         <source>Keep focus where it was when it opens</source>
-        <translation type="unfinished"></translation>
+        <translation>Оставлять фокус при открытии там, где он был</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="682"/>
         <source>Block fullscreen at open</source>
-        <translation type="unfinished"></translation>
+        <translation>Блокировать полный экран при открытии</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
         <source>Italic tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Курсивные подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
         <source>Upright tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Прямые подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="705"/>
         <source>Underlined tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Подчёркнутые подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="705"/>
         <source>Tab labels without an underline</source>
-        <translation type="unfinished"></translation>
+        <translation>Подписи вкладок без подчёркивания</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="708"/>
         <source>Struck-through tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Зачёркнутые подписи вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="709"/>
         <source>Tab labels without a line through them</source>
-        <translation type="unfinished"></translation>
+        <translation>Подписи вкладок без зачёркивания</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="713"/>
         <source>Hide the drop indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать индикатор сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="432"/>
@@ -3227,7 +3227,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="297"/>
         <source>Set strip direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Задать направление ленты</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="456"/>
@@ -3407,7 +3407,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <source>Don&apos;t restore previous position</source>
-        <translation type="unfinished"></translation>
+        <translation>Не восстанавливать прежнее положение</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="642"/>
@@ -3417,22 +3417,22 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="688"/>
         <source>Hide the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать индикатор вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="692"/>
         <source>Show the tab indicator for a single tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать индикатор вкладок при одной вкладке</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="695"/>
         <source>Tab indicator inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Индикатор вкладок внутри столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="696"/>
         <source>Tab indicator beside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Индикатор вкладок рядом со столбцом</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
@@ -3539,7 +3539,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
         <source>Plasma applet popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Всплывающее окно апплета Plasma</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="300"/>
@@ -3555,12 +3555,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
         <source>Light</source>
-        <translation type="unfinished"></translation>
+        <translation>Светлая</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
         <source>Dark</source>
-        <translation type="unfinished"></translation>
+        <translation>Тёмная</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="378"/>
@@ -3832,30 +3832,30 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="144"/>
         <source>Meta + Shift</source>
-        <translation type="unfinished"></translation>
+        <translation>Meta + Shift</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="145"/>
         <source>Ctrl + Meta</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl + Meta</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="195"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="487"/>
         <source>Match the screen shape</source>
-        <translation type="unfinished"></translation>
+        <translation>По форме экрана</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
         <source>Side to side</source>
-        <translation type="unfinished"></translation>
+        <translation>Рядом друг с другом</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
         <source>Top to bottom</source>
-        <translation type="unfinished"></translation>
+        <translation>Сверху вниз</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="201"/>
@@ -3864,7 +3864,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="145"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="152"/>
         <source>Proportion of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Доля ленты</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="114"/>
@@ -4036,56 +4036,56 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="198"/>
         <source>Preset width</source>
-        <translation type="unfinished"></translation>
+        <translation>Заданная ширина</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="208"/>
         <source>Share the column evenly</source>
-        <translation type="unfinished"></translation>
+        <translation>Поделить столбец поровну</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="209"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="295"/>
         <source>Fixed height</source>
-        <translation type="unfinished"></translation>
+        <translation>Фиксированная высота</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="210"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
-        <translation type="unfinished"></translation>
+        <translation>Заданная высота</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="214"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
         <source>Right of the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Справа от активного столбца</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="215"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Left of the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Слева от активного столбца</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
         <source>Start of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Начало ленты</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
         <source>End of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Конец ленты</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
         <source>Into the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>В активный столбец</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="222"/>
@@ -4103,33 +4103,33 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="227"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
         <source>Titled chips</source>
-        <translation type="unfinished"></translation>
+        <translation>Подписанные метки</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="228"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
         <source>Segment bar</source>
-        <translation type="unfinished"></translation>
+        <translation>Сегментная полоса</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="232"/>
         <source>Left of the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Слева от столбца</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="233"/>
         <source>Right of the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Справа от столбца</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="234"/>
         <source>Above the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Над столбцом</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="235"/>
         <source>Below the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Под столбцом</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="508"/>
@@ -4155,12 +4155,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="473"/>
         <source>Treat as normal windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Считать обычными окнами</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="479"/>
         <source>Ignore entirely</source>
-        <translation type="unfinished"></translation>
+        <translation>Полностью игнорировать</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="498"/>
@@ -4241,7 +4241,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="161"/>
         <source>Tiling (no algorithm assigned)</source>
-        <translation type="unfinished"></translation>
+        <translation>Мозаика (алгоритм не назначен)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
@@ -4425,7 +4425,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="910"/>
         <source>Scroll speed: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Скорость прокрутки: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
@@ -4453,95 +4453,95 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="265"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1049"/>
         <source>Scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон прокрутки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="274"/>
         <source>Scrolling template: None</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон прокрутки: нет</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="276"/>
         <source>Scrolling template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон прокрутки: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="292"/>
         <source>Tiling: None</source>
-        <translation type="unfinished"></translation>
+        <translation>Мозаика: нет</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="317"/>
         <source>Excluded from placement and decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключено из размещения и оформления</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="320"/>
         <source>Excluded from placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключено из размещения</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="323"/>
         <source>Excluded from animations</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключено из анимации</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="326"/>
         <source>Excluded from decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключено из оформления</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="375"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="318"/>
         <source>“%1”</source>
         <comment>a quoted zone name</comment>
-        <translation type="unfinished"></translation>
+        <translation>«%1»</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="449"/>
         <source>Block %1 shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Блокировать шейдер «%1»</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="453"/>
         <source>%1 shader: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Шейдер «%1»: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="462"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="475"/>
         <source>Decoration packs: none</source>
-        <translation type="unfinished"></translation>
+        <translation>Наборы оформления: нет</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
         <source>%1 duration</source>
-        <translation type="unfinished"></translation>
+        <translation>Длительность «%1»</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="495"/>
         <source>%1 duration (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Длительность «%1» (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="498"/>
         <source>%1 duration: %2 ms</source>
-        <translation type="unfinished"></translation>
+        <translation>Длительность «%1»: %2 мс</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="504"/>
         <source>%1 curve</source>
-        <translation type="unfinished"></translation>
+        <translation>Кривая «%1»</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="508"/>
         <source>%1 curve: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Кривая «%1»: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
         <source>Overlay style (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Стиль наложения (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="526"/>
@@ -4561,12 +4561,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
         <source>Border width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина рамки (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
         <source>Corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="597"/>
@@ -4599,7 +4599,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
         <source>Max tiled windows (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Максимум окон в мозаике (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
@@ -4609,12 +4609,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
         <source>Master count (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Число главных окон (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
         <source>Split ratio (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Соотношение разделения (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="640"/>
@@ -4624,7 +4624,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="649"/>
         <source>Insert (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Вставка (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="650"/>
@@ -4634,7 +4634,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="655"/>
         <source>Overflow (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Переполнение (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
@@ -4644,7 +4644,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="661"/>
         <source>Drag (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Перетаскивание (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="662"/>
@@ -4654,12 +4654,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
         <source>Column width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбца (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
         <source>Column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="674"/>
@@ -4669,12 +4669,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
         <source>Open at width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина при открытии (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
         <source>Open at width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина при открытии</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
@@ -4684,67 +4684,67 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
         <source>Window height (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота окна (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
         <source>Window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота окна</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="684"/>
         <source>Window height: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота окна: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
         <source>Open at height (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота при открытии (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
         <source>Open at height</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота при открытии</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="689"/>
         <source>Open at height: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота при открытии: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
         <source>Insert new windows (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Вставка новых окон (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="698"/>
         <source>Insert new windows: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Вставка новых окон: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
         <source>Sticky windows (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Прикреплённые окна (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
         <source>Sticky windows: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Прикреплённые окна: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
         <source>Strip direction (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Направление ленты (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="710"/>
         <source>Strip direction: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Направление ленты: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="715"/>
         <source>Centering (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрирование (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="716"/>
@@ -4754,7 +4754,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
         <source>New columns (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Новые столбцы (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
@@ -4764,7 +4764,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="727"/>
         <source>Open (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Открытие (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="728"/>
@@ -4774,77 +4774,77 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <source>Tab indicator style (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Стиль индикатора вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="738"/>
         <source>Tab indicator style: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Стиль индикатора вкладок: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
         <source>Tab indicator position (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Положение индикатора вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="744"/>
         <source>Tab indicator position: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Положение индикатора вкладок: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="748"/>
         <source>Tab indicator gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор индикатора вкладок: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="749"/>
         <source>Tab indicator gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор индикатора вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
         <source>Tab indicator thickness: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Толщина индикатора вкладок: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="754"/>
         <source>Tab indicator thickness (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Толщина индикатора вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
         <source>Tab indicator length (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Длина индикатора вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
         <source>Tab indicator length: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Длина индикатора вкладок: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="764"/>
         <source>Gap between tabs: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор между вкладками: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
         <source>Gap between tabs (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор между вкладками (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
         <source>Tab corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="774"/>
         <source>Tab corners: fully rounded</source>
-        <translation type="unfinished"></translation>
+        <translation>Углы вкладок: полностью скруглённые</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="775"/>
         <source>Tab corner radius: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления вкладок: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="582"/>
@@ -4855,133 +4855,133 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="926"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="931"/>
         <source>(invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>(недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="82"/>
         <source>%1 %2 %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 %2 %3</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="494"/>
         <source>Animation duration (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Длительность анимации (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="563"/>
         <source>%1 (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="790"/>
         <source>Tab label font</source>
-        <translation type="unfinished"></translation>
+        <translation>Шрифт подписи вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="793"/>
         <source>Tab label font (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Шрифт подписи вкладки (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="796"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="201"/>
         <source>Tab label font: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Шрифт подписи вкладки: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="803"/>
         <source>Tab label weight: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Насыщенность подписи вкладки: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="804"/>
         <source>Tab label weight (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Насыщенность подписи вкладки (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="821"/>
         <source>Active tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Активная вкладка: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="824"/>
         <source>Inactive tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Неактивная вкладка: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="827"/>
         <source>Urgent tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Срочная вкладка: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="830"/>
         <source>This window&apos;s active tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Активная вкладка этого окна: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="833"/>
         <source>This window&apos;s inactive tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Неактивная вкладка этого окна: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="835"/>
         <source>This window&apos;s urgent tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Срочная вкладка этого окна: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="843"/>
         <source>Drop indicator fill opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность заливки индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="844"/>
         <source>Drop indicator fill opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность заливки индикатора сброса (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="845"/>
         <source>Drop indicator fill opacity: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность заливки индикатора сброса: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="849"/>
         <source>Drop indicator border width: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина рамки индикатора сброса: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="850"/>
         <source>Drop indicator border width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина рамки индикатора сброса (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="855"/>
         <source>Drop indicator corner radius: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления индикатора сброса: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="856"/>
         <source>Drop indicator corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления индикатора сброса (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="863"/>
         <source>Drop indicator fill: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Заливка индикатора сброса: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="866"/>
         <source>Drop indicator border: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Рамка индикатора сброса: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="873"/>
         <source>Drop indicator fill when dragging this window: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Заливка индикатора сброса при перетаскивании этого окна: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="875"/>
         <source>Drop indicator border when dragging this window: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Рамка индикатора сброса при перетаскивании этого окна: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="881"/>
@@ -5001,29 +5001,29 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="901"/>
         <source>Scroll speed (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Скорость прокрутки (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
         <source>Right gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Правый зазор (недопустимо)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
         <source>%n condition</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n условие</numerusform>
+            <numerusform>%n условия</numerusform>
+            <numerusform>%n условий</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="242"/>
         <source>%n conditions</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n условие</numerusform>
+            <numerusform>%n условия</numerusform>
+            <numerusform>%n условий</numerusform>
         </translation>
     </message>
     <message>
@@ -5034,20 +5034,20 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="392"/>
         <source>Snap to zone %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилепить к зоне %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="255"/>
         <source>Snapping: None</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание: нет</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="394"/>
         <source>Snap to zones %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Прилепить к зоне %1</numerusform>
+            <numerusform>Прилепить к зонам %1</numerusform>
+            <numerusform>Прилепить к зонам %1</numerusform>
         </translation>
     </message>
     <message>
@@ -5063,12 +5063,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="944"/>
         <source>Active opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность активной зоны (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="945"/>
         <source>Inactive opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность неактивной зоны (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="947"/>
@@ -5088,7 +5088,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
         <source>Overlay border width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина рамки наложения (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="957"/>
@@ -5098,17 +5098,17 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Overlay corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления углов наложения (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
         <source>Gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="967"/>
         <source>Outer gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Внешний зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
@@ -5118,7 +5118,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Top gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Верхний зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
@@ -5128,7 +5128,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
         <source>Bottom gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Нижний зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
@@ -5138,7 +5138,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
         <source>Left gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Левый зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
@@ -5525,18 +5525,18 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="153"/>
         <source>Keep one application&apos;s windows floating instead of tiled. The windows stay managed, so they can still be dragged into a zone.</source>
-        <translation type="unfinished"></translation>
+        <translation>Держать окна одного приложения плавающими, а не в мозаике. Окна остаются управляемыми, поэтому их по-прежнему можно перетащить в зону.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="157"/>
         <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключить окна одного приложения из мозаики, прилипания и прокрутки. Рамки, наборы оформления и анимация продолжают действовать.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="257"/>
         <source>Exclude an app from placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключить приложение из размещения</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="177"/>
@@ -6493,7 +6493,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="22"/>
         <source>Zone span</source>
         <oldsource>Zone Span</oldsource>
-        <translation type="unfinished">Охват зон</translation>
+        <translation>Объединение зон</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="85"/>
@@ -6525,7 +6525,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="15"/>
         <source>Window handling</source>
         <oldsource>Window Handling</oldsource>
-        <translation type="unfinished">Обработка окон</translation>
+        <translation>Обработка окон</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="401"/>
@@ -6557,7 +6557,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="280"/>
         <source>Zone labels</source>
         <oldsource>Zone Labels</oldsource>
-        <translation type="unfinished">Подписи зон</translation>
+        <translation>Подписи зон</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="419"/>
@@ -6917,7 +6917,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="151"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
         <source>wheel</source>
-        <translation type="unfinished"></translation>
+        <translation>колесо</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="147"/>
@@ -6947,7 +6947,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="84"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="303"/>
         <source>graphics card</source>
-        <translation type="unfinished"></translation>
+        <translation>видеокарта</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="242"/>
@@ -6988,33 +6988,33 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="103"/>
         <source>script</source>
-        <translation type="unfinished"></translation>
+        <translation>скрипт</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="103"/>
         <source>luau</source>
-        <translation type="unfinished"></translation>
+        <translation>luau</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="104"/>
         <source>capability</source>
-        <translation type="unfinished"></translation>
+        <translation>возможность</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="105"/>
         <source>library</source>
-        <translation type="unfinished"></translation>
+        <translation>библиотека</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="160"/>
         <source>selector</source>
-        <translation type="unfinished"></translation>
+        <translation>выбор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="217"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="249"/>
         <source>shell</source>
-        <translation type="unfinished"></translation>
+        <translation>оболочка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="217"/>
@@ -7022,23 +7022,23 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="92"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="96"/>
         <source>plasma</source>
-        <translation type="unfinished"></translation>
+        <translation>plasma</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="250"/>
         <source>taskbar</source>
-        <translation type="unfinished"></translation>
+        <translation>панель задач</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="219"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="250"/>
         <source>applet</source>
-        <translation type="unfinished"></translation>
+        <translation>апплет</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="251"/>
         <source>applet popup</source>
-        <translation type="unfinished"></translation>
+        <translation>всплывающее окно апплета</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
@@ -7046,7 +7046,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>launcher</source>
-        <translation type="unfinished"></translation>
+        <translation>запуск приложений</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="219"/>
@@ -7054,7 +7054,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>tray</source>
-        <translation type="unfinished"></translation>
+        <translation>лоток</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
@@ -7062,17 +7062,17 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>system tray</source>
-        <translation type="unfinished"></translation>
+        <translation>системный лоток</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
         <source>kickoff</source>
-        <translation type="unfinished"></translation>
+        <translation>kickoff</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
         <source>dock</source>
-        <translation type="unfinished"></translation>
+        <translation>док</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="272"/>
@@ -7092,19 +7092,19 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
         <source>preview</source>
-        <translation type="unfinished"></translation>
+        <translation>предпросмотр</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
         <source>thumbnail</source>
-        <translation type="unfinished"></translation>
+        <translation>миниатюра</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="302"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="57"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="69"/>
         <source>Rendering device</source>
-        <translation type="unfinished"></translation>
+        <translation>Устройство отрисовки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="310"/>
@@ -7606,7 +7606,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="223"/>
         <source>motion blur</source>
-        <translation type="unfinished"></translation>
+        <translation>размытие движения</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="518"/>
@@ -7885,152 +7885,152 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="694"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="354"/>
         <source>Width and height presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки ширины и высоты</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="379"/>
         <source>Column widths</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширины столбцов</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
         <source>cycle</source>
-        <translation type="unfinished"></translation>
+        <translation>перебор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="700"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="401"/>
         <source>Window heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Высоты окон</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <source>chips</source>
-        <translation type="unfinished"></translation>
+        <translation>метки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <source>bar</source>
-        <translation type="unfinished"></translation>
+        <translation>полоса</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>left</source>
-        <translation type="unfinished"></translation>
+        <translation>слева</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>right</source>
-        <translation type="unfinished"></translation>
+        <translation>справа</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>top</source>
-        <translation type="unfinished"></translation>
+        <translation>сверху</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="720"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="88"/>
         <source>bottom</source>
-        <translation type="unfinished"></translation>
+        <translation>снизу</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="126"/>
         <source>Hide it for a single window</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать при одном окне</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="714"/>
         <source>hide</source>
-        <translation type="unfinished"></translation>
+        <translation>скрыть</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="730"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="251"/>
         <source>Make room inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Освободить место в столбце</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="731"/>
         <source>inside</source>
-        <translation type="unfinished"></translation>
+        <translation>внутри</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="732"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="265"/>
         <source>Gap</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="735"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="292"/>
         <source>Thickness</source>
-        <translation type="unfinished"></translation>
+        <translation>Толщина</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="313"/>
         <source>Length</source>
-        <translation type="unfinished"></translation>
+        <translation>Длина</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
         <source>length</source>
-        <translation type="unfinished"></translation>
+        <translation>длина</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="335"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="342"/>
         <source>Gap between tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор между вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="356"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="362"/>
         <source>Fully rounded tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Полностью скруглённые вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
         <source>rounded</source>
-        <translation type="unfinished"></translation>
+        <translation>скруглённый</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
         <source>pill</source>
-        <translation type="unfinished"></translation>
+        <translation>пилюля</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="845"/>
         <source>radius</source>
-        <translation type="unfinished"></translation>
+        <translation>радиус</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="760"/>
         <source>inactive</source>
-        <translation type="unfinished"></translation>
+        <translation>неактивный</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
         <source>urgent</source>
-        <translation type="unfinished"></translation>
+        <translation>срочный</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
         <source>attention</source>
-        <translation type="unfinished"></translation>
+        <translation>внимание</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="892"/>
@@ -8064,7 +8064,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="131"/>
         <source>Scroll the strip with the mouse wheel</source>
         <oldsource>Scroll columns with the mouse wheel</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Прокручивать ленту колесом мыши</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
@@ -8072,7 +8072,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="142"/>
         <source>mouse</source>
-        <translation type="unfinished"></translation>
+        <translation>мышь</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
@@ -8080,18 +8080,18 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="212"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="220"/>
         <source>Invert wheel direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Обратить направление колеса</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
         <source>invert</source>
-        <translation type="unfinished"></translation>
+        <translation>обратить</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <source>direction</source>
-        <translation type="unfinished"></translation>
+        <translation>направление</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="667"/>
@@ -8172,7 +8172,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="685"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="278"/>
         <source>Default height</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="160"/>
@@ -8180,7 +8180,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="708"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="104"/>
         <source>Tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Индикатор вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
@@ -8190,43 +8190,43 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="837"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="81"/>
         <source>indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>индикатор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="728"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="242"/>
         <source>Size and spacing</source>
-        <translation type="unfinished"></translation>
+        <translation>Размер и отступы</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="754"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="439"/>
         <source>Active tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Активная вкладка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="758"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="453"/>
         <source>Inactive tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Неактивные вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="762"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="468"/>
         <source>Urgent tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Срочная вкладка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="783"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="52"/>
         <source>Hold to re-insert into strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Удерживайте, чтобы вставить обратно в ленту</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="789"/>
         <source>strip preview</source>
-        <translation type="unfinished"></translation>
+        <translation>предпросмотр ленты</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="174"/>
@@ -8234,7 +8234,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="824"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="49"/>
         <source>Drop indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Индикатор сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
@@ -8249,12 +8249,12 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <source>drop</source>
-        <translation type="unfinished"></translation>
+        <translation>сбросить</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
         <source>resize</source>
-        <translation type="unfinished"></translation>
+        <translation>изменить размер</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
@@ -8262,12 +8262,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="67"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="73"/>
         <source>Restore columns on login</source>
-        <translation type="unfinished"></translation>
+        <translation>Восстанавливать столбцы при входе</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
         <source>session</source>
-        <translation type="unfinished"></translation>
+        <translation>сеанс</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
@@ -8275,32 +8275,32 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="83"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="89"/>
         <source>Restore floated windows to their previous position</source>
-        <translation type="unfinished"></translation>
+        <translation>Восстанавливать плавающие окна в их прежнем положении</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <source>all</source>
-        <translation type="unfinished"></translation>
+        <translation>все</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="106"/>
         <source>desktops</source>
-        <translation type="unfinished"></translation>
+        <translation>рабочие столы</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="108"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="132"/>
         <source>Width adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаг изменения ширины</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="875"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="154"/>
         <source>Height adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаг изменения высоты</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="282"/>
@@ -8310,30 +8310,30 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="81"/>
         <source>Crop columns at the screen edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Обрезать столбцы у края экрана</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>crop</source>
-        <translation type="unfinished"></translation>
+        <translation>обрезать</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>clip</source>
-        <translation type="unfinished"></translation>
+        <translation>усечь</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>cut off</source>
-        <translation type="unfinished"></translation>
+        <translation>отсечь</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
         <source>new</source>
-        <translation type="unfinished"></translation>
+        <translation>новый</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="32"/>
@@ -8390,7 +8390,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1050"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Scrolling Quick Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>Быстрые комбинации для прокрутки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1068"/>
@@ -9085,19 +9085,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="532"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="589"/>
         <source>Blur</source>
-        <translation type="unfinished"></translation>
+        <translation>Размытие</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="534"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="608"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="613"/>
         <source>Blur quality</source>
-        <translation type="unfinished"></translation>
+        <translation>Качество размытия</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="535"/>
         <source>quality</source>
-        <translation type="unfinished"></translation>
+        <translation>качество</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
@@ -9112,7 +9112,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="104"/>
         <source>Release grace period</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
@@ -9123,14 +9123,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="188"/>
         <source>mouse button</source>
-        <translation type="unfinished"></translation>
+        <translation>кнопка мыши</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="77"/>
         <source>Zone span release grace period</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания при объединении зон</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
@@ -9146,7 +9146,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="91"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="97"/>
         <source>Keep floating windows above</source>
-        <translation type="unfinished"></translation>
+        <translation>Держать плавающие окна поверх</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
@@ -9156,14 +9156,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>above</source>
-        <translation type="unfinished"></translation>
+        <translation>поверх</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="945"/>
         <source>stacking</source>
-        <translation type="unfinished"></translation>
+        <translation>порядок наложения</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="632"/>
@@ -9173,92 +9173,92 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>layer</source>
-        <translation type="unfinished"></translation>
+        <translation>слой</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
         <source>title</source>
-        <translation type="unfinished"></translation>
+        <translation>заголовок</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
         <source>bold</source>
-        <translation type="unfinished"></translation>
+        <translation>полужирный</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>italic</source>
-        <translation type="unfinished"></translation>
+        <translation>курсив</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>weight</source>
-        <translation type="unfinished"></translation>
+        <translation>насыщенность</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>underline</source>
-        <translation type="unfinished"></translation>
+        <translation>подчёркивание</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="725"/>
         <source>strikeout</source>
-        <translation type="unfinished"></translation>
+        <translation>зачёркивание</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="795"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="38"/>
         <source>Edge auto-scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>Автопрокрутка у края</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="797"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="54"/>
         <source>Trigger width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина области срабатывания</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="802"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="810"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="815"/>
         <source>auto scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>автопрокрутка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
         <source>drag scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>прокрутка перетаскиванием</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
         <source>edge scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>прокрутка у края</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="809"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="83"/>
         <source>Start delay</source>
-        <translation type="unfinished"></translation>
+        <translation>Задержка запуска</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
         <source>milliseconds</source>
-        <translation type="unfinished"></translation>
+        <translation>миллисекунды</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="814"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="110"/>
         <source>Maximum speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Максимальная скорость</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
         <source>fast</source>
-        <translation type="unfinished"></translation>
+        <translation>быстро</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="879"/>
@@ -9266,33 +9266,33 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="176"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="181"/>
         <source>View scroll step</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаг прокрутки вида</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
         <source>view</source>
-        <translation type="unfinished"></translation>
+        <translation>вид</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="122"/>
         <source>axis</source>
-        <translation type="unfinished"></translation>
+        <translation>ось</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="123"/>
         <source>portrait</source>
-        <translation type="unfinished"></translation>
+        <translation>портретная</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="914"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="158"/>
         <source>Scroll key for column focus</source>
-        <translation type="unfinished"></translation>
+        <translation>Клавиша прокрутки для фокуса столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="915"/>
@@ -9300,19 +9300,19 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="148"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="151"/>
         <source>scroll key</source>
-        <translation type="unfinished"></translation>
+        <translation>клавиша прокрутки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="918"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="150"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="186"/>
         <source>Scroll key for the view</source>
-        <translation type="unfinished"></translation>
+        <translation>Клавиша прокрутки для вида</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
         <source>pan</source>
-        <translation type="unfinished"></translation>
+        <translation>панорамирование</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="994"/>
@@ -9350,7 +9350,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="40"/>
         <source>Position and trigger</source>
         <oldsource>Position &amp; Trigger</oldsource>
-        <translation type="unfinished">Положение и триггер</translation>
+        <translation>Положение и триггер</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1005"/>
@@ -9371,7 +9371,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="157"/>
         <source>Layout arrangement</source>
         <oldsource>Layout Arrangement</oldsource>
-        <translation type="unfinished">Расположение раскладки</translation>
+        <translation>Порядок раскладок</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1010"/>
@@ -9455,27 +9455,27 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="385"/>
         <source>Preview size</source>
         <oldsource>Preview Size</oldsource>
-        <translation type="unfinished">Размер предпросмотра</translation>
+        <translation>Размер предпросмотра</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1040"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="13"/>
         <source>Snapping layout priority</source>
         <oldsource>Snapping Layout Priority</oldsource>
-        <translation type="unfinished">Приоритет раскладок при прилипании</translation>
+        <translation>Приоритет раскладок прилипания</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1042"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingOrderingPage.qml.cpp" line="13"/>
         <source>Tiling algorithm priority</source>
         <oldsource>Tiling Algorithm Priority</oldsource>
-        <translation type="unfinished">Приоритет алгоритмов мозаичного размещения</translation>
+        <translation>Приоритет алгоритмов мозаики</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="13"/>
         <source>Scrolling template priority</source>
-        <translation type="unfinished"></translation>
+        <translation>Приоритет шаблонов прокрутки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1046"/>
@@ -9502,14 +9502,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
-        <translation type="unfinished">Предустановки плавности</translation>
+        <translation>Предустановки сглаживания</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1064"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="282"/>
         <source>Spring presets</source>
         <oldsource>Spring Presets</oldsource>
-        <translation type="unfinished">Предустановки пружины</translation>
+        <translation>Предустановки пружин</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1066"/>
@@ -9535,25 +9535,25 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="73"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="46"/>
         <source>Strip Scrolled</source>
-        <translation type="unfinished"></translation>
+        <translation>Лента прокручена</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="80"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="51"/>
         <source>Tab Switched</source>
-        <translation type="unfinished"></translation>
+        <translation>Вкладка переключена</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="30"/>
         <source>Applet Popup Shown</source>
-        <translation type="unfinished"></translation>
+        <translation>Всплывающее окно апплета показано</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="35"/>
         <source>Applet Popup Hidden</source>
-        <translation type="unfinished"></translation>
+        <translation>Всплывающее окно апплета скрыто</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="134"/>
@@ -9586,19 +9586,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="826"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="67"/>
         <source>Fill color</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет заливки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
         <source>fill</source>
-        <translation type="unfinished"></translation>
+        <translation>заливка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="831"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="97"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="102"/>
         <source>Fill opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Непрозрачность заливки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="100"/>
@@ -9771,62 +9771,62 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="409"/>
         <source>Could not read the template file.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось прочитать файл шаблона.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="404"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="418"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="424"/>
         <source>That file is not a scrolling template this app can read.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот файл не является шаблоном прокрутки, который может прочитать это приложение.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="462"/>
         <source>That template no longer exists.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот шаблон больше не существует.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="200"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="520"/>
         <source>The daemon refused the template. Check that it has a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Служба отклонила шаблон. Проверьте, есть ли у него имя.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="213"/>
         <source>Could not save the template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось сохранить шаблон.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="226"/>
         <source>Could not save the template. Check that it has a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось сохранить шаблон. Проверьте, есть ли у него имя.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="522"/>
         <source>Could not save the template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось сохранить шаблон: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="542"/>
         <source>Could not delete the template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось удалить шаблон: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="549"/>
         <source>Could not delete the template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось удалить шаблон.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="561"/>
         <source>Could not duplicate the template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось продублировать шаблон: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="885"/>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="360"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="126"/>
         <source>Scrolling (no template)</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокрутка (без шаблона)</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="396"/>
@@ -9848,17 +9848,17 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="571"/>
         <source>Could not duplicate the template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось продублировать шаблон.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="603"/>
         <source>Could not open the editor. The daemon may not be running.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось открыть редактор. Возможно, служба не запущена.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="609"/>
         <source>Could not open the editor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось открыть редактор.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="723"/>
@@ -9878,20 +9878,20 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="348"/>
         <source>Template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="302"/>
         <source>A scrolling template you picked has been deleted, so that monitor kept its previous template. Pick one again on the Overview page.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбранный вами шаблон прокрутки был удалён, поэтому этот монитор сохранил прежний шаблон. Выберите шаблон заново на странице обзора.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Выбранный вами %n шаблон прокрутки был удалён, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
+            <numerusform>Выбранные вами %n шаблона прокрутки были удалены, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
+            <numerusform>Выбранные вами %n шаблонов прокрутки были удалены, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
         </translation>
     </message>
     <message>
@@ -10035,19 +10035,19 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
         <source>Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблоны</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="349"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="78"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="242"/>
         <source>Tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="363"/>
         <source>Strip Selector</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбор ленты</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
@@ -10079,7 +10079,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="60"/>
         <source>Shell</source>
-        <translation type="unfinished"></translation>
+        <translation>Оболочка</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="518"/>
@@ -10429,7 +10429,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="305"/>
         <source>An old backup at %1 is in the way and could not be removed, so nothing was imported.</source>
-        <translation type="unfinished"></translation>
+        <translation>Старая резервная копия в %1 помешала, и удалить её не удалось, поэтому ничего не импортировано.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="312"/>
@@ -10440,7 +10440,7 @@
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="331"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="416"/>
         <source>That settings file is older than the window rules this profile already has, and importing it would drop them. Set up a new settings profile and import it there. Your window rules and quick layout slots are not part of an export, so copy them over by hand afterwards.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот файл параметров старше правил окон, которые уже есть в этом профиле, и его импорт удалил бы их. Создайте новый профиль параметров и импортируйте файл туда. Правила окон и быстрые слоты раскладок не входят в экспорт, поэтому перенесите их вручную.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="353"/>
@@ -10455,12 +10455,12 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="389"/>
         <source>That settings file is from a newer version of this app.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот файл параметров создан более новой версией приложения.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="400"/>
         <source>That settings file does not say which version of this app wrote it.</source>
-        <translation type="unfinished"></translation>
+        <translation>В этом файле параметров не указано, какая версия приложения его записала.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="433"/>
@@ -10470,7 +10470,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="451"/>
         <source>Your settings file was read but the upgrade could not be saved.</source>
-        <translation type="unfinished"></translation>
+        <translation>Файл параметров прочитан, но обновление не удалось сохранить.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="484"/>
@@ -10481,7 +10481,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="529"/>
         <source>Your settings were imported, but the window rules could not be reloaded. Restart PlasmaZones before you change any rules, or the imported ones will be lost.</source>
-        <translation type="unfinished"></translation>
+        <translation>Параметры импортированы, но правила окон не удалось перезагрузить. Перезапустите PlasmaZones перед изменением правил, иначе импортированные правила будут потеряны.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="560"/>
@@ -10590,12 +10590,12 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Не использовать шаблон на этом экране, чтобы столбцы сохраняли встроенные ширины и высоты</translation>
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
-        <translation type="unfinished"></translation>
+        <translation>Не использовать раскладку на этом экране, чтобы окна плавали и ничто их не прилепляло и не выкладывало мозаикой</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -10909,44 +10909,44 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="262"/>
         <source>Add Column</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="238"/>
         <source>Add a starting column to the template</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить начальный столбец в шаблон</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="224"/>
         <source>A template can start at most %n column</source>
         <comment>@info</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Шаблон может начинаться максимум с %n столбца</numerusform>
+            <numerusform>Шаблон может начинаться максимум с %n столбцов</numerusform>
+            <numerusform>Шаблон может начинаться максимум с %n столбцов</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="240"/>
         <source>Add a starting column at the end of the strip</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить начальный столбец в конце ленты</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="248"/>
         <source>%n column</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n столбец</numerusform>
+            <numerusform>%n столбца</numerusform>
+            <numerusform>%n столбцов</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="261"/>
         <source>Drag the divider after a column to resize it. Click a column to reorder it, switch it to tabs, or remove it.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Перетащите разделитель после столбца, чтобы изменить его размер. Щёлкните столбец, чтобы изменить его порядок, переключить на вкладки или удалить.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="297"/>
@@ -11111,7 +11111,7 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="575"/>
         <source>Save template and close editor</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сохранить шаблон и закрыть редактор</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="64"/>
@@ -11213,7 +11213,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
         <source>Scrolling Template Editor</source>
         <comment>@title</comment>
-        <translation type="unfinished"></translation>
+        <translation>Редактор шаблонов прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="799"/>
@@ -11256,7 +11256,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Открытие чего-то другого заменит редактируемый шаблон. Что сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="960"/>
@@ -11298,7 +11298,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
-        <translation type="unfinished"></translation>
+        <translation>Справка редактора шаблонов</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
@@ -11310,7 +11310,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
         <source>Template saved</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон сохранён</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1051"/>
@@ -11462,13 +11462,13 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="187"/>
         <source>Shift+%1</source>
         <comment>@shortcut; %1 is an arrow pair such as Left/Right</comment>
-        <translation type="unfinished"></translation>
+        <translation>Shift+%1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="193"/>
         <source>Ctrl+%1</source>
         <comment>@shortcut; %1 is an arrow pair such as Left/Right</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+%1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="205"/>
@@ -11500,62 +11500,62 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="294"/>
         <source>Drag the divider after it</source>
         <comment>@info mouse gesture</comment>
-        <translation type="unfinished"></translation>
+        <translation>Перетащите разделитель после него</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="66"/>
         <source>Save template</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сохранить шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="28"/>
         <source>Up/Down</source>
         <comment>@shortcut arrow pair</comment>
-        <translation type="unfinished"></translation>
+        <translation>Вверх/Вниз</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="28"/>
         <source>Left/Right</source>
         <comment>@shortcut arrow pair</comment>
-        <translation type="unfinished"></translation>
+        <translation>Влево/Вправо</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="66"/>
         <source>Save layout</source>
         <comment>@action</comment>
-        <translation type="unfinished">Сохранить раскладку</translation>
+        <translation>Сохранить раскладку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="173"/>
         <source>Template Columns</source>
         <comment>@title:group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Столбцы шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="180"/>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="287"/>
         <source>Select column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Выбрать столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="186"/>
         <source>Resize column 1%</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменить размер столбца на 1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="192"/>
         <source>Reorder column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменить порядок столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="198"/>
         <source>Remove column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="224"/>
@@ -11638,19 +11638,19 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="293"/>
         <source>Resize column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменить размер столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="299"/>
         <source>Deselect</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Снять выделение</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="300"/>
         <source>Click empty space</source>
         <comment>@info mouse gesture</comment>
-        <translation type="unfinished"></translation>
+        <translation>Щёлкните пустое место</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="308"/>
@@ -11687,19 +11687,19 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="343"/>
         <source>Hover or select a column to reveal its action buttons</source>
         <comment>@info tip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Наведите указатель на столбец или выберите его, чтобы показать кнопки действий</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="348"/>
         <source>Add columns from the bottom bar</source>
         <comment>@info tip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Столбцы добавляются на нижней панели</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="353"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through</source>
         <comment>@info tip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки — это размеры, которые перебираются комбинациями переключения ширины и высоты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="361"/>
@@ -11716,7 +11716,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="367"/>
         <source>Column info announced to screen readers. Tab navigates UI, arrow keys navigate columns.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сведения о столбце для программ чтения с экрана. Tab перемещает по интерфейсу, клавиши со стрелками — по столбцам.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="406"/>
@@ -12151,14 +12151,14 @@
         <source>Corner radius:</source>
         <oldsource>Border radius:</oldsource>
         <comment>@label</comment>
-        <translation type="unfinished">Радиус скругления:</translation>
+        <translation>Радиус скругления:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="381"/>
         <source>Corner radius for all selected zones</source>
         <oldsource>Border radius for all selected zones</oldsource>
         <comment>@label</comment>
-        <translation type="unfinished">Радиус скругления для всех выбранных зон</translation>
+        <translation>Радиус скругления для всех выбранных зон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="382"/>
@@ -12392,7 +12392,7 @@
         <source>Corner radius in pixels</source>
         <oldsource>Border radius in pixels</oldsource>
         <comment>@label</comment>
-        <translation type="unfinished">Радиус скругления в пикселях</translation>
+        <translation>Радиус скругления в пикселях</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="807"/>
@@ -12701,7 +12701,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
         <source>Reset every shader parameter to its default value</source>
-        <translation type="unfinished"></translation>
+        <translation>Сбросить все параметры шейдера к значениям по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="764"/>
@@ -12713,7 +12713,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="767"/>
         <source>Apply the shader settings and close the dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Применить параметры шейдера и закрыть диалог</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="904"/>
@@ -12783,7 +12783,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
         <source>Template:</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="175"/>
@@ -12801,7 +12801,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
         <source>Template name</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Имя шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
@@ -12813,7 +12813,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
         <source>Enter name for the template</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Введите имя шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="242"/>
@@ -13185,7 +13185,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
         <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание, мозаика и прокрутка окон для композиторов Wayland. Прилепляйте окна к зонам, которые вы рисуете сами, доверьте их раскладку алгоритму или прокручивайте их по бесконечной ленте. Каждый монитор выбирает свой режим.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
@@ -13237,7 +13237,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="139"/>
         <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
         <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание вдохновлено FancyZones, а прокрутка — композитором niri.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="149"/>
@@ -13401,17 +13401,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="58"/>
         <source>GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.</source>
-        <translation type="unfinished"></translation>
+        <translation>Графический процессор, отрисовывающий наложения зон и экранные сообщения. При автоматическом выборе решает графический драйвер. Содержимое окон компонует KWin, поэтому на него это не влияет.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
         <source>Stop the daemon to change rendering settings.</source>
-        <translation type="unfinished"></translation>
+        <translation>Остановите службу, чтобы изменить параметры отрисовки.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
         <source>Rendering changes take effect after restarting the daemon.</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменения отрисовки вступят в силу после перезапуска службы.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="156"/>
@@ -13422,7 +13422,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="163"/>
         <source>fps</source>
         <comment>frames per second, unit appended to a slider value</comment>
-        <translation type="unfinished">fps</translation>
+        <translation>fps</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="191"/>
@@ -13484,7 +13484,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="368"/>
         <source>Hz</source>
         <comment>hertz, unit appended to a slider value</comment>
-        <translation type="unfinished"></translation>
+        <translation>Гц</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="361"/>
@@ -13519,7 +13519,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="455"/>
         <source>Capture device or monitor source. Keep it set to auto to follow the default output.</source>
-        <translation type="unfinished"></translation>
+        <translation>Устройство записи или источник мониторинга. Оставьте автоматический выбор, чтобы следовать за выводом по умолчанию.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="502"/>
@@ -13637,7 +13637,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="162"/>
         <source>Your settings could not be written, so nothing was reset.</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось записать параметры, поэтому ничего не сброшено.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="165"/>
@@ -13695,17 +13695,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="567"/>
         <source>Save did not complete. %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Сохранение не завершено. %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="581"/>
         <source>No details were reported.</source>
-        <translation type="unfinished"></translation>
+        <translation>Подробности не сообщены.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="582"/>
         <source>Discard did not complete. %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Отмена не завершена. %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="569"/>
@@ -13735,7 +13735,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="888"/>
         <source>Simple</source>
-        <translation type="unfinished"></translation>
+        <translation>Простой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="928"/>
@@ -13746,7 +13746,7 @@
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="204"/>
         <source>%1, position %2 of %3</source>
         <comment>@info:accessibility reorderable priority row: name, position, total</comment>
-        <translation type="unfinished"></translation>
+        <translation>%1, позиция %2 из %3</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="395"/>
@@ -13862,19 +13862,19 @@
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="238"/>
         <source>Simple</source>
         <comment>@info search result mode badge</comment>
-        <translation type="unfinished"></translation>
+        <translation>Простой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="238"/>
         <source>Advanced</source>
         <comment>@info search result mode badge</comment>
-        <translation type="unfinished">Дополнительно</translation>
+        <translation>Дополнительно</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="256"/>
         <source>, </source>
         <comment>@info:whatsthis joiner between search-result context parts</comment>
-        <translation type="unfinished"></translation>
+        <translation>, </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="327"/>
@@ -14016,13 +14016,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="193"/>
         <source>Change trigger %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить триггер %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="193"/>
         <source>Change trigger %1 for %2</source>
         <comment>@action:button %1 is a key chord such as Meta+Shift, %2 names the setting being edited</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменить триггер %1 для «%2»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="212"/>
@@ -14038,12 +14038,12 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="240"/>
         <source>Remove trigger for %1</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить триггер для «%1»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="260"/>
         <source>Remove this trigger. At least one must remain.</source>
-        <translation type="unfinished"></translation>
+        <translation>Удалить этот триггер. Хотя бы один должен остаться.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="271"/>
@@ -14059,7 +14059,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="288"/>
         <source>Reset %1 to defaults</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сбросить «%1» к значениям по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="324"/>
@@ -14210,7 +14210,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling this will discard your unsaved changes. Continue?</source>
-        <translation type="unfinished"></translation>
+        <translation>Отключение этого приведёт к потере несохранённых изменений. Продолжить?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="140"/>
@@ -14226,7 +14226,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Остановка службы PlasmaZones отключает прилипание, мозаику и прокрутку окон до её повторного запуска.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>
@@ -14277,7 +14277,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="368"/>
         <source>Italic</source>
-        <translation type="unfinished"></translation>
+        <translation>Курсив</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="388"/>
@@ -14447,16 +14447,16 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="131"/>
         <source>%n event below this one kept settings from a different shader pack, so they no longer apply.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n событие ниже сохранило параметры из другого набора шейдеров, поэтому они больше не действуют.</numerusform>
+            <numerusform>%n события ниже сохранили параметры из другого набора шейдеров, поэтому они больше не действуют.</numerusform>
+            <numerusform>%n событий ниже сохранили параметры из другого набора шейдеров, поэтому они больше не действуют.</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="134"/>
         <source>Discard those settings</source>
-        <translation type="unfinished"></translation>
+        <translation>Отменить эти параметры</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="166"/>
@@ -14520,12 +14520,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="269"/>
         <source>Following the inherited pack, with saved settings that no longer apply</source>
-        <translation type="unfinished"></translation>
+        <translation>Следует унаследованному набору, с сохранёнными параметрами, которые больше не действуют</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="271"/>
         <source>Following the inherited pack, with settings of its own</source>
-        <translation type="unfinished"></translation>
+        <translation>Следует унаследованному набору, со своими параметрами</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="274"/>
@@ -14601,7 +14601,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="654"/>
         <source>No shader for this event, and no inherited one either.</source>
-        <translation type="unfinished"></translation>
+        <translation>Для этого события нет шейдера и нет унаследованного.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="656"/>
@@ -14617,12 +14617,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="673"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="775"/>
         <source>Revert shader to inherited</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть шейдер к унаследованному</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="816"/>
         <source>Remove the shader pack</source>
-        <translation type="unfinished"></translation>
+        <translation>Удалить набор шейдеров</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="818"/>
@@ -14633,7 +14633,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="806"/>
         <source>Use no shader for this event</source>
-        <translation type="unfinished"></translation>
+        <translation>Не использовать шейдер для этого события</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="991"/>
@@ -14862,25 +14862,25 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="53"/>
         <source>Scrolling strip</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Лента прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="55"/>
         <source>Plasma shell</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Оболочка Plasma</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="57"/>
         <source>Widgets</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished">Виджеты</translation>
+        <translation>Виджеты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="59"/>
         <source>Cursor</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Курсор</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="66"/>
@@ -14953,13 +14953,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="363"/>
         <source>★ %1</source>
         <comment>marks a user-created preset</comment>
-        <translation type="unfinished"></translation>
+        <translation>★ %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="232"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="364"/>
         <source>User preset %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Пользовательская предустановка %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
@@ -15557,7 +15557,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="43"/>
         <source>Plasma shell</source>
         <comment>@label decoration surface group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Оболочка Plasma</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="50"/>
@@ -15606,7 +15606,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="232"/>
         <source>Not decorated. Add a decoration pack to style this surface.</source>
-        <translation type="unfinished"></translation>
+        <translation>Без оформления. Добавьте набор оформления, чтобы стилизовать эту поверхность.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="235"/>
@@ -15748,52 +15748,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Цвет рамки активного окна</translation>
+        <translation>Цвет рамки активного окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
         <source>Low</source>
         <comment>@item:inlistbox decoration blur quality</comment>
-        <translation type="unfinished"></translation>
+        <translation>Низкое</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="62"/>
         <source>Balanced</source>
         <comment>@item:inlistbox decoration blur quality</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сбалансированное</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="66"/>
         <source>High</source>
         <comment>@item:inlistbox decoration blur quality</comment>
-        <translation type="unfinished"></translation>
+        <translation>Высокое</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="300"/>
         <source>Border color for the focused window. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет рамки активного окна. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Цвет рамки неактивного окна</translation>
+        <translation>Цвет рамки неактивного окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
         <source>Border color for unfocused windows. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет рамки неактивных окон. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="437"/>
         <source>Tint color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Цвет оттенка</translation>
+        <translation>Цвет оттенка</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="439"/>
         <source>Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет, которым заливается окно, когда сила оттенка больше нуля. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="475"/>
@@ -15843,13 +15843,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="601"/>
         <source>This applies to windows that use decoration shader packs with blur.</source>
-        <translation type="unfinished"></translation>
+        <translation>Это относится к окнам, использующим наборы шейдеров оформления с размытием.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="610"/>
         <source>How sharply decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</source>
         <oldsource>How sharp decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Насколько резко шейдеры оформления рассчитывают своё размытие относительно того, что выбирает для себя каждый набор шейдеров. Меньшее значение дешевле для видеокарты и в движении выглядит чуть мягче. Большее резче и обходится дороже.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="636"/>
@@ -15865,7 +15865,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="688"/>
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
-        <translation type="unfinished">Остальные окна сохраняют оформление, но перестают двигаться. Снижает нагрузку на видеокарту примерно пропорционально числу открытых окон.</translation>
+        <translation>Другие окна сохраняют оформление, но перестают двигаться. Это экономит нагрузку на видеокарту примерно пропорционально числу открытых окон. Панели и всплывающие окна апплетов продолжают анимироваться, потому что панель никогда не бывает активным окном.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -15953,29 +15953,29 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="564"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="587"/>
         <source>No template</source>
-        <translation type="unfinished"></translation>
+        <translation>Без шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="566"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="589"/>
         <source>No algorithm</source>
-        <translation type="unfinished"></translation>
+        <translation>Без алгоритма</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="567"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="590"/>
         <source>No layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Без раскладки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="577"/>
         <source>No template assigned</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон не назначен</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="579"/>
         <source>No algorithm assigned</source>
-        <translation type="unfinished"></translation>
+        <translation>Алгоритм не назначен</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="592"/>
@@ -15987,10 +15987,10 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="602"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="457"/>
         <source>%n width</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n ширина</numerusform>
+            <numerusform>%n ширины</numerusform>
+            <numerusform>%n ширин</numerusform>
         </translation>
     </message>
     <message>
@@ -16028,7 +16028,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="357"/>
         <source>Clear Default</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить значение по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="397"/>
@@ -16111,12 +16111,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="90"/>
         <source>Width Count</source>
-        <translation type="unfinished"></translation>
+        <translation>Число ширин</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="333"/>
         <source>Set a priority order on the Priority page first</source>
-        <translation type="unfinished"></translation>
+        <translation>Сначала задайте порядок на странице приоритета</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="368"/>
@@ -16147,7 +16147,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="429"/>
         <source>Filter Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Фильтр шаблонов</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="455"/>
@@ -16228,12 +16228,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
         <source>Unnamed Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон без имени</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
         <source>Unnamed Algorithm</source>
-        <translation type="unfinished"></translation>
+        <translation>Алгоритм без имени</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
@@ -16247,16 +16247,16 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
         <source>Template with %n width</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Шаблон с %n шириной</numerusform>
+            <numerusform>Шаблон с %n ширинами</numerusform>
+            <numerusform>Шаблон с %n ширинами</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="304"/>
         <source>Default scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон прокрутки по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="307"/>
@@ -16271,7 +16271,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="331"/>
         <source>Built-in template. Editing stores your own copy.</source>
-        <translation type="unfinished"></translation>
+        <translation>Встроенный шаблон. При правке сохраняется ваша копия.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="334"/>
@@ -16286,7 +16286,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="340"/>
         <source>Edited copy of a built-in template. Deleting it brings the built-in one back.</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменённая копия встроенного шаблона. При удалении вернётся встроенный.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="342"/>
@@ -16343,7 +16343,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="114"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="50"/>
         <source>User templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Пользовательские шаблоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
@@ -16358,7 +16358,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
         <source>Drop a template file here to import it, or use the buttons below. Your templates live under your data directory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перетащите сюда файл шаблона, чтобы импортировать его, или воспользуйтесь кнопками ниже. Ваши шаблоны находятся в вашем каталоге данных.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="70"/>
@@ -16373,7 +16373,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="70"/>
         <source>Drop a template file here</source>
-        <translation type="unfinished"></translation>
+        <translation>Перетащите сюда файл шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="71"/>
@@ -16388,7 +16388,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="71"/>
         <source>Release to import template</source>
-        <translation type="unfinished"></translation>
+        <translation>Отпустите, чтобы импортировать шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="621"/>
@@ -16437,7 +16437,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="166"/>
         <source>Open user templates directory</source>
-        <translation type="unfinished"></translation>
+        <translation>Открыть каталог пользовательских шаблонов</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutThumbnail.qml.cpp" line="151"/>
@@ -16448,12 +16448,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="267"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="438"/>
         <source>Your Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Ваши шаблоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="268"/>
         <source>All templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Все шаблоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="280"/>
@@ -16474,7 +16474,7 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="93"/>
         <source>Scrolling Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблоны прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
@@ -16489,7 +16489,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search templates…</source>
-        <translation type="unfinished"></translation>
+        <translation>Поиск шаблонов…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
@@ -16500,17 +16500,17 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Создать шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No matching templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Подходящих шаблонов нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No scrolling templates available</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблоны прокрутки недоступны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="456"/>
@@ -16551,7 +16551,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="473"/>
         <source>Both Built-in and Your Templates sources are hidden</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрыты и встроенные, и ваши шаблоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="475"/>
@@ -16561,7 +16561,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="481"/>
         <source>Start the PlasmaZones daemon to create a template, or import one</source>
-        <translation type="unfinished"></translation>
+        <translation>Запустите службу PlasmaZones, чтобы создать шаблон, или импортируйте готовый</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="485"/>
@@ -16599,10 +16599,10 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="511"/>
         <source>%n template</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n шаблон</numerusform>
+            <numerusform>%n шаблона</numerusform>
+            <numerusform>%n шаблонов</numerusform>
         </translation>
     </message>
     <message>
@@ -16638,12 +16638,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="629"/>
         <source>Import Scrolling Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Импорт шаблона прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="642"/>
         <source>Export Scrolling Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Экспорт шаблона прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="655"/>
@@ -16668,7 +16668,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="825"/>
         <source>Delete Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Удалить шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
@@ -16810,7 +16810,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="162"/>
         <source>Quick Scrolling %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Быстрая прокрутка %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="174"/>
@@ -16821,42 +16821,42 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="174"/>
         <source>Shortcut %1, used on monitors in this mode</source>
         <comment>%1 is a keyboard shortcut such as Meta+Alt+1</comment>
-        <translation type="unfinished"></translation>
+        <translation>Комбинация %1, используется на мониторах в этом режиме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Tiling algorithm for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Алгоритм мозаики для быстрой комбинации %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Zone layout for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Раскладка зон для быстрой комбинации %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Scrolling template for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблон прокрутки для быстрой комбинации %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить раскладку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear template</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear layout for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить раскладку для быстрой комбинации %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear template for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Очистить шаблон для быстрой комбинации %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="43"/>
@@ -16932,7 +16932,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="138"/>
         <source>%1 · %2</source>
         <comment>inheritance note, then the profile description</comment>
-        <translation type="unfinished">%1 · %2</translation>
+        <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="160"/>
@@ -17027,7 +17027,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>
         <source>None</source>
         <comment>the explicit no-layout choice</comment>
-        <translation type="unfinished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="335"/>
@@ -17255,52 +17255,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="179"/>
         <source>e.g. Editor, Terminal</source>
         <comment>@info:placeholder zone names for a snap-to-zone rule</comment>
-        <translation type="unfinished"></translation>
+        <translation>например, Editor, Terminal</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="181"/>
         <source>Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone names field of a snap-to-zone rule</comment>
-        <translation type="unfinished"></translation>
+        <translation>Названия зон, к которым прилепляются подходящие окна, из той раскладки, которая активна. Несколько зон охватывают их общую область.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="203"/>
         <source>Add a name…</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить название…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="204"/>
         <source>Add a zone name from your layouts</source>
         <comment>@info:accessibility</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить название зоны из ваших раскладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="241"/>
         <source>One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone numbers field of a snap-to-zone rule</comment>
-        <translation type="unfinished">Один или несколько номеров зон (нумерация с 1), к которым прилепляются подходящие окна. Несколько зон охватывают их общую область.</translation>
+        <translation>Один или несколько номеров зон, считая с 1, к которым прилепляются подходящие окна. Несколько зон охватывают их общую область.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="406"/>
         <source>Reset to the system accent color</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть системный акцентный цвет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="407"/>
         <source>Follow the system accent color</source>
-        <translation type="unfinished"></translation>
+        <translation>Следовать системному акцентному цвету</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="534"/>
         <source>None</source>
         <comment>@item:inlistbox scrolling template rule action, use no template at all</comment>
-        <translation type="unfinished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="551"/>
         <source>Choose a template…</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите шаблон…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
@@ -17333,7 +17333,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="775"/>
         <source>This event is not driven per window, so a rule cannot change it. It stays here because this action already names it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Это событие не управляется отдельно для каждого окна, поэтому правило не может его изменить. Оно здесь потому, что это действие уже его называет.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="782"/>
@@ -17457,7 +17457,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="220"/>
         <source>Add a second condition, grouping it with this one</source>
-        <translation type="unfinished"></translation>
+        <translation>Добавить второе условие, сгруппировав его с этим</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="394"/>
@@ -17473,7 +17473,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="229"/>
         <source>Add a condition group alongside this condition</source>
-        <translation type="unfinished"></translation>
+        <translation>Добавить группу условий рядом с этим условием</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="403"/>
@@ -17587,7 +17587,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="742"/>
         <source>Choose a scheme…</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите схему…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="781"/>
@@ -17598,7 +17598,7 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="141"/>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="171"/>
         <source>That template is no longer available.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот шаблон больше не доступен.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="242"/>
@@ -17609,199 +17609,199 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="258"/>
         <source>This template starts no columns</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Этот шаблон не начинает ни одного столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="259"/>
         <source>The first windows you open form the starting columns, in order along the strip. Later windows use the default width from the panel. A template without starting columns only sets the width presets.</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Первые открытые окна образуют начальные столбцы по порядку вдоль ленты. Последующие окна используют ширину по умолчанию из панели. Шаблон без начальных столбцов задаёт только предустановки ширины.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <source>Column %1, %2% wide, %3</source>
         <comment>@info accessible column summary; %3 is Stacked or Tabbed</comment>
-        <translation type="unfinished"></translation>
+        <translation>Столбец %1, ширина %2%, %3</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation type="unfinished">С вкладками</translation>
+        <translation>С вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Stacked</source>
         <comment>@info column display</comment>
-        <translation type="unfinished"></translation>
+        <translation>Стопкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="493"/>
         <source>%1%</source>
         <comment>@info column width percentage</comment>
-        <translation type="unfinished">%1%</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="500"/>
         <source>Column %1</source>
         <comment>@info column caption</comment>
-        <translation type="unfinished"></translation>
+        <translation>Столбец %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="570"/>
         <source>Move column toward the strip start</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переместить столбец к началу ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="571"/>
         <source>Swap this column with the previous one</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Поменять этот столбец с предыдущим</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="572"/>
         <source>Move toward start</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переместить к началу</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="597"/>
         <source>Move column toward the strip end</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переместить столбец к концу ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="598"/>
         <source>Swap this column with the next one</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Поменять этот столбец со следующим</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="599"/>
         <source>Move toward end</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переместить к концу</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="754"/>
         <source>Drag along the strip to resize this column</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Перетащите вдоль ленты, чтобы изменить размер этого столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="586"/>
         <source>Show windows stacked</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показывать окна стопкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="586"/>
         <source>Show windows as tabs</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показывать окна вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="587"/>
         <source>Switch this column between stacked windows and tabs</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переключить этот столбец между стопкой окон и вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="588"/>
         <source>Show windows stacked</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показывать окна стопкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="588"/>
         <source>Show windows as tabs</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показывать окна вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="612"/>
         <source>Remove column</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="613"/>
         <source>Remove this column from the template</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить этот столбец из шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="614"/>
         <source>Remove column</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="753"/>
         <source>Column width divider</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Разделитель ширины столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="837"/>
         <source>Screen edge</source>
         <comment>@info marker caption</comment>
-        <translation type="unfinished"></translation>
+        <translation>Край экрана</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="271"/>
         <source>Change Description</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить описание</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="306"/>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="320"/>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="339"/>
         <source>Change Default Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить ширину по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="354"/>
         <source>Change Default Display</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить отображение по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="377"/>
         <source>Change Width Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить предустановки ширины</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="390"/>
         <source>Change Height Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить предустановки высоты</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="411"/>
         <source>Add Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Добавить столбец</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="424"/>
         <source>Remove Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Удалить столбец</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="437"/>
         <source>Move Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Переместить столбец</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="464"/>
         <source>Resize Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить размер столбца</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="486"/>
         <source>Change Column Display</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменить отображение столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="244"/>
@@ -17873,18 +17873,18 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="108"/>
         <source>Action “%1” may not take effect because this rule also has an exclusion that stops the rest of the rule from applying. Put the exclusion on a separate rule.</source>
-        <translation type="unfinished"></translation>
+        <translation>Действие «%1» может не сработать, потому что в этом правиле есть исключение, останавливающее применение остальной части правила. Вынесите исключение в отдельное правило.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="110"/>
         <source>Action “%1” is a duplicate. An earlier action of the same type on this rule already sets it, so only one of them takes effect.</source>
-        <translation type="unfinished"></translation>
+        <translation>Действие «%1» дублируется. Более раннее действие того же типа в этом правиле уже задаёт его, поэтому сработает только одно из них.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="112"/>
         <source>Action “%1” is not filled in yet. Choose a value for it, or remove the action. Otherwise it is dropped when the rule is saved.</source>
         <oldsource>Action “%1” is not filled in yet. Choose a value for it, or remove the action, otherwise it is dropped when the rule is saved.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Действие «%1» ещё не заполнено. Выберите для него значение или удалите действие. Иначе оно будет отброшено при сохранении правила.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="114"/>
@@ -17932,19 +17932,19 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="161"/>
         <source>%n animation action that cannot run</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n действие анимации, которое не может выполниться</numerusform>
+            <numerusform>%n действия анимации, которые не могут выполниться</numerusform>
+            <numerusform>%n действий анимации, которые не могут выполниться</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="165"/>
         <source>This rule has %n animation action naming an event that does not belong to a window, so it never runs. Rules match windows.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>У этого правила есть %n действие анимации, называющее событие, не принадлежащее окну, поэтому оно никогда не выполняется. Правила сопоставляются с окнами.</numerusform>
+            <numerusform>У этого правила есть %n действия анимации, называющие событие, не принадлежащее окну, поэтому они никогда не выполняются. Правила сопоставляются с окнами.</numerusform>
+            <numerusform>У этого правила есть %n действий анимации, называющих событие, не принадлежащее окну, поэтому они никогда не выполняются. Правила сопоставляются с окнами.</numerusform>
         </translation>
     </message>
     <message>
@@ -18071,7 +18071,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
         <source>Choose Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите цвет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
@@ -18247,7 +18247,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="427"/>
         <source>No monitors are connected.</source>
-        <translation type="unfinished"></translation>
+        <translation>Мониторы не подключены.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="435"/>
@@ -18282,48 +18282,50 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="285"/>
         <source>Scrolling strip preview, PlasmaZones is not running</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предпросмотр ленты прокрутки, PlasmaZones не запущен</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="287"/>
         <source>Scrolling strip preview, apply to start scrolling on this screen</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предпросмотр ленты прокрутки, примените, чтобы включить прокрутку на этом экране</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="289"/>
         <source>Scrolling strip preview, no windows on the strip yet</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предпросмотр ленты прокрутки, на ленте пока нет окон</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="291"/>
         <source>Scrolling strip preview with %n window</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Предпросмотр ленты прокрутки с %n окном</numerusform>
+            <numerusform>Предпросмотр ленты прокрутки с %n окнами</numerusform>
+            <numerusform>Предпросмотр ленты прокрутки с %n окнами</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1111"/>
-        <source>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen uses no template, so columns follow the built-in width and height steps.</source>
+        <oldsource>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</oldsource>
+        <translation>Этот экран не использует шаблон, поэтому столбцы следуют встроенным шагам ширины и высоты.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1113"/>
-        <source>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen uses the %1 template, which sets its starting columns and the width and height presets.</source>
+        <oldsource>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</oldsource>
+        <translation>Этот экран использует шаблон %1, который задаёт его начальные столбцы и предустановки ширины и высоты.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
         <source>This monitor uses %1, which is not in your layout list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот монитор использует раскладку «%1». Её нет в вашем списке раскладок.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1035"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Этот монитор использует алгоритм «%1». Его нет в вашем списке алгоритмов.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
@@ -18335,49 +18337,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="602"/>
         <source>PlasmaZones is not running</source>
         <comment>scrolling strip preview, the daemon is not running</comment>
-        <translation type="unfinished"></translation>
+        <translation>PlasmaZones не запущен</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="604"/>
         <source>Apply to start scrolling on this screen</source>
         <comment>scrolling strip preview, the mode is staged but not applied yet</comment>
-        <translation type="unfinished"></translation>
+        <translation>Примените, чтобы включить прокрутку на этом экране</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</source>
-        <translation type="unfinished"></translation>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout. Windows are numbered in order, and Snap to Zone reaches the first nine.</source>
+        <oldsource>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</oldsource>
+        <translation>Режим прокрутки размещает окна в столбцах изменяемого размера на бесконечной ленте, без раскладки зон. Окна нумеруются по порядку, и «Прилепить к зоне» достаёт до первых девяти.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
-        <translation type="unfinished"></translation>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout.</source>
+        <translation>Режим прокрутки размещает окна в столбцах изменяемого размера на бесконечной ленте, без раскладки зон.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1115"/>
-        <source>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen is pinned to a template no longer in your list, so columns follow the built-in width and height steps.</source>
+        <oldsource>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</oldsource>
+        <translation>Этот экран закреплён за шаблоном, которого больше нет в вашем списке, поэтому столбцы следуют встроенным шагам ширины и высоты.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1124"/>
         <source>Pick another template to replace it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите другой шаблон вместо него.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1126"/>
-        <source>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</source>
-        <oldsource>This screen has no template of its own, so it follows the default template from the Layouts page.</oldsource>
-        <translation type="unfinished"></translation>
+        <source>This screen has no template of its own, so it follows the default from Scrolling → Templates.</source>
+        <oldsource>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</oldsource>
+        <translation>У этого экрана нет своего шаблона, поэтому он следует шаблону по умолчанию из Прокрутка → Шаблоны.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
-        <source>Every starting column is in use, so further columns open at the template&apos;s own width and display.</source>
-        <translation type="unfinished"></translation>
+        <source>Every starting column is in use, so new columns open at the template&apos;s own width.</source>
+        <oldsource>Every starting column is in use, so further columns open at the template&apos;s own width and display.</oldsource>
+        <translation>Все начальные столбцы заняты, поэтому новые столбцы открываются с собственной шириной шаблона.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
-        <source>This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen has used %1 of %2 starting columns, and the rest shape the next ones you open.</source>
+        <translation>Этот экран использовал %1 из %2 начальных столбцов, остальные задают вид следующих, которые вы откроете.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
@@ -18541,7 +18546,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="829"/>
         <source>Custom split</source>
         <oldsource>Custom Split</oldsource>
-        <translation type="unfinished">Пользовательское разделение</translation>
+        <translation>Своё разделение</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="846"/>
@@ -18685,7 +18690,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="335"/>
         <source>%1 px width</source>
         <comment>pixel-unit width in a preset tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ширина %1 пикс.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="297"/>
@@ -18892,13 +18897,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="120"/>
         <source>Scrolling strip</source>
         <comment>@item shader capability (the scrolling strip&apos;s view motion)</comment>
-        <translation type="unfinished"></translation>
+        <translation>Лента прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="125"/>
         <source>Tab switch</source>
         <comment>@item shader capability (switching tabs in a scrolling column)</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переключение вкладки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="163"/>
@@ -19246,7 +19251,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="16"/>
         <source>Create layouts on the Snapping → Layouts page first.</source>
         <oldsource>Create layouts in the Layouts page first.</oldsource>
-        <translation type="unfinished">Сначала создайте раскладки на странице «Раскладки».</translation>
+        <translation>Сначала создайте раскладки на странице Прилипание → Раскладки.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="17"/>
@@ -19257,34 +19262,34 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="69"/>
         <source>Zone highlight color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет подсветки зоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="100"/>
         <source>Inactive zone color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Цвет неактивной зоны</translation>
+        <translation>Цвет неактивной зоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="71"/>
         <source>Color for the active/hovered zone. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет активной зоны или зоны под указателем. Следует цветовой схеме, если вы не выберете свой. Ползунки непрозрачности ниже заменяют любую прозрачность, заложенную в цвете.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="102"/>
         <source>Color for zones that are not hovered. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет зон, над которыми нет указателя. Следует цветовой схеме, если вы не выберете свой. Ползунки непрозрачности ниже заменяют любую прозрачность, заложенную в цвете.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="120"/>
         <source>Zone border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет рамки зоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="122"/>
         <source>Color for zone borders. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет рамок зон. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="156"/>
@@ -19304,23 +19309,23 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="244"/>
         <source>Corner rounding of zones in pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>Скругление углов зон в пикселях</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="429"/>
         <source>Choose Zone Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите цвет зоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="289"/>
         <source>Zone label text color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет текста подписи зоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="291"/>
         <source>Text color for zone labels. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет текста подписей зон. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="306"/>
@@ -19334,7 +19339,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="312"/>
         <source>System font</source>
         <oldsource>System default</oldsource>
-        <translation type="unfinished">Системный по умолчанию</translation>
+        <translation>Системный шрифт</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="350"/>
@@ -19385,12 +19390,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="99"/>
         <source>How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго наложение остаётся активным после отпускания триггера активации, чтобы окно, брошенное сразу после этого, всё же прилипло. Помогает, когда триггер — кнопка мыши, отпускаемая вместе со сбросом. Значение 0 отключает это.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="103"/>
         <source>Release grace period for drag activation</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания для активации перетаскиванием</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="137"/>
@@ -19455,12 +19460,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="96"/>
         <source>How long the zones stay up after you let go of the trigger, so a window dropped just after letting go still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго зоны остаются на экране после отпускания триггера, чтобы окно, брошенное сразу после этого, всё же прилипло. Помогает, когда триггер — кнопка мыши, отпускаемая вместе со сбросом. Значение 0 отключает это.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="97"/>
         <source>Release grace period for showing zones</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания для показа зон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="110"/>
@@ -19485,12 +19490,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="87"/>
         <source>How long after the trigger is released a drop still counts as holding it. The picker is decided at the moment you let go of the window, which is when a trigger held by the same hand has usually lifted already. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго после отпускания триггера сброс всё ещё считается выполненным с удержанием. Выбор определяется в момент отпускания окна, когда триггер, удерживаемый той же рукой, обычно уже отпущен. Значение 0 отключает это.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="88"/>
         <source>Release grace period for the snap assist picker</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания для помощника прилипания</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="25"/>
@@ -19531,7 +19536,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="121"/>
         <source>Keep the windows you float stacked above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Держать окна, которые вы делаете плавающими, поверх окон, прилепленных к зонам. Правило, задающее слой окна, имеет приоритет для окон, которым оно соответствует.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
@@ -19557,7 +19562,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
         <source>How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго объединение остаётся активным после отпускания клавиши объединения, чтобы окно, брошенное сразу после этого, всё же заняло отмеченные зоны. Помогает, когда это кнопка мыши, отпускаемая вместе со сбросом. Значение 0 отключает это.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -19910,7 +19915,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="85"/>
         <source>Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.</source>
         <oldsource>Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it</oldsource>
-        <translation type="unfinished">Нажмите триггер повторной вставки один раз, чтобы включить предпросмотр стопки, и ещё раз, чтобы выключить</translation>
+        <translation>Нажмите триггер повторной вставки один раз, чтобы включить предпросмотр стопки. Нажмите ещё раз, чтобы выключить.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="92"/>
@@ -19920,12 +19925,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="106"/>
         <source>How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго предпросмотр стопки остаётся активным после отпускания триггера повторной вставки, чтобы окно, брошенное сразу после этого, всё же попало в стопку. Помогает, когда триггер — кнопка мыши, отпускаемая вместе со сбросом. Значение 0 отключает это.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="107"/>
         <source>Release grace period for re-insert into stack</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания для повторной вставки в стопку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="23"/>
@@ -19936,23 +19941,23 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation type="unfinished"></translation>
+        <translation>При значении «Никогда» лента стоит на месте, пока активный столбец не начал бы уходить с экрана. При «Всегда» активный столбец останавливается по центру. При «При переполнении» центрирование происходит только тогда, когда лента выходит за край экрана.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
         <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
         <comment>the quoted phrase Center the focused column and the word Never must match the sibling row&apos;s title and option label</comment>
-        <translation type="unfinished">Если лента содержит только один столбец, центрировать его даже тогда, когда параметр «Центрировать активный столбец» установлен в значение «Никогда».</translation>
+        <translation>Когда на ленте один столбец, центрировать его, даже если «Центрировать активный столбец» установлено в «Никогда».</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="77"/>
         <source>When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.</source>
-        <translation type="unfinished"></translation>
+        <translation>Когда это включено, столбец у края экрана сохраняет полный размер и обрезается краем. Когда выключено, столбец сжимается, чтобы поместиться, или уезжает, когда от него остаётся слишком мало. Обрезка немного снижает эффективность полноэкранного видео и игр, пока хоть один экран использует прокрутку.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="93"/>
         <source>Focus a window when it opens.</source>
-        <translation type="unfinished"></translation>
+        <translation>Передавать фокус окну при его открытии.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="97"/>
@@ -19963,44 +19968,44 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="109"/>
         <source>Moving the mouse pointer over a window gives it focus.</source>
-        <translation type="unfinished"></translation>
+        <translation>Наведение указателя мыши на окно передаёт ему фокус.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="125"/>
         <source>Turn the wheel with a scroll key held to move along the strip. When this is off, both scroll keys are left to the compositor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Крутите колесо с зажатой клавишей прокрутки, чтобы перемещаться вдоль ленты. Когда это выключено, обе клавиши прокрутки остаются композитору.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="153"/>
         <source>Both scroll keys use the same chord, so the view one never runs. Give them different chords to use both.</source>
-        <translation type="unfinished"></translation>
+        <translation>Обе клавиши прокрутки используют одно и то же сочетание, поэтому клавиша для вида никогда не срабатывает. Задайте им разные сочетания, чтобы использовать обе.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="160"/>
         <source>Hold this and turn the wheel to move focus from column to column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Удерживайте это и крутите колесо, чтобы переводить фокус со столбца на столбец.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="175"/>
         <source>the column focus scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
-        <translation type="unfinished"></translation>
+        <translation>клавиша прокрутки для фокуса столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="188"/>
         <source>Hold this and turn the wheel to move the view along the strip without changing which column has focus.</source>
-        <translation type="unfinished"></translation>
+        <translation>Удерживайте это и крутите колесо, чтобы перемещать вид вдоль ленты, не меняя, какой столбец в фокусе.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="196"/>
         <source>the view scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
-        <translation type="unfinished"></translation>
+        <translation>клавиша прокрутки для вида</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="214"/>
         <source>Scrolling down moves toward the start of the strip instead of the end, for both scroll keys.</source>
-        <translation type="unfinished"></translation>
+        <translation>Прокрутка вниз перемещает к началу ленты, а не к концу, для обеих клавиш прокрутки.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="39"/>
@@ -20061,12 +20066,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="36"/>
         <source>Where a new window&apos;s column enters the strip. Restored windows and per-window rules keep their own position.</source>
-        <translation type="unfinished"></translation>
+        <translation>Где столбец нового окна попадает на ленту. Восстановленные окна и правила для отдельных окон сохраняют своё положение.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="53"/>
         <source>Keep columns at least as wide and tall as their windows&apos; minimum size, which can push other windows off screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Держать столбцы не уже и не ниже минимального размера их окон, что может вытеснить другие окна за пределы экрана</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="57"/>
@@ -20077,56 +20082,56 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="69"/>
         <source>When windows reopen after a restart, rebuild their columns with the same order, widths, and tab groups</source>
-        <translation type="unfinished"></translation>
+        <translation>Когда окна открываются заново после перезапуска, восстанавливать их столбцы с тем же порядком, ширинами и группами вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="85"/>
         <source>When a floated window reopens, it returns to the position and size it had before, rather than being placed by the compositor. A rule can override this either way, opting individual windows in or out.</source>
-        <translation type="unfinished"></translation>
+        <translation>Когда плавающее окно открывается заново, оно возвращается к прежнему положению и размеру, а не размещается композитором. Правило может переопределить это в обе стороны, включая или исключая отдельные окна.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="101"/>
         <source>Keep the windows you float stacked above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Держать окна, которые вы делаете плавающими, поверх столбцов ленты. Правило, задающее слой окна, имеет приоритет для окон, которым оно соответствует.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="117"/>
         <source>How to handle windows that are shown on all virtual desktops</source>
-        <translation type="unfinished"></translation>
+        <translation>Как обрабатывать окна, показываемые на всех виртуальных рабочих столах</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="120"/>
         <source>Sticky window handling</source>
-        <translation type="unfinished"></translation>
+        <translation>Обработка прикреплённых окон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="134"/>
         <source>How far the increase and decrease column width shortcuts resize a column per press, as a share of the strip</source>
         <oldsource>How far the increase and decrease column width shortcuts move a column per press, as a share of the strip</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Насколько комбинации увеличения и уменьшения ширины столбца меняют его за одно нажатие, в долях ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="137"/>
         <source>Column width adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаг изменения ширины столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="156"/>
         <source>How far the increase and decrease window height shortcuts resize a window per press, as a share of the work area across the strip</source>
         <oldsource>How far the increase and decrease window height shortcuts resize a window per press, as a share of the screen height</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Насколько комбинации увеличения и уменьшения высоты окна меняют его за одно нажатие, в долях рабочей области поперёк ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="159"/>
         <source>Window height adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаг изменения высоты окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="178"/>
         <source>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the work area along the strip</source>
         <oldsource>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the screen along the strip</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Насколько один щелчок Meta+Shift+колесо сдвигает ленту без смены фокуса, в долях рабочей области вдоль ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="77"/>
@@ -20137,7 +20142,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="93"/>
         <source>Keep the windows you float stacked above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Держать окна, которые вы делаете плавающими, поверх окон в мозаике. Правило, задающее слой окна, имеет приоритет для окон, которым оно соответствует.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="126"/>
@@ -20224,7 +20229,7 @@
         <location filename=".qml-stubs/src/shared/CategoryBadge.qml.cpp" line="54"/>
         <source>Template</source>
         <comment>@label:badge</comment>
-        <translation type="unfinished">Шаблон</translation>
+        <translation>Шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CategoryBadge.qml.cpp" line="56"/>
@@ -20500,7 +20505,7 @@
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="398"/>
         <source>%1 (continued)</source>
         <comment>category heading for a section that continues from the previous column</comment>
-        <translation type="unfinished"></translation>
+        <translation>%1 (продолжение)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
@@ -20512,7 +20517,7 @@
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, state</comment>
-        <translation type="unfinished">%1, %2</translation>
+        <translation>%1, %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="559"/>
@@ -20523,7 +20528,7 @@
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="165"/>
         <source>%1, %2</source>
         <comment>accessible name of the scrolling strip OSD when the strip is empty; %1 is the card name, %2 the reason</comment>
-        <translation type="unfinished">%1, %2</translation>
+        <translation>%1, %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="356"/>
@@ -20628,7 +20633,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="201"/>
         <source>No window to switch to</source>
-        <translation type="unfinished"></translation>
+        <translation>Нет окна для переключения</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="206"/>
@@ -20689,65 +20694,65 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
         <source>Already at that size</source>
-        <translation type="unfinished"></translation>
+        <translation>Уже такого размера</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="377"/>
         <source>Already centered</source>
-        <translation type="unfinished"></translation>
+        <translation>Уже по центру</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="411"/>
         <source>Already in master position</source>
-        <translation type="unfinished"></translation>
+        <translation>Уже в главной позиции</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="490"/>
         <source>Restored</source>
         <comment>@info:status the window&apos;s previous position was restored</comment>
-        <translation type="unfinished">Восстановлено</translation>
+        <translation>Восстановлено</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="501"/>
         <source>Tiled</source>
         <comment>@info:status the window is now tiled (adjective, not a verb)</comment>
-        <translation type="unfinished">Размещённое мозаикой</translation>
+        <translation>В мозаике</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="529"/>
         <source>Swapped with master window</source>
-        <translation type="unfinished"></translation>
+        <translation>Поменяно местами с главным окном</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="549"/>
         <source>Resized</source>
         <comment>@info:status the window was resized</comment>
-        <translation type="unfinished"></translation>
+        <translation>Размер изменён</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="137"/>
         <source>Spanning is not available in this mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Объединение недоступно в этом режиме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="151"/>
         <source>Pushing to an empty zone is not available in this mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Перемещение в пустую зону недоступно в этом режиме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
         <source>No window in that position</source>
-        <translation type="unfinished"></translation>
+        <translation>В этой позиции нет окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="287"/>
         <source>All windows are already arranged</source>
-        <translation type="unfinished"></translation>
+        <translation>Все окна уже расположены</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="289"/>
         <source>Could not arrange the windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось расположить окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="292"/>
@@ -20783,57 +20788,57 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
         <source>No column templates available</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблоны столбцов недоступны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="335"/>
         <source>That layout is not available on this screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Эта раскладка недоступна на этом экране</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="337"/>
         <source>Layouts are not available in this mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Раскладки недоступны в этом режиме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="349"/>
         <source>Resizing is unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>Изменение размера недоступно</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="356"/>
         <source>Tabbing is unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>Вкладки недоступны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
         <source>Windowed fullscreen is unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>Полный экран в окне недоступен</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="369"/>
         <source>No window to move between columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Нет окна для перемещения между столбцами</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="385"/>
         <source>The scroll step is too small to move the view</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаг прокрутки слишком мал, чтобы сдвинуть вид</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
         <source>Already at the end of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Уже в конце ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
         <source>Columns are already at their default sizes</source>
-        <translation type="unfinished"></translation>
+        <translation>Столбцы уже имеют размеры по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="400"/>
         <source>Could not refresh the layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Не удалось обновить раскладку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="408"/>
@@ -20886,7 +20891,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
         <source>Snapped</source>
         <comment>@info:status the window was snapped into a zone</comment>
-        <translation type="unfinished">Прилипшее</translation>
+        <translation>Прилипло</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
@@ -20907,7 +20912,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="477"/>
         <source>Focus</source>
         <comment>@info:status focus moved in the pressed direction</comment>
-        <translation type="unfinished">Фокус</translation>
+        <translation>Фокус</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
@@ -20928,7 +20933,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="510"/>
         <source>Snapped</source>
         <comment>@info:status the snapped layer took focus</comment>
-        <translation type="unfinished">Прилипшее</translation>
+        <translation>Прилипшие</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="516"/>
@@ -20939,7 +20944,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="518"/>
         <source>Floating</source>
         <comment>@info:status the window is now floating (adjective, not a verb)</comment>
-        <translation type="unfinished">Плавающее</translation>
+        <translation>Плавающее</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="525"/>
@@ -20949,7 +20954,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="527"/>
         <source>Focused the master window</source>
-        <translation type="unfinished"></translation>
+        <translation>Фокус на главном окне</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
@@ -20979,48 +20984,48 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="547"/>
         <source>Column widths equalized</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширины столбцов выровнены</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="551"/>
         <source>Tabbed display toggled</source>
-        <translation type="unfinished"></translation>
+        <translation>Отображение вкладками переключено</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="558"/>
         <source>Windowed fullscreen off</source>
-        <translation type="unfinished"></translation>
+        <translation>Полный экран в окне выключен</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="560"/>
         <source>Windowed fullscreen on</source>
-        <translation type="unfinished"></translation>
+        <translation>Полный экран в окне включён</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="562"/>
         <source>Window moved between columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Окно перемещено между столбцами</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="564"/>
         <source>Window expelled into its own column</source>
-        <translation type="unfinished"></translation>
+        <translation>Окно вытолкнуто в собственный столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="569"/>
         <source>Visible columns centered</source>
-        <translation type="unfinished"></translation>
+        <translation>Видимые столбцы центрированы</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="571"/>
         <source>Column centered</source>
-        <translation type="unfinished"></translation>
+        <translation>Столбец центрирован</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="576"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
-        <translation type="unfinished"></translation>
+        <translation>Прокручено</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
@@ -21046,7 +21051,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="678"/>
         <source>Brief feedback for keyboard window and layout actions</source>
-        <translation type="unfinished"></translation>
+        <translation>Краткий отклик на действия с окнами и раскладками с клавиатуры</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="170"/>
@@ -21089,7 +21094,7 @@
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="548"/>
         <source>No columns yet. Drop here to start the strip.</source>
         <comment>@info strip selector empty state</comment>
-        <translation type="unfinished"></translation>
+        <translation>Столбцов пока нет. Перетащите сюда, чтобы начать ленту.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="645"/>
@@ -21106,7 +21111,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="110"/>
         <source>At least one monitor has its own column sizing, which wins over the values below. Switch to advanced mode to edit it on Scrolling → Columns.</source>
-        <translation type="unfinished"></translation>
+        <translation>Хотя бы у одного монитора свои размеры столбцов, которые имеют приоритет над значениями ниже. Переключитесь в расширенный режим, чтобы изменить их в Прокрутка → Столбцы.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="125"/>
@@ -21124,14 +21129,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="147"/>
         <source>How much of the strip a new column takes</source>
         <oldsource>How much of the usable screen width a new column takes</oldsource>
-        <translation type="unfinished">Какую долю полезной ширины экрана занимает новый столбец</translation>
+        <translation>Какую часть ленты занимает новый столбец</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="199"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="173"/>
         <source>How many pixels a new column takes along the strip</source>
         <oldsource>How many pixels wide a new column is</oldsource>
-        <translation type="unfinished">Ширина нового столбца в пикселях</translation>
+        <translation>Сколько пикселей занимает новый столбец вдоль ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="206"/>
@@ -21143,264 +21148,264 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="207"/>
         <source>Column width preset number</source>
-        <translation type="unfinished"></translation>
+        <translation>Номер предустановки ширины столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="146"/>
         <source>How wide a column is when it first opens. A screen with a layout template of its own takes the width from that template instead, including the width set for this monitor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Насколько широк столбец при первом открытии. Экран со своим шаблоном раскладки берёт ширину из этого шаблона, включая ширину, заданную для этого монитора.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="229"/>
         <source>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.</source>
         <oldsource>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>С какой шириной открывается новый столбец, считая с 1 среди ширин шаблона раскладки экрана. Экраны без своего шаблона используют шаблон по умолчанию из Прокрутка → Шаблоны, а совсем без шаблона действуют встроенные шаги ширины. Открытые так столбцы следуют за последующими изменениями списка, из которого они взяты.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="261"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip. A screen with a layout template of its own takes this from that template instead, and the template&apos;s starting columns each carry their own.</source>
-        <translation type="unfinished"></translation>
+        <translation>Обычный складывает окна столбца друг над другом. Вкладки показывают по одному окну за полосой вкладок. Экран со своим шаблоном раскладки берёт это из шаблона, а начальные столбцы шаблона несут каждый своё значение.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="280"/>
         <source>How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors.</source>
-        <translation type="unfinished"></translation>
+        <translation>Насколько высоко окно, когда оно присоединяется к столбцу. При «Поделить столбец поровну» новое окно делит оставшееся место с соседями.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="283"/>
         <source>Default window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Высота окна по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="297"/>
         <source>How many pixels a new window takes across the strip</source>
         <oldsource>How many pixels tall a new window is</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Сколько пикселей занимает новое окно поперёк ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="304"/>
         <source>Fixed window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Фиксированная высота окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="323"/>
         <source>Which height a new window opens at, counted from 1 into the heights of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in height steps apply.</source>
         <oldsource>Which height a new window opens at, counted from 1 into the heights of the screen&apos;s layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in height steps apply.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>С какой высотой открывается новое окно, считая с 1 среди высот шаблона раскладки экрана. Экраны без своего шаблона используют шаблон по умолчанию из Прокрутка → Шаблоны, а совсем без шаблона действуют встроенные шаги высоты.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="330"/>
         <source>Window height preset number</source>
-        <translation type="unfinished"></translation>
+        <translation>Номер предустановки высоты окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="369"/>
         <source>These are the steps the cycling shortcuts walk on a screen with no layout template. A screen using a template walks that template&apos;s own lists instead, and each list is replaced whole, so a template that carries widths but no heights leaves the heights here in play.</source>
-        <translation type="unfinished"></translation>
+        <translation>Это шаги, которые перебираются комбинациями переключения на экране без шаблона раскладки. Экран с шаблоном перебирает вместо этого собственные списки шаблона, и каждый список заменяется целиком, поэтому шаблон с ширинами, но без высот оставляет здешние высоты в силе.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="381"/>
         <source>Percentages of the work area along the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area width, cycled in this order by the preset shortcuts</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Проценты рабочей области вдоль ленты, перебираемые в этом порядке комбинациями предустановок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
         <source>%1% column width preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка ширины столбца %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="390"/>
         <source>Remove the %1% column width preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить предустановку ширины столбца %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="391"/>
         <source>New column width preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation type="unfinished"></translation>
+        <translation>Процент новой предустановки ширины столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="392"/>
         <source>Add a column width preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить предустановку ширины столбца</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="403"/>
         <source>Percentages of the work area across the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area height, cycled in this order by the preset shortcuts</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Проценты рабочей области поперёк ленты, перебираемые в этом порядке комбинациями предустановок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
         <source>%1% window height preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка высоты окна %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="413"/>
         <source>Remove the %1% window height preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить предустановку высоты окна %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="414"/>
         <source>New window height preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation type="unfinished"></translation>
+        <translation>Процент новой предустановки высоты окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="415"/>
         <source>Add a window height preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить предустановку высоты окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="200"/>
         <source>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>С какой шириной открывается новый столбец, считая с 1 среди ширин шаблона раскладки экрана. Экраны без своего шаблона используют шаблон по умолчанию из Прокрутка → Шаблоны, а совсем без шаблона действуют встроенные шаги ширины.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="252"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="114"/>
         <source>Mark a tabbed column&apos;s windows on screen. Tabbed columns keep working without it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Отмечать на экране окна столбца с вкладками. Столбцы с вкладками работают и без этого.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="266"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="147"/>
         <source>Titled chips label each window. A segment bar is thinner and shows only how many there are.</source>
         <oldsource>Titled chips name each window. A segment bar is thinner and shows only how many there are.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Подписанные метки называют каждое окно. Сегментная полоса тоньше и показывает только, сколько их.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="270"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="151"/>
         <source>Tab indicator style</source>
-        <translation type="unfinished"></translation>
+        <translation>Стиль индикатора вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="282"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="163"/>
         <source>Which edge of the column the indicator runs along.</source>
-        <translation type="unfinished"></translation>
+        <translation>Вдоль какого края столбца идёт индикатор.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="286"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="167"/>
         <source>Tab indicator position</source>
-        <translation type="unfinished"></translation>
+        <translation>Положение индикатора вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="69"/>
         <source>Choose Tab Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите цвет вкладки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="128"/>
         <source>Leave a tabbed column unmarked while it holds only one window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Оставлять столбец с вкладками без отметки, пока в нём только одно окно.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="133"/>
         <source>Hide the tab indicator for a single window</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывать индикатор вкладок при одном окне</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="183"/>
         <source>Typeface and style for the tab labels. Their size comes from Thickness, so there is no size to set here. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Гарнитура и начертание подписей вкладок. Их размер вытекает из толщины, поэтому здесь размер не задаётся. Сегментная полоса не рисует подписей и это игнорирует.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="218"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="219"/>
         <source>Reset the tab label font</source>
-        <translation type="unfinished"></translation>
+        <translation>Сбросить шрифт подписи вкладки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Уменьшать окна, чтобы индикатор поместился. Если выключено, он рисуется рядом со столбцом и может перекрыть соседа или уйти за экран.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
         <source>Make room for the tab indicator inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Освободить место для индикатора вкладок в столбце</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="267"/>
         <source>Space between the indicator and the window. A negative gap draws it over the window instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Расстояние между индикатором и окном. Отрицательный зазор рисует его поверх окна.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="272"/>
         <source>Gap around the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Зазор вокруг индикатора вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="294"/>
         <source>How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their labels, which on a left or right edge means a lot.</source>
-        <translation type="unfinished"></translation>
+        <translation>Насколько толстый индикатор. Когда он освобождает место внутри столбца, это ровно столько места, сколько он занимает. Сегментная полоса читается уже при нескольких пикселях. Подписанным меткам нужно достаточно места для надписей, что у левого или правого края означает много.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="495"/>
         <source>Choose Tab Font</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите шрифт вкладки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="299"/>
         <source>Tab indicator thickness</source>
-        <translation type="unfinished"></translation>
+        <translation>Толщина индикатора вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="315"/>
         <source>How much of the column edge the indicator spans, centered on it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Какую часть края столбца занимает индикатор, отцентрованный по нему.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="758"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="318"/>
         <source>Tab indicator length</source>
-        <translation type="unfinished"></translation>
+        <translation>Длина индикатора вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="337"/>
         <source>Space separating one tab from the next.</source>
-        <translation type="unfinished"></translation>
+        <translation>Расстояние, отделяющее одну вкладку от следующей.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Скруглять каждую вкладку до пилюли. Если выключено, вместо этого действует радиус скругления ниже.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
         <source>How rounded each tab&apos;s corners are. On a segment bar with no gap between tabs, only the two ends of the run are rounded.</source>
         <oldsource>How rounded each tab&apos;s corners are. With no gap between tabs, only the two ends are rounded.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Насколько скруглены углы каждой вкладки. На сегментной полосе без зазора между вкладками скругляются только два конца ряда.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="397"/>
         <source>Tab corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>Радиус скругления вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="441"/>
         <source>The tab of the window the column is currently showing.</source>
-        <translation type="unfinished"></translation>
+        <translation>Вкладка окна, которое столбец сейчас показывает.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="455"/>
         <source>The tabs of the column&apos;s other windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Вкладки остальных окон столбца.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="470"/>
         <source>The tab of a window that is asking for attention.</source>
-        <translation type="unfinished"></translation>
+        <translation>Вкладка окна, которое требует внимания.</translation>
     </message>
     <message>
         <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
@@ -21422,7 +21427,7 @@
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="351"/>
         <source>Some animation settings could not be saved.</source>
-        <translation type="unfinished"></translation>
+        <translation>Некоторые параметры анимации не удалось сохранить.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="483"/>
@@ -21433,13 +21438,13 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="51"/>
         <source>Reset %1 to the color scheme</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть «%1» к цветовой схеме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="71"/>
         <source>%1 color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет «%1»</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
@@ -21447,703 +21452,703 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="47"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="745"/>
         <source>Color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Цветовая схема</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="33"/>
         <source>Reset to the color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть к цветовой схеме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="34"/>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="52"/>
         <source>Follow the color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Следовать цветовой схеме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="50"/>
         <source>Color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="103"/>
         <source>Following the color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Следует цветовой схеме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="34"/>
         <source>Dragged windows re-insert into the scroll strip at the cursor position without requiring a modifier key or mouse button</source>
-        <translation type="unfinished"></translation>
+        <translation>Перетаскиваемые окна вставляются обратно в ленту прокрутки в позиции указателя, без клавиши-модификатора или кнопки мыши</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="40"/>
         <source>Always re-insert into strip on drag</source>
-        <translation type="unfinished"></translation>
+        <translation>Всегда вставлять обратно в ленту при перетаскивании</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="54"/>
         <source>Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.</source>
-        <translation type="unfinished"></translation>
+        <translation>При перетаскивании окна удерживайте клавишу-модификатор или кнопку мыши, чтобы вставить его в ленту под указателем. Оно станет новым столбцом или сложится в тот столбец, на который попадёт.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="80"/>
         <source>Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.</source>
-        <translation type="unfinished"></translation>
+        <translation>Нажмите триггер повторной вставки один раз, чтобы включить предпросмотр ленты. Нажмите ещё раз, чтобы выключить.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="87"/>
         <source>Toggle mode for re-insert into strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Режим переключателя для повторной вставки в ленту</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="101"/>
         <source>How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго предпросмотр ленты остаётся активным после отпускания триггера повторной вставки, чтобы окно, брошенное сразу после этого, всё же попало на ленту. Помогает, когда триггер — кнопка мыши, отпускаемая вместе со сбросом. Значение 0 отключает это.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="102"/>
         <source>Release grace period for re-insert into strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Допуск после отпускания для повторной вставки в ленту</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="70"/>
         <source>Drop indicator fill color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет заливки индикатора сброса</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="72"/>
         <source>Color filling the space the window will land in. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет, заполняющий место, куда попадёт окно. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="99"/>
         <source>How solid the fill is. This replaces any transparency carried by the fill color.</source>
-        <translation type="unfinished"></translation>
+        <translation>Насколько плотна заливка. Это заменяет любую прозрачность, заложенную в цвете заливки.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="117"/>
         <source>Drop indicator border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Цвет рамки индикатора сброса</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="119"/>
         <source>Color of the indicator&apos;s edge. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Цвет края индикатора. Следует цветовой схеме, если вы не выберете свой.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="136"/>
         <source>Thickness of the indicator&apos;s edge in pixels. Zero draws the fill with no edge.</source>
-        <translation type="unfinished"></translation>
+        <translation>Толщина края индикатора в пикселях. Ноль рисует заливку без края.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="165"/>
         <source>Corner rounding of the indicator in pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Скругление углов индикатора в пикселях.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/generalpagecontroller.cpp" line="61"/>
         <source>Unavailable device (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Недоступное устройство (%1)</translation>
     </message>
     <message>
         <location filename="../src/settings/utils/gpudevicelist.cpp" line="235"/>
         <source>GPU %1</source>
-        <translation type="unfinished"></translation>
+        <translation>GPU %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation type="unfinished"></translation>
+        <translation>Назначьте шаблонам прокрутки комбинации клавиш для быстрого переключения.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="30"/>
         <source>Choose Drop Indicator Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Выберите цвет индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, какой движок размещения (прилипание, мозаика или прокрутка) работает на подходящем экране, рабочем столе или в комнате.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
         <source>Assigns a snapping layout to the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Назначает раскладку прилипания подходящему экрану, рабочему столу или комнате.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Назначает алгоритм мозаики подходящему экрану, рабочему столу или комнате.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
         <source>Assigns a scrolling column template to the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Назначает шаблон столбцов прокрутки подходящему экрану, рабочему столу или комнате.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
         <source>Turns the named engine off for the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Отключает названный движок для подходящего экрана, рабочего стола или комнаты.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="45"/>
         <source>Locks the active layout for the matched context so it cannot be switched.</source>
-        <translation type="unfinished"></translation>
+        <translation>Блокирует активную раскладку для подходящего контекста, чтобы её нельзя было сменить.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="48"/>
         <source>Allows or suppresses the automatic default layout for the matched context. Off means no engine activates there until you assign one yourself.</source>
-        <translation type="unfinished"></translation>
+        <translation>Разрешает или подавляет автоматическую раскладку по умолчанию для подходящего контекста. Выключено означает, что там не включится ни один движок, пока вы не назначите его сами.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывает или скрывает экранные сообщения для подходящего экрана, рабочего стола или комнаты. Выключено заглушает там всплывающие подсказки раскладки и навигации. Включено показывает их даже при выключенных общих переключателях, хотя стиль отображения «Нет» всё равно всё скрывает.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
         <source>Keeps matching windows out of snapping, tiling and scrolling while their decorations and animations still apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>Исключает подходящие окна из прилипания, мозаики и прокрутки, при этом их оформление и анимация продолжают действовать.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="75"/>
         <source>Turns off every PlasmaZones animation for matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Отключает всю анимацию PlasmaZones для подходящих окон.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="78"/>
         <source>Turns off PlasmaZones borders and decoration packs for matching windows. Placement and animations are untouched.</source>
-        <translation type="unfinished"></translation>
+        <translation>Отключает рамки PlasmaZones и наборы оформления для подходящих окон. Размещение и анимация не затрагиваются.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="83"/>
         <source>Opens matching windows floating instead of placing them. A floated window can still be snapped or tiled by hand later.</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывает подходящие окна плавающими, вместо того чтобы размещать их. Плавающее окно позже всё ещё можно прилепить или выложить мозаикой вручную.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="94"/>
         <source>Moves matching windows to a chosen monitor when they open.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перемещает подходящие окна на выбранный монитор при открытии.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="97"/>
         <source>Moves matching windows to a chosen virtual desktop when they open.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перемещает подходящие окна на выбранный виртуальный рабочий стол при открытии.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="106"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
-        <translation type="unfinished"></translation>
+        <translation>Определяет, возвращается ли подходящее окно в свою прежнюю зону при повторном открытии, в течение сеанса или после выхода. Переопределяет параметр «Восстанавливать окна в их предыдущую зону», поэтому приложение вроде браузера можно исключить, пока все остальные окна восстанавливаются.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
         <source>Controls whether a matching window gets its original size back when unsnapped, overriding the global setting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Определяет, возвращает ли подходящее окно исходный размер при откреплении от зоны, переопределяя общий параметр.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="117"/>
         <source>When a matching floating window is unfloated without a remembered zone, places it into a zone anyway. Overrides the global fallback setting for this window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Когда с подходящего плавающего окна снимается плавание, а зона не запомнена, оно всё равно помещается в зону. Переопределяет общий резервный параметр для этого окна.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="122"/>
         <source>Keeps matching windows above or below other windows, for example floating windows above tiled ones when paired with the Floating condition.</source>
-        <translation type="unfinished"></translation>
+        <translation>Держит подходящие окна выше или ниже других окон, например плавающие окна над окнами в мозаике в паре с условием «Плавающее».</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="128"/>
         <source>Sets how much of the strip a matching window&apos;s column takes on a scrolling screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, какую часть ленты занимает столбец подходящего окна на экране с прокруткой.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="131"/>
         <source>Sets how much of its column a matching window takes when it opens.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, какую часть своего столбца занимает подходящее окно при открытии.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="134"/>
         <source>Opens a matching window&apos;s column tabbed, or forces it normal where the default is tabbed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывает столбец подходящего окна с вкладками или принудительно делает его обычным там, где по умолчанию вкладки.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="139"/>
         <source>Chooses whether a matching window opens its own column or joins the focused one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, открывает ли подходящее окно свой столбец или присоединяется к активному.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
         <source>Opens matching windows maximized, so their column fills the work area along the strip when they first appear.</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывает подходящие окна развёрнутыми, чтобы их столбец при первом появлении заполнял рабочую область вдоль ленты.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="147"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Передаёт подходящим окнам фокус клавиатуры сразу при открытии, а при выключении оставляет фокус там, где он был.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="152"/>
         <source>Opens matching windows in fullscreen mode. Off stops apps from starting in fullscreen on their own.</source>
-        <translation type="unfinished"></translation>
+        <translation>Открывает подходящие окна в полноэкранном режиме. Выключено не даёт приложениям запускаться в полный экран самостоятельно.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="163"/>
         <source>Uses a different animation shader for one event on matching windows. An empty choice turns that event&apos;s shader off for them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Использует другой шейдер анимации для одного события в подходящих окнах. Пустой выбор отключает для них шейдер этого события.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="168"/>
         <source>Uses a different animation duration for one event on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Использует другую длительность анимации для одного события в подходящих окнах.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
         <source>Uses a different easing curve for one event on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Использует другую кривую сглаживания для одного события в подходящих окнах.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
         <source>Replaces the decoration packs drawn on matching windows. An empty list removes their decorations.</source>
-        <translation type="unfinished"></translation>
+        <translation>Заменяет наборы оформления, отрисовываемые на подходящих окнах. Пустой список убирает их оформление.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
-        <translation type="unfinished"></translation>
+        <translation>Включает или выключает слой непрозрачности и оттенка для подходящих окон. Правилам «Задать непрозрачность», «Задать силу оттенка» и «Задать цвет оттенка» нужен этот слой, чтобы вообще подействовать.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, насколько сильно оттенок окрашивает подходящие окна. Действует, только пока для окна включён слой непрозрачности и оттенка.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="196"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет оттенка для подходящих окон. Действует, только пока для окна включён слой непрозрачности и оттенка.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="202"/>
         <source>Hides the title bar on matching windows, or forces it visible where a mode would hide it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывает заголовок у подходящих окон или принудительно показывает его там, где режим его скрыл бы.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="207"/>
         <source>Shows or hides the PlasmaZones border on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывает или скрывает рамку PlasmaZones на подходящих окнах.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="210"/>
         <source>Sets the border thickness on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт толщину рамки на подходящих окнах.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="213"/>
         <source>Sets the border corner radius on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт радиус скругления рамки на подходящих окнах.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="216"/>
         <source>Sets the border color for matching windows while they are focused.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет рамки подходящих окон, пока они в фокусе.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
         <source>Sets the border color for matching windows while they are not focused.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет рамки подходящих окон, пока они не в фокусе.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Использует другой шейдер наложения зон для подходящего экрана, рабочего стола или комнаты.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает наложение зон для подходящего контекста между прямоугольниками зон и предпросмотром раскладки.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет подсвеченной зоны наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет неактивной зоны наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет рамки зон наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт непрозрачность подсвеченной зоны наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт непрозрачность неактивной зоны наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт толщину рамки зон наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт радиус скругления зон наложения для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывает или скрывает номера зон на наложении для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт зазор между зонами для подходящего экрана, рабочего стола или комнаты.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт единый зазор по краю экрана для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает подходящий контекст между единым внешним зазором и зазорами по сторонам.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
         <source>Sets the top outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт верхний внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
         <source>Sets the bottom outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт нижний внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
         <source>Sets the left outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт левый внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
         <source>Sets the right outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт правый внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ограничивает, сколько окон алгоритм мозаики располагает в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
         <source>Sets the master area split ratio for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт соотношение разделения главной области для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
         <source>Sets how many windows the master area holds for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, сколько окон вмещает главная область в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, куда попадают вновь открытые окна в стопке мозаики в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
         <source>Sets how much of the strip newly opened columns take on the matched scrolling context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, какую часть ленты занимают вновь открытые столбцы в подходящем контексте прокрутки.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="315"/>
         <source>Chooses whether new columns show their windows divided across the strip or tabbed on the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, показывают ли новые столбцы свои окна разделёнными поперёк ленты или вкладками в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
         <source>Sets how much of their column newly opened windows take for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, какую часть своего столбца занимают вновь открытые окна в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
         <source>Keeps columns on the matched context at least as large as each window asks to be. Off lets a column go smaller, which the compositor then clamps on its own.</source>
-        <translation type="unfinished"></translation>
+        <translation>Держит столбцы в подходящем контексте не меньше, чем требует каждое окно. Выключено позволяет столбцу стать меньше, что композитор затем ограничивает сам.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="66"/>
         <source>Keeps matching windows out of PlasmaZones entirely, so they get no placement and no decorations.</source>
-        <translation type="unfinished"></translation>
+        <translation>Полностью исключает подходящие окна из PlasmaZones, так что они не размещаются и не оформляются.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывает или скрывает всплывающее окно выбора при перетаскивании для подходящего экрана, рабочего стола или комнаты. Выключено означает, что перетаскивание окна к краю срабатывания не предлагает там выбора. Включено предлагает его даже при выключенном общем переключателе выбора для этого экрана.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
         <source>Snaps matching windows into the given zones when they open. Zones can be picked by number or by name, and a name finds that zone in whichever layout is active. Several zones span their combined area.</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилепляет подходящие окна к указанным зонам при открытии. Зоны выбираются по номеру или по названию, а название находит зону в той раскладке, которая активна. Несколько зон охватывают их общую область.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
         <source>Controls whether a matching floated window returns to its remembered position and monitor when it reopens, during the session or after a logout. Overrides the restore-previous-position setting of whichever engine owns the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Определяет, возвращается ли подходящее плавающее окно на запомненное место и монитор при повторном открытии, в течение сеанса или после выхода. Переопределяет параметр восстановления прежнего положения того движка, которому принадлежит экран.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="157"/>
         <source>Scales mouse wheel and touchpad scrolling speed inside matching windows. Below 100% slows it down and above 100% speeds it up.</source>
-        <translation type="unfinished"></translation>
+        <translation>Масштабирует скорость прокрутки колесом мыши и сенсорной панелью внутри подходящих окон. Меньше 100 % — медленнее, больше 100 % — быстрее.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Затемняет подходящие окна до заданной непрозрачности. Действует, только пока для окна включён слой непрозрачности и оттенка, из общего параметра или из правила «Показывать непрозрачность и оттенок». Окно со своей цепочкой оформления затемняется вместо этого через параметры наборов этой цепочки.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
         <source>Chooses what happens to windows past the cap for the matched context. They can float, or the cap can be ignored.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, что происходит с окнами сверх лимита в подходящем контексте. Они могут стать плавающими, либо лимит может игнорироваться.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, делает ли перетаскивание окна из мозаики его плавающим или меняет его местами в стопке, для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="300"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переопределяет собственные параметры алгоритма мозаики для подходящего контекста. Действует, только пока этот алгоритм там активен.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="310"/>
         <source>Chooses when the scrolling view re-centers on the focused column for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, когда вид прокрутки снова центрируется на активном столбце в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="320"/>
         <source>Chooses where a new window&apos;s column enters the strip for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, где столбец нового окна попадает на ленту в подходящем контексте.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="326"/>
         <source>Centers a column on the matched context whenever it is the only one on the strip, whatever the centering policy says.</source>
-        <translation type="unfinished"></translation>
+        <translation>Центрирует столбец в подходящем контексте, когда он единственный на ленте, что бы ни говорила политика центрирования.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="336"/>
         <source>Clips a column that hangs over the screen edge on the matched context so only the on-screen part is drawn. The column keeps its real size, so scrolling is unchanged.</source>
-        <translation type="unfinished"></translation>
+        <translation>Обрезает в подходящем контексте столбец, выходящий за край экрана, так что рисуется только видимая часть. Столбец сохраняет реальный размер, поэтому прокрутка не меняется.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="341"/>
         <source>Gives windows opening on the matched context keyboard focus. A per-window Focus when opened rule still wins over this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Передаёт фокус клавиатуры окнам, открывающимся в подходящем контексте. Правило «Передавать фокус при открытии» для отдельного окна всё равно имеет приоритет.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
         <source>Drops the outer gaps on the matched context while a single column is on the strip, so a lone window fills the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Убирает в подходящем контексте внешние зазоры, пока на ленте один столбец, чтобы одиночное окно заполняло экран.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Передаёт фокус в подходящем контексте тому столбцу, над которым проходит указатель, без щелчка. Касается только экранов с прокруткой, поэтому экраны с прилипанием и мозаикой продолжают следовать общему параметру.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="357"/>
         <source>Chooses how the matched context treats windows shown on all desktops. Anything other than treating them as normal keeps them floating instead of in a column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, как подходящий контекст обходится с окнами, показываемыми на всех рабочих столах. Всё, кроме обращения с ними как с обычными, оставляет их плавающими, а не в столбце.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="362"/>
         <source>Chooses which way the matched context&apos;s strip runs, overriding the Strip direction setting and any per-monitor choice. Match the screen shape resolves from the usable area, so the rule can hand a pinned monitor back to that option for one desktop or activity.</source>
         <comment>&apos;Match the screen shape&apos; must stay identical to the option label shown in the picker</comment>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, в какую сторону идёт лента подходящего контекста, переопределяя параметр направления ленты и любой выбор для отдельного монитора. «По форме экрана» вычисляется из полезной области, поэтому правило может вернуть закреплённый монитор к этому варианту для одного рабочего стола или комнаты.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
         <source>Shows or hides the tab indicator on tabbed columns for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывает или скрывает индикатор вкладок на столбцах с вкладками для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="374"/>
         <source>Switches the tab indicator between a segment bar and titled chips for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Переключает индикатор вкладок для подходящего контекста между сегментной полосой и подписанными метками.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="379"/>
         <source>Chooses which column edge the tab indicator runs along for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Выбирает, вдоль какого края столбца идёт индикатор вкладок для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="382"/>
         <source>Hides the tab indicator when a tabbed column holds only one window, for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Скрывает индикатор вкладок, когда в столбце с вкладками только одно окно, для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="387"/>
         <source>Reserves the tab indicator&apos;s space inside the column instead of drawing beside it, for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Резервирует место индикатора вкладок внутри столбца вместо отрисовки рядом, для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="392"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт расстояние между индикатором вкладок и окном для подходящего контекста. Отрицательный зазор рисует его поверх окна.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="397"/>
         <source>Sets the tab indicator&apos;s thickness for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт толщину индикатора вкладок для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="400"/>
         <source>Sets how much of the column edge the tab indicator spans for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, какую часть края столбца занимает индикатор вкладок для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="403"/>
         <source>Sets the gap between individual tabs for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт зазор между отдельными вкладками для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
         <source>Sets the corner radius of each tab for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт радиус скругления каждой вкладки для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="409"/>
         <source>Sets the active tab color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет активной вкладки для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="412"/>
         <source>Sets the inactive tab color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет неактивных вкладок для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="415"/>
         <source>Sets the color of a tab whose window asks for attention, for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет вкладки, окно которой требует внимания, для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="418"/>
         <source>Sets the font the tab labels are drawn in for the matched context. Leave it empty to use the system font. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт шрифт, которым отрисовываются подписи вкладок для подходящего контекста. Оставьте пустым, чтобы использовать системный шрифт. Сегментная полоса не рисует подписей и это игнорирует.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="423"/>
         <source>Sets how heavy the tab label text is for the matched context, from 100 for the thinnest weight up to 900 for the boldest. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт, насколько насыщен текст подписей вкладок для подходящего контекста, от 100 для самого тонкого до 900 для самого жирного начертания. Сегментная полоса не рисует подписей и это игнорирует.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="429"/>
         <source>Draws the tab labels in italic for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Отрисовывает подписи вкладок курсивом для подходящего контекста. Сегментная полоса не рисует подписей и это игнорирует.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="434"/>
         <source>Underlines the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Подчёркивает подписи вкладок для подходящего контекста. Сегментная полоса не рисует подписей и это игнорирует.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="439"/>
         <source>Draws a line through the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Зачёркивает подписи вкладок для подходящего контекста. Сегментная полоса не рисует подписей и это игнорирует.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="444"/>
         <source>Recolors a matching window&apos;s own tab while it is the active one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перекрашивает собственную вкладку подходящего окна, пока она активна.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="447"/>
         <source>Recolors a matching window&apos;s own tab while another tab is active.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перекрашивает собственную вкладку подходящего окна, пока активна другая вкладка.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="450"/>
         <source>Recolors a matching window&apos;s own tab while it asks for attention.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перекрашивает собственную вкладку подходящего окна, пока оно требует внимания.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="454"/>
         <source>Shows or hides the drop indicator during drag re-inserts for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывает или скрывает индикатор сброса при повторной вставке перетаскиванием для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="457"/>
         <source>Sets the drop indicator&apos;s fill color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет заливки индикатора сброса для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="460"/>
         <source>Sets the drop indicator&apos;s border color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт цвет рамки индикатора сброса для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="463"/>
         <source>Sets the drop indicator&apos;s fill opacity for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт непрозрачность заливки индикатора сброса для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="466"/>
         <source>Sets the drop indicator&apos;s border thickness for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт толщину рамки индикатора сброса для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="469"/>
         <source>Sets the drop indicator&apos;s corner radius for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задаёт радиус скругления индикатора сброса для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="472"/>
         <source>Recolors the drop indicator&apos;s fill while a matching window is being dragged.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перекрашивает заливку индикатора сброса, пока перетаскивается подходящее окно.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="475"/>
         <source>Recolors the drop indicator&apos;s border while a matching window is being dragged.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перекрашивает рамку индикатора сброса, пока перетаскивается подходящее окно.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="222"/>
         <source>%1 · %2</source>
         <comment>animation section, then the event inside it</comment>
-        <translation type="unfinished">%1 · %2</translation>
+        <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="174"/>
         <source>None</source>
         <comment>@item rule action layout value, explicitly none at all</comment>
-        <translation type="unfinished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="251"/>
         <source>None</source>
         <comment>@item no decoration packs in the chain</comment>
-        <translation type="unfinished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="299"/>
         <source>(invalid)</source>
         <comment>@item an action value the rule runtime rejects</comment>
-        <translation type="unfinished"></translation>
+        <translation>(недопустимо)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="302"/>
         <source>%1%</source>
         <comment>a whole-number percentage</comment>
-        <translation type="unfinished">%1%</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
@@ -22151,100 +22156,100 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="482"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
-        <translation type="unfinished">%1: %2</translation>
+        <translation>%1: %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="41"/>
         <source>Scrolling animation events</source>
-        <translation type="unfinished"></translation>
+        <translation>События анимации прокрутки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="42"/>
         <source>Animations for scrolling. Strip Scrolled covers the whole strip moving together, and Tab Switched covers a tab replacing another in its column. Each event offers only the shaders that can drive it.</source>
         <oldsource>Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Анимация для прокрутки. «Лента прокручена» охватывает всю ленту, движущуюся вместе, а «Вкладка переключена» — вкладку, сменяющую другую в своём столбце. Каждое событие предлагает только те шейдеры, которые могут его вести.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="100"/>
         <source>This list is full at %1 presets. Remove one to add another.</source>
-        <translation type="unfinished"></translation>
+        <translation>В этом списке уже максимум предустановок (%1). Удалите одну, чтобы добавить другую.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="102"/>
         <source>There is already a preset at this percentage.</source>
-        <translation type="unfinished"></translation>
+        <translation>На этом проценте уже есть предустановка.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="106"/>
         <source>A list needs at least one preset, so this one cannot be removed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Списку нужна хотя бы одна предустановка, поэтому эту удалить нельзя.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="177"/>
         <source>%1%</source>
         <comment>a preset size as a percentage of the work area</comment>
-        <translation type="unfinished">%1%</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
         <source>Remove this preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Удалить эту предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="226"/>
         <source>Add preset:</source>
-        <translation type="unfinished"></translation>
+        <translation>Добавить предустановку:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="233"/>
         <source>%</source>
         <comment>percent unit suffix in a spin box</comment>
-        <translation type="unfinished"></translation>
+        <translation>%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="250"/>
         <source>Add</source>
-        <translation type="unfinished"></translation>
+        <translation>Добавить</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
-        <translation type="unfinished"></translation>
+        <translation>Перетаскивая окно на экране с прокруткой, поднесите его к заданному краю экрана, чтобы открыть всплывающее окно с текущей лентой. Бросьте между двумя столбцами, чтобы вставить новый столбец, на столбец с вкладками, чтобы добавить окно вкладкой, или на верхнюю либо нижнюю половину столбца, чтобы сложить его туда.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Всплывающее окно выбора ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="101"/>
         <source>Show the current strip as drop targets when dragging windows to screen edges</source>
-        <translation type="unfinished"></translation>
+        <translation>Показывать текущую ленту как цели сброса при перетаскивании окон к краям экрана</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="105"/>
         <source>Enable strip selector popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Включить всплывающее окно выбора ленты</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
         <source>%n tab</source>
         <comment>@info:label tabbed column tab count</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n вкладка</numerusform>
+            <numerusform>%n вкладки</numerusform>
+            <numerusform>%n вкладок</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
         <source>%n window</source>
         <comment>@info:label column window count</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n окно</numerusform>
+            <numerusform>%n окна</numerusform>
+            <numerusform>%n окон</numerusform>
         </translation>
     </message>
     <message>
@@ -22252,327 +22257,327 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="306"/>
         <source>%1%</source>
         <comment>@info preset percentage</comment>
-        <translation type="unfinished">%1%</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменить предустановку %1% в «%2»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
         <source>Click to edit this preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Щёлкните, чтобы изменить эту предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="197"/>
         <source>Edit preset percentage in %1</source>
         <comment>@label:textbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменить процент предустановки в «%1»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
         <source>Remove %1% from %2</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить %1% из «%2»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
         <source>Remove this preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Удалить эту предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="320"/>
         <source>New preset percentage for %1</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Процент новой предустановки в «%1»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="342"/>
         <source>Add preset to %1</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить предустановку в «%1»</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="346"/>
         <source>This list can hold at most %n preset</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Этот список вмещает максимум %n предустановку</numerusform>
+            <numerusform>Этот список вмещает максимум %n предустановки</numerusform>
+            <numerusform>Этот список вмещает максимум %n предустановок</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="43"/>
         <source>This size is already a preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Этот размер уже есть в предустановках</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="349"/>
         <source>Add this size as a preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Добавить этот размер как предустановку</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="375"/>
         <source>No presets yet. Pick a size and add it.</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановок пока нет. Выберите размер и добавьте его.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="121"/>
         <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Это встроенный шаблон. Сохранение создаёт вашу копию, а удаление этой копии возвращает встроенный.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="130"/>
         <source>Template</source>
         <comment>@title:group</comment>
-        <translation type="unfinished">Шаблон</translation>
+        <translation>Шаблон</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="137"/>
         <source>Description:</source>
         <comment>@label:textbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Описание:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="138"/>
         <source>Template description</source>
         <comment>@label:textbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Описание шаблона</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="139"/>
         <source>Optional description</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Необязательное описание</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="172"/>
         <source>Later columns</source>
         <comment>@title:group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Последующие столбцы</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="179"/>
         <source>Default width:</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ширина по умолчанию:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="180"/>
         <source>Default column width</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished">Ширина столбца по умолчанию</translation>
+        <translation>Ширина столбца по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="185"/>
         <source>Proportion of the strip</source>
         <oldsource>Fraction of the screen</oldsource>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Доля ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="189"/>
         <source>Fixed pixels</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Фиксированные пиксели</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="193"/>
         <source>The window decides</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Решает окно</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
         <source>Width preset</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка ширины</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
         <source>Width in pixels:</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ширина в пикселях:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
         <source>Width:</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished">Ширина:</translation>
+        <translation>Ширина:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width in pixels</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ширина столбца по умолчанию в пикселях</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished">Ширина столбца по умолчанию</translation>
+        <translation>Ширина столбца по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
         <source>%1%</source>
         <comment>@info:spinbox width percentage</comment>
-        <translation type="unfinished">%1%</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="256"/>
         <source>Start at preset:</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Начинать с предустановки:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="257"/>
         <source>Default width preset</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка ширины по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="260"/>
         <source>No width presets yet</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановок ширины пока нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="261"/>
         <source>Preset %1 (%2%)</source>
         <comment>@item:inlistbox preset number and percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановка %1 (%2%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
         <source>Show windows as:</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показывать окна как:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="272"/>
         <source>Show windows as</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показывать окна как</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="280"/>
         <source>Stacked</source>
         <comment>@item:inlistbox column display</comment>
-        <translation type="unfinished"></translation>
+        <translation>Стопкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation type="unfinished">С вкладками</translation>
+        <translation>С вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
         <source>Size presets</source>
         <comment>@title:group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки размера</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="300"/>
         <source>Widths:</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ширины:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="303"/>
         <source>Width presets</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки ширины</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="316"/>
         <source>Heights:</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Высоты:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="319"/>
         <source>Height presets</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки высоты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ширина по умолчанию задана предустановкой ширины, поэтому этому шаблону нужна хотя бы одна предустановка ширины. Без неё он сохранится как доля ленты.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Предустановки — это размеры, которые перебираются комбинациями переключения ширины и высоты, пока назначен этот шаблон.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
         <source>Shell decoration surfaces</source>
-        <translation type="unfinished"></translation>
+        <translation>Поверхности оформления оболочки</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Оформление для поверхностей, принадлежащих оболочке Plasma. Они остаются без оформления, пока оно не будет включено здесь, и общее оформление по умолчанию к ним никогда не применяется.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>
         <source>Plasma shell animation events</source>
-        <translation type="unfinished"></translation>
+        <translation>События анимации оболочки Plasma</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation type="unfinished"></translation>
+        <translation>Анимация для поверхностей, принадлежащих оболочке Plasma, например для запуска приложений и всплывающих окон системного лотка. Ни один шейдер, выбранный вами для собственных окон, до них не доходит, поэтому каждая строка начинается без шейдера, и выбор шейдера и есть всё подключение. Пока вы не выберете, эти поверхности анимируются так, как их анимирует Plasma. «Все поверхности оболочки» — значение по умолчанию для обоих событий, и любое из них может его переопределить. У панелей здесь строк нет, потому что панель остаётся на экране весь сеанс, а не открывается и закрывается.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="23"/>
         <source>All Shell Surfaces</source>
-        <translation type="unfinished"></translation>
+        <translation>Все поверхности оболочки</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="29"/>
         <source>Panels</source>
-        <translation type="unfinished">Панели</translation>
+        <translation>Панели</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="35"/>
         <source>Applet Popups</source>
-        <translation type="unfinished"></translation>
+        <translation>Всплывающие окна апплетов</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation type="unfinished"></translation>
+        <translation>Задайте порядок шаблонов при переборе комбинациями клавиш и в выборе раскладки. Перетаскивайте строки или используйте кнопки со стрелками для изменения порядка.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
         <source>No templates available</source>
-        <translation type="unfinished"></translation>
+        <translation>Шаблоны недоступны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="16"/>
         <source>Create templates on the Scrolling → Templates page first.</source>
-        <translation type="unfinished"></translation>
+        <translation>Сначала создайте шаблоны на странице Прокрутка → Шаблоны.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="17"/>
         <source>Reset template order to default</source>
-        <translation type="unfinished"></translation>
+        <translation>Вернуть порядок шаблонов к значению по умолчанию</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
@@ -22580,461 +22585,461 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="25"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="53"/>
         <source>Strip direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Направление ленты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="48"/>
         <source>Direction</source>
         <comment>row inside the Strip direction card</comment>
-        <translation type="unfinished">Направление</translation>
+        <translation>Направление</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation type="unfinished"></translation>
+        <translation>В какую сторону идёт лента. «По форме экрана» ведёт её сверху вниз, когда полезная область выше, чем шире, а в остальных случаях — рядом друг с другом. Столбцы по-прежнему делятся поперёк ленты, в какую бы сторону она ни шла.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
         <source>Accordion Collapse</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сворачивание аккордеона</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="64"/>
         <source>Accordion Expand</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Разворачивание аккордеона</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Внешний вид</translation>
+        <translation>Появление и исчезновение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Всплывающее окно апплета</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
         <source>Badge Hide</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Скрытие значка</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="76"/>
         <source>Badge Pulse</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Пульсация значка</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="79"/>
         <source>Badge Show</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показ значка</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="82"/>
         <source>Border</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Рамка</translation>
+        <translation>Рамка</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Шпаргалка комбинаций</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
         <source>Click</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Щелчок</translation>
+        <translation>Щелчок</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="91"/>
         <source>Close</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Закрыть</translation>
+        <translation>Закрытие</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="94"/>
         <source>Cursor</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Курсор</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="97"/>
         <source>Desktop</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Рабочий стол</translation>
+        <translation>Рабочий стол</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="100"/>
         <source>Dim</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Затемнение</translation>
+        <translation>Затемнение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="103"/>
         <source>Editor</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Редактор</translation>
+        <translation>Редактор</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Появление</translation>
+        <translation>Появление</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Исчезание</translation>
+        <translation>Исчезание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
         <source>Fast</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Быстро</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="115"/>
         <source>Focus</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Фокус</translation>
+        <translation>Фокус</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Глобальные</translation>
+        <translation>Глобальные</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
         <source>Hide</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Скрытие</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Наведение</translation>
+        <translation>Наведение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
         <source>Layout Picker</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Выбор раскладки</translation>
+        <translation>Выбор раскладки</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
         <source>Layout Switch</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Смена раскладки</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
         <source>Maximize</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Разворачивание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="136"/>
         <source>Minimize</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Сворачивание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="139"/>
         <source>Move</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Перемещение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="142"/>
         <source>Movement</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Движение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="145"/>
         <source>Open</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Открытие</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="148"/>
         <source>OSD</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Экранное сообщение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
         <source>Overlays</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Наложения</translation>
+        <translation>Наложения</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="154"/>
         <source>Panel</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Панель</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="157"/>
         <source>Peek</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Просмотр</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="160"/>
         <source>Pop</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Хлопок</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Всплывающее окно</translation>
+        <translation>Всплывающее окно</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
         <source>Press</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Нажатие</translation>
+        <translation>Нажатие</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="169"/>
         <source>Progress</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Прогресс</translation>
+        <translation>Прогресс</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="172"/>
         <source>Pulse</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Пульсация</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Переупорядочивание</translation>
+        <translation>Переупорядочивание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
         <source>Scrolling</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Прокрутка</translation>
+        <translation>Прокрутка</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="181"/>
         <source>Shell</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Оболочка</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="184"/>
         <source>Show</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Показ</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Вдвигание</translation>
+        <translation>Вдвигание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Выдвигание</translation>
+        <translation>Выдвигание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
         <source>Slow</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Медленно</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="196"/>
         <source>Snap Assist</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Помощник прилипания</translation>
+        <translation>Помощник прилипания</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
         <source>Snap In</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
         <source>Snap Out</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Открепление</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
         <source>Snap Resize</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Изменение размера при прилипании</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="208"/>
         <source>Switch</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переключение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="211"/>
         <source>Tab Switch</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Переключение вкладки</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="214"/>
         <source>Tint</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Оттенок</translation>
+        <translation>Оттенок</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="217"/>
         <source>Toggle Off</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Отключение</translation>
+        <translation>Отключение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="220"/>
         <source>Toggle On</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Включение</translation>
+        <translation>Включение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="223"/>
         <source>View</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Вид</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="226"/>
         <source>Widget</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Виджет</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="229"/>
         <source>Window</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Окно</translation>
+        <translation>Окно</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="232"/>
         <source>Zone Highlight</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Подсветка зоны</translation>
+        <translation>Подсветка зоны</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
         <source>Zone Overlay Flash</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Вспышка наложения зон</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="238"/>
         <source>Zone Selector</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Выбор зоны</translation>
+        <translation>Выбор зоны</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="56"/>
         <source>How close to the edge of the working area the pointer has to be before the strip can start scrolling.</source>
-        <translation type="unfinished"></translation>
+        <translation>Насколько близко к краю рабочей области должен быть указатель, прежде чем лента сможет начать прокрутку.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="61"/>
         <source>Edge auto-scroll trigger width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ширина области срабатывания автопрокрутки у края</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="85"/>
         <source>How long the pointer has to stay near the edge before the strip moves. Stops a drag that only passes by an edge from scrolling.</source>
-        <translation type="unfinished"></translation>
+        <translation>Как долго указатель должен оставаться у края, прежде чем лента сдвинется. Не даёт прокрутке срабатывать при перетаскивании, которое лишь проходит мимо края.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="90"/>
         <source>Edge auto-scroll start delay</source>
-        <translation type="unfinished"></translation>
+        <translation>Задержка запуска автопрокрутки у края</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerGraceRow.qml.cpp" line="63"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="91"/>
         <source>ms</source>
         <comment>milliseconds unit suffix in a spin box</comment>
-        <translation type="unfinished">ms</translation>
+        <translation>мс</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="112"/>
         <source>How fast the strip scrolls with the pointer held right at the edge. It moves more slowly the further from the edge the pointer sits.</source>
-        <translation type="unfinished"></translation>
+        <translation>Насколько быстро прокручивается лента, когда указатель находится прямо у края. Чем дальше указатель от края, тем медленнее она движется.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="117"/>
         <source>Edge auto-scroll maximum speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Максимальная скорость автопрокрутки у края</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="118"/>
         <source>px/s</source>
         <comment>pixels per second unit suffix in a spin box</comment>
-        <translation type="unfinished"></translation>
+        <translation>пикс/с</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsSpinBox.qml.cpp" line="22"/>
         <source>px</source>
         <comment>pixels unit suffix in a spin box</comment>
-        <translation type="unfinished">пикс.</translation>
+        <translation>пикс.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="171"/>
         <source>Snapping (no layout)</source>
-        <translation type="unfinished"></translation>
+        <translation>Прилипание (без раскладки)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="338"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="153"/>
         <source>Tiling (no algorithm)</source>
-        <translation type="unfinished"></translation>
+        <translation>Мозаика (без алгоритма)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="170"/>
         <source>None</source>
         <comment>no tiling algorithm is set</comment>
-        <translation type="unfinished">Нет</translation>
+        <translation>Нет</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="101"/>
         <source>This event is not driven per window, so the rule cannot change it</source>
-        <translation type="unfinished"></translation>
+        <translation>Это событие не управляется отдельно для каждого окна, поэтому правило не может его изменить</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. Set the animation for this event on the Animations pages instead, where it applies everywhere.</source>
-        <translation type="unfinished"></translation>
+        <translation>Правила сопоставляются с окнами, а это событие не принадлежит окну, поэтому это действие никогда не выполняется. Задайте анимацию для этого события на страницах анимации, где она действует везде.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Правила сопоставляются с окнами, а это событие не принадлежит окну, поэтому это действие никогда не выполняется. Это событие нигде не принимает шейдер, поэтому действие можно удалить.</translation>
     </message>
 </context>
 </TS>
