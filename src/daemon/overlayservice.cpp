@@ -559,12 +559,11 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // every dismiss; with both shaders and animations disabled there is
     // no transition to amortize, and keeping the shell mapped means a
     // fullscreen layer surface is composited above every normal toplevel for
-    // the daemon's lifetime, which exposes composition-pipeline bugs on
-    // hybrid-GPU setups. (It no longer masks the compositor's own
-    // translucency-while-moving effect: the shell's layer was downgraded from
-    // Overlay to Top for exactly that reason, see the PassiveShell role note
-    // and issue #516. The rest of the cost stands, which is why the gate
-    // stays.) Effects-on path
+    // the daemon's lifetime, which is a cost an idle daemon should not pay
+    // when it is drawing nothing. That is the whole rationale for the gate.
+    // It is deliberately NOT a claim about masking the compositor's own
+    // translucency-while-moving effect - the PassiveShell role note explains
+    // why that mechanism was never real. Effects-on path
     // keeps the warm cache; effects-off path lets the next
     // syncSurfaceState !anyVisible transition unmap the wl_surface.
     //
