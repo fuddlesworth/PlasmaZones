@@ -20,11 +20,15 @@ namespace PlasmaZones {
 /// @ref PhosphorShellPatterns axis-2 UI-pattern vocabulary.
 namespace PhosphorRoles {
 
-/// Zone overlay: the full-screen layer that paints zone rectangles and
-/// hosts the snap-assist/zone-selector slots. Hud pattern (Overlay layer,
-/// click-through, no exclusive zone). AnchorAll for physical screens;
-/// virtual-screen surfaces override to AnchorTop|AnchorLeft + margins
-/// via SurfaceConfig overrides.
+/// Zone-overlay config-only role. Same migration story as the OSD /
+/// SnapAssist / LayoutPicker roles: post-shell-migration the zone
+/// rectangles are an Item slot inside the per-screen PassiveShell (see
+/// createOverlayWindow in overlay.cpp), so the surface anchoring lives
+/// on the PassiveShell role and this role exists purely as the
+/// SurfaceAnimator config-lookup key (`plasmazones-zone-overlay`). The
+/// Hud pattern's layer + AnchorAll fields are inherited but unused;
+/// createWarmedOsdSurface computes the shell's real anchors and margins,
+/// including the virtual-screen AnchorTop|AnchorLeft + offset case.
 inline const PhosphorLayer::Role ZoneOverlay =
     PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-zone-overlay"));
 
