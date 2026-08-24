@@ -389,7 +389,14 @@ public:
     /// firing a verb, so the app underneath does not scroll its own content
     /// while the user is mid-step on the strip.
     ///
-    /// @p delta is the event's own. The direction the strip moves is derived
+    /// @p delta and @p deltaV120 are the event's own two scroll fields, and
+    /// both are needed because neither alone counts notches on every source:
+    /// deltaV120 is exact at 120 per notch but is zero on continuous sources,
+    /// and the smooth @p delta carries the source's own scale (degrees for a
+    /// wheel, pixels for a touchpad) rather than a notch count. The handler
+    /// normalises them to notches before it acts.
+    ///
+    /// The direction the strip moves is derived
     /// here (sign of the accumulated notch, inversion setting) and the strip
     /// AXIS is resolved downstream by the engine, so one rule serves a
     /// horizontal and a vertical strip alike: a whole notch means "toward the
@@ -398,7 +405,7 @@ public:
     /// per-axis ACCUMULATOR the delta lands in, because KWin delivers
     /// horizontal and vertical scroll as two independent streams and a
     /// diagonal touchpad drift feeds both at once.
-    bool handleWheelChord(qreal delta, Qt::Orientation orientation, Qt::KeyboardModifiers mods,
+    bool handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientation orientation, Qt::KeyboardModifiers mods,
                           Qt::MouseButtons buttons);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
@@ -1542,10 +1549,11 @@ private:
     // cover a case the next settingsChanged re-requests anyway.
     QVector<PhosphorCompositor::ParsedTrigger> m_wheelFocusTriggers{{4, 0}};
     QVector<PhosphorCompositor::ParsedTrigger> m_wheelViewTriggers{{11, 0}};
-    // Smooth-delta accumulators, in wheel-notch units. Matching used to run
-    // through registerAxisShortcut, whose processAxis only fires once |delta|
-    // clears 1.0; doing the matching ourselves means owning that threshold,
-    // or a touchpad sends a column step per libinput event.
+    // Scroll accumulators, in wheel-notch units (the raw event fields are
+    // normalised to notches before they land here). Matching used to run
+    // through registerAxisShortcut, which fired one verb per axis event;
+    // doing the matching ourselves means owning that threshold, or a touchpad
+    // sends a column step per libinput event.
     //
     // Per axis because KWin delivers horizontal and vertical scroll as two
     // independent streams: a diagonal drift feeds both with possibly opposite

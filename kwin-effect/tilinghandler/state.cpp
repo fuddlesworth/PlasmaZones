@@ -49,6 +49,21 @@ namespace {
 /// message. A real wheel notch is 1.0 and even a coalesced high-resolution
 /// frame stays in single digits, so this only ever truncates garbage.
 constexpr int kMaxWheelStepsPerEvent = 16;
+
+/// One discrete wheel notch, in deltaV120 units. libinput reports high
+/// resolution wheels as fractions of this and KWin passes the value through
+/// unchanged, so dividing by it yields notches directly.
+constexpr qreal kV120PerNotch = 120.0;
+
+/// One notch worth of the smooth `delta` field, used only when the event
+/// carries no deltaV120 (touchpads and other continuous sources). The wheel
+/// itself never lands here: KWin fills deltaV120 for every wheel event.
+///
+/// The value is libinput's legacy degrees-per-detent, which is also the scale
+/// KWin's smooth delta uses for a wheel, so a continuous source has to travel
+/// about as far as one notch to spend a step. Treating that field as notches
+/// directly is what made a single notch fire a whole screenful of steps.
+constexpr qreal kSmoothUnitsPerNotch = 15.0;
 } // namespace
 
 void TilingHandler::clearTiledTracking()
@@ -588,8 +603,8 @@ void TilingHandler::clearActiveLayoutsForTeardown()
     m_effect->sliceActiveLayoutRulesForUnseededMap();
 }
 
-bool TilingHandler::handleWheelChord(qreal delta, Qt::Orientation orientation, Qt::KeyboardModifiers mods,
-                                     Qt::MouseButtons buttons)
+bool TilingHandler::handleWheelChord(qreal delta, qint32 deltaV120, Qt::Orientation orientation,
+                                     Qt::KeyboardModifiers mods, Qt::MouseButtons buttons)
 {
     // Fast path first, in the order that costs least: the enable setting,
     // then "does any screen run the strip at all". Every axis event in the
@@ -636,6 +651,13 @@ bool TilingHandler::handleWheelChord(qreal delta, Qt::Orientation orientation, Q
         resetWheelAccumulators();
         return false;
     }
+    // Convert to NOTCHES before anything downstream looks at the magnitude.
+    // KWin's two delta fields are not notch counts: deltaV120 is 120 per
+    // notch, and the smooth delta is the source's own scale (degrees for a
+    // wheel, pixels for a touchpad). deltaV120 is exact and is what a wheel
+    // always carries, so prefer it and fall back to the smooth field only for
+    // the continuous sources that leave it zero.
+    const qreal notches = deltaV120 != 0 ? deltaV120 / kV120PerNotch : delta / kSmoothUnitsPerNotch;
     // Not while a window drag is in flight. The shipped defaults cannot
     // collide (drag activation is Alt, the chords are Meta and Meta+Shift),
     // but both sides are user-configurable now, and a user who binds the same
@@ -669,12 +691,12 @@ bool TilingHandler::handleWheelChord(qreal delta, Qt::Orientation orientation, Q
     }
     // Accumulate to a whole notch before acting, which is the threshold
     // KWin's axis-shortcut path applied for us before the matching moved
-    // here. A discrete wheel notch arrives as |delta| == 1.0 and so still
-    // fires on its first event; a touchpad or high-resolution wheel now
-    // spends several fractional events per step instead of one verb each.
+    // here. A discrete wheel notch normalises to exactly 1.0 and so still
+    // fires on its first event; a touchpad or high-resolution wheel spends
+    // several fractional events per step instead of one verb each.
     qreal& accum = orientation == Qt::Vertical ? m_wheelAccumVertical : m_wheelAccumHorizontal;
     qreal& other = orientation == Qt::Vertical ? m_wheelAccumHorizontal : m_wheelAccumVertical;
-    accum += delta;
+    accum += notches;
     if (qAbs(accum) < 1.0) {
         // Sub-notch, but still part of the chord gesture: consume it so the
         // app underneath does not scroll its own content while the user is
@@ -684,8 +706,8 @@ bool TilingHandler::handleWheelChord(qreal delta, Qt::Orientation orientation, Q
     // The sign is fixed for this event; only the magnitude is spent below.
     const qreal whole = accum > 0 ? 1.0 : -1.0;
     // Spend the WHOLE accumulated magnitude, not one notch of it. A fast
-    // discrete wheel and a coalesced high-resolution frame both deliver
-    // |delta| well above 1.0 in a single event, and taking one step per event
+    // discrete wheel and a coalesced high-resolution frame can both deliver
+    // more than one notch in a single event, and taking one step per event
     // there would bank the rest forever: the strip would lag the wheel by a
     // growing margin and the unspent remainder would be dropped at the end of
     // the gesture.
