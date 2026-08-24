@@ -516,11 +516,18 @@ void VirtualDesktopManager::onKWinDesktopDataChanged()
 
 void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
 {
-    if (m_desktopCount == count) {
+    // The parameter must stay `uint`: KWin's numberOfDesktopsChanged carries
+    // `u` on the wire, and QDBusConnection::connect matches on the signature,
+    // so an `int` slot here returns true at connect time and then never fires.
+    // `uint` is therefore a wire type only — narrow once at this boundary and
+    // let everything below stay int, matching m_currentDesktop, the 1-based
+    // desktop math, and desktopCountChanged(int).
+    const int newCount = static_cast<int>(count);
+    if (m_desktopCount == newCount) {
         return;
     }
 
-    m_desktopCount = count;
+    m_desktopCount = newCount;
 
     if (m_useKWinDBus) {
         refreshFromKWin();
@@ -536,7 +543,7 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
 
     clampScreenDesktopsToCount();
 
-    Q_EMIT desktopCountChanged(count);
+    Q_EMIT desktopCountChanged(newCount);
 }
 
 int VirtualDesktopManager::desktopCount() const
