@@ -388,6 +388,72 @@ private Q_SLOTS:
     /// of completion-vs-cancellation must wrap the callback themselves."
     /// `dtor_cancels_leftover_tracks` exercises this in the dtor scenario;
     /// this test pins the same invariant on the explicit `cancel()` path.
+    /// A superseded operation's onComplete is DROPPED on the gate-off path,
+    /// exactly as it is on the enabled path.
+    ///
+    /// This pins a contract that used to differ between the two. The gate-off
+    /// branch once SALVAGED the in-flight callback and invoked it
+    /// synchronously from inside the superseding dispatch — i.e. after that
+    /// dispatch had already written its own state — so a hide completion could
+    /// tear down a slot the show one line above had just brought up. Six
+    /// consumer slots were exposed to it. Nothing else in the suite exercises
+    /// setEnabled, so without this case the salvage can be reinstated and stay
+    /// green.
+    void gate_off_supersede_drops_the_preempted_oncomplete()
+    {
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        SurfaceAnimator anim(m_registry, defaultsForTesting());
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        deps.animator = &anim;
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorShellPatterns::Modal();
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = s.primary();
+        cfg.keepMappedOnHide = true;
+        cfg.debugName = QStringLiteral("gate-off-supersede");
+
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        // A hide is in flight with the gate ON, so a real track exists.
+        int hideCompletions = 0;
+        anim.beginHide(surface, target, [&hideCompletions]() {
+            ++hideCompletions;
+        });
+
+        // The gate flips off mid-leg. Per the documented semantics this does
+        // NOT touch the in-flight track.
+        anim.setEnabled(false);
+        QCOMPARE(hideCompletions, 0);
+
+        // A show for the SAME (surface, item) now supersedes that hide.
+        int showCompletions = 0;
+        anim.beginShow(surface, target, [&showCompletions]() {
+            ++showCompletions;
+        });
+
+        // The new caller is serviced synchronously on the gate-off path...
+        QCOMPARE(showCompletions, 1);
+        // ...and the superseded hide's callback is never invoked. If this
+        // fires, the salvage is back and the show's own state is being
+        // clobbered from inside beginShow.
+        QCOMPARE(hideCompletions, 0);
+
+        // Still not fired after any stale tick could have landed.
+        QTest::qWait(100);
+        QCOMPARE(hideCompletions, 0);
+        QCOMPARE(showCompletions, 1);
+
+        anim.setEnabled(true);
+        delete surface;
+    }
+
     void cancel_does_not_fire_oncomplete()
     {
         PhosphorLayer::Testing::MockTransport t;

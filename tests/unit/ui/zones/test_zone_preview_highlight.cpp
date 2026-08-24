@@ -12,6 +12,9 @@
 
 #include <QtPlugin>
 
+#include <cmath>
+#include <memory>
+
 // Force-link the static QML module's auto-generated init symbol so the test
 // binary registers `org.plasmazones.common` types into the QmlEngine. Without
 // this the linker drops the init code as dead and the import fails to resolve.
@@ -736,6 +739,39 @@ private Q_SLOTS:
     /// A well too short for the arrow drops it rather than clipping the
     /// caption. The hosts clip this component, so without the drop the
     /// sentence that carries the whole message loses its bottom line.
+    /// A StripEmptyState's live metrics at @p width: the caption's height plus
+    /// the Column's spacing, and the constant arrowhead extent. MEASURED, not
+    /// assumed — both are font, DPI and gridUnit products, so a fixture that
+    /// hardcodes them only discriminates on the machine it was written on.
+    /// Returns false if the component could not be built.
+    bool stripEmptyStateMetrics(qreal width, const QString& caption, qreal* capPlusSpacing, qreal* headExtent)
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.StripEmptyState { }\n",
+            QUrl(QStringLiteral("qrc:/test_strip_empty_state_probe.qml")));
+        if (!component.isReady()) {
+            return false;
+        }
+        QVariantMap initial;
+        initial[QStringLiteral("caption")] = caption;
+        // Horizontal on purpose: there _arrowStackExtent is the CONSTANT
+        // arrowhead box, so the rest of _stackHeight is exactly the caption
+        // plus the Column's spacing.
+        initial[QStringLiteral("verticalAxis")] = false;
+        initial[QStringLiteral("width")] = width;
+        initial[QStringLiteral("height")] = 400.0;
+        std::unique_ptr<QQuickItem> probe(qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial)));
+        if (!probe) {
+            return false;
+        }
+        *headExtent = probe->property("_arrowStackExtent").toReal();
+        *capPlusSpacing = probe->property("_stackHeight").toReal() - *headExtent;
+        return *headExtent > 0 && *capPlusSpacing > 0;
+    }
+
     void testStripEmptyStateDropsTheArrowBeforeTheCaption_data()
     {
         QTest::addColumn<bool>("verticalAxis");
@@ -747,17 +783,75 @@ private Q_SLOTS:
         // A fit test written against the horizontal quantity looks right and
         // silently never fires on the vertical axis — which is precisely the
         // bug the first version of this guard shipped with.
-        // Heights chosen in the band where dropping the arrow is DECISIVE:
-        // too short for arrow + spacing + caption, tall enough for the caption
-        // alone. Below that band nothing fits and the host's clip is
-        // unavoidable, which is a limit of the well, not of this guard.
-        QTest::newRow("horizontal") << false << 190.0 << 40.0;
-        // The vertical height is chosen to sit in the band where the two
-        // candidate formulas DISAGREE: measuring the arrow as the arrowhead
-        // box says it fits at this height, measuring it as the span says it
-        // does not. Outside that band both answers coincide and the row would
-        // pass against the wrong formula.
-        QTest::newRow("vertical") << true << 90.0 << 60.0;
+        //
+        // The heights are DERIVED from the live component rather than
+        // hardcoded. Every term is a font, DPI and gridUnit product, so a
+        // literal that discriminates on one machine is a hard failure or a
+        // silent pass on the next.
+        const QString caption = QStringLiteral("This screen could not be measured");
+        qreal capPlusSpacing = 0;
+        qreal headExtent = 0;
+
+        // Horizontal: anything below head + spacing + caption drops the arrow,
+        // with no upper bound, so just inside it is stable across themes.
+        if (stripEmptyStateMetrics(190.0, caption, &capPlusSpacing, &headExtent)) {
+            QTest::newRow("horizontal") << false << 190.0 << (std::floor(headExtent + capPlusSpacing) - 1.0);
+        }
+
+        // Vertical is the delicate one. The height has to sit where the
+        // CORRECT formula (arrow measured as its 0.45h span) says the arrow
+        // does not fit while the OLD BUGGY one (arrow measured as the constant
+        // arrowhead box) says it does; outside that band the row passes
+        // against either formula and pins nothing. Solving
+        //     0.45h + capPlusSpacing > h   and   headExtent + capPlusSpacing <= h
+        // gives  headExtent + capPlusSpacing <= h < capPlusSpacing / 0.55.
+        // If the running theme leaves that band empty the row is skipped
+        // rather than failing, because there is then no height at which this
+        // component can distinguish the two.
+        if (stripEmptyStateMetrics(90.0, caption, &capPlusSpacing, &headExtent)) {
+            const qreal lo = headExtent + capPlusSpacing;
+            const qreal hi = capPlusSpacing / 0.55;
+            const qreal h = std::floor(lo) + 1.0;
+            if (lo < hi && h < hi) {
+                QTest::newRow("vertical") << true << 90.0 << h;
+            }
+        }
+    }
+
+    /// The zero floors on the shaft and the caption width, on a well narrower
+    /// than either was written for. Its own case rather than a row of the drop
+    /// test above, because at this size the caption collapses to zero width
+    /// and the fit guard legitimately reports that the arrow fits — a
+    /// different property than the one that test pins.
+    void testStripEmptyStateSurvivesAHairlineWell()
+    {
+        QQmlComponent component(&m_engine);
+        component.setData(
+            "import QtQuick\n"
+            "import org.plasmazones.common as QFZCommon\n"
+            "QFZCommon.StripEmptyState { }\n",
+            QUrl(QStringLiteral("qrc:/test_strip_empty_state_hairline.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+
+        QVariantMap initial;
+        initial[QStringLiteral("caption")] = QStringLiteral("This screen could not be measured");
+        initial[QStringLiteral("width")] = 10.0;
+        initial[QStringLiteral("height")] = 10.0;
+        auto* state = qobject_cast<QQuickItem*>(component.createWithInitialProperties(initial));
+        QVERIFY2(state, qPrintable(component.errorString()));
+        state->setParent(&m_engine);
+
+        // Nothing in the tree may be handed a negative size. Without the
+        // Math.max(0, ...) floors the shaft's width is the well minus a head
+        // arm, and the caption's is the well minus a gridUnit — both negative
+        // here.
+        for (QQuickItem* kid : state->findChildren<QQuickItem*>()) {
+            QVERIFY2(
+                kid->width() >= 0,
+                qPrintable(
+                    QStringLiteral("negative width on %1").arg(QString::fromLatin1(kid->metaObject()->className()))));
+            QVERIFY(kid->height() >= 0);
+        }
     }
 
     void testStripEmptyStateDropsTheArrowBeforeTheCaption()
@@ -801,10 +895,9 @@ private Q_SLOTS:
             if (text.isValid() && text.toString() == QLatin1String("This screen could not be measured")) {
                 sawCaptionLabel = true;
                 QVERIFY(kid->isVisible());
-                // Never negative, however narrow the well.
-                QVERIFY(kid->width() >= 0);
-                // The whole point of dropping the arrow: the caption still fits
-                // the well, so the host's clip has nothing to cut.
+                // The point of dropping the arrow: the caption now fits the
+                // well, so the host's clip has nothing to cut. (The zero
+                // floors are pinned separately, on a hairline well.)
                 QVERIFY(kid->height() <= state->height());
             }
         }

@@ -156,17 +156,18 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
 
 void Daemon::reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred)
 {
-    const auto settleTimers = findChildren<QTimer*>(
-        QRegularExpression(QLatin1Char('^') + QRegularExpression::escape(QString(kScrollingSettlePrefix))),
-        Qt::FindDirectChildrenOnly);
     // Required, not optional: an empty predicate here would mean "reap every
     // timer", the most destructive reading of a caller mistake. Both call
-    // sites always pass a live one.
+    // sites always pass a live one. Checked before the child walk so a
+    // malformed call refuses immediately rather than paying for it first.
     Q_ASSERT(pred);
     if (!pred) {
         qCWarning(lcDaemon) << "reapScrollingOsdSettleTimersWhere called with no predicate; reaping nothing";
         return;
     }
+    const auto settleTimers = findChildren<QTimer*>(
+        QRegularExpression(QLatin1Char('^') + QRegularExpression::escape(QString(kScrollingSettlePrefix))),
+        Qt::FindDirectChildrenOnly);
     for (QTimer* settle : settleTimers) {
         const QString timerScreenId = screenIdFromSettleTimerName(settle->objectName());
         if (!pred(timerScreenId)) {

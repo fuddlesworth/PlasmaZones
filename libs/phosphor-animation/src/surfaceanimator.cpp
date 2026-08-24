@@ -238,26 +238,6 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
             qCWarning(lcSurfaceAnimator)
                 << "beginShow on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
         }
-        // Salvage any in-flight previous-track onComplete BEFORE
-        // cancelTracking drops it. The bare cancellation contract
-        // (legCompleted-only firing) is correct for `cancel()` calls,
-        // but the gate-off short-circuit here also fires the NEW
-        // caller's onComplete synchronously below — leaving the
-        // previous caller's callback unfired strands them while a
-        // sibling caller gets serviced.
-        //
-        // Dispatch order: the salvaged previous-track onComplete fires
-        // SYNCHRONOUSLY before cancelTracking, then cancelTracking
-        // erases the track, then the new caller's onComplete runs
-        // synchronously below. Natural completion order (oldest-first);
-        // consumers can safely call back into SurfaceAnimator from
-        // either callback since neither runs from a dtor — re-entry
-        // touches a fully-constructed `*d`. cancelTracking itself is
-        // synchronous and does not re-touch `m_tracks` after erasing
-        // the entry, so the salvaged callback's potential re-entry
-        // (which may mutate `m_tracks`) is bounded: the callback runs
-        // AFTER cancelTracking has already erased our `surface` entry,
-        // so any new entry the callback inserts is its own to manage.
         // Supersede, do not salvage. An in-flight track for this same
         // (surface, item) belongs to an operation THIS call replaces, so its
         // onComplete is dropped — exactly what the enabled path does, where
@@ -308,24 +288,6 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
             qCWarning(lcSurfaceAnimator)
                 << "beginHide on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
         }
-        // Salvage previous-track onComplete before cancelTracking drops it.
-        // See beginShow's matching block for the rationale (gate-off path
-        // fires the new caller's onComplete synchronously below — silently
-        // dropping the in-flight caller's callback is the bug, not the
-        // cancellation contract).
-        //
-        // Dispatch order: the salvaged previous-track onComplete fires
-        // SYNCHRONOUSLY before cancelTracking, then cancelTracking
-        // erases the track, then the new caller's onComplete runs
-        // synchronously below. Natural completion order (oldest-first);
-        // consumers can safely call back into SurfaceAnimator from
-        // either callback since neither runs from a dtor — re-entry
-        // touches a fully-constructed `*d`. cancelTracking is fully
-        // synchronous and does not re-touch `m_tracks` after erasing
-        // the entry, so the salvaged callback's potential re-entry
-        // (which may mutate `m_tracks`) is bounded: the callback runs
-        // AFTER cancelTracking has already erased our `surface` entry,
-        // so any new entry the callback inserts is its own to manage.
         // Supersede, do not salvage. An in-flight track for this same
         // (surface, item) belongs to an operation THIS call replaces, so its
         // onComplete is dropped — exactly what the enabled path does, where
