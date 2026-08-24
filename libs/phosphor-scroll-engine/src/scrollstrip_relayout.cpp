@@ -300,13 +300,20 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
             const int sourcePos = columnStripPos(sourceIdx, params);
             // Source's leading edge to the target's trailing one, or the
             // mirror when the source is trailward, expressed through strip
-            // positions exactly as niri's total_width is. The two extra gaps
-            // are niri's as well: they account for the padding it keeps
-            // OUTSIDE both columns, which our outer gap already carves out of
-            // the work area rather than adding here.
-            const int span = (sourcePos < activeMainPos ? activeMainPos - sourcePos + colMain
-                                                        : sourcePos - activeMainPos + sourceMain)
-                + params.gap * 2;
+            // positions exactly as niri's total_width is.
+            //
+            // WITHOUT niri's `+ gaps * 2`, deliberately. That term is the
+            // edge padding niri keeps between the outermost column and the
+            // viewport: its working_area still contains that padding, so it
+            // has to be added to the span before the two are comparable. Ours
+            // is already gone — engine_query subtracts the outer gaps from
+            // params.workArea, and both relayout (first column flush at
+            // mainLow) and the fit arm below (pinning to viewMain - colMain)
+            // lay columns edge to edge inside what is left. viewMain IS the
+            // room the pair has, so adding the term back would compare the
+            // padding twice and center a pair that fits by up to two gaps.
+            const int span = sourcePos < activeMainPos ? activeMainPos - sourcePos + colMain
+                                                       : sourcePos - activeMainPos + sourceMain;
             if (span > viewMain) {
                 center = true;
             }

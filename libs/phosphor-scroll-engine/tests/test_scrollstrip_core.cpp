@@ -150,6 +150,7 @@ private Q_SLOTS:
     void focusAlwaysModeCenters();
     void focusOnOverflowMode();
     void focusOnOverflowMeasuresAgainstTheTargetNeighbour();
+    void focusOnOverflowSpanExcludesViewportEdgePadding();
     void alwaysCenterSingleColumn();
     void minimizeKeepsSlotAndRestores();
     void fullyMinimizedColumnCollapses();
@@ -386,6 +387,47 @@ void TestScrollStripCore::focusOnOverflowMeasuresAgainstTheTargetNeighbour()
         const QRect r = rectOf(strip.relayout(params), QStringLiteral("c2"));
         QCOMPARE(Ax::mainLen(r), 300);
         QCOMPARE(Ax::mainPos(r), (viewMain - 300) / 2);
+    }
+}
+
+void TestScrollStripCore::focusOnOverflowSpanExcludesViewportEdgePadding()
+{
+    // The THRESHOLD itself, which the neighbour case above cannot pin: both
+    // of its rows clear the boundary by hundreds of pixels, so an overflow
+    // test carrying a spurious constant term still centers them and still
+    // looks right. niri adds `gaps * 2` to its span because its working_area
+    // still holds the padding it keeps between the outermost column and the
+    // viewport. Ours does not — the outer gaps come off params.workArea long
+    // before the strip sees it, and columns lay out flush inside what is
+    // left — so viewMain is exactly the room the pair has and the span is
+    // compared raw. Carrying niri's term across would center a pair that
+    // fits by up to two gaps, which is what this case rejects.
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
+    const int viewMain = Ax::mainLen(params.workArea);
+    QCOMPARE(viewMain, 1200);
+    QCOMPARE(params.gap, 10);
+
+    {
+        // 595 + 10 + 595 = exactly 1200. The pair fills the viewport to the
+        // pixel, so it FITS and the fit arm leaves it flush at the lead edge.
+        ScrollStrip strip;
+        QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(595), ColumnDisplay::Normal, params));
+        QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(595), ColumnDisplay::Normal, params));
+        const ResolvedStrip r = strip.relayout(params);
+        QCOMPARE(r.viewOffset, 0);
+        // Spelled out rather than derived, and deliberately NOT the centered
+        // position (1200 - 595) / 2 = 302 the two-gap form would produce.
+        QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("b"))), 605);
+    }
+    {
+        // Fifteen pixels over: 600 + 10 + 605 = 1215. Now it centers, so the
+        // case above is a boundary rather than a strip that never overflows.
+        ScrollStrip strip;
+        QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(600), ColumnDisplay::Normal, params));
+        QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(605), ColumnDisplay::Normal, params));
+        const QRect b = rectOf(strip.relayout(params), QStringLiteral("b"));
+        QCOMPARE(Ax::mainPos(b), (viewMain - 605) / 2);
     }
 }
 
