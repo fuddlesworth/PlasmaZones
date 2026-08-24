@@ -223,7 +223,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
 }
 
 void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
-                                              const QString& screenId, bool locked)
+                                              bool verticalAxis, const QString& screenId, bool locked)
 {
     // The native-template twin of showLayoutOsdImpl: no Layout* backs a
     // ScrollingTemplate, so the caller supplies the id, name and the
@@ -268,11 +268,72 @@ void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& 
     // use (see the autotile rationale in the string overload below).
     p.aspectRatioClass =
         PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    // Same axis the caller laid the bands along, so this card carries the edge
+    // ticks the picker's template cards do. Without it the same template is
+    // chevroned in the picker and bare here.
+    p.stripAxisHint = verticalAxis ? QStringLiteral("vertical") : QStringLiteral("horizontal");
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     finishOsdShow(window, surface, osdSlot, screenGeom);
-    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId;
+    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId
+                      << "vertical=" << verticalAxis;
+}
+
+void OverlayService::showScrollingStripOsd(const QString& name, const QVariantList& zones, bool verticalAxis,
+                                           const QString& emptyCaption, const QString& screenId)
+{
+    // NO empty-zones bail, unlike every sibling above. An empty strip is a
+    // state worth showing, and the card shows it as an axis arrow plus the
+    // caller's caption. What would be wrong is showing it as an invented
+    // three-column sketch, which is what this path used to do.
+    //
+    // What IS refused is empty zones with no caption: the QML gates the empty
+    // state on the caption, so that pair renders bare edge ticks over a blank
+    // well — the "failed to load" picture the empty state exists to replace.
+    // Enforcing it here rather than trusting the doc comment, because the
+    // renderer has no way to invent the reason the strip is blank.
+    if (zones.isEmpty() && emptyCaption.isEmpty()) {
+        qCWarning(lcOverlay) << "Refusing strip OSD with no zones and no caption: screen=" << screenId;
+        return;
+    }
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
+        return;
+    }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+
+    LayoutOsdContentParams p;
+    p.screenId = prep->effectiveScreenId;
+    // No id, deliberately, matching the settings thumbnail's throwaway card
+    // literal: a live strip snapshot has no persisted identity, and a stable
+    // id only invites code elsewhere to treat it as a real layout.
+    p.name = name;
+    p.zones = zones;
+    // Autotile: the renderer reads it as "generated, not editable", which is
+    // exactly what a live strip snapshot is.
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Autotile);
+    p.autoAssign = false;
+    p.globalAutoAssign = false;
+    p.locked = false;
+    p.screenAspectRatio = aspectRatio;
+    p.aspectRatioClass =
+        PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    p.stripAxisHint = verticalAxis ? QStringLiteral("vertical") : QStringLiteral("horizontal");
+    // Only meaningful with no zones; pushed as empty otherwise so the QML
+    // gate is the caption itself rather than a second flag that could
+    // disagree with it.
+    p.stripEmptyCaption = zones.isEmpty() ? emptyCaption : QString();
+    pushLayoutOsdContent(osdSlot, p);
+    writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
+
+    finishOsdShow(window, surface, osdSlot, screenGeom);
+    qCInfo(lcOverlay) << "Scrolling strip OSD: screen=" << screenId << "zones=" << zones.size()
+                      << "vertical=" << verticalAxis;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -380,6 +441,11 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeQmlProperty(osdSlot, QStringLiteral("autoAssign"), p.autoAssign);
     writeQmlProperty(osdSlot, QStringLiteral("globalAutoAssign"), p.globalAutoAssign);
     writeAutotileMetadata(osdSlot, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
+    // Both written unconditionally: the OSD slot Item is reused across show
+    // calls, so a prior strip card would otherwise leave its ticks or its
+    // empty-state caption on the next layout card.
+    writeQmlProperty(osdSlot, QStringLiteral("stripAxisHint"), p.stripAxisHint);
+    writeQmlProperty(osdSlot, QStringLiteral("stripEmptyCaption"), p.stripEmptyCaption);
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
     writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
     // Zone preview colors and opacities follow the same settings pipeline as

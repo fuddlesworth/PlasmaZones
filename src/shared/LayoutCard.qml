@@ -47,6 +47,24 @@ Item {
     property bool showZoneNumbers: true
     property string zoneNumberDisplay: "all"
     property bool producesOverlappingZones: false
+    /// ZonePreview's strip axis ticks: "none", "horizontal" or "vertical".
+    /// Only the scrolling surfaces set it; every layout host leaves the
+    /// default and draws no ticks.
+    property string stripAxisHint: "none"
+    /// Non-empty replaces the zone preview in the well with the shared
+    /// StripEmptyState: the axis arrow plus this caption. Only the scrolling
+    /// hosts set it, and only when the strip has nothing to draw.
+    ///
+    /// It lives INSIDE the card rather than replacing the card, so an empty
+    /// strip keeps its name row and category badge. A screen whose strip is
+    /// empty still has a template governing it, and swapping the whole card
+    /// out for a bare well would stop naming it exactly when the user is most
+    /// likely to be wondering which one is in force.
+    ///
+    /// Separate from placeholderIcon: that stands for an entry which IS an
+    /// absence (the no-layout row), while this is a real strip that currently
+    /// holds nothing. The two never apply at once.
+    property string stripEmptyCaption: ""
     property color zoneHighlightColor: ZoneColorDefaults.previewActiveZoneColor
     property color zoneInactiveColor: ZoneColorDefaults.previewInactiveZoneColor
     property color zoneBorderColor: ZoneColorDefaults.previewZoneBorderColor
@@ -251,7 +269,11 @@ Item {
         // placeholder rather than as content.
         Kirigami.Icon {
             anchors.centerIn: previewBackground
-            visible: root.placeholderIcon !== ""
+            // The caption wins the well. The two are documented as mutually
+            // exclusive on stripEmptyCaption above; enforcing it here means a
+            // host that set both stacks nothing, rather than drawing the icon
+            // through the empty state's arrow.
+            visible: root.placeholderIcon !== "" && root.stripEmptyCaption === ""
             source: root.placeholderIcon
             width: Math.round(Math.min(previewBackground.width, previewBackground.height) * 0.4)
             height: width
@@ -315,6 +337,10 @@ Item {
 
             anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
+            // Hidden rather than fed an empty list: an empty ZonePreview still
+            // draws its own axis ticks, which would double up with the empty
+            // state's arrow in the same well.
+            visible: root.stripEmptyCaption === ""
             zones: root.layoutData ? (root.layoutData.zones || []) : []
             showZoneNumbers: root.showZoneNumbers
             zoneNumberDisplay: root.zoneNumberDisplay
@@ -338,7 +364,22 @@ Item {
             fontStrikeout: root.fontStrikeout
             showMasterDot: root.showMasterDot
             masterCount: root.masterCount
+            stripAxisHint: root.stripAxisHint
+            stripAxisHintColor: root.textColor
             animationDuration: root.animationDuration
+        }
+
+        // The empty strip, in the same well the zones would have filled.
+        StripEmptyState {
+            anchors.fill: previewBackground
+            anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
+            // Safe to clip only because the component drops its arrow rather
+            // than truncating the caption on a well too short for both.
+            clip: true
+            visible: root.stripEmptyCaption !== ""
+            verticalAxis: root.stripAxisHint === "vertical"
+            caption: root.stripEmptyCaption
+            contentColor: root.textColor
         }
     }
 

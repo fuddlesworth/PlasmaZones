@@ -19,6 +19,7 @@
 #include <QSet>
 #include <QThreadPool>
 #include <chrono>
+#include <functional>
 #include <optional>
 #include <memory>
 
@@ -164,7 +165,7 @@ public:
         DesktopSwitch,
     };
     /// Whether an empty strip may defer its card by the settle beat
-    /// (@ref kScrollingOsdAdoptSettleMs) or must render the sketch now.
+    /// (@ref kScrollingOsdAdoptSettleMs) or must render the empty state now.
     /// Immediate is for the batched multi-screen show, where one deferred
     /// screen would land ~300 ms after the rest.
     enum class StripSettle {
@@ -230,7 +231,8 @@ private:
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
     /// The scrolling strip preview card itself: live visible-tile rects, or
-    /// the representative endless-strip sketch when the strip is empty.
+    /// the empty state (an axis arrow and a caption naming the reason) when
+    /// the strip is empty or the screen cannot be measured.
     /// Carries NO gates of its own, so it stays private and reachable only
     /// through showScrollingModeOsd, which applies them (and re-applies them
     /// on the settle dispatch that calls back in here). Advances the
@@ -255,6 +257,17 @@ private:
     /// @p screenId reaps all of them (stop()); a screen id reaps that
     /// output's, including every virtual sub-screen of it (screenRemoved).
     void reapScrollingOsdSettleTimers(const QString& screenId = QString());
+    /// Reap the settle timers whose screen id satisfies @p pred.
+    ///
+    /// The screenId overload above is keyed on samePhysical, which is right
+    /// for an unplug and WRONG for a virtual-screen reconfigure: there the
+    /// physical output survives and only some vs:N ids go away, so a physical
+    /// match would reap the survivors too. Un-subdividing an output is
+    /// reachable with no unplug at all, and without this the timers of the
+    /// dropped sub-screens are never destroyed — one dead QTimer accumulates
+    /// per vs id ever seen, and an armed one can still fire for a screen that
+    /// no longer exists.
+    void reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred);
     void clearHighlight();
 
     /**

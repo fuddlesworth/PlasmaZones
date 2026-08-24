@@ -79,10 +79,68 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
+    /// Which way the scrolling strip runs, drawn as a chevron on each of the
+    /// two edges the strip continues past: "none" (the default, every layout
+    /// host), "horizontal" or "vertical".
+    ///
+    /// This is the ONLY thing a strip preview says about continuation. The
+    /// sketch it replaced drew three invented columns with their outer two
+    /// clipped at the box edges, which read as real windows because the
+    /// renderer draws real zones the same way. A chevron cannot be mistaken
+    /// for a window, and unlike the sketch it is honest on a populated strip
+    /// too, so every scrolling surface carries it rather than only the empty
+    /// one.
+    property string stripAxisHint: "none"
+    /// Tick colour. Theme text by default, deliberately NOT the zone palette:
+    /// the ticks describe the strip, not a zone, and a user who has recoloured
+    /// their zones should not lose them into the fill.
+    property color stripAxisHintColor: Kirigami.Theme.textColor
     /// Whether to show master indicator dots on master zone(s)
     property bool showMasterDot: false
     /// Number of master zones to mark with indicator dots
     property int masterCount: 1
+
+    readonly property bool stripAxisHintVertical: root.stripAxisHint === "vertical"
+    readonly property bool stripAxisHintVisible: root.stripAxisHintVertical || root.stripAxisHint === "horizontal"
+    /// Arm length of one chevron stroke. Scaled off the box's SHORT side so a
+    /// tick keeps its proportions on a portrait screen's preview, floored so
+    /// it survives the smallest host (the layout combo's thumbnail) and capped
+    /// so it does not grow into a wedge on the Monitors page's large box.
+    readonly property real stripAxisHintArm: Math.max(3, Math.min(9, Math.min(root.width, root.height) * 0.085))
+    /// Stroke thickness, floored at 1 for the same reason the tab band floors
+    /// its own: below a pixel the stroke stops being drawn at all.
+    readonly property real stripAxisHintThickness: Math.max(1, root.stripAxisHintArm * 0.22)
+
+    // The axis ticks: one chevron on each edge the strip continues past.
+    // z 1 rather than declaration order, because an edge column of a live
+    // strip lands exactly here and a tick under its fill is a smudge. Both
+    // are non-interactive: ZonePreview carries no MouseAreas (the selector
+    // hit-tests the delegates from C++) and these must not introduce one.
+    AxisChevron {
+        objectName: "zonePreviewAxisTickStart"
+        z: 1
+        direction: root.stripAxisHintVertical ? 2 : 0
+        arm: root.stripAxisHintArm
+        thickness: root.stripAxisHintThickness
+        strokeColor: root.stripAxisHintColor
+        opacity: 0.5
+        visible: root.stripAxisHintVisible
+        x: root.stripAxisHintVertical ? (root.width - width) / 2 : root.edgeGap
+        y: root.stripAxisHintVertical ? root.edgeGap : (root.height - height) / 2
+    }
+
+    AxisChevron {
+        objectName: "zonePreviewAxisTickEnd"
+        z: 1
+        direction: root.stripAxisHintVertical ? 3 : 1
+        arm: root.stripAxisHintArm
+        thickness: root.stripAxisHintThickness
+        strokeColor: root.stripAxisHintColor
+        opacity: 0.5
+        visible: root.stripAxisHintVisible
+        x: root.stripAxisHintVertical ? (root.width - width) / 2 : root.width - root.edgeGap - width
+        y: root.stripAxisHintVertical ? root.height - root.edgeGap - height : (root.height - height) / 2
+    }
 
     /// Where a zone's tile lands, in one place. Three overlays need it — the
     /// zone rect itself, the master dots and the scrolling tab bands — and
@@ -208,7 +266,7 @@ Item {
                     // 16px legibility floor. Coupled by value to the hosts
                     // that must keep every zone number visible — the
                     // scrolling strip preview raises LayoutThumbnail's
-                    // minZoneSize to this same 16 (MonitorStatePage.qml) —
+                    // minZoneSize to this same 16 (MonitorModePreviews.qml) —
                     // so a change here must move those hosts with it.
                     if (parent.width < 16 || parent.height < 16)
                         return false;

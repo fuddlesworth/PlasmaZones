@@ -238,6 +238,15 @@ Item {
                     fontItalic: root.appSettings ? root.appSettings.labelFontItalic : false
                     fontUnderline: root.appSettings ? root.appSettings.labelFontUnderline : false
                     fontStrikeout: root.appSettings ? root.appSettings.labelFontStrikeout : false
+                    // No strip axis ticks here, deliberately. The library browses
+                    // templates with no target screen in hand, and the bands it
+                    // draws are laid out screen-agnostically (always left to
+                    // right, see appendScrollingTemplatePreviews) — so a tick
+                    // resolved from the global ladder can point across its own
+                    // bands on a vertical strip, and says "horizontal" for the
+                    // default Auto axis whatever the monitor is shaped like.
+                    // The Monitors page carries the ticks, where a real screen
+                    // resolves both the bands and the axis together.
 
                     // Hover the preview to read the layout/algorithm description.
                     // Scoped to the thumbnail graphic (not the whole card) so it

@@ -131,6 +131,18 @@ struct LayoutOsdContentParams
     bool producesOverlappingZones = false;
     QString zoneNumberDisplay = QStringLiteral("all");
     int masterCount = 1;
+    /// Strip axis ticks on the preview: "none" (every layout card), or
+    /// "horizontal" / "vertical" for a scrolling one. A populated card draws a
+    /// chevron on each edge the strip continues past; an empty one hands the
+    /// same axis to the empty state's arrow instead, since the two would
+    /// otherwise double up in one well. Either way the card says which way its
+    /// columns run.
+    QString stripAxisHint = QStringLiteral("none");
+    /// Non-empty replaces the zone preview with the shared StripEmptyState:
+    /// the axis arrow plus THIS caption. The caller supplies the wording
+    /// because an empty well has several causes and they do not mean the same
+    /// thing — see StripEmptyState.qml. Empty (the default) draws zones.
+    QString stripEmptyCaption;
     QString screenId; ///< effective screen id, resolves the context overlay-appearance override
 };
 

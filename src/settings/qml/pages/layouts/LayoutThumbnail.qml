@@ -46,6 +46,13 @@ Item {
     // number-readable (the scrolling strip, where every tile is a digit
     // target) raises this to 16.
     property int minZoneSize: 8
+    /// Strip axis ticks, passed through to LayoutCard. "none" for every
+    /// layout host; the scrolling hosts resolve the axis for their screen and
+    /// pass "horizontal" or "vertical".
+    property string stripAxisHint: "none"
+    /// Replaces the well's zones with the axis arrow and this caption. See
+    /// LayoutCard.stripEmptyCaption for why it sits inside the card.
+    property string stripEmptyCaption: ""
     // Zone fill opacities when no settings source is attached — the same
     // values LayoutCard's own activeOpacity / inactiveOpacity defaults carry,
     // named here so the pair stays in step by reference rather than by luck.
@@ -171,11 +178,12 @@ Item {
         globalAutoAssign: root.globalAutoAssign
         previewWidth: root.previewBoxWidth
         previewHeight: root.previewBoxHeight
-        // Same feature configuration as the popup cards. The three pixel
-        // literals are deliberate overrides of LayoutCard's own defaults
-        // (2 / 2 / 10): the settings thumbnail draws a denser grid than a
-        // popup card, so the gaps are halved and the zone floor lowered.
-        // Hosts that need a different floor set minZoneSize on the thumbnail.
+        // Same feature configuration as the popup cards. The two pixel
+        // literals are deliberate overrides of LayoutCard's own gap defaults
+        // (2 / 2): the settings thumbnail draws a denser grid than a popup
+        // card, so the gaps are halved. The zone floor is forwarded rather
+        // than overridden here — see the minZoneSize property, which defaults
+        // below LayoutCard's own and is raised again by the scrolling host.
         showCardBackground: true
         zonePadding: 1
         edgeGap: 1
@@ -184,6 +192,8 @@ Item {
         producesOverlappingZones: root.layout ? root.layout.producesOverlappingZones === true : false
         showMasterDot: root.layout ? (root.layout.isAutotile === true && root.layout.supportsMasterCount === true) : false
         masterCount: root.layout && root.layout.masterCount !== undefined ? root.layout.masterCount : 1
+        stripAxisHint: root.stripAxisHint
+        stripEmptyCaption: root.stripEmptyCaption
         // Effective settings-pipeline values — the daemon pushes the same
         // settings->activeOpacity()/inactiveOpacity()/highlightColor() into
         // the popup slots (internal.h writeColorSettings); here they come

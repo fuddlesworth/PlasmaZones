@@ -192,6 +192,13 @@ Window {
         property int masterCount: 1
         property bool producesOverlappingZones: false
         property string zoneNumberDisplay: "all"
+        // Strip axis ticks and the empty-strip caption for the scrolling
+        // strip card. Same declare-and-forward contract as the colors above:
+        // osd.cpp pushLayoutOsdContent writes both with setProperty on every
+        // show, and an UNDECLARED name silently becomes a dynamic property no
+        // binding observes — the ticks would never reach LayoutOsdContent.
+        property string stripAxisHint: "none"
+        property string stripEmptyCaption: ""
         property real screenAspectRatio: 16 / 9
         property string aspectRatioClass: "any"
         property string fontFamily: ""
@@ -330,6 +337,8 @@ Window {
                 masterCount: osdSlot.masterCount
                 producesOverlappingZones: osdSlot.producesOverlappingZones
                 zoneNumberDisplay: osdSlot.zoneNumberDisplay
+                stripAxisHint: osdSlot.stripAxisHint
+                stripEmptyCaption: osdSlot.stripEmptyCaption
                 screenAspectRatio: osdSlot.screenAspectRatio
                 aspectRatioClass: osdSlot.aspectRatioClass
                 fontFamily: osdSlot.fontFamily

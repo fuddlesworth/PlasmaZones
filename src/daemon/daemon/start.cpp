@@ -848,6 +848,15 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
     if (m_tilingAdaptor) {
         m_tilingAdaptor->clearScrollTabPaintOverridesWhere(droppedSubScreen);
     }
+
+    // The strip-preview settle timers are keyed by the same screen ids and
+    // belong on this boundary too. The screenRemoved reap cannot cover them:
+    // it matches on samePhysical, and here the physical output SURVIVES, so a
+    // physical match would reap the sub-screens that are still live. Without
+    // this a dropped vs:N leaves its QTimer parented to the daemon until
+    // shutdown, and an armed one goes on to fire for a screen that no longer
+    // exists.
+    reapScrollingOsdSettleTimersWhere(droppedSubScreen);
 }
 
 void Daemon::pruneEngineOrdersForWindow(const QString& instanceId)

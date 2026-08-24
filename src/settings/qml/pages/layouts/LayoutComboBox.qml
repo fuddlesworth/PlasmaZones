@@ -675,6 +675,11 @@ ComboBox {
                     isHovered: true
                     showZoneNumbers: false
                     minZoneSize: 2
+                    // No edge ticks on a scrolling-template row, deliberately.
+                    // The combo browses templates with no target screen in
+                    // hand, and its bands are laid out screen-agnostically, so
+                    // a tick resolved from the global ladder can contradict the
+                    // bands beside it. The Monitors page carries the ticks.
                 }
             }
 
