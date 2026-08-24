@@ -115,12 +115,22 @@ void TilingHandler::setWheelFocusInverted(bool inverted)
 
 void TilingHandler::setWheelFocusTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers)
 {
+    if (m_wheelFocusTriggers == triggers) {
+        return;
+    }
     m_wheelFocusTriggers = triggers;
+    // A real rebind ends whatever gesture was in flight: the banked sub-notch
+    // remainder belongs to the chord the user just replaced.
+    resetWheelAccumulators();
 }
 
 void TilingHandler::setWheelViewTriggers(const QVector<PhosphorCompositor::ParsedTrigger>& triggers)
 {
+    if (m_wheelViewTriggers == triggers) {
+        return;
+    }
     m_wheelViewTriggers = triggers;
+    resetWheelAccumulators();
 }
 
 bool TilingHandler::isManagedScreen(const QString& screenId) const

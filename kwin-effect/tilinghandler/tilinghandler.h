@@ -1535,30 +1535,22 @@ private:
     // cannot include, which is the same reason TriggerParser::checkModifier
     // switches on bare ints. Keep both in step with that table.
     //
-    // The seed's failure direction is to CONSUME, unlike the drag lists,
-    // whose pre-load latch is deliberately permissive. loadSettingAsync only
-    // invokes its callback on a VALID reply, so if the reply is lost these
-    // shipped chords stay live: a user who rebound the focus chord elsewhere
-    // would find Meta+wheel still claimed by the strip rather than passed to
-    // their app. Accepted rather than gated, because gating would make both
-    // chords dead for the whole pre-reply window to cover a case the next
-    // settingsChanged re-requests anyway.
+    // The seed's failure direction is to CONSUME, unlike the permissive
+    // pre-load latch the drag lists use: a lost reply leaves these shipped
+    // chords live against a user who rebound them. Accepted rather than
+    // gated, since gating kills both chords for the whole pre-reply window to
+    // cover a case the next settingsChanged re-requests anyway.
     QVector<PhosphorCompositor::ParsedTrigger> m_wheelFocusTriggers{{4, 0}};
     QVector<PhosphorCompositor::ParsedTrigger> m_wheelViewTriggers{{11, 0}};
-    // Smooth-delta accumulators, one per axis, in wheel-notch units.
+    // Smooth-delta accumulators, in wheel-notch units. Matching used to run
+    // through registerAxisShortcut, whose processAxis only fires once |delta|
+    // clears 1.0; doing the matching ourselves means owning that threshold,
+    // or a touchpad sends a column step per libinput event.
     //
-    // Matching used to run through KWin's registerAxisShortcut, whose
-    // processAxis only fires once the accumulated |delta| clears 1.0. Doing
-    // the matching ourselves means owning that threshold too: a touchpad or a
-    // high-resolution wheel delivers many fractional events per notch, and
-    // one strip verb per libinput event would send dozens of column steps
-    // per flick.
-    //
-    // Kept per axis because KWin delivers horizontal and vertical scroll as
-    // two independent event streams. A diagonal two-finger drift feeds both,
-    // and the axes can carry opposite signs, so a single accumulator would
-    // interleave +1 and -1 steps. The axis that crosses first wins the
-    // gesture and zeroes the other.
+    // Per axis because KWin delivers horizontal and vertical scroll as two
+    // independent streams: a diagonal drift feeds both with possibly opposite
+    // signs, so one accumulator would interleave +1 and -1 steps. The axis
+    // that crosses first wins and zeroes the other.
     qreal m_wheelAccumVertical = 0.0;
     qreal m_wheelAccumHorizontal = 0.0;
     // ── Border state — uses shared BorderState from compositor-common ──

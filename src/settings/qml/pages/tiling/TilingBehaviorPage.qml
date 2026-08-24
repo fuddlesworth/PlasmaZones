@@ -12,7 +12,6 @@ SettingsFlickable {
     // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
     // references stay direct (those are Settings Q_PROPERTYs not wrapped here).
     readonly property var settingsBridge: settingsController.tilingBehaviorPage
-    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
 
     contentHeight: content.implicitHeight
     clip: true
@@ -62,7 +61,7 @@ SettingsFlickable {
                     enabled: !alwaysReinsertSwitch.checked
 
                     ModifierAndMouseCheckBoxes {
-                        width: root.triggerPreferredWidth
+                        width: TriggerLabels.editorPreferredWidth
                         acceptMode: acceptModeAll
                         // See the scrolling twin: the sentinel eats a stored
                         // slot that this list does not show.

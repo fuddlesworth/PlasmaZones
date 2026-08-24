@@ -15,12 +15,10 @@ SettingsCard {
     id: root
 
     readonly property var settingsBridge: settingsController.scrollingBehaviorPage
-    // Explicit width for the SettingsRow control slot (a plain Row
-    // positioner — Layout.* is ignored there), hoisted like the tiling
-    // page's triggerPreferredWidth. Below ~640 px of row width the slot
-    // clamp cuts the widget's right edge; shared pre-existing behaviour
-    // with the tiling twin.
-    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
+    // Width for the SettingsRow control slot comes from TriggerLabels, which
+    // every trigger editor host shares. Below ~640 px of row width the slot
+    // clamp cuts the widget's right edge; shared pre-existing behaviour with
+    // the tiling twin.
 
     headerText: i18n("Triggers")
     searchAnchor: "scrollingTriggers"
@@ -56,7 +54,7 @@ SettingsCard {
             enabled: !alwaysReinsertSwitch.checked
 
             ModifierAndMouseCheckBoxes {
-                width: root.triggerPreferredWidth
+                width: TriggerLabels.editorPreferredWidth
                 acceptMode: acceptModeAll
                 // The always-active sentinel occupies one of the four stored
                 // slots and is stripped out of the list below, so Add has to

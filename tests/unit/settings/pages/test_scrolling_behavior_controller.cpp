@@ -182,6 +182,42 @@ private Q_SLOTS:
         controller.setAlwaysReinsertIntoStrip(false);
         QCOMPARE(alwaysSpy.count(), 2);
     }
+
+    /// The two wheel chords may legally hold the same trigger, and the effect
+    /// then always picks focus (it is tested first), leaving the view binding
+    /// dead. The card warns about it, so the predicate behind that warning
+    /// has to be right: it compares STORED entries, since the QML-facing
+    /// bitmask form is lossy and two different stored chords can collapse to
+    /// the same rendering.
+    void wheelChordCollisionIsDetectedAndAnnouncedOnce()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        ScrollingBehaviorController controller(settings);
+
+        // The shipped pair differs by one modifier, which is the whole point.
+        QVERIFY(!controller.wheelTriggersCollide());
+
+        QSignalSpy collideSpy(&controller, &ScrollingBehaviorController::wheelTriggersCollideChanged);
+        QVERIFY(collideSpy.isValid());
+
+        // Point the view chord at the focus chord's modifier.
+        settings.setScrollingWheelViewTriggers(QVariantList{storedTrigger(static_cast<int>(DragModifier::Meta))});
+        QVERIFY(controller.wheelTriggersCollide());
+        QCOMPARE(collideSpy.count(), 1);
+
+        // An edit that leaves the verdict alone must not re-announce it: the
+        // banner would otherwise flicker on every keystroke of a rebind.
+        settings.setScrollingWheelFocusTriggers(QVariantList{storedTrigger(static_cast<int>(DragModifier::Meta)),
+                                                             storedTrigger(static_cast<int>(DragModifier::CtrlMeta))});
+        QVERIFY(controller.wheelTriggersCollide());
+        QCOMPARE(collideSpy.count(), 1);
+
+        // Separating them again flips it back, once.
+        settings.setScrollingWheelViewTriggers(QVariantList{storedTrigger(static_cast<int>(DragModifier::MetaShift))});
+        QVERIFY(!controller.wheelTriggersCollide());
+        QCOMPARE(collideSpy.count(), 2);
+    }
 };
 
 QTEST_MAIN(TestScrollingBehaviorController)

@@ -49,6 +49,14 @@ class ScrollingBehaviorController : public PhosphorControl::PageController
     Q_PROPERTY(QVariantList scrollingWheelViewTriggers READ scrollingWheelViewTriggers WRITE
                    setScrollingWheelViewTriggers NOTIFY scrollingWheelViewTriggersChanged)
     Q_PROPERTY(QVariantList defaultScrollingWheelViewTriggers READ defaultScrollingWheelViewTriggers CONSTANT)
+    /// True when the two wheel chord lists share an entry.
+    ///
+    /// Binding the same chord to both is legal and the effect breaks the tie
+    /// deterministically (focus is tested before view), but the view binding
+    /// is then unreachable, which is the same dead-binding shape the exact
+    /// matcher exists to prevent between two DIFFERENT chords. Derived here
+    /// rather than in QML so the comparison lives beside the lists it reads.
+    Q_PROPERTY(bool wheelTriggersCollide READ wheelTriggersCollide NOTIFY wheelTriggersCollideChanged)
 
 public:
     explicit ScrollingBehaviorController(ISettings& settings, QObject* parent = nullptr);
@@ -72,6 +80,7 @@ public:
     QVariantList defaultScrollingWheelFocusTriggers() const;
     QVariantList scrollingWheelViewTriggers() const;
     QVariantList defaultScrollingWheelViewTriggers() const;
+    bool wheelTriggersCollide() const;
 
     void setAlwaysReinsertIntoStrip(bool enabled);
     void setScrollingDragInsertTriggers(const QVariantList& triggers);
@@ -83,6 +92,7 @@ Q_SIGNALS:
     void scrollingDragInsertTriggersChanged();
     void scrollingWheelFocusTriggersChanged();
     void scrollingWheelViewTriggersChanged();
+    void wheelTriggersCollideChanged();
 
 private:
     ISettings* m_settings = nullptr;
@@ -92,6 +102,8 @@ private:
     /// Cached AlwaysActive-stripped trigger list (master-flag toggles leave
     /// the QML-facing stripped list identical).
     QVariantList m_lastScrollingDragInsertTriggers;
+    /// Cached collision verdict, so the banner only announces a real flip.
+    bool m_lastWheelTriggersCollide = false;
 };
 
 } // namespace PlasmaZones

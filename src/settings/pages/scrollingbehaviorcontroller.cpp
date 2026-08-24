@@ -47,6 +47,36 @@ ScrollingBehaviorController::ScrollingBehaviorController(ISettings& settings, QO
             &ScrollingBehaviorController::scrollingWheelFocusTriggersChanged);
     connect(m_settings, &ISettings::scrollingWheelViewTriggersChanged, this,
             &ScrollingBehaviorController::scrollingWheelViewTriggersChanged);
+    // The collision flag is derived from BOTH lists, so it re-evaluates on
+    // either. Cached and compared rather than forwarded, because most edits to
+    // one list leave the answer alone and the banner should not re-announce
+    // itself on every keystroke of an unrelated rebind.
+    m_lastWheelTriggersCollide = wheelTriggersCollide();
+    const auto reEvaluateCollision = [this] {
+        const bool collides = wheelTriggersCollide();
+        if (collides != m_lastWheelTriggersCollide) {
+            m_lastWheelTriggersCollide = collides;
+            Q_EMIT wheelTriggersCollideChanged();
+        }
+    };
+    connect(m_settings, &ISettings::scrollingWheelFocusTriggersChanged, this, reEvaluateCollision);
+    connect(m_settings, &ISettings::scrollingWheelViewTriggersChanged, this, reEvaluateCollision);
+}
+
+bool ScrollingBehaviorController::wheelTriggersCollide() const
+{
+    // Compared in STORAGE form, which is what the effect matches on. The
+    // QML-facing bitmask conversion is lossy for values the editor cannot
+    // render, so two entries could look different there and still be the same
+    // chord to anyTriggerHeldExact.
+    const QVariantList focus = m_settings->scrollingWheelFocusTriggers();
+    const QVariantList view = m_settings->scrollingWheelViewTriggers();
+    for (const QVariant& f : focus) {
+        if (view.contains(f)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 QVariantList ScrollingBehaviorController::scrollingWheelFocusTriggers() const

@@ -14,9 +14,9 @@ import org.kde.kirigami as Kirigami
  * column, how a column at the screen edge is shown (crop versus resize), and
  * the two wheel chords ("scroll keys") that drive the strip. All belong with
  * focus rather than on a page of their own, so the card hosts them and the
- * former Scrolling →
- * View leaf is gone. Which way the strip runs is the Strip direction card
- * above this one — it moved out to take a per-monitor scope chip.
+ * former Scrolling → View leaf is gone. Which way the strip runs is the Strip
+ * direction card above this one, which moved out to take a per-monitor scope
+ * chip.
  *
  * Most rows bind the appSettings context property, so the card carries no
  * per-page state. App-wide only, matching the tiling/snapping window pages:
@@ -29,11 +29,7 @@ import org.kde.kirigami as Kirigami
 SettingsCard {
     id: root
 
-    readonly property var behaviorBridge: settingsController.scrollingBehaviorPage
-    // Explicit width for the SettingsRow control slot (a plain Row
-    // positioner — Layout.* is ignored there), hoisted the same way and for
-    // the same reason as ScrollingDragInsertCard's.
-    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
+    readonly property var settingsBridge: settingsController.scrollingBehaviorPage
 
     headerText: i18n("Focus and view")
     searchAnchor: "scrollingFocus"
@@ -148,6 +144,16 @@ SettingsCard {
         // SettingsRow's gates, so marking any of them advancedOnly later
         // would silently keep it visible in simple mode. Re-plumb the visible
         // binding if that curation ever happens.
+        // Both lists holding the same chord is legal, and the effect resolves
+        // it the same way every time (focus wins), but the view binding is
+        // then dead and nothing else on the page would say so.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Warning
+            text: i18n("Both scroll keys use the same chord, so the view one never runs. Give them different chords to use both.")
+            visible: root.settingsBridge.wheelTriggersCollide && wheelEnabledSwitch.checked
+        }
+
         SettingsRow {
             title: i18n("Scroll key for column focus")
             searchAnchor: "wheelFocusTriggers"
@@ -156,7 +162,7 @@ SettingsCard {
             visible: true
 
             ModifierAndMouseCheckBoxes {
-                width: root.triggerPreferredWidth
+                width: TriggerLabels.editorPreferredWidth
                 // Modifiers only, matching the "scroll key" these rows are
                 // named for. The exact matcher compares buttons as a SUBSET
                 // even though it compares modifiers exactly, so a
@@ -167,11 +173,11 @@ SettingsCard {
                 // either.
                 acceptMode: acceptModeMetaOnly
                 accessibleContext: i18nc("@info:accessibility a sentence fragment substituted into 'Remove trigger for %1' and 'Reset %1 to defaults'", "the column focus scroll key")
-                triggers: root.behaviorBridge.scrollingWheelFocusTriggers
-                defaultTriggers: root.behaviorBridge.defaultScrollingWheelFocusTriggers
+                triggers: root.settingsBridge.scrollingWheelFocusTriggers
+                defaultTriggers: root.settingsBridge.defaultScrollingWheelFocusTriggers
                 tooltipEnabled: false
                 onTriggersModified: triggers => {
-                    root.behaviorBridge.scrollingWheelFocusTriggers = triggers;
+                    root.settingsBridge.scrollingWheelFocusTriggers = triggers;
                 }
             }
         }
@@ -184,15 +190,15 @@ SettingsCard {
             visible: true
 
             ModifierAndMouseCheckBoxes {
-                width: root.triggerPreferredWidth
+                width: TriggerLabels.editorPreferredWidth
                 // Modifiers only, for the same reason as the focus row above.
                 acceptMode: acceptModeMetaOnly
                 accessibleContext: i18nc("@info:accessibility a sentence fragment substituted into 'Remove trigger for %1' and 'Reset %1 to defaults'", "the view scroll key")
-                triggers: root.behaviorBridge.scrollingWheelViewTriggers
-                defaultTriggers: root.behaviorBridge.defaultScrollingWheelViewTriggers
+                triggers: root.settingsBridge.scrollingWheelViewTriggers
+                defaultTriggers: root.settingsBridge.defaultScrollingWheelViewTriggers
                 tooltipEnabled: false
                 onTriggersModified: triggers => {
-                    root.behaviorBridge.scrollingWheelViewTriggers = triggers;
+                    root.settingsBridge.scrollingWheelViewTriggers = triggers;
                 }
             }
         }

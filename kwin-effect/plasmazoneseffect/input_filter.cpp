@@ -166,6 +166,12 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     // compositor axis shortcut loses to that binding rather than to us; the
     // chord we do claim never reaches the app underneath, which would
     // otherwise scroll its own content at the same time as the strip.
+    // event->modifiers, NOT modifiersRelevantForGlobalShortcuts, and that is
+    // deliberate rather than an oversight. Verified against KWin 6.x source:
+    // GlobalShortcutFilter::pointerAxis passes `event->modifiers` straight to
+    // processAxis, so this is the same field the chords were matched against
+    // while they were compositor axis shortcuts. Using the other one here
+    // would be a behaviour CHANGE, not a fidelity fix.
     if (TilingHandler* tiling = m_effect->tilingHandler();
         tiling && tiling->handleWheelChord(event->delta, event->orientation, event->modifiers, event->buttons)) {
         // A claimed chord ends whatever ScrollFactor stream was running: the

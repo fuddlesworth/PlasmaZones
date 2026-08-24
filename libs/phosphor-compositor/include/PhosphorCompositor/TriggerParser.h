@@ -24,6 +24,10 @@ struct ParsedTrigger
 {
     int modifier = 0;
     int mouseButton = 0;
+
+    /// Value equality, so a consumer caching a parsed list can tell a real
+    /// settings change from a re-publish of the same one.
+    bool operator==(const ParsedTrigger& other) const = default;
 };
 
 /**
