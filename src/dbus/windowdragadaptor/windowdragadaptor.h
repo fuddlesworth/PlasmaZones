@@ -676,6 +676,27 @@ private:
     bool m_lastLoggedRawInsertHeld = false;
     bool m_zoneSpanToggled = false; // Current toggle state for zone span (toggle mode)
     bool m_prevZoneSpanTriggerHeld = false; // Previous frame's zone span trigger state for edge detection
+    // Hold-mode release grace (resolveHoldGrace in dragactivation.h). The
+    // timestamps sit on m_dragClock, started at beginDrag; -1 means the
+    // trigger has not been physically held during this drag. Activation and
+    // drag-insert keep their own, since the two lists may bind different
+    // buttons and are released at different moments.
+    QElapsedTimer m_dragClock;
+    qint64 m_activationLastHeldMs = -1;
+    qint64 m_dragInsertLastHeldMs = -1;
+    qint64 m_zoneSpanLastHeldMs = -1;
+    // A release followed by no pointer motion delivers no tick once the
+    // grace has run out, so the zone state the release tick preserved would
+    // stand until the drop and a drop long after the grace would still snap.
+    // This single-shot replays the last tick's arguments at expiry so the
+    // clear happens on time. Created lazily like m_dragScrollTimer.
+    QTimer* m_graceExpiryTimer = nullptr;
+    int m_lastTickCursorX = 0;
+    int m_lastTickCursorY = 0;
+    int m_lastTickModifiers = 0;
+    int m_lastTickMouseButtons = 0;
+    void armGraceExpiry(qint64 remainingMs);
+    void stopGraceExpiry();
     // Drag-to-reorder mode is active for the cursor's current ENGINE screen
     // (autotile or scrolling): cached so per-tick dragMoved work (60+ Hz)
     // doesn't re-query settings + engine per cursor update. Seeded at

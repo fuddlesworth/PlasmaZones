@@ -83,6 +83,14 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::outerGapRight() <= ConfigDefaults::outerGapRightMax());
         QVERIFY(ConfigDefaults::adjacentThreshold() >= ConfigDefaults::adjacentThresholdMin());
         QVERIFY(ConfigDefaults::adjacentThreshold() <= ConfigDefaults::adjacentThresholdMax());
+        QVERIFY(ConfigDefaults::dragActivationGraceMs() >= ConfigDefaults::triggerGraceMsMin());
+        QVERIFY(ConfigDefaults::dragActivationGraceMs() <= ConfigDefaults::triggerGraceMsMax());
+        QVERIFY(ConfigDefaults::autotileDragInsertGraceMs() >= ConfigDefaults::triggerGraceMsMin());
+        QVERIFY(ConfigDefaults::autotileDragInsertGraceMs() <= ConfigDefaults::triggerGraceMsMax());
+        QVERIFY(ConfigDefaults::scrollingDragInsertGraceMs() >= ConfigDefaults::triggerGraceMsMin());
+        QVERIFY(ConfigDefaults::scrollingDragInsertGraceMs() <= ConfigDefaults::triggerGraceMsMax());
+        QVERIFY(ConfigDefaults::zoneSpanGraceMs() >= ConfigDefaults::triggerGraceMsMin());
+        QVERIFY(ConfigDefaults::zoneSpanGraceMs() <= ConfigDefaults::triggerGraceMsMax());
         QVERIFY(ConfigDefaults::pollIntervalMs() >= ConfigDefaults::pollIntervalMsMin());
         QVERIFY(ConfigDefaults::pollIntervalMs() <= ConfigDefaults::pollIntervalMsMax());
         QVERIFY(ConfigDefaults::minimumZoneSizePx() >= ConfigDefaults::minimumZoneSizePxMin());

@@ -56,10 +56,41 @@ SettingsCard {
             description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
 
             SettingsSwitch {
+                id: spanToggleSwitch
+
                 checked: appSettings.zoneSpanToggleMode
                 accessibleName: i18n("Zone span toggle mode")
                 onToggled: function (newValue) {
                     appSettings.zoneSpanToggleMode = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {
+            enabled: !spanToggleSwitch.checked
+        }
+
+        SettingsRow {
+            title: i18n("Release grace period")
+            searchAnchor: "zoneSpanReleaseGracePeriod"
+            description: i18n("How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.")
+            enabled: !spanToggleSwitch.checked
+
+            SettingsSpinBox {
+                id: spanGraceSpin
+
+                accessibleName: i18n("Zone span release grace period")
+                from: card.settingsBridge.triggerGraceMsMin
+                to: card.settingsBridge.triggerGraceMsMax
+                stepSize: 10
+                unitText: i18nc("milliseconds unit suffix in a spin box", "ms")
+                onValueModified: value => {
+                    return appSettings.zoneSpanGraceMs = value;
+                }
+                Binding on value {
+                    value: appSettings.zoneSpanGraceMs
+                    when: !spanGraceSpin.editing
+                    restoreMode: Binding.RestoreNone
                 }
             }
         }

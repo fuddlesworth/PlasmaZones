@@ -76,10 +76,47 @@ SettingsFlickable {
                     description: activeDescription
 
                     SettingsSwitch {
+                        id: toggleActivationSwitch
+
                         checked: appSettings.toggleActivation
                         accessibleName: i18n("Toggle mode")
                         onToggled: function (newValue) {
                             appSettings.toggleActivation = newValue;
+                        }
+                    }
+                }
+
+                // Hold mode only: toggle mode has no release to extend, and
+                // with "Activate on every drag" the trigger deactivates
+                // while held, where a grace would prolong the suppression.
+                SettingsSeparator {
+                    enabled: !alwaysActivateSwitch.checked && !toggleActivationSwitch.checked
+                }
+
+                SettingsRow {
+                    title: i18n("Release grace period")
+                    searchAnchor: "releaseGracePeriod"
+                    description: i18n("How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+                    enabled: !alwaysActivateSwitch.checked && !toggleActivationSwitch.checked
+
+                    SettingsSpinBox {
+                        id: activationGraceSpin
+
+                        accessibleName: i18n("Release grace period")
+                        from: root.settingsBridge.triggerGraceMsMin
+                        to: root.settingsBridge.triggerGraceMsMax
+                        stepSize: 10
+                        unitText: i18nc("milliseconds unit suffix in a spin box", "ms")
+                        onValueModified: value => {
+                            return appSettings.dragActivationGraceMs = value;
+                        }
+                        // Guarded Binding for the same reason as the zone span
+                        // card's edge threshold: a plain value binding is
+                        // destroyed by the control's own edit echo.
+                        Binding on value {
+                            value: appSettings.dragActivationGraceMs
+                            when: !activationGraceSpin.editing
+                            restoreMode: Binding.RestoreNone
                         }
                     }
                 }

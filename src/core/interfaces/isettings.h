@@ -150,6 +150,8 @@ public:
     virtual void setAutotileDragInsertTriggers(const QVariantList& triggers) = 0;
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
+    virtual int autotileDragInsertGraceMs() const = 0;
+    virtual void setAutotileDragInsertGraceMs(int ms) = 0;
 
     // Scrolling twins: hold-to-activate list for live re-inserting a dragged
     // window into the scroll strip (WindowDragAdaptor reads them per drag,
@@ -158,6 +160,8 @@ public:
     virtual void setScrollingDragInsertTriggers(const QVariantList& triggers) = 0;
     virtual bool scrollingDragInsertToggle() const = 0;
     virtual void setScrollingDragInsertToggle(bool enable) = 0;
+    virtual int scrollingDragInsertGraceMs() const = 0;
+    virtual void setScrollingDragInsertGraceMs(int ms) = 0;
 
     // Per-algorithm autotile settings map. Settings inherits from
     // PhosphorEngine::IAutotileSettings (which also declares these),
@@ -675,13 +679,17 @@ Q_SIGNALS:
     void dragActivationTriggersChanged();
     void autotileDragInsertTriggersChanged();
     void autotileDragInsertToggleChanged();
+    void autotileDragInsertGraceMsChanged();
     void scrollingDragInsertTriggersChanged();
     void scrollingDragInsertToggleChanged();
+    void scrollingDragInsertGraceMsChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
     void zoneSpanToggleModeChanged();
+    void zoneSpanGraceMsChanged();
     void toggleActivationChanged();
+    void dragActivationGraceMsChanged();
     void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
     // The per-mode disable signals carry the mode that flipped so listeners can

@@ -189,6 +189,32 @@ public:
         Q_EMIT toggleActivationChanged();
         Q_EMIT settingsChanged();
     }
+    int zoneSpanGraceMs() const override
+    {
+        return m_zoneSpanGraceMs;
+    }
+    void setZoneSpanGraceMs(int value) override
+    {
+        if (m_zoneSpanGraceMs == value) {
+            return;
+        }
+        m_zoneSpanGraceMs = value;
+        Q_EMIT zoneSpanGraceMsChanged();
+        Q_EMIT settingsChanged();
+    }
+    int dragActivationGraceMs() const override
+    {
+        return m_dragActivationGraceMs;
+    }
+    void setDragActivationGraceMs(int value) override
+    {
+        if (m_dragActivationGraceMs == value) {
+            return;
+        }
+        m_dragActivationGraceMs = value;
+        Q_EMIT dragActivationGraceMsChanged();
+        Q_EMIT settingsChanged();
+    }
 
     // IZoneVisualizationSettings
     bool showZonesOnAllMonitors() const override
@@ -2224,6 +2250,19 @@ public:
         Q_EMIT autotileDragInsertToggleChanged();
         Q_EMIT settingsChanged();
     }
+    int autotileDragInsertGraceMs() const override
+    {
+        return m_autotileDragInsertGraceMs;
+    }
+    void setAutotileDragInsertGraceMs(int value) override
+    {
+        if (m_autotileDragInsertGraceMs == value) {
+            return;
+        }
+        m_autotileDragInsertGraceMs = value;
+        Q_EMIT autotileDragInsertGraceMsChanged();
+        Q_EMIT settingsChanged();
+    }
     QVariantList scrollingDragInsertTriggers() const override
     {
         return m_scrollingDragInsertTriggers;
@@ -2248,6 +2287,19 @@ public:
         }
         m_scrollingDragInsertToggle = value;
         Q_EMIT scrollingDragInsertToggleChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingDragInsertGraceMs() const override
+    {
+        return m_scrollingDragInsertGraceMs;
+    }
+    void setScrollingDragInsertGraceMs(int value) override
+    {
+        if (m_scrollingDragInsertGraceMs == value) {
+            return;
+        }
+        m_scrollingDragInsertGraceMs = value;
+        Q_EMIT scrollingDragInsertGraceMsChanged();
         Q_EMIT settingsChanged();
     }
     QVariantMap autotilePerAlgorithmSettings() const override
@@ -2898,7 +2950,9 @@ private:
     bool m_audioReverse = ConfigDefaults::audioReverse();
     bool m_audioWaves = ConfigDefaults::audioWaves();
     bool m_autotileDragInsertToggle = ConfigDefaults::autotileDragInsertToggle();
+    int m_autotileDragInsertGraceMs = ConfigDefaults::autotileDragInsertGraceMs();
     bool m_scrollingDragInsertToggle = ConfigDefaults::scrollingDragInsertToggle();
+    int m_scrollingDragInsertGraceMs = ConfigDefaults::scrollingDragInsertGraceMs();
     bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
     bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
     bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
@@ -2917,6 +2971,8 @@ private:
     bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
     bool m_toggleActivation = ConfigDefaults::toggleActivation();
+    int m_dragActivationGraceMs = ConfigDefaults::dragActivationGraceMs();
+    int m_zoneSpanGraceMs = ConfigDefaults::zoneSpanGraceMs();
     bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
     bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
     bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();

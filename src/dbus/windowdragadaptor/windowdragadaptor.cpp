@@ -7,6 +7,7 @@
 #include <QScreen>
 #include <QTimer>
 #include <algorithm>
+#include <limits>
 #include <array>
 #include <cmath>
 #include <optional>
@@ -339,6 +340,42 @@ void WindowDragAdaptor::stopDragScrollTimer()
     }
     m_dragScrollWindowId.clear();
     m_dragScrollElapsed.invalidate();
+}
+
+void WindowDragAdaptor::armGraceExpiry(qint64 remainingMs)
+{
+    if (!m_graceExpiryTimer) {
+        m_graceExpiryTimer = new QTimer(this);
+        m_graceExpiryTimer->setSingleShot(true);
+        m_graceExpiryTimer->setTimerType(Qt::PreciseTimer);
+        connect(m_graceExpiryTimer, &QTimer::timeout, this, [this]() {
+            // Replay the last tick with its own inputs. The trigger is still
+            // released in them, and the grace has run out by now, so the
+            // replay takes the release arm the original tick deferred. A
+            // finished drag has no window id and the replay is a no-op.
+            if (m_draggedWindowId.isEmpty()) {
+                return;
+            }
+            dragMoved(m_draggedWindowId, m_lastTickCursorX, m_lastTickCursorY, m_lastTickModifiers,
+                      m_lastTickMouseButtons);
+        });
+    }
+    // One past the deadline so the replay evaluates strictly after the
+    // grace, not on its last millisecond.
+    const int dueMs =
+        static_cast<int>(qBound<qint64>(qint64(1), remainingMs + 1, qint64(std::numeric_limits<int>::max())));
+    // Two families (activation, drag-insert) share the timer; the earlier
+    // deadline wins and the later one re-arms from its own replay tick.
+    if (!m_graceExpiryTimer->isActive() || m_graceExpiryTimer->remainingTime() > dueMs) {
+        m_graceExpiryTimer->start(dueMs);
+    }
+}
+
+void WindowDragAdaptor::stopGraceExpiry()
+{
+    if (m_graceExpiryTimer) {
+        m_graceExpiryTimer->stop();
+    }
 }
 
 void WindowDragAdaptor::advanceDragScroll()

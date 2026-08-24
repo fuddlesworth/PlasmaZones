@@ -873,6 +873,11 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
+        {CD::releaseGraceMsKey(),
+         CD::dragActivationGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
         {CD::focusNewWindowsKey(), CD::snappingFocusNewWindows(), QMetaType::Bool},
         {CD::focusFollowsMouseKey(), CD::snappingFocusFollowsMouse(), QMetaType::Bool},
     };
@@ -909,6 +914,11 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(DragModifier::CtrlAltMeta), "ctrlAltMeta"_L1}})},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
+        {CD::releaseGraceMsKey(),
+         CD::zoneSpanGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 }
 
@@ -1040,6 +1050,11 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::lockedScreensKey(), CD::autotileLockedScreens(), QMetaType::QString, {}, canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
+        {CD::releaseGraceMsKey(),
+         CD::autotileDragInsertGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 
     // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. The shared

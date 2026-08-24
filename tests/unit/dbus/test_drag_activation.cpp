@@ -161,6 +161,63 @@ private Q_SLOTS:
         QVERIFY(!inverted.active); // latch=true in always-active mode → overlay off
         QVERIFY(inverted.nextActivationToggled); // latch unchanged
     }
+
+    // ─── Hold-mode release grace (resolveHoldGrace) ───────────────────────
+
+    void grace_rawHeld_stampsNow()
+    {
+        const auto g = resolveHoldGrace(/*rawHeld=*/true, /*nowMs=*/1000, /*lastHeldMs=*/-1, /*graceMs=*/150);
+        QVERIFY(g.held);
+        QCOMPARE(g.nextLastHeldMs, 1000);
+        QCOMPARE(g.remainingMs, 0);
+    }
+
+    void grace_releasedInsideWindow_staysHeld()
+    {
+        const auto g = resolveHoldGrace(false, 1100, 1000, 150);
+        QVERIFY(g.held);
+        QCOMPARE(g.nextLastHeldMs, 1000); // stamp is not refreshed by a grace tick
+        QCOMPARE(g.remainingMs, 50);
+    }
+
+    void grace_releasedAtBoundary_staysHeld()
+    {
+        const auto g = resolveHoldGrace(false, 1150, 1000, 150);
+        QVERIFY(g.held);
+        QCOMPARE(g.remainingMs, 0);
+    }
+
+    void grace_releasedPastWindow_released()
+    {
+        const auto g = resolveHoldGrace(false, 1151, 1000, 150);
+        QVERIFY(!g.held);
+        QCOMPARE(g.nextLastHeldMs, 1000);
+    }
+
+    void grace_zero_isRaw()
+    {
+        // A zero grace is the off switch: the tick right after release reads
+        // released, whatever the stamp says.
+        const auto g = resolveHoldGrace(false, 1001, 1000, 0);
+        QVERIFY(!g.held);
+    }
+
+    void grace_neverHeld_released()
+    {
+        // No physically-held tick this drag: nothing to extend, however
+        // large the grace.
+        const auto g = resolveHoldGrace(false, 5, -1, 1000);
+        QVERIFY(!g.held);
+        QCOMPARE(g.nextLastHeldMs, -1);
+    }
+
+    void grace_clockWentBackwards_released()
+    {
+        // A stamp from the future (clock restarted by a new drag without the
+        // stamp being re-seeded) must fail closed, not extend forever.
+        const auto g = resolveHoldGrace(false, 10, 500, 150);
+        QVERIFY(!g.held);
+    }
 };
 
 QTEST_MAIN(TestDragActivation)

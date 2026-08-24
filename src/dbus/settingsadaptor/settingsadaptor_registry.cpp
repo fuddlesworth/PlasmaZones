@@ -256,6 +256,7 @@ void SettingsAdaptor::initializeRegistry()
     m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+    REGISTER_INT_SETTING("dragActivationGraceMs", dragActivationGraceMs, setDragActivationGraceMs)
 
     // Display settings
     REGISTER_BOOL_SETTING("showZonesOnAllMonitors", showZonesOnAllMonitors, setShowZonesOnAllMonitors)

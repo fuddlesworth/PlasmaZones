@@ -82,10 +82,41 @@ SettingsCard {
             enabled: !alwaysReinsertSwitch.checked
 
             SettingsSwitch {
+                id: insertToggleSwitch
+
                 checked: appSettings.scrollingDragInsertToggle
                 accessibleName: i18n("Toggle mode for re-insert into strip")
                 onToggled: function (newValue) {
                     appSettings.scrollingDragInsertToggle = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {
+            enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+        }
+
+        SettingsRow {
+            title: i18n("Release grace period")
+            searchAnchor: "scrollingReleaseGracePeriod"
+            description: i18n("How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+            enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+
+            SettingsSpinBox {
+                id: insertGraceSpin
+
+                accessibleName: i18n("Release grace period for re-insert into strip")
+                from: root.settingsBridge.triggerGraceMsMin
+                to: root.settingsBridge.triggerGraceMsMax
+                stepSize: 10
+                unitText: i18nc("milliseconds unit suffix in a spin box", "ms")
+                onValueModified: value => {
+                    return appSettings.scrollingDragInsertGraceMs = value;
+                }
+                Binding on value {
+                    value: appSettings.scrollingDragInsertGraceMs
+                    when: !insertGraceSpin.editing
+                    restoreMode: Binding.RestoreNone
                 }
             }
         }

@@ -33,6 +33,8 @@ class TilingBehaviorController : public PhosphorControl::PageController
     Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMin READ triggerGraceMsMin CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMax READ triggerGraceMsMax CONSTANT)
 
 public:
     explicit TilingBehaviorController(ISettings& settings, QObject* parent = nullptr);
@@ -51,6 +53,8 @@ public:
     bool alwaysReinsertIntoStack() const;
     QVariantList autotileDragInsertTriggers() const;
     QVariantList defaultAutotileDragInsertTriggers() const;
+    int triggerGraceMsMin() const;
+    int triggerGraceMsMax() const;
 
     void setAlwaysReinsertIntoStack(bool enabled);
     void setAutotileDragInsertTriggers(const QVariantList& triggers);

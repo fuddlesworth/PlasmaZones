@@ -58,6 +58,26 @@ public:
     {
         return false;
     }
+    // Hold-mode release grace, one per placement mode that has a trigger
+    // list with a toggle mode (snapping activation, the two engines'
+    // drag re-insert). A mouse-button trigger is released by the same hand
+    // that drops the window, so the button often lifts a few milliseconds
+    // before the drop. The trigger keeps reading as held for this long
+    // after its last physically-held tick, so that drop still snaps. Only
+    // hold mode uses it (toggle mode has no release to extend), and 0
+    // turns it off. The range is shared by all three.
+    static int dragActivationGraceMs()
+    {
+        return 150;
+    }
+    static constexpr int triggerGraceMsMin()
+    {
+        return 0;
+    }
+    static constexpr int triggerGraceMsMax()
+    {
+        return 1000;
+    }
     static bool snappingEnabled()
     {
         return true;
@@ -78,6 +98,10 @@ public:
     {
         return false;
     }
+    static int zoneSpanGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
     static QVariantList autotileDragInsertTriggers()
     {
         // Held while dragging a window to dynamically insert it into the
@@ -87,6 +111,10 @@ public:
     static bool autotileDragInsertToggle()
     {
         return false;
+    }
+    static int autotileDragInsertGraceMs()
+    {
+        return dragActivationGraceMs();
     }
     // Scrolling twins of the autotile drag-insert pair (stored under
     // Scrolling.Behavior with the same generic Triggers/ToggleActivation
@@ -100,6 +128,10 @@ public:
     static bool scrollingDragInsertToggle()
     {
         return false;
+    }
+    static int scrollingDragInsertGraceMs()
+    {
+        return dragActivationGraceMs();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

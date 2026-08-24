@@ -137,4 +137,14 @@ int SnappingBehaviorController::adjacentThresholdMax() const
     return ConfigDefaults::adjacentThresholdMax();
 }
 
+int SnappingBehaviorController::triggerGraceMsMin() const
+{
+    return ConfigDefaults::triggerGraceMsMin();
+}
+
+int SnappingBehaviorController::triggerGraceMsMax() const
+{
+    return ConfigDefaults::triggerGraceMsMax();
+}
+
 } // namespace PlasmaZones

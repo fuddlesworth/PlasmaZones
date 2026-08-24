@@ -40,4 +40,25 @@ ActivationDecision resolveActivationActive(bool triggerHeld, bool toggleMode, bo
     return out;
 }
 
+HoldGraceDecision resolveHoldGrace(bool rawHeld, qint64 nowMs, qint64 lastHeldMs, int graceMs)
+{
+    HoldGraceDecision out;
+    if (rawHeld) {
+        out.held = true;
+        out.nextLastHeldMs = nowMs;
+        return out;
+    }
+    out.nextLastHeldMs = lastHeldMs;
+    if (graceMs <= 0 || lastHeldMs < 0) {
+        return out;
+    }
+    const qint64 elapsed = nowMs - lastHeldMs;
+    if (elapsed < 0 || elapsed > graceMs) {
+        return out;
+    }
+    out.held = true;
+    out.remainingMs = graceMs - elapsed;
+    return out;
+}
+
 } // namespace PlasmaZones

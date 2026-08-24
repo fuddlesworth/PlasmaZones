@@ -109,6 +109,7 @@ void SettingsAdaptor::initializeRegistrySnapping()
     m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
+    REGISTER_INT_SETTING("zoneSpanGraceMs", zoneSpanGraceMs, setZoneSpanGraceMs)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Zone settings. The shared inner/outer gaps have NO SETTERS here: they are

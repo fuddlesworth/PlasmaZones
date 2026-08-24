@@ -85,6 +85,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_lastLoggedActivationActive = false;
+    // A pending grace replay must not fire into the next drag (or into no
+    // drag at all); the timestamps themselves are re-seeded by beginDrag.
+    stopGraceExpiry();
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
@@ -563,6 +566,17 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         return;
     }
 
+    // Kept for the grace-expiry replay (see armGraceExpiry), which re-runs
+    // this tick's inputs once the release grace has run out.
+    m_lastTickCursorX = cursorX;
+    m_lastTickCursorY = cursorY;
+    m_lastTickModifiers = modifiers;
+    m_lastTickMouseButtons = mouseButtons;
+    // beginDrag starts the clock before any tick can arrive; the guard only
+    // keeps a tick on an unstarted clock (nothing legitimate) from reading
+    // an undefined elapsed value.
+    const qint64 nowMs = m_dragClock.isValid() ? m_dragClock.elapsed() : 0;
+
     // Parse modifiers early — needed for both retrigger check and normal processing.
     // KWin Effect provides modifiers via the mouseChanged signal.
     Qt::KeyboardModifiers mods;
@@ -589,7 +603,39 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // would never show. The non-sentinel entries serve double duty: they
     // activate the overlay when always-active is off, and deactivate it
     // (hold or toggle) when always-active is on (#249).
-    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+    const bool rawTriggerHeld =
+        anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+
+    // Hold-mode release grace: a mouse-button trigger lifts a few
+    // milliseconds before the drop when the same hand releases both, and
+    // that release tick used to clear the zone state the drop reads. Keep
+    // the trigger reading as held for the configured grace after its last
+    // physically-held tick. Plain hold mode only: toggle mode has no release
+    // to extend, and the always-active inversion (#249) makes the trigger a
+    // deactivate-while-held, where a grace would prolong the suppression the
+    // user just ended. Off in those modes the resolver still tracks the
+    // last-held stamp (grace 0) so a later mode read starts from fresh data.
+    const bool activationHoldMode = m_settings && !m_settings->toggleActivation() && !alwaysActiveOnDrag;
+    const HoldGraceDecision activationGrace = resolveHoldGrace(
+        rawTriggerHeld, nowMs, m_activationLastHeldMs, activationHoldMode ? m_settings->dragActivationGraceMs() : 0);
+    m_activationLastHeldMs = activationGrace.nextLastHeldMs;
+    const bool triggerHeld = activationGrace.held;
+    if (triggerHeld && !rawTriggerHeld) {
+        armGraceExpiry(activationGrace.remainingMs);
+    }
+
+    // Zone span trigger, resolved once here for both the drag-insert
+    // keep-alive arm and the main span read below, with the same hold-mode
+    // grace. The sentinel is excluded for the reason given at the main read.
+    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+    const bool zoneSpanHoldMode = m_settings && !m_settings->zoneSpanToggleMode();
+    const HoldGraceDecision zoneSpanGrace = resolveHoldGrace(rawZoneSpanHeld, nowMs, m_zoneSpanLastHeldMs,
+                                                             zoneSpanHoldMode ? m_settings->zoneSpanGraceMs() : 0);
+    m_zoneSpanLastHeldMs = zoneSpanGrace.nextLastHeldMs;
+    const bool zoneSpanHeld = zoneSpanGrace.held;
+    if (zoneSpanHeld && !rawZoneSpanHeld) {
+        armGraceExpiry(zoneSpanGrace.remainingMs);
+    }
 
     // ── Drag-insert preview (runs even when m_snapCancelled) ────────────────
     // This block is intentionally ABOVE the snap-cancelled early return because
@@ -627,13 +673,31 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         bool insertHeld;
         const bool toggleMode = insertEngine
             && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
+        // Hold-mode release grace, the drag-insert twin of the activation
+        // grace above, on the grace setting of the engine owning the cursor
+        // screen. Off any engine screen the stamp is dropped rather than
+        // kept: rawInsertHeld is false there by construction, and a return
+        // to an engine screen inside the window must not read as held
+        // without a physical press (the leave already cancelled the preview).
+        if (!insertEngine) {
+            m_dragInsertLastHeldMs = -1;
+        }
+        const int insertGraceMs = (insertEngine && !toggleMode)
+            ? (onScrollingScreen ? m_settings->scrollingDragInsertGraceMs() : m_settings->autotileDragInsertGraceMs())
+            : 0;
+        const HoldGraceDecision insertGrace =
+            resolveHoldGrace(rawInsertHeld, nowMs, m_dragInsertLastHeldMs, insertGraceMs);
+        m_dragInsertLastHeldMs = insertGrace.nextLastHeldMs;
+        if (insertGrace.held && !rawInsertHeld) {
+            armGraceExpiry(insertGrace.remainingMs);
+        }
         if (toggleMode) {
             if (rawInsertHeld && !m_prevDragInsertHeld) {
                 m_dragInsertToggled = !m_dragInsertToggled;
             }
             insertHeld = m_dragInsertToggled;
         } else {
-            insertHeld = rawInsertHeld;
+            insertHeld = insertGrace.held;
         }
         // The shared rising-edge latch follows the raw state on EVERY
         // engine-screen tick, not only in toggle mode: the toggle SETTING is
@@ -854,10 +918,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                             m_prevTriggerHeld, m_activationToggled);
                 m_prevTriggerHeld = actKeepAlive.nextPrevTriggerHeld;
                 m_activationToggled = actKeepAlive.nextActivationToggled;
-                const bool rawSpanKeepAlive =
-                    anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
                 const ActivationDecision spanKeepAlive =
-                    resolveActivationActive(rawSpanKeepAlive, m_settings->zoneSpanToggleMode(),
+                    resolveActivationActive(zoneSpanHeld, m_settings->zoneSpanToggleMode(),
                                             /*alwaysActiveOnDrag=*/false, m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
                 m_prevZoneSpanTriggerHeld = spanKeepAlive.nextPrevTriggerHeld;
                 m_zoneSpanToggled = spanKeepAlive.nextActivationToggled;
@@ -928,7 +990,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     if (activationActive != m_lastLoggedActivationActive) {
         qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
                              << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
-                             << "triggerHeld=" << triggerHeld << "alwaysActive=" << alwaysActiveOnDrag
+                             << "triggerHeld=" << triggerHeld << "rawHeld=" << rawTriggerHeld
+                             << "alwaysActive=" << alwaysActiveOnDrag
                              << "toggleActivation=" << m_settings->toggleActivation();
         m_lastLoggedActivationActive = activationActive;
     }
@@ -963,9 +1026,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // for the whole drag. The latch is evaluated every tick (not just when
     // the overlay is active) so a release→press while the overlay is off is
     // still seen on the next active tick.
-    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
     const ActivationDecision zoneSpanDecision =
-        resolveActivationActive(rawZoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
+        resolveActivationActive(zoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
                                 m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
     m_prevZoneSpanTriggerHeld = zoneSpanDecision.nextPrevTriggerHeld;
     m_zoneSpanToggled = zoneSpanDecision.nextActivationToggled;

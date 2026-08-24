@@ -164,8 +164,13 @@ public:
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
     virtual bool zoneSpanToggleMode() const = 0;
     virtual void setZoneSpanToggleMode(bool enable) = 0;
+    virtual int zoneSpanGraceMs() const = 0;
+    virtual void setZoneSpanGraceMs(int ms) = 0;
     virtual bool toggleActivation() const = 0;
     virtual void setToggleActivation(bool enable) = 0;
+    // Hold-mode release grace in ms (see ConfigDefaults::dragActivationGraceMs).
+    virtual int dragActivationGraceMs() const = 0;
+    virtual void setDragActivationGraceMs(int ms) = 0;
     virtual bool snappingEnabled() const = 0;
     virtual void setSnappingEnabled(bool enabled) = 0;
 };

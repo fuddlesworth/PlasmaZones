@@ -219,6 +219,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
     m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
+    REGISTER_INT_SETTING("scrollingDragInsertGraceMs", scrollingDragInsertGraceMs, setScrollingDragInsertGraceMs)
 
     // The template priority order (IOrderingSettings) — the scrolling member
     // of the ordering family. The snapping and tiling orders are not on the

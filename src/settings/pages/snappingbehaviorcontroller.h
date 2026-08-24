@@ -53,6 +53,8 @@ class SnappingBehaviorController : public PhosphorControl::PageController
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
     Q_PROPERTY(int adjacentThresholdMin READ adjacentThresholdMin CONSTANT)
     Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMin READ triggerGraceMsMin CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMax READ triggerGraceMsMax CONSTANT)
 
 public:
     explicit SnappingBehaviorController(ISettings& settings, QObject* parent = nullptr);
@@ -83,6 +85,8 @@ public:
 
     int adjacentThresholdMin() const;
     int adjacentThresholdMax() const;
+    int triggerGraceMsMin() const;
+    int triggerGraceMsMax() const;
 
 Q_SIGNALS:
     void alwaysActivateOnDragChanged();

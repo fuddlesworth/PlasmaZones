@@ -540,6 +540,9 @@ void Settings::setScrollingDragInsertTriggers(const QVariantList& triggers)
 P_STORE_GET(bool, scrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setScrollingDragInsertToggle, scrollingBehaviorGroup, toggleActivationKey,
                  scrollingDragInsertToggleChanged)
+P_STORE_GET(int, scrollingDragInsertGraceMs, scrollingBehaviorGroup, releaseGraceMsKey, int)
+P_STORE_SET_INT(setScrollingDragInsertGraceMs, scrollingBehaviorGroup, releaseGraceMsKey,
+                scrollingDragInsertGraceMsChanged)
 
 P_STORE_GET(int, scrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, int)
 P_STORE_SET_INT(setScrollingInsertPosition, scrollingBehaviorGroup, insertPositionKey, scrollingInsertPositionChanged)

@@ -60,6 +60,16 @@ QVariantList ScrollingBehaviorController::defaultScrollingDragInsertTriggers() c
     return TriggerUtils::convertTriggersForQml(ConfigDefaults::scrollingDragInsertTriggers());
 }
 
+int ScrollingBehaviorController::triggerGraceMsMin() const
+{
+    return ConfigDefaults::triggerGraceMsMin();
+}
+
+int ScrollingBehaviorController::triggerGraceMsMax() const
+{
+    return ConfigDefaults::triggerGraceMsMax();
+}
+
 void ScrollingBehaviorController::setAlwaysReinsertIntoStrip(bool enabled)
 {
     if (alwaysReinsertIntoStrip() == enabled) {
