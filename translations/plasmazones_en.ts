@@ -652,7 +652,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="149"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="620"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="623"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
@@ -1353,44 +1353,44 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="364"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="367"/>
         <source>Layout Locked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="378"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="381"/>
         <source>Layout Unlocked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="457"/>
         <source>Disabled on this monitor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="465"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="468"/>
         <source>Desktop %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="478"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="470"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="481"/>
         <source>Disabled on %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="476"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="479"/>
         <source>Disabled on this activity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="506"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="509"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="673"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="676"/>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
@@ -1407,7 +1407,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="337"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="340"/>
         <source>Layout: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1548,7 +1548,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="739"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="742"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation type="unfinished"></translation>
@@ -18267,12 +18267,14 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1111"/>
-        <source>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</source>
+        <source>This screen uses no template, so columns follow the built-in width and height steps.</source>
+        <oldsource>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1113"/>
-        <source>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</source>
+        <source>This screen uses the %1 template, which sets its starting columns and the width and height presets.</source>
+        <oldsource>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -18305,17 +18307,19 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</source>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout. Windows are numbered in order, and Snap to Zone reaches the first nine.</source>
+        <oldsource>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1115"/>
-        <source>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</source>
+        <source>This screen is pinned to a template no longer in your list, so columns follow the built-in width and height steps.</source>
+        <oldsource>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -18325,18 +18329,19 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1126"/>
-        <source>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</source>
-        <oldsource>This screen has no template of its own, so it follows the default template from the Layouts page.</oldsource>
+        <source>This screen has no template of its own, so it follows the default from Scrolling → Templates.</source>
+        <oldsource>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
-        <source>Every starting column is in use, so further columns open at the template&apos;s own width and display.</source>
+        <source>Every starting column is in use, so new columns open at the template&apos;s own width.</source>
+        <oldsource>Every starting column is in use, so further columns open at the template&apos;s own width and display.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
-        <source>This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.</source>
+        <source>This screen has used %1 of %2 starting columns, and the rest shape the next ones you open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

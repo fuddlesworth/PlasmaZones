@@ -6,12 +6,12 @@
     <message>
         <location filename="../libs/phosphor-control/qml/AboutPageShell.qml" line="79"/>
         <source>About %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Om %1</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/AboutPageShell.qml" line="79"/>
         <source>About</source>
-        <translation type="unfinished">Om</translation>
+        <translation>Om</translation>
     </message>
 </context>
 <context>
@@ -19,37 +19,37 @@
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="36"/>
         <source>Discard unsaved changes?</source>
-        <translation type="unfinished">Förkasta osparade ändringar?</translation>
+        <translation>Förkasta ändringar som inte sparats?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
         <source>You have unsaved settings. Apply them now, or close without saving?</source>
-        <translation type="unfinished"></translation>
+        <translation>Du har inställningar som inte sparats. Vill du tillämpa dem nu eller stänga utan att spara?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
         <source>You have unsaved settings. Closing now will discard them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Du har inställningar som inte sparats. Om du stänger nu går de förlorade.</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="52"/>
         <source>Apply</source>
-        <translation type="unfinished">Verkställ</translation>
+        <translation>Tillämpa</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="67"/>
         <source>Discard</source>
-        <translation type="unfinished">Förkasta</translation>
+        <translation>Förkasta</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="81"/>
         <source>Cancel</source>
-        <translation type="unfinished">Avbryt</translation>
+        <translation>Avbryt</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="81"/>
         <source>Keep Editing</source>
-        <translation type="unfinished"></translation>
+        <translation>Fortsätt redigera</translation>
     </message>
 </context>
 <context>
@@ -57,7 +57,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/PageHost.qml" line="281"/>
         <source>Select a page from the sidebar</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj en sida i sidopanelen</translation>
     </message>
 </context>
 <context>
@@ -66,7 +66,7 @@
         <location filename="../libs/phosphor-control/qml/PageLoadingIndicator.qml" line="28"/>
         <location filename="../libs/phosphor-control/qml/PageLoadingIndicator.qml" line="70"/>
         <source>Loading…</source>
-        <translation type="unfinished"></translation>
+        <translation>Läser in…</translation>
     </message>
 </context>
 <context>
@@ -74,17 +74,17 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="142"/>
         <source>Settings</source>
-        <translation type="unfinished">Inställningar</translation>
+        <translation>Inställningar</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="553"/>
         <source>Back</source>
-        <translation type="unfinished">Bakåt</translation>
+        <translation>Bakåt</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SettingsAppWindow.qml" line="567"/>
         <source>Forward</source>
-        <translation type="unfinished">Framåt</translation>
+        <translation>Framåt</translation>
     </message>
 </context>
 <context>
@@ -92,7 +92,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/Sidebar.qml" line="563"/>
         <source>Search...</source>
-        <translation type="unfinished"></translation>
+        <translation>Sök…</translation>
     </message>
 </context>
 <context>
@@ -100,13 +100,13 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
         <source>Back to %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Tillbaka till %1</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="88"/>
         <source>Back</source>
-        <translation type="unfinished">Bakåt</translation>
+        <translation>Bakåt</translation>
     </message>
 </context>
 <context>
@@ -114,12 +114,12 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
         <source>%1 section, expanded</source>
-        <translation type="unfinished"></translation>
+        <translation>Avsnitt %1, expanderat</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
         <source>%1 section, collapsed</source>
-        <translation type="unfinished"></translation>
+        <translation>Avsnitt %1, hopfällt</translation>
     </message>
 </context>
 <context>
@@ -127,53 +127,53 @@
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="173"/>
         <source>Unsaved changes</source>
-        <translation type="unfinished">Osparade ändringar</translation>
+        <translation>Ändringar som inte sparats</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
         <source>Discarding…</source>
-        <translation type="unfinished"></translation>
+        <translation>Förkastar…</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="245"/>
         <source>Discard</source>
-        <translation type="unfinished">Förkasta</translation>
+        <translation>Förkasta</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="187"/>
         <source>Discard changes</source>
-        <translation type="unfinished"></translation>
+        <translation>Förkasta ändringar</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="196"/>
         <source>Saving…</source>
-        <translation type="unfinished"></translation>
+        <translation>Sparar…</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="196"/>
         <source>Save</source>
-        <translation type="unfinished">Spara</translation>
+        <translation>Spara</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="200"/>
         <source>Save settings</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara inställningar</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="240"/>
         <source>Discard Changes</source>
-        <translation type="unfinished"></translation>
+        <translation>Förkasta ändringar</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="241"/>
         <source>Are you sure you want to discard all unsaved changes?</source>
-        <translation type="unfinished"></translation>
+        <translation>Vill du förkasta alla ändringar som inte sparats?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="254"/>
         <source>Cancel</source>
-        <translation type="unfinished">Avbryt</translation>
+        <translation>Avbryt</translation>
     </message>
 </context>
 <context>
@@ -181,47 +181,47 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="43"/>
         <source>PlasmaZones</source>
-        <translation type="unfinished">PlasmaZones</translation>
+        <translation>PlasmaZones</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="49"/>
         <source>Version %1</source>
-        <translation type="unfinished">Version %1</translation>
+        <translation>Version %1</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="49"/>
         <source>Version unknown</source>
-        <translation type="unfinished">Okänd version</translation>
+        <translation>Okänd version</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="59"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterfästning, panelläggning och rullning för Wayland-kompositorer</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="72"/>
         <source>Open PlasmaZones Settings</source>
-        <translation type="unfinished">Öppna PlasmaZones-inställningar</translation>
+        <translation>Öppna PlasmaZones-inställningar</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="83"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation type="unfinished"></translation>
+        <translation>Ställ in zoner, panelläggning, rullning, utseende, kortkommandon med mera</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="100"/>
         <source>GitHub</source>
-        <translation type="unfinished">GitHub</translation>
+        <translation>GitHub</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="107"/>
         <source>Report Bug</source>
-        <translation type="unfinished">Rapportera fel</translation>
+        <translation>Rapportera fel</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="114"/>
         <source>Documentation</source>
-        <translation type="unfinished">Dokumentation</translation>
+        <translation>Dokumentation</translation>
     </message>
 </context>
 <context>
@@ -336,7 +336,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
         <source>Switch Focus Between Floating and Placed Windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Växla fokus mellan flytande och placerade fönster</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="163"/>
@@ -501,42 +501,42 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Consume or Expel Toward the Strip Start</source>
-        <translation type="unfinished"></translation>
+        <translation>Uppta eller mata ut mot remsans början</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="354"/>
         <source>Consume or Expel Toward the Strip End</source>
-        <translation type="unfinished"></translation>
+        <translation>Uppta eller mata ut mot remsans slut</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
         <source>Focus First Window in Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera första fönstret i kolumnen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="446"/>
         <source>Focus Last Window in Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera sista fönstret i kolumnen</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="452"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera föregående kolumn, stanna vid kanten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="458"/>
         <source>Focus Next Column, Stopping at the Edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera nästa kolumn, stanna vid kanten</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="464"/>
         <source>Focus Previous Column, Wrapping</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera föregående kolumn, runt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="470"/>
         <source>Focus Next Column, Wrapping</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera nästa kolumn, runt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
@@ -551,7 +551,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Toggle Windowed Fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>Växla helskärm i fönster</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
@@ -581,7 +581,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Grow Column into Empty Space</source>
-        <translation type="unfinished"></translation>
+        <translation>Väx kolumnen in i tomt utrymme</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
@@ -591,7 +591,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="416"/>
         <source>Cycle Window Height Preset Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Stega fönstrets höjdförinställning bakåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
@@ -611,37 +611,37 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="436"/>
         <source>Center Visible Columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Centrera synliga kolumner</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="475"/>
         <source>Move Window to Floating</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fönstret till flytande</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
         <source>Move Window to Tiled</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fönstret till panelagt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="491"/>
         <source>Scroll View Back a Page</source>
-        <translation type="unfinished"></translation>
+        <translation>Rulla vyn en sida bakåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="496"/>
         <source>Scroll View Forward a Page</source>
-        <translation type="unfinished"></translation>
+        <translation>Rulla vyn en sida framåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="501"/>
         <source>Equalize Column Widths</source>
-        <translation type="unfinished"></translation>
+        <translation>Utjämna kolumnbredder</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="506"/>
         <source>Minimize Column Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Minimera kolumnbredden</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="513"/>
@@ -652,7 +652,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="149"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="620"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="623"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
@@ -669,67 +669,67 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="168"/>
         <source>Switch Floating and Placed Focus</source>
-        <translation type="unfinished"></translation>
+        <translation>Växla fokus mellan flytande och placerat</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
         <source>Moves focus between the floating windows and the placed layout. It returns to the window that last had focus there when that window is still available.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus mellan de flytande fönstren och den placerade layouten. Fokus återgår till det fönster som senast hade fokus där, om det fönstret fortfarande finns.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="172"/>
         <source>Moves focus between the floating windows and the scrolling columns. It returns to the window that last had focus there when that window is still available.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus mellan de flytande fönstren och rullningskolumnerna. Fokus återgår till det fönster som senast hade fokus där, om det fönstret fortfarande finns.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="182"/>
         <source>Switches this screen to the previous layout in the list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den här skärmen till föregående layout i listan.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="185"/>
         <source>Switches this screen to the next layout in the list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den här skärmen till nästa layout i listan.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="188"/>
         <source>Opens a picker to choose this screen&apos;s layout.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppnar en väljare för den här skärmens layout.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
         <source>Locks this screen&apos;s layout so nothing switches it until unlocked.</source>
-        <translation type="unfinished"></translation>
+        <translation>Låser den här skärmens layout så att inget växlar den förrän den låses upp.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
         <source>Locks this screen&apos;s column template so nothing switches it until unlocked.</source>
-        <translation type="unfinished"></translation>
+        <translation>Låser den här skärmens kolumnmall så att inget växlar den förrän den låses upp.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="203"/>
         <source>Arrange All Windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Ordna alla fönster</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
         <source>Move Focus Left</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fokus åt vänster</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="230"/>
         <source>Move Focus Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fokus åt höger</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
         <source>Move Focus Up</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fokus uppåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
         <source>Move Focus Down</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fokus nedåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
@@ -746,12 +746,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
         <source>Cycle Focus Forward</source>
-        <translation type="unfinished"></translation>
+        <translation>Stega fokus framåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="262"/>
         <source>Cycle Focus Backward</source>
-        <translation type="unfinished"></translation>
+        <translation>Stega fokus bakåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="264"/>
@@ -776,32 +776,32 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
         <source>Re-applies the tiling algorithm to every window on the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tillämpar panelläggningsalgoritmen igen på varje fönster på skärmen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="158"/>
         <source>Puts every column back to the screen&apos;s default width and display, and every window back to an even share of its column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställer varje kolumn till skärmens standardbredd och standardvisning, och varje fönster till en lika stor del av sin kolumn.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
         <source>Moves focus to the first column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus till den första kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="294"/>
         <source>Moves focus to the last column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus till den sista kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="325"/>
         <source>Moves the focused column to the first position.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar den fokuserade kolumnen till första positionen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="327"/>
         <source>Moves the focused column to the last position.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar den fokuserade kolumnen till sista positionen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="329"/>
@@ -816,17 +816,17 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="399"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullar vyn så att den fokuserade kolumnen hamnar mitt på skärmen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="345"/>
         <source>Switches the focused column between stacked windows and tabs.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den fokuserade kolumnen mellan staplade fönster och flikar.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="413"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar det fokuserade fönstret i helskärmsläge medan det behåller sin plats i kolumnen, så att det inte täcker skärmen. Tryck igen för att lämna.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="352"/>
@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stegar den fokuserade kolumnen genom skärmens storleksförinställningar längs remsan.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,218 +846,218 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stegar den fokuserade kolumnen bakåt genom skärmens storleksförinställningar längs remsan.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
         <source>Grows the focused column along the strip by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ökar den fokuserade kolumnen längs remsan med det inställda steget.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="350"/>
         <source>Shrinks the focused column along the strip by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Minskar den fokuserade kolumnen längs remsan med det inställda steget.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="366"/>
         <source>Toggles the focused column between filling the work area and a smaller size.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den fokuserade kolumnen mellan att fylla arbetsytan och en mindre storlek.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stegar det fokuserade fönstret genom skärmens storleksförinställningar inom sin kolumn.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stegar det fokuserade fönstret bakåt genom skärmens storleksförinställningar inom sin kolumn.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
         <source>Grows the focused window within its column by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ökar det fokuserade fönstret inom sin kolumn med det inställda steget.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="383"/>
         <source>Shrinks the focused window within its column by the configured step.</source>
-        <translation type="unfinished"></translation>
+        <translation>Minskar det fokuserade fönstret inom sin kolumn med det inställda steget.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="394"/>
         <source>Clears manual window sizes in the focused column so its windows share the column&apos;s space evenly.</source>
-        <translation type="unfinished"></translation>
+        <translation>Rensar manuella fönsterstorlekar i den fokuserade kolumnen så att dess fönster delar kolumnens utrymme lika.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="369"/>
         <source>Grow into Empty Space</source>
-        <translation type="unfinished"></translation>
+        <translation>Väx in i tomt utrymme</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="370"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ökar den fokuserade kolumnen så att den fyller det tomma utrymmet på skärmen. Andra kolumner behåller sin storlek.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="401"/>
         <source>Scrolls the view so the fully visible columns sit centered as a group.</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullar vyn så att de helt synliga kolumnerna centreras som en grupp.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="320"/>
         <source>Moves focus to the first window of the focused column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus till det första fönstret i den fokuserade kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="322"/>
         <source>Moves focus to the last window of the focused column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus till det sista fönstret i den fokuserade kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
         <source>Move to Floating</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta till flytande</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="420"/>
         <source>Makes the focused window float. Unlike the float toggle, it never re-tiles.</source>
-        <translation type="unfinished"></translation>
+        <translation>Gör det fokuserade fönstret flytande. Till skillnad från flytväxlaren panelägger den aldrig tillbaka.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="423"/>
         <source>Move to Tiled</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta till panelagt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
         <source>Returns the focused floating window to its column. Unlike the float toggle, it never floats.</source>
-        <translation type="unfinished"></translation>
+        <translation>Återför det fokuserade flytande fönstret till sin kolumn. Till skillnad från flytväxlaren gör den aldrig fönstret flytande.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="447"/>
         <source>Applies the numbered layout to this screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tillämpar den numrerade layouten på den här skärmen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="448"/>
         <source>Applies the numbered column template to this screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tillämpar den numrerade kolumnmallen på den här skärmen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="463"/>
         <source>Sends the focused window to the numbered slot on this screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Skickar det fokuserade fönstret till den numrerade platsen på den här skärmen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="603"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
-        <translation type="unfinished">Verkställ layout %1</translation>
+        <translation>Tillämpa layout %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="385"/>
         <source>Cycle Window Height</source>
-        <translation type="unfinished"></translation>
+        <translation>Stega fönsterhöjd</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="183"/>
         <source>Switches this screen to the previous column template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den här skärmen till föregående kolumnmall.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="186"/>
         <source>Switches this screen to the next column template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den här skärmen till nästa kolumnmall.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <source>Opens a picker to choose this screen&apos;s column template. Its column widths become the widths columns cycle through.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppnar en väljare för den här skärmens kolumnmall. Dess kolumnbredder blir de bredder som kolumner stegar igenom.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="330"/>
         <source>Pulls a window from the next column into the focused column, stacking them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hämtar ett fönster från nästa kolumn in i den fokuserade kolumnen och staplar dem.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="334"/>
         <source>Moves the focused window out of a shared column into a new column after it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar det fokuserade fönstret ut ur en delad kolumn till en ny kolumn efter den.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="337"/>
         <source>Splits the focused window out of a shared column toward the start of the strip. A window alone in its column merges into the previous column instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Delar ut det fokuserade fönstret ur en delad kolumn mot remsans början. Ett fönster som är ensamt i sin kolumn slås i stället ihop med föregående kolumn.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
         <source>Splits the focused window out of a shared column toward the end of the strip. A window alone in its column merges into the next column instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Delar ut det fokuserade fönstret ur en delad kolumn mot remsans slut. Ett fönster som är ensamt i sin kolumn slås i stället ihop med nästa kolumn.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
         <source>Cycle Window Height Back</source>
-        <translation type="unfinished"></translation>
+        <translation>Stega fönsterhöjd bakåt</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
         <source>Focus Previous Column (Edge Stop)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera föregående kolumn (stanna vid kanten)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus en kolumn mot remsans början och stannar vid kanten. Det vanliga fokuskortkommandot fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
         <source>Focus Next Column (Edge Stop)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera nästa kolumn (stanna vid kanten)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus en kolumn mot remsans slut och stannar vid kanten. Det vanliga fokuskortkommandot fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
         <source>Focus Previous Column (Wrap)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera föregående kolumn (runt)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="307"/>
         <source>Moves focus one column toward the start of the strip, wrapping to the last column at the edge.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus en kolumn mot remsans början och hoppar vid kanten till den sista kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="311"/>
         <source>Focus Next Column (Wrap)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera nästa kolumn (runt)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="312"/>
         <source>Moves focus one column toward the end of the strip, wrapping to the first column at the edge.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar fokus en kolumn mot remsans slut och hoppar vid kanten till den första kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="405"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullar vyn en hel skärm mot remsans början. Fokus stannar kvar.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullar vyn en hel skärm mot remsans slut. Fokus stannar kvar.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="376"/>
         <source>Gives every column fully on screen an equal share of the screen. Columns clipped at an edge are left alone.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ger varje kolumn som syns helt en lika stor del av skärmen. Kolumner som är avskurna vid en kant lämnas orörda.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
-        <translation type="unfinished"></translation>
+        <translation>Minskar den fokuserade kolumnen till den minsta storleksförinställningen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="569"/>
@@ -1072,7 +1072,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="619"/>
         <source>Move Focus</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta fokus</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="624"/>
@@ -1147,7 +1147,7 @@
     <message>
         <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="729"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
-        <translation type="unfinished"></translation>
+        <translation>Layoutväljare: bekräfta (Enter på numeriskt tangentbord)</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="22"/>
@@ -1241,12 +1241,12 @@
     <message>
         <location filename="../src/editor/main.cpp" line="182"/>
         <source>Scrolling template ID to edit</source>
-        <translation type="unfinished"></translation>
+        <translation>ID för rullningsmallen som ska redigeras</translation>
     </message>
     <message>
         <location filename="../src/editor/main.cpp" line="184"/>
         <source>Create new scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Skapa ny rullningsmall</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/clipboard.cpp" line="96"/>
@@ -1344,57 +1344,57 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="606"/>
         <source>No windows on the strip yet</source>
         <comment>scrolling strip preview, empty strip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Inga fönster på remsan än</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="145"/>
         <source>This screen could not be measured</source>
         <comment>scrolling strip preview, screen geometry lookup failed</comment>
-        <translation type="unfinished"></translation>
+        <translation>Den här skärmen kunde inte mätas</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="364"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="367"/>
         <source>Layout Locked</source>
         <translation>Layout låst</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="378"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="381"/>
         <source>Layout Unlocked</source>
-        <translation type="unfinished"></translation>
+        <translation>Layouten låstes upp</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="457"/>
         <source>Disabled on this monitor</source>
         <translation>Inaktiverad på den här skärmen</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="465"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="468"/>
         <source>Desktop %1</source>
         <translation>Skrivbord %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="478"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="470"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="481"/>
         <source>Disabled on %1</source>
         <translation>Inaktiverad på %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="476"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="479"/>
         <source>Disabled on this activity</source>
         <translation>Inaktiverad på den här aktiviteten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="506"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="509"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation>Ingen layout tilldelad</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="673"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="676"/>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnmall — %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/cheatsheet.cpp" line="117"/>
@@ -1407,7 +1407,7 @@
         <translation>Layouttjänsten är inte initierad</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="337"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="340"/>
         <source>Layout: %1</source>
         <translation>Layout: %1</translation>
     </message>
@@ -1459,7 +1459,7 @@
     <message>
         <location filename="../src/daemon/main.cpp" line="250"/>
         <source>Window snapping, tiling and scrolling</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterfästning, panelläggning och rullning</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="255"/>
@@ -1548,7 +1548,7 @@
         <translation>Namn på målskärm</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="739"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="742"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation>Panelindelning: %1</translation>
@@ -1821,17 +1821,17 @@
     <message numerus="yes">
         <location filename="../src/settings/pages/animationspagecontroller.cpp" line="732"/>
         <source>Could not restore %n profile file. It remains pending.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n profilfil kunde inte återställas. Den är fortfarande i vänteläge.</numerusform>
+            <numerusform>%n profilfiler kunde inte återställas. De är fortfarande i vänteläge.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/pages/animationspagecontroller.cpp" line="734"/>
         <source>Could not restore %n profile files. They remain pending.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n profilfil kunde inte återställas. Den är fortfarande i vänteläge.</numerusform>
+            <numerusform>%n profilfiler kunde inte återställas. De är fortfarande i vänteläge.</numerusform>
         </translation>
     </message>
     <message>
@@ -1864,33 +1864,33 @@
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="77"/>
         <source>Imported %n layout from KZones</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Importerade %n layout från KZones</numerusform>
+            <numerusform>Importerade %n layouter från KZones</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="78"/>
         <source>Imported %n layouts from KZones</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Importerade %n layout från KZones</numerusform>
+            <numerusform>Importerade %n layouter från KZones</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="122"/>
         <source>Imported %n layout from KZones file</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Importerade %n layout från KZones-filen</numerusform>
+            <numerusform>Importerade %n layouter från KZones-filen</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="123"/>
         <source>Imported %n layouts from KZones file</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Importerade %n layout från KZones-filen</numerusform>
+            <numerusform>Importerade %n layouter från KZones-filen</numerusform>
         </translation>
     </message>
     <message>
@@ -2003,7 +2003,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="110"/>
         <source>The window&apos;s class as the compositor reports it, which is the WM_CLASS pair &quot;resourceName resourceClass&quot;. Konsole, for example, reports &quot;konsole konsole&quot;, not just &quot;konsole&quot;, so use contains or ends with rather than is.</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönstrets klass så som kompositorn rapporterar den, alltså WM_CLASS-paret ”resourceName resourceClass”. Konsole rapporterar till exempel ”konsole konsole” och inte bara ”konsole”, så använd innehåller eller slutar med i stället för är.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="116"/>
@@ -2043,7 +2043,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="133"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ett rullningsfönster i helskärm i fönster räknas här som helskärm.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="135"/>
@@ -2168,12 +2168,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
-        <translation type="unfinished"></translation>
+        <translation>Den layout som är aktiv på skärmen just nu, eller den rullningsmall som används där. Låter en regel ändra mellanrum, överlagringen eller låsläget för den skärm som visar en viss layout eller mall. Den kan inte ändra vilken layout som är tilldelad, det skulle bli cirkulärt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation type="unfinished"></translation>
+        <translation>Om systemets färgschema är ljust eller mörkt. Låter en regel välja andra mellanrum, överlagringsfärger eller layouter när skrivbordet växlar mellan dag- och nattteman. Reglerna tillämpas på nytt så snart temat ändras.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2268,7 +2268,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="99"/>
         <source>Open maximized (off = open at the default width)</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna maximerat (av = öppna med standardbredden)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="211"/>
@@ -2280,12 +2280,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="233"/>
         <source>Return the window to its previous zone when it reopens (off = don&apos;t restore)</source>
-        <translation type="unfinished"></translation>
+        <translation>Återför fönstret till sin tidigare zon när det öppnas igen (av = återställ inte)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="249"/>
         <source>Scroll speed (below 100% is slower, above 100% is faster)</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningshastighet (under 100 % är långsammare, över 100 % är snabbare)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="277"/>
@@ -2470,7 +2470,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="51"/>
         <source>Template layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallayout</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="57"/>
@@ -2500,12 +2500,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="88"/>
         <source>New column position</source>
-        <translation type="unfinished"></translation>
+        <translation>Ny kolumns position</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="93"/>
         <source>Window height (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterhöjd (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="96"/>
@@ -2515,58 +2515,58 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="102"/>
         <source>Handling</source>
-        <translation type="unfinished"></translation>
+        <translation>Hantering</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="108"/>
         <source>Focus the window when it opens (off = keep the current focus)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera fönstret när det öppnas (av = behåll nuvarande fokus)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
         <source>Open in fullscreen (off = block the app&apos;s own fullscreen at open)</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna i helskärm (av = blockera appens eget helskärmsläge vid öppning)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="122"/>
         <source>Center a lone column (off = leave it where it sits)</source>
-        <translation type="unfinished"></translation>
+        <translation>Centrera en ensam kolumn (av = låt den vara där den är)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="125"/>
         <source>Respect minimum window sizes (off = let columns go narrower)</source>
-        <translation type="unfinished"></translation>
+        <translation>Respektera minsta fönsterstorlekar (av = låt kolumner bli smalare)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="128"/>
         <source>Crop columns at the screen edge (off = keep them whole)</source>
-        <translation type="unfinished"></translation>
+        <translation>Beskär kolumner vid skärmkanten (av = låt dem vara hela)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="131"/>
         <source>Focus new windows (off = keep focus where it is)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera nya fönster (av = låt fokus vara kvar)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="134"/>
         <source>Drop the outer gaps for a lone column (off = keep them)</source>
-        <translation type="unfinished"></translation>
+        <translation>Utelämna de yttre mellanrummen för en ensam kolumn (av = behåll dem)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="137"/>
         <source>Focus follows the mouse (off = focus stays until you click)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokus följer musen (av = fokus stannar tills du klickar)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="145"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="199"/>
         <source>Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="148"/>
         <source>Show the indicator over tabbed columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa indikatorn över kolumner med flikar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="154"/>
@@ -2575,87 +2575,87 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="280"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="161"/>
         <source>Position</source>
-        <translation type="unfinished"></translation>
+        <translation>Position</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="157"/>
         <source>Hide it when the column holds one window</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj den när kolumnen håller ett fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="160"/>
         <source>Make room for it inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Gör plats för det inuti kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="163"/>
         <source>Gap (px, negative draws over the window)</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum (px, negativt ritar över fönstret)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="166"/>
         <source>Thickness (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Tjocklek (px)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="169"/>
         <source>Length (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Längd (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="172"/>
         <source>Gap between tabs (px)</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum mellan flikar (px)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="175"/>
         <source>Corner radius (px, -1 is fully rounded)</source>
-        <translation type="unfinished"></translation>
+        <translation>Hörnradie (px, -1 är helt rundad)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="180"/>
         <source>Font (leave empty for the system font)</source>
-        <translation type="unfinished"></translation>
+        <translation>Teckensnitt (lämna tomt för systemets teckensnitt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="183"/>
         <source>Weight (100 is thinnest, 900 is boldest)</source>
-        <translation type="unfinished"></translation>
+        <translation>Textvikt (100 är tunnast, 900 är fetast)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="186"/>
         <source>Show the tab labels in italic</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa fliketiketterna i kursiv stil</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="189"/>
         <source>Underline the tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Stryk under fliketiketterna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="192"/>
         <source>Draw a line through the tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Stryk över fliketiketterna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="202"/>
         <source>Show the indicator while dragging</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa indikatorn under dragning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="205"/>
         <source>Fill opacity (%)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fyllningens opacitet (%)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="223"/>
         <source>Zone names</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonnamn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="230"/>
         <source>Restore the window&apos;s previous position (off = don&apos;t restore)</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ fönstrets tidigare position (av = återställ inte)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="236"/>
@@ -2665,7 +2665,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="239"/>
         <source>Place in a zone when no zone is remembered (off = stay floating)</source>
-        <translation type="unfinished"></translation>
+        <translation>Placera i en zon när ingen zon minns (av = förbli flytande)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="242"/>
@@ -2675,12 +2675,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="252"/>
         <source>Show on-screen displays here (off = hide them)</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa skärmmeddelanden här (av = dölj dem)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="255"/>
         <source>Show the drag selector here (off = hide it)</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa dragväljaren här (av = dölj den)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="280"/>
@@ -2727,12 +2727,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="391"/>
         <source>Zone numbers like “1, 2”, or a range like “1-3”. Multiple zones snap the window to their combined area.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonnummer som ”1, 2”, eller ett intervall som ”1-3”. Flera zoner fäster fönstret vid deras gemensamma yta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="396"/>
         <source>Zone names like “Editor, Terminal”, found in whichever layout is active. Give numbers, names, or both.</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonnamn som ”Editor, Terminal”, som finns i den layout som är aktiv. Ange nummer, namn eller båda.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="219"/>
@@ -2747,7 +2747,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="225"/>
         <source>Set scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange rullningsmall</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="231"/>
@@ -2797,12 +2797,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="258"/>
         <source>Set new column position</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange ny kolumns position</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="261"/>
         <source>Set default window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange standardhöjd för fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="264"/>
@@ -2812,7 +2812,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="267"/>
         <source>Open at window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med den här fönsterhöjden</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="270"/>
@@ -2829,35 +2829,35 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="279"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="657"/>
         <source>Respect minimum window sizes</source>
-        <translation type="unfinished"></translation>
+        <translation>Respektera minsta fönsterstorlekar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="291"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Focus follows the mouse</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokus följer musen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="294"/>
         <source>Set sticky window handling</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange hantering av fastnålade fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="300"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="647"/>
         <source>Open maximized</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna maximerat</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="303"/>
         <source>Focus when opened</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera vid öppning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="306"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="682"/>
         <source>Open in fullscreen</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna i helskärm</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="314"/>
@@ -2869,149 +2869,149 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="112"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="118"/>
         <source>Show the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="317"/>
         <source>Set tab indicator style</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange stil för flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="320"/>
         <source>Set tab indicator position</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange position för flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="323"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="691"/>
         <source>Hide the tab indicator for a single tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj flikindikatorn för en enda flik</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="326"/>
         <source>Place the tab indicator inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Placera flikindikatorn inuti kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="329"/>
         <source>Set the gap around the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange mellanrummet runt flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="332"/>
         <source>Set tab indicator thickness</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange tjocklek för flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="335"/>
         <source>Set tab indicator length</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange längd för flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="338"/>
         <source>Set the gap between tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange mellanrummet mellan flikar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="341"/>
         <source>Set tab corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange flikens hörnradie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="344"/>
         <source>Set the active tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange färg för den aktiva fliken</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="347"/>
         <source>Set the inactive tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange färg för den inaktiva fliken</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="350"/>
         <source>Set the urgent tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange färg för den brådskande fliken</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="357"/>
         <source>Set the tab label font</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange teckensnitt för fliketiketten</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="360"/>
         <source>Set the tab label weight</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange textvikt för fliketiketten</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="363"/>
         <source>Make tab labels italic</source>
-        <translation type="unfinished"></translation>
+        <translation>Gör fliketiketter kursiva</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="366"/>
         <source>Underline tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Stryk under fliketiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="369"/>
         <source>Strike through tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Stryk över fliketiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="372"/>
         <source>Set this window&apos;s active tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange färg för det här fönstrets aktiva flik</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="375"/>
         <source>Set this window&apos;s inactive tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange färg för det här fönstrets inaktiva flik</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="378"/>
         <source>Set this window&apos;s urgent tab color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange färg för det här fönstrets brådskande flik</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="383"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="713"/>
         <source>Show the drop indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa släppindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="386"/>
         <source>Set the drop indicator fill color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange släppindikatorns fyllningsfärg</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="389"/>
         <source>Set the drop indicator border color</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange släppindikatorns kantfärg</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="392"/>
         <source>Set the drop indicator fill opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange opacitet för släppindikatorns fyllning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="395"/>
         <source>Set the drop indicator border width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange kantbredd för släppindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="398"/>
         <source>Set the drop indicator corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange hörnradie för släppindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="405"/>
         <source>Set the drop indicator fill color when dragging this window</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange släppindikatorns fyllningsfärg när det här fönstret dras</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="408"/>
         <source>Set the drop indicator border color when dragging this window</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange släppindikatorns kantfärg när det här fönstret dras</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="411"/>
@@ -3027,191 +3027,191 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="426"/>
         <source>Exclude from placement and decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Undanta från placering och dekorationer</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="429"/>
         <source>Exclude from placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Undanta från placering</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="435"/>
         <source>Snap to zones</source>
-        <translation type="unfinished"></translation>
+        <translation>Fäst vid zoner</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="438"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <source>Restore previous position</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ tidigare position</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="447"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
         <source>Restore to previous zone</source>
-        <translation type="unfinished"></translation>
+        <translation>Återför till tidigare zon</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="453"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="604"/>
         <source>Fall back to a zone on unfloat</source>
-        <translation type="unfinished"></translation>
+        <translation>Fall tillbaka på en zon när flytläget upphävs</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="459"/>
         <source>Set scroll speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange rullningshastighet</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="462"/>
         <source>Show on-screen displays</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa skärmmeddelanden</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="470"/>
         <source>Show the drag selector</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa dragväljaren</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="488"/>
         <source>Override overlay shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Åsidosätt överlagringens shader</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="491"/>
         <source>Override overlay style</source>
-        <translation type="unfinished"></translation>
+        <translation>Åsidosätt överlagringens stil</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="526"/>
         <source>Exclude from decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Undanta från dekorationer</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="598"/>
         <source>Don&apos;t restore to previous zone</source>
-        <translation type="unfinished"></translation>
+        <translation>Återför inte till tidigare zon</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
         <source>Stay floating when no zone is remembered</source>
-        <translation type="unfinished"></translation>
+        <translation>Förbli flytande när ingen zon minns</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Show on-screen displays here</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa skärmmeddelanden här</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Hide on-screen displays here</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj skärmmeddelanden här</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
         <source>Show the drag selector here</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa dragväljaren här</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
         <source>Hide the drag selector here</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj dragväljaren här</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="647"/>
         <source>Open at the default width</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med standardbredden</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="654"/>
         <source>Leave a lone column where it sits</source>
-        <translation type="unfinished"></translation>
+        <translation>Låt en ensam kolumn vara där den är</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="657"/>
         <source>Ignore minimum window sizes</source>
-        <translation type="unfinished"></translation>
+        <translation>Ignorera minsta fönsterstorlekar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="661"/>
         <source>Keep columns whole at the screen edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Låt kolumner vara hela vid skärmkanten</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
         <source>Keep focus where it is</source>
-        <translation type="unfinished"></translation>
+        <translation>Låt fokus vara kvar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="288"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="667"/>
         <source>Drop the outer gaps for a lone column</source>
-        <translation type="unfinished"></translation>
+        <translation>Utelämna de yttre mellanrummen för en ensam kolumn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
         <source>Set maximum tiled windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange högsta antal panelagda fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Keep the outer gaps for a lone column</source>
-        <translation type="unfinished"></translation>
+        <translation>Behåll de yttre mellanrummen för en ensam kolumn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Focus stays until you click</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokus stannar tills du klickar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="676"/>
         <source>Focus the window when it opens</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokusera fönstret när det öppnas</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="677"/>
         <source>Keep focus where it was when it opens</source>
-        <translation type="unfinished"></translation>
+        <translation>Låt fokus vara kvar där det var när det öppnas</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="682"/>
         <source>Block fullscreen at open</source>
-        <translation type="unfinished"></translation>
+        <translation>Blockera helskärm vid öppning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
         <source>Italic tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Kursiva fliketiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
         <source>Upright tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Raka fliketiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="705"/>
         <source>Underlined tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Understrukna fliketiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="705"/>
         <source>Tab labels without an underline</source>
-        <translation type="unfinished"></translation>
+        <translation>Fliketiketter utan understrykning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="708"/>
         <source>Struck-through tab labels</source>
-        <translation type="unfinished"></translation>
+        <translation>Överstrukna fliketiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="709"/>
         <source>Tab labels without a line through them</source>
-        <translation type="unfinished"></translation>
+        <translation>Fliketiketter utan överstrykning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="713"/>
         <source>Hide the drop indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj släppindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="432"/>
@@ -3221,7 +3221,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="297"/>
         <source>Set strip direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange remsans riktning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="456"/>
@@ -3401,7 +3401,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="595"/>
         <source>Don&apos;t restore previous position</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ inte tidigare position</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="642"/>
@@ -3411,22 +3411,22 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="688"/>
         <source>Hide the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj flikindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="692"/>
         <source>Show the tab indicator for a single tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa flikindikatorn för en enda flik</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="695"/>
         <source>Tab indicator inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikator inuti kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="696"/>
         <source>Tab indicator beside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikator bredvid kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
@@ -3533,7 +3533,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
         <source>Plasma applet popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Plasma-appletpopup</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="300"/>
@@ -3549,12 +3549,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
         <source>Light</source>
-        <translation type="unfinished"></translation>
+        <translation>Ljust</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="305"/>
         <source>Dark</source>
-        <translation type="unfinished"></translation>
+        <translation>Mörkt</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="378"/>
@@ -3826,30 +3826,30 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="144"/>
         <source>Meta + Shift</source>
-        <translation type="unfinished"></translation>
+        <translation>Meta + Skift</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="145"/>
         <source>Ctrl + Meta</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl + Meta</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="195"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="487"/>
         <source>Match the screen shape</source>
-        <translation type="unfinished"></translation>
+        <translation>Följ skärmens form</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
         <source>Side to side</source>
-        <translation type="unfinished"></translation>
+        <translation>Sida vid sida</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
         <source>Top to bottom</source>
-        <translation type="unfinished"></translation>
+        <translation>Ovanför varandra</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="201"/>
@@ -3858,7 +3858,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="145"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="152"/>
         <source>Proportion of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Andel av remsan</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="114"/>
@@ -4030,56 +4030,56 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="198"/>
         <source>Preset width</source>
-        <translation type="unfinished"></translation>
+        <translation>Förinställd bredd</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="208"/>
         <source>Share the column evenly</source>
-        <translation type="unfinished"></translation>
+        <translation>Dela kolumnen lika</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="209"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="295"/>
         <source>Fixed height</source>
-        <translation type="unfinished"></translation>
+        <translation>Fast höjd</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="210"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
-        <translation type="unfinished"></translation>
+        <translation>Förinställd höjd</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="214"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
         <source>Right of the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Till höger om den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="215"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Left of the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>Till vänster om den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="216"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="460"/>
         <source>Start of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsans början</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="217"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="463"/>
         <source>End of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsans slut</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="218"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="466"/>
         <source>Into the focused column</source>
-        <translation type="unfinished"></translation>
+        <translation>In i den fokuserade kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="222"/>
@@ -4097,33 +4097,33 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="227"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
         <source>Titled chips</source>
-        <translation type="unfinished"></translation>
+        <translation>Namngivna brickor</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="228"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="427"/>
         <source>Segment bar</source>
-        <translation type="unfinished"></translation>
+        <translation>Segmentrad</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="232"/>
         <source>Left of the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Till vänster om kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="233"/>
         <source>Right of the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Till höger om kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="234"/>
         <source>Above the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Ovanför kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="235"/>
         <source>Below the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Under kolumnen</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="508"/>
@@ -4149,12 +4149,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="473"/>
         <source>Treat as normal windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Behandla som vanliga fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="479"/>
         <source>Ignore entirely</source>
-        <translation type="unfinished"></translation>
+        <translation>Ignorera helt</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="498"/>
@@ -4235,7 +4235,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="161"/>
         <source>Tiling (no algorithm assigned)</source>
-        <translation type="unfinished"></translation>
+        <translation>Panelläggning (inget algoritm tilldelad)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
@@ -4419,7 +4419,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="910"/>
         <source>Scroll speed: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningshastighet: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
@@ -4447,95 +4447,95 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="265"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1049"/>
         <source>Scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsmall</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="274"/>
         <source>Scrolling template: None</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsmall: ingen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="276"/>
         <source>Scrolling template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsmall: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="292"/>
         <source>Tiling: None</source>
-        <translation type="unfinished"></translation>
+        <translation>Panelläggning: ingen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="317"/>
         <source>Excluded from placement and decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Undantaget från placering och dekorationer</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="320"/>
         <source>Excluded from placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Undantaget från placering</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="323"/>
         <source>Excluded from animations</source>
-        <translation type="unfinished"></translation>
+        <translation>Undantaget från animationer</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="326"/>
         <source>Excluded from decorations</source>
-        <translation type="unfinished"></translation>
+        <translation>Undantaget från dekorationer</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="375"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="318"/>
         <source>“%1”</source>
         <comment>a quoted zone name</comment>
-        <translation type="unfinished"></translation>
+        <translation>”%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="449"/>
         <source>Block %1 shader</source>
-        <translation type="unfinished"></translation>
+        <translation>Blockera %1-shader</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="453"/>
         <source>%1 shader: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1-shader: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="462"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="475"/>
         <source>Decoration packs: none</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekorationspaket: inga</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
         <source>%1 duration</source>
-        <translation type="unfinished"></translation>
+        <translation>Varaktighet för %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="495"/>
         <source>%1 duration (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Varaktighet för %1 (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="498"/>
         <source>%1 duration: %2 ms</source>
-        <translation type="unfinished"></translation>
+        <translation>Varaktighet för %1: %2 ms</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="504"/>
         <source>%1 curve</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurva för %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="508"/>
         <source>%1 curve: %2</source>
-        <translation type="unfinished"></translation>
+        <translation>Kurva för %1: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
         <source>Overlay style (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Överlagringsstil (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="526"/>
@@ -4555,12 +4555,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
         <source>Border width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Kantbredd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
         <source>Corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Hörnradie (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="597"/>
@@ -4593,7 +4593,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
         <source>Max tiled windows (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Max panelagda fönster (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
@@ -4603,12 +4603,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
         <source>Master count (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Antal huvudfönster (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
         <source>Split ratio (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Delningsförhållande (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="640"/>
@@ -4618,7 +4618,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="649"/>
         <source>Insert (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Infogning (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="650"/>
@@ -4628,7 +4628,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="655"/>
         <source>Overflow (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Överflöde (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="656"/>
@@ -4638,7 +4638,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="661"/>
         <source>Drag (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Dra (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="662"/>
@@ -4648,12 +4648,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
         <source>Column width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnbredd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="673"/>
         <source>Column width</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnbredd</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="674"/>
@@ -4663,12 +4663,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
         <source>Open at width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med bredd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="678"/>
         <source>Open at width</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med bredd</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="679"/>
@@ -4678,67 +4678,67 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
         <source>Window height (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterhöjd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="683"/>
         <source>Window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterhöjd</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="684"/>
         <source>Window height: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterhöjd: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
         <source>Open at height (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med höjd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
         <source>Open at height</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med höjd</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="689"/>
         <source>Open at height: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna med höjd: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
         <source>Insert new windows (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Infoga nya fönster (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="698"/>
         <source>Insert new windows: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Infoga nya fönster: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
         <source>Sticky windows (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fastnålade fönster (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
         <source>Sticky windows: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Fastnålade fönster: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
         <source>Strip direction (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsans riktning (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="710"/>
         <source>Strip direction: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsans riktning: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="715"/>
         <source>Centering (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Centrering (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="716"/>
@@ -4748,7 +4748,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
         <source>New columns (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Nya kolumner (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
@@ -4758,7 +4758,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="727"/>
         <source>Open (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="728"/>
@@ -4768,77 +4768,77 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <source>Tab indicator style (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Stil för flikindikator (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="738"/>
         <source>Tab indicator style: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Stil för flikindikator: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
         <source>Tab indicator position (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns position (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="744"/>
         <source>Tab indicator position: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns position: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="748"/>
         <source>Tab indicator gap: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns mellanrum: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="749"/>
         <source>Tab indicator gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns mellanrum (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
         <source>Tab indicator thickness: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns tjocklek: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="754"/>
         <source>Tab indicator thickness (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns tjocklek (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
         <source>Tab indicator length (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns längd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
         <source>Tab indicator length: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns längd: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="764"/>
         <source>Gap between tabs: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum mellan flikar: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
         <source>Gap between tabs (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum mellan flikar (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
         <source>Tab corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikens hörnradie (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="774"/>
         <source>Tab corners: fully rounded</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikhörn: helt rundade</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="775"/>
         <source>Tab corner radius: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikens hörnradie: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="582"/>
@@ -4849,133 +4849,133 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="926"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="931"/>
         <source>(invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>(ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="82"/>
         <source>%1 %2 %3</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 %2 %3</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="494"/>
         <source>Animation duration (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Animeringens varaktighet (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="563"/>
         <source>%1 (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="790"/>
         <source>Tab label font</source>
-        <translation type="unfinished"></translation>
+        <translation>Teckensnitt för fliketikett</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="793"/>
         <source>Tab label font (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Teckensnitt för fliketikett (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="796"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="201"/>
         <source>Tab label font: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Teckensnitt för fliketikett: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="803"/>
         <source>Tab label weight: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Textvikt för fliketikett: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="804"/>
         <source>Tab label weight (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Textvikt för fliketikett (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="821"/>
         <source>Active tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktiv flik: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="824"/>
         <source>Inactive tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Inaktiv flik: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="827"/>
         <source>Urgent tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Brådskande flik: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="830"/>
         <source>This window&apos;s active tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Det här fönstrets aktiva flik: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="833"/>
         <source>This window&apos;s inactive tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Det här fönstrets inaktiva flik: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="835"/>
         <source>This window&apos;s urgent tab: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Det här fönstrets brådskande flik: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="843"/>
         <source>Drop indicator fill opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Opacitet för släppindikatorns fyllning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="844"/>
         <source>Drop indicator fill opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Opacitet för släppindikatorns fyllning (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="845"/>
         <source>Drop indicator fill opacity: %1%</source>
-        <translation type="unfinished"></translation>
+        <translation>Opacitet för släppindikatorns fyllning: %1 %</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="849"/>
         <source>Drop indicator border width: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Kantbredd för släppindikatorn: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="850"/>
         <source>Drop indicator border width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Kantbredd för släppindikatorn (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="855"/>
         <source>Drop indicator corner radius: %1 px</source>
-        <translation type="unfinished"></translation>
+        <translation>Hörnradie för släppindikatorn: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="856"/>
         <source>Drop indicator corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Hörnradie för släppindikatorn (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="863"/>
         <source>Drop indicator fill: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikatorns fyllning: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="866"/>
         <source>Drop indicator border: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikatorns kant: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="873"/>
         <source>Drop indicator fill when dragging this window: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikatorns fyllning när det här fönstret dras: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="875"/>
         <source>Drop indicator border when dragging this window: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikatorns kant när det här fönstret dras: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="881"/>
@@ -4995,27 +4995,27 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="901"/>
         <source>Scroll speed (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningshastighet (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
         <source>Right gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Höger mellanrum (ogiltigt)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
         <source>%n condition</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n villkor</numerusform>
+            <numerusform>%n villkor</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="242"/>
         <source>%n conditions</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n villkor</numerusform>
+            <numerusform>%n villkor</numerusform>
         </translation>
     </message>
     <message>
@@ -5026,19 +5026,19 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="392"/>
         <source>Snap to zone %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Fäst vid zon %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="255"/>
         <source>Snapping: None</source>
-        <translation type="unfinished"></translation>
+        <translation>Fästning: ingen</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="394"/>
         <source>Snap to zones %1</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Fäst vid zon %1</numerusform>
+            <numerusform>Fäst vid zoner %1</numerusform>
         </translation>
     </message>
     <message>
@@ -5054,12 +5054,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="944"/>
         <source>Active opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Opacitet för aktivt (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="945"/>
         <source>Inactive opacity (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Opacitet för inaktivt (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="947"/>
@@ -5079,7 +5079,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
         <source>Overlay border width (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Överlagringens kantbredd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="957"/>
@@ -5089,17 +5089,17 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Overlay corner radius (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Överlagringens hörnradie (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
         <source>Gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="967"/>
         <source>Outer gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Yttre mellanrum (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
@@ -5109,7 +5109,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Top gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Övre mellanrum (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
@@ -5119,7 +5119,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
         <source>Bottom gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Nedre mellanrum (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
@@ -5129,7 +5129,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
         <source>Left gap (invalid)</source>
-        <translation type="unfinished"></translation>
+        <translation>Vänster mellanrum (ogiltigt)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
@@ -5516,18 +5516,18 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="153"/>
         <source>Keep one application&apos;s windows floating instead of tiled. The windows stay managed, so they can still be dragged into a zone.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll ett programs fönster flytande i stället för panelagda. Fönstren förblir hanterade, så de går fortfarande att dra in i en zon.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="157"/>
         <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll ett programs fönster utanför panelläggning, fästning och rullning. Kanter, dekorationspaket och animationer gäller fortfarande.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="257"/>
         <source>Exclude an app from placement</source>
-        <translation type="unfinished"></translation>
+        <translation>Undanta ett program från placering</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="177"/>
@@ -6484,7 +6484,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="22"/>
         <source>Zone span</source>
         <oldsource>Zone Span</oldsource>
-        <translation type="unfinished">Zonspann</translation>
+        <translation>Zonöverspann</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="85"/>
@@ -6516,7 +6516,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="15"/>
         <source>Window handling</source>
         <oldsource>Window Handling</oldsource>
-        <translation type="unfinished">Fönsterhantering</translation>
+        <translation>Fönsterhantering</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="401"/>
@@ -6548,7 +6548,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="280"/>
         <source>Zone labels</source>
         <oldsource>Zone Labels</oldsource>
-        <translation type="unfinished">Zonetiketter</translation>
+        <translation>Zonetiketter</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="419"/>
@@ -6908,7 +6908,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="151"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
         <source>wheel</source>
-        <translation type="unfinished"></translation>
+        <translation>hjul</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="147"/>
@@ -6938,7 +6938,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="84"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="303"/>
         <source>graphics card</source>
-        <translation type="unfinished"></translation>
+        <translation>grafikkort</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="242"/>
@@ -6979,33 +6979,33 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="103"/>
         <source>script</source>
-        <translation type="unfinished"></translation>
+        <translation>skript</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="103"/>
         <source>luau</source>
-        <translation type="unfinished"></translation>
+        <translation>luau</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="104"/>
         <source>capability</source>
-        <translation type="unfinished"></translation>
+        <translation>funktion</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="105"/>
         <source>library</source>
-        <translation type="unfinished"></translation>
+        <translation>bibliotek</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="160"/>
         <source>selector</source>
-        <translation type="unfinished"></translation>
+        <translation>väljare</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="217"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="249"/>
         <source>shell</source>
-        <translation type="unfinished"></translation>
+        <translation>skal</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="217"/>
@@ -7013,23 +7013,23 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="92"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="96"/>
         <source>plasma</source>
-        <translation type="unfinished"></translation>
+        <translation>plasma</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="250"/>
         <source>taskbar</source>
-        <translation type="unfinished"></translation>
+        <translation>aktivitetsfält</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="219"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="250"/>
         <source>applet</source>
-        <translation type="unfinished"></translation>
+        <translation>applet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="251"/>
         <source>applet popup</source>
-        <translation type="unfinished"></translation>
+        <translation>appletpopup</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
@@ -7037,7 +7037,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>launcher</source>
-        <translation type="unfinished"></translation>
+        <translation>startprogram</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="219"/>
@@ -7045,7 +7045,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>tray</source>
-        <translation type="unfinished"></translation>
+        <translation>systemfält</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
@@ -7053,17 +7053,17 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>system tray</source>
-        <translation type="unfinished"></translation>
+        <translation>systemfält</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
         <source>kickoff</source>
-        <translation type="unfinished"></translation>
+        <translation>kickoff</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
         <source>dock</source>
-        <translation type="unfinished"></translation>
+        <translation>docka</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="272"/>
@@ -7083,19 +7083,19 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
         <source>preview</source>
-        <translation type="unfinished"></translation>
+        <translation>förhandsvisning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
         <source>thumbnail</source>
-        <translation type="unfinished"></translation>
+        <translation>miniatyr</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="302"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="57"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="69"/>
         <source>Rendering device</source>
-        <translation type="unfinished"></translation>
+        <translation>Renderingsenhet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="310"/>
@@ -7597,7 +7597,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="223"/>
         <source>motion blur</source>
-        <translation type="unfinished"></translation>
+        <translation>rörelseoskärpa</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="518"/>
@@ -7876,152 +7876,152 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="694"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="354"/>
         <source>Width and height presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Förinställningar för bredd och höjd</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="379"/>
         <source>Column widths</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnbredder</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
         <source>cycle</source>
-        <translation type="unfinished"></translation>
+        <translation>stega</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="700"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="401"/>
         <source>Window heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterhöjder</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <source>chips</source>
-        <translation type="unfinished"></translation>
+        <translation>brickor</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <source>bar</source>
-        <translation type="unfinished"></translation>
+        <translation>rad</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>left</source>
-        <translation type="unfinished"></translation>
+        <translation>vänster</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>right</source>
-        <translation type="unfinished"></translation>
+        <translation>höger</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>top</source>
-        <translation type="unfinished"></translation>
+        <translation>överst</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="720"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="88"/>
         <source>bottom</source>
-        <translation type="unfinished"></translation>
+        <translation>nederst</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="126"/>
         <source>Hide it for a single window</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj den för ett enda fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="714"/>
         <source>hide</source>
-        <translation type="unfinished"></translation>
+        <translation>dölj</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="730"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="251"/>
         <source>Make room inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Gör plats inuti kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="731"/>
         <source>inside</source>
-        <translation type="unfinished"></translation>
+        <translation>inuti</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="732"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="265"/>
         <source>Gap</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="735"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="292"/>
         <source>Thickness</source>
-        <translation type="unfinished"></translation>
+        <translation>Tjocklek</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="313"/>
         <source>Length</source>
-        <translation type="unfinished"></translation>
+        <translation>Längd</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
         <source>length</source>
-        <translation type="unfinished"></translation>
+        <translation>längd</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="335"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="342"/>
         <source>Gap between tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum mellan flikar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="356"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="362"/>
         <source>Fully rounded tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Helt rundade flikar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
         <source>rounded</source>
-        <translation type="unfinished"></translation>
+        <translation>rundad</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
         <source>pill</source>
-        <translation type="unfinished"></translation>
+        <translation>piller</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="845"/>
         <source>radius</source>
-        <translation type="unfinished"></translation>
+        <translation>radie</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="760"/>
         <source>inactive</source>
-        <translation type="unfinished"></translation>
+        <translation>inaktiv</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
         <source>urgent</source>
-        <translation type="unfinished"></translation>
+        <translation>brådskande</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
         <source>attention</source>
-        <translation type="unfinished"></translation>
+        <translation>uppmärksamhet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="892"/>
@@ -8055,7 +8055,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="131"/>
         <source>Scroll the strip with the mouse wheel</source>
         <oldsource>Scroll columns with the mouse wheel</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Rulla remsan med mushjulet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
@@ -8063,7 +8063,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="142"/>
         <source>mouse</source>
-        <translation type="unfinished"></translation>
+        <translation>mus</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
@@ -8071,18 +8071,18 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="212"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="220"/>
         <source>Invert wheel direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Invertera hjulets riktning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
         <source>invert</source>
-        <translation type="unfinished"></translation>
+        <translation>invertera</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <source>direction</source>
-        <translation type="unfinished"></translation>
+        <translation>riktning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="667"/>
@@ -8163,7 +8163,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="685"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="278"/>
         <source>Default height</source>
-        <translation type="unfinished"></translation>
+        <translation>Standardhöjd</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="160"/>
@@ -8171,7 +8171,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="708"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="104"/>
         <source>Tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikator</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
@@ -8181,43 +8181,43 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="837"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="81"/>
         <source>indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>indikator</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="728"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="242"/>
         <source>Size and spacing</source>
-        <translation type="unfinished"></translation>
+        <translation>Storlek och avstånd</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="754"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="439"/>
         <source>Active tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktiv flik</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="758"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="453"/>
         <source>Inactive tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Inaktiva flikar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="762"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="468"/>
         <source>Urgent tab</source>
-        <translation type="unfinished"></translation>
+        <translation>Brådskande flik</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="783"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="52"/>
         <source>Hold to re-insert into strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll ned för att infoga i remsan igen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="789"/>
         <source>strip preview</source>
-        <translation type="unfinished"></translation>
+        <translation>remsförhandsvisning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="174"/>
@@ -8225,7 +8225,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="824"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="49"/>
         <source>Drop indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikator</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
@@ -8240,12 +8240,12 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <source>drop</source>
-        <translation type="unfinished"></translation>
+        <translation>släpp</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
         <source>resize</source>
-        <translation type="unfinished"></translation>
+        <translation>ändra storlek</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
@@ -8253,12 +8253,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="67"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="73"/>
         <source>Restore columns on login</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ kolumner vid inloggning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
         <source>session</source>
-        <translation type="unfinished"></translation>
+        <translation>session</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
@@ -8266,32 +8266,32 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="83"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="89"/>
         <source>Restore floated windows to their previous position</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ flytande fönster till deras tidigare position</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <source>all</source>
-        <translation type="unfinished"></translation>
+        <translation>alla</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="106"/>
         <source>desktops</source>
-        <translation type="unfinished"></translation>
+        <translation>skrivbord</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="108"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="132"/>
         <source>Width adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Steg för breddjustering</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="875"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="154"/>
         <source>Height adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Steg för höjdjustering</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="282"/>
@@ -8301,30 +8301,30 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="81"/>
         <source>Crop columns at the screen edge</source>
-        <translation type="unfinished"></translation>
+        <translation>Beskär kolumner vid skärmkanten</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>crop</source>
-        <translation type="unfinished"></translation>
+        <translation>beskär</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>clip</source>
-        <translation type="unfinished"></translation>
+        <translation>klipp</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>cut off</source>
-        <translation type="unfinished"></translation>
+        <translation>kapa</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
         <source>new</source>
-        <translation type="unfinished"></translation>
+        <translation>ny</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="32"/>
@@ -8381,7 +8381,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1050"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Scrolling Quick Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>Snabbkortkommandon för rullning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1068"/>
@@ -9076,19 +9076,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="532"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="589"/>
         <source>Blur</source>
-        <translation type="unfinished"></translation>
+        <translation>Oskärpa</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="534"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="608"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="613"/>
         <source>Blur quality</source>
-        <translation type="unfinished"></translation>
+        <translation>Oskärpekvalitet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="535"/>
         <source>quality</source>
-        <translation type="unfinished"></translation>
+        <translation>kvalitet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
@@ -9103,7 +9103,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="104"/>
         <source>Release grace period</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
@@ -9114,14 +9114,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="188"/>
         <source>mouse button</source>
-        <translation type="unfinished"></translation>
+        <translation>musknapp</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="77"/>
         <source>Zone span release grace period</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp för zonöverspann</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
@@ -9137,7 +9137,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="91"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="97"/>
         <source>Keep floating windows above</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll flytande fönster överst</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
@@ -9147,14 +9147,14 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>above</source>
-        <translation type="unfinished"></translation>
+        <translation>överst</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="945"/>
         <source>stacking</source>
-        <translation type="unfinished"></translation>
+        <translation>stapling</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="632"/>
@@ -9164,92 +9164,92 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>layer</source>
-        <translation type="unfinished"></translation>
+        <translation>lager</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
         <source>title</source>
-        <translation type="unfinished"></translation>
+        <translation>titel</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
         <source>bold</source>
-        <translation type="unfinished"></translation>
+        <translation>fet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>italic</source>
-        <translation type="unfinished"></translation>
+        <translation>kursiv</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>weight</source>
-        <translation type="unfinished"></translation>
+        <translation>textvikt</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>underline</source>
-        <translation type="unfinished"></translation>
+        <translation>understrykning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="725"/>
         <source>strikeout</source>
-        <translation type="unfinished"></translation>
+        <translation>överstrykning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="795"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="38"/>
         <source>Edge auto-scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>Automatisk rullning vid kanten</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="797"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="54"/>
         <source>Trigger width</source>
-        <translation type="unfinished"></translation>
+        <translation>Utlösarområdets bredd</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="802"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="810"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="815"/>
         <source>auto scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>automatisk rullning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
         <source>drag scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>dragrullning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
         <source>edge scroll</source>
-        <translation type="unfinished"></translation>
+        <translation>kantrullning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="809"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="83"/>
         <source>Start delay</source>
-        <translation type="unfinished"></translation>
+        <translation>Startfördröjning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
         <source>milliseconds</source>
-        <translation type="unfinished"></translation>
+        <translation>millisekunder</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="814"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="110"/>
         <source>Maximum speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Högsta hastighet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
         <source>fast</source>
-        <translation type="unfinished"></translation>
+        <translation>snabb</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="879"/>
@@ -9257,33 +9257,33 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="176"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="181"/>
         <source>View scroll step</source>
-        <translation type="unfinished"></translation>
+        <translation>Vyns rullningssteg</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
         <source>view</source>
-        <translation type="unfinished"></translation>
+        <translation>vy</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="122"/>
         <source>axis</source>
-        <translation type="unfinished"></translation>
+        <translation>axel</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="123"/>
         <source>portrait</source>
-        <translation type="unfinished"></translation>
+        <translation>stående</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="914"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="158"/>
         <source>Scroll key for column focus</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningstangent för kolumnfokus</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="915"/>
@@ -9291,19 +9291,19 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="148"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="151"/>
         <source>scroll key</source>
-        <translation type="unfinished"></translation>
+        <translation>rullningstangent</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="918"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="150"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="186"/>
         <source>Scroll key for the view</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningstangent för vyn</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
         <source>pan</source>
-        <translation type="unfinished"></translation>
+        <translation>panorera</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="994"/>
@@ -9341,7 +9341,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="40"/>
         <source>Position and trigger</source>
         <oldsource>Position &amp; Trigger</oldsource>
-        <translation type="unfinished">Position &amp; utlösare</translation>
+        <translation>Position och utlösare</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1005"/>
@@ -9362,7 +9362,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="157"/>
         <source>Layout arrangement</source>
         <oldsource>Layout Arrangement</oldsource>
-        <translation type="unfinished">Layoutarrangemang</translation>
+        <translation>Layoutordning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1010"/>
@@ -9446,27 +9446,27 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="385"/>
         <source>Preview size</source>
         <oldsource>Preview Size</oldsource>
-        <translation type="unfinished">Förhandsgranskningsstorlek</translation>
+        <translation>Förhandsvisningens storlek</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1040"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="13"/>
         <source>Snapping layout priority</source>
         <oldsource>Snapping Layout Priority</oldsource>
-        <translation type="unfinished">Prioritet för fästlayout</translation>
+        <translation>Prioritet för fästlayouter</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1042"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingOrderingPage.qml.cpp" line="13"/>
         <source>Tiling algorithm priority</source>
         <oldsource>Tiling Algorithm Priority</oldsource>
-        <translation type="unfinished">Prioritet för panelindelningsalgoritm</translation>
+        <translation>Prioritet för panelläggningsalgoritmer</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="13"/>
         <source>Scrolling template priority</source>
-        <translation type="unfinished"></translation>
+        <translation>Prioritet för rullningsmallar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1046"/>
@@ -9493,14 +9493,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
-        <translation type="unfinished">Förinställningar för mjukövergång</translation>
+        <translation>Förinställningar för mjukning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1064"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="282"/>
         <source>Spring presets</source>
         <oldsource>Spring Presets</oldsource>
-        <translation type="unfinished">Fjäderförinställningar</translation>
+        <translation>Förinställningar för fjädrar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1066"/>
@@ -9526,25 +9526,25 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="73"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="46"/>
         <source>Strip Scrolled</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsan rullades</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="80"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="51"/>
         <source>Tab Switched</source>
-        <translation type="unfinished"></translation>
+        <translation>Fliken växlades</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="30"/>
         <source>Applet Popup Shown</source>
-        <translation type="unfinished"></translation>
+        <translation>Appletpopup visades</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="35"/>
         <source>Applet Popup Hidden</source>
-        <translation type="unfinished"></translation>
+        <translation>Appletpopup doldes</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="134"/>
@@ -9577,19 +9577,19 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="826"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="67"/>
         <source>Fill color</source>
-        <translation type="unfinished"></translation>
+        <translation>Fyllningsfärg</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
         <source>fill</source>
-        <translation type="unfinished"></translation>
+        <translation>fyllning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="831"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="97"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="102"/>
         <source>Fill opacity</source>
-        <translation type="unfinished"></translation>
+        <translation>Fyllningens opacitet</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="100"/>
@@ -9762,62 +9762,62 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="409"/>
         <source>Could not read the template file.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallfilen kunde inte läsas.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="404"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="418"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="424"/>
         <source>That file is not a scrolling template this app can read.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den filen är inte en rullningsmall som det här programmet kan läsa.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="462"/>
         <source>That template no longer exists.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den mallen finns inte längre.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="200"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="520"/>
         <source>The daemon refused the template. Check that it has a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tjänsten avvisade mallen. Kontrollera att den har ett namn.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="213"/>
         <source>Could not save the template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte sparas.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="226"/>
         <source>Could not save the template. Check that it has a name.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte sparas. Kontrollera att den har ett namn.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="522"/>
         <source>Could not save the template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte sparas: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="542"/>
         <source>Could not delete the template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte tas bort: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="549"/>
         <source>Could not delete the template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte tas bort.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="561"/>
         <source>Could not duplicate the template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte dupliceras: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="885"/>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="360"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="126"/>
         <source>Scrolling (no template)</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullning (ingen mall)</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="396"/>
@@ -9839,17 +9839,17 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="571"/>
         <source>Could not duplicate the template.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallen kunde inte dupliceras.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="603"/>
         <source>Could not open the editor. The daemon may not be running.</source>
-        <translation type="unfinished"></translation>
+        <translation>Redigeraren kunde inte öppnas. Tjänsten kanske inte körs.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="609"/>
         <source>Could not open the editor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Redigeraren kunde inte öppnas.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="723"/>
@@ -9869,19 +9869,19 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="348"/>
         <source>Template: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Mall: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="302"/>
         <source>A scrolling template you picked has been deleted, so that monitor kept its previous template. Pick one again on the Overview page.</source>
-        <translation type="unfinished"></translation>
+        <translation>En rullningsmall du valt har tagits bort, så den skärmen behöll sin tidigare mall. Välj en igen på översiktssidan.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n rullningsmall du valt har tagits bort, så de skärmarna behöll sina tidigare mallar. Välj dem igen på översiktssidan.</numerusform>
+            <numerusform>%n rullningsmallar du valt har tagits bort, så de skärmarna behöll sina tidigare mallar. Välj dem igen på översiktssidan.</numerusform>
         </translation>
     </message>
     <message>
@@ -10025,19 +10025,19 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
         <source>Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Mallar</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="349"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="78"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="242"/>
         <source>Tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikar</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="363"/>
         <source>Strip Selector</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsväljare</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
@@ -10069,7 +10069,7 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="512"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="60"/>
         <source>Shell</source>
-        <translation type="unfinished"></translation>
+        <translation>Skal</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="518"/>
@@ -10419,7 +10419,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="305"/>
         <source>An old backup at %1 is in the way and could not be removed, so nothing was imported.</source>
-        <translation type="unfinished"></translation>
+        <translation>En gammal säkerhetskopia på %1 är i vägen och kunde inte tas bort, så inget importerades.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="312"/>
@@ -10430,7 +10430,7 @@
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="331"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="416"/>
         <source>That settings file is older than the window rules this profile already has, and importing it would drop them. Set up a new settings profile and import it there. Your window rules and quick layout slots are not part of an export, so copy them over by hand afterwards.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den inställningsfilen är äldre än fönsterreglerna som den här profilen redan har, och att importera den skulle ta bort dem. Skapa en ny inställningsprofil och importera den där. Dina fönsterregler och snabba layoutplatser ingår inte i en export, så kopiera över dem för hand efteråt.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="353"/>
@@ -10445,12 +10445,12 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="389"/>
         <source>That settings file is from a newer version of this app.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den inställningsfilen kommer från en nyare version av det här programmet.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="400"/>
         <source>That settings file does not say which version of this app wrote it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den inställningsfilen anger inte vilken version av det här programmet som skrev den.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="433"/>
@@ -10460,7 +10460,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="451"/>
         <source>Your settings file was read but the upgrade could not be saved.</source>
-        <translation type="unfinished"></translation>
+        <translation>Din inställningsfil lästes, men uppgraderingen kunde inte sparas.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="484"/>
@@ -10471,7 +10471,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="529"/>
         <source>Your settings were imported, but the window rules could not be reloaded. Restart PlasmaZones before you change any rules, or the imported ones will be lost.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dina inställningar importerades, men fönsterreglerna kunde inte läsas in på nytt. Starta om PlasmaZones innan du ändrar några regler, annars går de importerade förlorade.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="560"/>
@@ -10580,12 +10580,12 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
-        <translation type="unfinished"></translation>
+        <translation>Använd ingen mall på den här skärmen, så att kolumner behåller de inbyggda bredderna och höjderna</translation>
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
         <source>Use no layout on this screen, so windows float and nothing snaps or tiles them</source>
-        <translation type="unfinished"></translation>
+        <translation>Använd ingen layout på den här skärmen, så att fönster flyter och inget fäster eller panelägger dem</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchproviders.cpp" line="151"/>
@@ -10899,42 +10899,42 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="262"/>
         <source>Add Column</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="238"/>
         <source>Add a starting column to the template</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en startkolumn i mallen</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="224"/>
         <source>A template can start at most %n column</source>
         <comment>@info</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>En mall kan börja med högst %n kolumn</numerusform>
+            <numerusform>En mall kan börja med högst %n kolumner</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="240"/>
         <source>Add a starting column at the end of the strip</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en startkolumn i slutet av remsan</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="248"/>
         <source>%n column</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n kolumn</numerusform>
+            <numerusform>%n kolumner</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="261"/>
         <source>Drag the divider after a column to resize it. Click a column to reorder it, switch it to tabs, or remove it.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Dra avdelaren efter en kolumn för att ändra dess storlek. Klicka på en kolumn för att ordna om den, växla den till flikar eller ta bort den.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="297"/>
@@ -11099,7 +11099,7 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="575"/>
         <source>Save template and close editor</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Spara mallen och stäng redigeraren</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="64"/>
@@ -11201,7 +11201,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
         <source>Scrolling Template Editor</source>
         <comment>@title</comment>
-        <translation type="unfinished"></translation>
+        <translation>Redigerare för rullningsmallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="799"/>
@@ -11244,7 +11244,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Att öppna något annat ersätter mallen du redigerar. Vad vill du göra med dina ändringar som inte sparats?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="960"/>
@@ -11286,7 +11286,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
-        <translation type="unfinished"></translation>
+        <translation>Hjälp för mallredigeraren</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
@@ -11298,7 +11298,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
         <source>Template saved</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Mallen sparades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1051"/>
@@ -11450,13 +11450,13 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="187"/>
         <source>Shift+%1</source>
         <comment>@shortcut; %1 is an arrow pair such as Left/Right</comment>
-        <translation type="unfinished"></translation>
+        <translation>Skift+%1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="193"/>
         <source>Ctrl+%1</source>
         <comment>@shortcut; %1 is an arrow pair such as Left/Right</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+%1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="205"/>
@@ -11488,62 +11488,62 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="294"/>
         <source>Drag the divider after it</source>
         <comment>@info mouse gesture</comment>
-        <translation type="unfinished"></translation>
+        <translation>Dra avdelaren efter den</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="66"/>
         <source>Save template</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Spara mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="28"/>
         <source>Up/Down</source>
         <comment>@shortcut arrow pair</comment>
-        <translation type="unfinished"></translation>
+        <translation>Upp/Ned</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="28"/>
         <source>Left/Right</source>
         <comment>@shortcut arrow pair</comment>
-        <translation type="unfinished"></translation>
+        <translation>Vänster/Höger</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="66"/>
         <source>Save layout</source>
         <comment>@action</comment>
-        <translation type="unfinished">Spara layout</translation>
+        <translation>Spara layout</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="173"/>
         <source>Template Columns</source>
         <comment>@title:group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Mallkolumner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="180"/>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="287"/>
         <source>Select column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Välj kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="186"/>
         <source>Resize column 1%</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ändra kolumnstorlek 1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="192"/>
         <source>Reorder column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ordna om kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="198"/>
         <source>Remove column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="224"/>
@@ -11626,19 +11626,19 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="293"/>
         <source>Resize column</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ändra kolumnstorlek</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="299"/>
         <source>Deselect</source>
         <comment>@action</comment>
-        <translation type="unfinished"></translation>
+        <translation>Avmarkera</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="300"/>
         <source>Click empty space</source>
         <comment>@info mouse gesture</comment>
-        <translation type="unfinished"></translation>
+        <translation>Klicka på tomt utrymme</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="308"/>
@@ -11675,19 +11675,19 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="343"/>
         <source>Hover or select a column to reveal its action buttons</source>
         <comment>@info tip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Hovra över eller markera en kolumn för att visa dess åtgärdsknappar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="348"/>
         <source>Add columns from the bottom bar</source>
         <comment>@info tip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kolumner lägger du till från nedre raden</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="353"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through</source>
         <comment>@info tip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Förinställningar är de storlekar som kortkommandona för bredd- och höjdstegning går igenom</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="361"/>
@@ -11704,7 +11704,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="367"/>
         <source>Column info announced to screen readers. Tab navigates UI, arrow keys navigate columns.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kolumninformation som meddelas skärmläsare. Tabb navigerar i gränssnittet, piltangenterna navigerar mellan kolumner.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="406"/>
@@ -12138,14 +12138,14 @@
         <source>Corner radius:</source>
         <oldsource>Border radius:</oldsource>
         <comment>@label</comment>
-        <translation type="unfinished">Kantradie:</translation>
+        <translation>Hörnradie:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="381"/>
         <source>Corner radius for all selected zones</source>
         <oldsource>Border radius for all selected zones</oldsource>
         <comment>@label</comment>
-        <translation type="unfinished">Kantradie för alla markerade zoner</translation>
+        <translation>Hörnradie för alla markerade zoner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="382"/>
@@ -12378,7 +12378,7 @@
         <source>Corner radius in pixels</source>
         <oldsource>Border radius in pixels</oldsource>
         <comment>@label</comment>
-        <translation type="unfinished">Kantradie i bildpunkter</translation>
+        <translation>Hörnradie i bildpunkter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PropertyPanel.qml.cpp" line="807"/>
@@ -12687,7 +12687,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
         <source>Reset every shader parameter to its default value</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ alla shaderparametrar till sina standardvärden</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="764"/>
@@ -12699,7 +12699,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="767"/>
         <source>Apply the shader settings and close the dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Tillämpa shaderinställningarna och stäng dialogrutan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="904"/>
@@ -12769,7 +12769,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
         <source>Template:</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Mall:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="175"/>
@@ -12787,7 +12787,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
         <source>Template name</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Mallnamn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
@@ -12799,7 +12799,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
         <source>Enter name for the template</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ange ett namn för mallen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="242"/>
@@ -13171,7 +13171,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
         <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterfästning, panelläggning och rullning för Wayland-kompositorer. Fäst fönster i zoner du ritar själv, låt en algoritm panelägga dem åt dig, eller rulla dem längs en oändlig remsa. Varje skärm väljer sitt eget läge.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
@@ -13223,7 +13223,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="139"/>
         <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
         <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Fästning är inspirerad av FancyZones och rullning av kompositorn niri.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="149"/>
@@ -13387,17 +13387,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="58"/>
         <source>GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.</source>
-        <translation type="unfinished"></translation>
+        <translation>GPU som ritar zonöverlagringarna och skärmmeddelandena. Med Automatiskt bestämmer grafikdrivrutinen. KWin sätter samman fönsterinnehållet, så det påverkas inte.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
         <source>Stop the daemon to change rendering settings.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stoppa tjänsten för att ändra renderingsinställningarna.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
         <source>Rendering changes take effect after restarting the daemon.</source>
-        <translation type="unfinished"></translation>
+        <translation>Renderingsändringar börjar gälla efter att tjänsten startats om.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="156"/>
@@ -13408,7 +13408,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="163"/>
         <source>fps</source>
         <comment>frames per second, unit appended to a slider value</comment>
-        <translation type="unfinished">fps</translation>
+        <translation>bilder/s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="191"/>
@@ -13470,7 +13470,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="368"/>
         <source>Hz</source>
         <comment>hertz, unit appended to a slider value</comment>
-        <translation type="unfinished"></translation>
+        <translation>Hz</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="361"/>
@@ -13505,7 +13505,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="455"/>
         <source>Capture device or monitor source. Keep it set to auto to follow the default output.</source>
-        <translation type="unfinished"></translation>
+        <translation>Inspelningsenhet eller monitorkälla. Låt den stå på automatiskt för att följa standardutgången.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="502"/>
@@ -13623,7 +13623,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="162"/>
         <source>Your settings could not be written, so nothing was reset.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dina inställningar kunde inte skrivas, så inget återställdes.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="165"/>
@@ -13681,17 +13681,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="567"/>
         <source>Save did not complete. %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Sparandet slutfördes inte. %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="581"/>
         <source>No details were reported.</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga detaljer rapporterades.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="582"/>
         <source>Discard did not complete. %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Förkastandet slutfördes inte. %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="569"/>
@@ -13721,7 +13721,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="888"/>
         <source>Simple</source>
-        <translation type="unfinished"></translation>
+        <translation>Enkelt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="928"/>
@@ -13732,7 +13732,7 @@
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="204"/>
         <source>%1, position %2 of %3</source>
         <comment>@info:accessibility reorderable priority row: name, position, total</comment>
-        <translation type="unfinished"></translation>
+        <translation>%1, position %2 av %3</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="395"/>
@@ -13847,19 +13847,19 @@
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="238"/>
         <source>Simple</source>
         <comment>@info search result mode badge</comment>
-        <translation type="unfinished"></translation>
+        <translation>Enkelt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="238"/>
         <source>Advanced</source>
         <comment>@info search result mode badge</comment>
-        <translation type="unfinished">Avancerat</translation>
+        <translation>Avancerat</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="256"/>
         <source>, </source>
         <comment>@info:whatsthis joiner between search-result context parts</comment>
-        <translation type="unfinished"></translation>
+        <translation>, </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="327"/>
@@ -14001,13 +14001,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="193"/>
         <source>Change trigger %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra utlösaren %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="193"/>
         <source>Change trigger %1 for %2</source>
         <comment>@action:button %1 is a key chord such as Meta+Shift, %2 names the setting being edited</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ändra utlösaren %1 för %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="212"/>
@@ -14023,12 +14023,12 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="240"/>
         <source>Remove trigger for %1</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort utlösaren för %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="260"/>
         <source>Remove this trigger. At least one must remain.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort den här utlösaren. Minst en måste finnas kvar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="271"/>
@@ -14044,7 +14044,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="288"/>
         <source>Reset %1 to defaults</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation type="unfinished"></translation>
+        <translation>Återställ %1 till standardvärden</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="324"/>
@@ -14195,7 +14195,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="136"/>
         <source>Disabling this will discard your unsaved changes. Continue?</source>
-        <translation type="unfinished"></translation>
+        <translation>Att stänga av detta förkastar dina ändringar som inte sparats. Vill du fortsätta?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="140"/>
@@ -14211,7 +14211,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Om du stoppar PlasmaZones-tjänsten inaktiveras fönsterfästning, panelläggning och rullning tills du startar den igen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>
@@ -14262,7 +14262,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="368"/>
         <source>Italic</source>
-        <translation type="unfinished"></translation>
+        <translation>Kursiv</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="388"/>
@@ -14431,15 +14431,15 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="131"/>
         <source>%n event below this one kept settings from a different shader pack, so they no longer apply.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n händelse under den här behöll inställningar från ett annat shaderpaket, så de gäller inte längre.</numerusform>
+            <numerusform>%n händelser under den här behöll inställningar från ett annat shaderpaket, så de gäller inte längre.</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="134"/>
         <source>Discard those settings</source>
-        <translation type="unfinished"></translation>
+        <translation>Förkasta de inställningarna</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="166"/>
@@ -14503,12 +14503,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="269"/>
         <source>Following the inherited pack, with saved settings that no longer apply</source>
-        <translation type="unfinished"></translation>
+        <translation>Följer det ärvda paketet, med sparade inställningar som inte längre gäller</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="271"/>
         <source>Following the inherited pack, with settings of its own</source>
-        <translation type="unfinished"></translation>
+        <translation>Följer det ärvda paketet, med egna inställningar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="274"/>
@@ -14584,7 +14584,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="654"/>
         <source>No shader for this event, and no inherited one either.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen shader för den här händelsen, och ingen ärvd heller.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="656"/>
@@ -14600,12 +14600,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="673"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="775"/>
         <source>Revert shader to inherited</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ shadern till den ärvda</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="816"/>
         <source>Remove the shader pack</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort shaderpaketet</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="818"/>
@@ -14616,7 +14616,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="806"/>
         <source>Use no shader for this event</source>
-        <translation type="unfinished"></translation>
+        <translation>Använd ingen shader för den här händelsen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="991"/>
@@ -14845,25 +14845,25 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="53"/>
         <source>Scrolling strip</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsremsa</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="55"/>
         <source>Plasma shell</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Plasma-skal</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="57"/>
         <source>Widgets</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished">Widgetar</translation>
+        <translation>Widgetar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="59"/>
         <source>Cursor</source>
         <comment>@label motion event group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Markör</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="66"/>
@@ -14935,13 +14935,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="363"/>
         <source>★ %1</source>
         <comment>marks a user-created preset</comment>
-        <translation type="unfinished"></translation>
+        <translation>★ %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="232"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="364"/>
         <source>User preset %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Egen förinställning %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
@@ -15537,7 +15537,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="43"/>
         <source>Plasma shell</source>
         <comment>@label decoration surface group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Plasma-skal</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSetsPage.qml.cpp" line="50"/>
@@ -15583,7 +15583,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="232"/>
         <source>Not decorated. Add a decoration pack to style this surface.</source>
-        <translation type="unfinished"></translation>
+        <translation>Inte dekorerad. Lägg till ett dekorationspaket för att forma den här ytan.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="235"/>
@@ -15724,52 +15724,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Aktiv kantfärg</translation>
+        <translation>Kantfärg för aktivt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
         <source>Low</source>
         <comment>@item:inlistbox decoration blur quality</comment>
-        <translation type="unfinished"></translation>
+        <translation>Låg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="62"/>
         <source>Balanced</source>
         <comment>@item:inlistbox decoration blur quality</comment>
-        <translation type="unfinished"></translation>
+        <translation>Balanserad</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="66"/>
         <source>High</source>
         <comment>@item:inlistbox decoration blur quality</comment>
-        <translation type="unfinished"></translation>
+        <translation>Hög</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="300"/>
         <source>Border color for the focused window. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kantfärg för det fokuserade fönstret. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Inaktiv kantfärg</translation>
+        <translation>Kantfärg för inaktivt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
         <source>Border color for unfocused windows. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Kantfärg för fönster utan fokus. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="437"/>
         <source>Tint color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Färgtonens färg</translation>
+        <translation>Toningsfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="439"/>
         <source>Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg som fönstret sköljs med när toningsstyrkan är över noll. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="475"/>
@@ -15819,13 +15819,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="601"/>
         <source>This applies to windows that use decoration shader packs with blur.</source>
-        <translation type="unfinished"></translation>
+        <translation>Detta gäller fönster som använder dekorationsshaderpaket med oskärpa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="610"/>
         <source>How sharply decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</source>
         <oldsource>How sharp decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Hur skarpt dekorationsshaders beräknar sin oskärpa, i förhållande till vad varje shaderpaket väljer för egen del. Lägre är billigare för grafikkortet och ser något mjukare ut i rörelse. Högre är skarpare och kostar mer.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="636"/>
@@ -15841,7 +15841,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="688"/>
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
-        <translation type="unfinished">Andra fönster behåller sin dekoration men slutar röra sig. Sparar grafikkortsanvändning ungefär i proportion till hur många fönster du har öppna.</translation>
+        <translation>Andra fönster behåller sin dekoration men slutar röra sig. Det sparar grafikkortsbelastning ungefär i proportion till hur många fönster du har öppna. Paneler och appletpopupper fortsätter animera, eftersom en panel aldrig är det aktiva fönstret.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -15929,29 +15929,29 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="564"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="587"/>
         <source>No template</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="566"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="589"/>
         <source>No algorithm</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen algoritm</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="567"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="590"/>
         <source>No layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen layout</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="577"/>
         <source>No template assigned</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen mall tilldelad</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="579"/>
         <source>No algorithm assigned</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen algoritm tilldelad</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="592"/>
@@ -15963,9 +15963,9 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="602"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="457"/>
         <source>%n width</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n bredd</numerusform>
+            <numerusform>%n bredder</numerusform>
         </translation>
     </message>
     <message>
@@ -16003,7 +16003,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="357"/>
         <source>Clear Default</source>
-        <translation type="unfinished"></translation>
+        <translation>Rensa standard</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="397"/>
@@ -16086,12 +16086,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="90"/>
         <source>Width Count</source>
-        <translation type="unfinished"></translation>
+        <translation>Antal bredder</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="333"/>
         <source>Set a priority order on the Priority page first</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange först en prioritetsordning på sidan Prioritet</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="368"/>
@@ -16122,7 +16122,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="429"/>
         <source>Filter Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Filtrera mallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="455"/>
@@ -16203,12 +16203,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
         <source>Unnamed Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Namnlös mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
         <source>Unnamed Algorithm</source>
-        <translation type="unfinished"></translation>
+        <translation>Namnlös algoritm</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
@@ -16221,15 +16221,15 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
         <source>Template with %n width</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Mall med %n bredd</numerusform>
+            <numerusform>Mall med %n bredder</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="304"/>
         <source>Default scrolling template</source>
-        <translation type="unfinished"></translation>
+        <translation>Standardrullningsmall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="307"/>
@@ -16244,7 +16244,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="331"/>
         <source>Built-in template. Editing stores your own copy.</source>
-        <translation type="unfinished"></translation>
+        <translation>Inbyggd mall. Redigering sparar en egen kopia.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="334"/>
@@ -16259,7 +16259,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="340"/>
         <source>Edited copy of a built-in template. Deleting it brings the built-in one back.</source>
-        <translation type="unfinished"></translation>
+        <translation>Redigerad kopia av en inbyggd mall. Om du tar bort den kommer den inbyggda tillbaka.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="342"/>
@@ -16316,7 +16316,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="114"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="50"/>
         <source>User templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Egna mallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
@@ -16331,7 +16331,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
         <source>Drop a template file here to import it, or use the buttons below. Your templates live under your data directory.</source>
-        <translation type="unfinished"></translation>
+        <translation>Släpp en mallfil här för att importera den, eller använd knapparna nedan. Dina mallar ligger i din datakatalog.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="70"/>
@@ -16346,7 +16346,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="70"/>
         <source>Drop a template file here</source>
-        <translation type="unfinished"></translation>
+        <translation>Släpp en mallfil här</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="71"/>
@@ -16361,7 +16361,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="71"/>
         <source>Release to import template</source>
-        <translation type="unfinished"></translation>
+        <translation>Släpp för att importera mallen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="621"/>
@@ -16410,7 +16410,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="166"/>
         <source>Open user templates directory</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna katalogen med egna mallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutThumbnail.qml.cpp" line="151"/>
@@ -16421,12 +16421,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="267"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="438"/>
         <source>Your Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Dina mallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="268"/>
         <source>All templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Alla mallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="280"/>
@@ -16447,7 +16447,7 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="93"/>
         <source>Scrolling Templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsmallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
@@ -16462,7 +16462,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search templates…</source>
-        <translation type="unfinished"></translation>
+        <translation>Sök mallar…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
@@ -16473,17 +16473,17 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Ny mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No matching templates</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga matchande mallar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No scrolling templates available</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga rullningsmallar tillgängliga</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="456"/>
@@ -16524,7 +16524,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="473"/>
         <source>Both Built-in and Your Templates sources are hidden</source>
-        <translation type="unfinished"></translation>
+        <translation>Både inbyggda och Dina mallar är dolda</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="475"/>
@@ -16534,7 +16534,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="481"/>
         <source>Start the PlasmaZones daemon to create a template, or import one</source>
-        <translation type="unfinished"></translation>
+        <translation>Starta PlasmaZones-tjänsten för att skapa en mall, eller importera en</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="485"/>
@@ -16570,9 +16570,9 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="511"/>
         <source>%n template</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n mall</numerusform>
+            <numerusform>%n mallar</numerusform>
         </translation>
     </message>
     <message>
@@ -16608,12 +16608,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="629"/>
         <source>Import Scrolling Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Importera rullningsmall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="642"/>
         <source>Export Scrolling Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Exportera rullningsmall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="655"/>
@@ -16638,7 +16638,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="825"/>
         <source>Delete Template</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
@@ -16780,7 +16780,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="162"/>
         <source>Quick Scrolling %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Snabbrullning %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="174"/>
@@ -16791,42 +16791,42 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="174"/>
         <source>Shortcut %1, used on monitors in this mode</source>
         <comment>%1 is a keyboard shortcut such as Meta+Alt+1</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kortkommando %1, används på skärmar i det här läget</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Tiling algorithm for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Panelläggningsalgoritm för snabbkortkommandot %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Zone layout for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonlayout för snabbkortkommandot %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Scrolling template for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsmall för snabbkortkommandot %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Rensa layout</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear template</source>
-        <translation type="unfinished"></translation>
+        <translation>Rensa mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear layout for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Rensa layouten för snabbkortkommandot %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear template for quick shortcut %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Rensa mallen för snabbkortkommandot %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="43"/>
@@ -16902,7 +16902,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="138"/>
         <source>%1 · %2</source>
         <comment>inheritance note, then the profile description</comment>
-        <translation type="unfinished">%1 · %2</translation>
+        <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="160"/>
@@ -16997,7 +16997,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="301"/>
         <source>None</source>
         <comment>the explicit no-layout choice</comment>
-        <translation type="unfinished">Ingen</translation>
+        <translation>Ingen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="335"/>
@@ -17223,52 +17223,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="179"/>
         <source>e.g. Editor, Terminal</source>
         <comment>@info:placeholder zone names for a snap-to-zone rule</comment>
-        <translation type="unfinished"></translation>
+        <translation>t.ex. Editor, Terminal</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="181"/>
         <source>Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone names field of a snap-to-zone rule</comment>
-        <translation type="unfinished"></translation>
+        <translation>Zonnamn som matchande fönster fästs vid, som finns i den layout som är aktiv. Flera zoner täcker deras gemensamma yta.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="203"/>
         <source>Add a name…</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till ett namn…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="204"/>
         <source>Add a zone name from your layouts</source>
         <comment>@info:accessibility</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till ett zonnamn från dina layouter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="241"/>
         <source>One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.</source>
         <comment>@info:accessibility zone numbers field of a snap-to-zone rule</comment>
-        <translation type="unfinished">Ett eller flera 1-baserade zonnummer att fästa matchande fönster i. Flera zoner spänner över deras kombinerade yta.</translation>
+        <translation>Ett eller flera zonnummer räknat från 1, som matchande fönster fästs vid. Flera zoner täcker deras gemensamma yta.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="406"/>
         <source>Reset to the system accent color</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ till systemets accentfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="407"/>
         <source>Follow the system accent color</source>
-        <translation type="unfinished"></translation>
+        <translation>Följ systemets accentfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="534"/>
         <source>None</source>
         <comment>@item:inlistbox scrolling template rule action, use no template at all</comment>
-        <translation type="unfinished">Ingen</translation>
+        <translation>Ingen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="551"/>
         <source>Choose a template…</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj en mall…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
@@ -17301,7 +17301,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="775"/>
         <source>This event is not driven per window, so a rule cannot change it. It stays here because this action already names it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den här händelsen styrs inte per fönster, så en regel kan inte ändra den. Den står här eftersom den här åtgärden redan namnger den.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="782"/>
@@ -17425,7 +17425,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="220"/>
         <source>Add a second condition, grouping it with this one</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till ett andra villkor och gruppera det med det här</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="394"/>
@@ -17441,7 +17441,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="229"/>
         <source>Add a condition group alongside this condition</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en villkorsgrupp bredvid det här villkoret</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionEditor.qml.cpp" line="403"/>
@@ -17555,7 +17555,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="742"/>
         <source>Choose a scheme…</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj ett schema…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="781"/>
@@ -17566,7 +17566,7 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="141"/>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="171"/>
         <source>That template is no longer available.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den mallen är inte längre tillgänglig.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="242"/>
@@ -17577,199 +17577,199 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="258"/>
         <source>This template starts no columns</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Den här mallen börjar med inga kolumner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="259"/>
         <source>The first windows you open form the starting columns, in order along the strip. Later windows use the default width from the panel. A template without starting columns only sets the width presets.</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>De första fönstren du öppnar bildar startkolumnerna, i ordning längs remsan. Senare fönster använder standardbredden från panelen. En mall utan startkolumner anger bara breddförinställningarna.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <source>Column %1, %2% wide, %3</source>
         <comment>@info accessible column summary; %3 is Stacked or Tabbed</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kolumn %1, %2 % bred, %3</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation type="unfinished">Med flikar</translation>
+        <translation>Flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Stacked</source>
         <comment>@info column display</comment>
-        <translation type="unfinished"></translation>
+        <translation>Staplade</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="493"/>
         <source>%1%</source>
         <comment>@info column width percentage</comment>
-        <translation type="unfinished">%1 %</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="500"/>
         <source>Column %1</source>
         <comment>@info column caption</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kolumn %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="570"/>
         <source>Move column toward the strip start</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flytta kolumnen mot remsans början</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="571"/>
         <source>Swap this column with the previous one</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Byt plats på den här kolumnen och föregående</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="572"/>
         <source>Move toward start</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flytta mot början</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="597"/>
         <source>Move column toward the strip end</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flytta kolumnen mot remsans slut</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="598"/>
         <source>Swap this column with the next one</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Byt plats på den här kolumnen och nästa</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="599"/>
         <source>Move toward end</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flytta mot slutet</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="754"/>
         <source>Drag along the strip to resize this column</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Dra längs remsan för att ändra storlek på den här kolumnen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="586"/>
         <source>Show windows stacked</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa fönster staplade</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="586"/>
         <source>Show windows as tabs</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa fönster som flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="587"/>
         <source>Switch this column between stacked windows and tabs</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Växla den här kolumnen mellan staplade fönster och flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="588"/>
         <source>Show windows stacked</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa fönster staplade</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="588"/>
         <source>Show windows as tabs</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa fönster som flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="612"/>
         <source>Remove column</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="613"/>
         <source>Remove this column from the template</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort den här kolumnen från mallen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="614"/>
         <source>Remove column</source>
         <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="753"/>
         <source>Column width divider</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Avdelare för kolumnbredd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="837"/>
         <source>Screen edge</source>
         <comment>@info marker caption</comment>
-        <translation type="unfinished"></translation>
+        <translation>Skärmkant</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="271"/>
         <source>Change Description</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra beskrivning</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="306"/>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="320"/>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="339"/>
         <source>Change Default Width</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra standardbredd</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="354"/>
         <source>Change Default Display</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra standardvisning</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="377"/>
         <source>Change Width Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra breddförinställningar</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="390"/>
         <source>Change Height Presets</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra höjdförinställningar</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="411"/>
         <source>Add Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till kolumn</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="424"/>
         <source>Remove Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort kolumn</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="437"/>
         <source>Move Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Flytta kolumn</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="464"/>
         <source>Resize Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra kolumnstorlek</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="486"/>
         <source>Change Column Display</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra kolumnvisning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="244"/>
@@ -17841,18 +17841,18 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="108"/>
         <source>Action “%1” may not take effect because this rule also has an exclusion that stops the rest of the rule from applying. Put the exclusion on a separate rule.</source>
-        <translation type="unfinished"></translation>
+        <translation>Åtgärden ”%1” får kanske ingen effekt, eftersom den här regeln också har ett undantag som stoppar resten av regeln. Lägg undantaget i en egen regel.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="110"/>
         <source>Action “%1” is a duplicate. An earlier action of the same type on this rule already sets it, so only one of them takes effect.</source>
-        <translation type="unfinished"></translation>
+        <translation>Åtgärden ”%1” är en dubblett. En tidigare åtgärd av samma typ i den här regeln anger den redan, så bara en av dem får effekt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="112"/>
         <source>Action “%1” is not filled in yet. Choose a value for it, or remove the action. Otherwise it is dropped when the rule is saved.</source>
         <oldsource>Action “%1” is not filled in yet. Choose a value for it, or remove the action, otherwise it is dropped when the rule is saved.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Åtgärden ”%1” är inte ifylld än. Välj ett värde för den eller ta bort åtgärden. Annars faller den bort när regeln sparas.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="114"/>
@@ -17898,17 +17898,17 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="161"/>
         <source>%n animation action that cannot run</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n animeringsåtgärd som inte kan köras</numerusform>
+            <numerusform>%n animeringsåtgärder som inte kan köras</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="165"/>
         <source>This rule has %n animation action naming an event that does not belong to a window, so it never runs. Rules match windows.</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Den här regeln har %n animeringsåtgärd som namnger en händelse som inte hör till ett fönster, så den körs aldrig. Regler matchar fönster.</numerusform>
+            <numerusform>Den här regeln har %n animeringsåtgärder som namnger en händelse som inte hör till ett fönster, så de körs aldrig. Regler matchar fönster.</numerusform>
         </translation>
     </message>
     <message>
@@ -18033,7 +18033,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
         <source>Choose Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj färg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
@@ -18208,7 +18208,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="427"/>
         <source>No monitors are connected.</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga skärmar är anslutna.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="435"/>
@@ -18243,47 +18243,49 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="285"/>
         <source>Scrolling strip preview, PlasmaZones is not running</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Förhandsvisning av rullningsremsan, PlasmaZones körs inte</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="287"/>
         <source>Scrolling strip preview, apply to start scrolling on this screen</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Förhandsvisning av rullningsremsan, tillämpa för att börja rulla på den här skärmen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="289"/>
         <source>Scrolling strip preview, no windows on the strip yet</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation type="unfinished"></translation>
+        <translation>Förhandsvisning av rullningsremsan, inga fönster på remsan än</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="291"/>
         <source>Scrolling strip preview with %n window</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Förhandsvisning av rullningsremsan med %n fönster</numerusform>
+            <numerusform>Förhandsvisning av rullningsremsan med %n fönster</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1111"/>
-        <source>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen uses no template, so columns follow the built-in width and height steps.</source>
+        <oldsource>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</oldsource>
+        <translation>Den här skärmen använder ingen mall, så kolumner följer de inbyggda bredd- och höjdstegen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1113"/>
-        <source>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen uses the %1 template, which sets its starting columns and the width and height presets.</source>
+        <oldsource>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</oldsource>
+        <translation>Den här skärmen använder mallen %1, som anger dess startkolumner och bredd- och höjdförinställningarna.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
         <source>This monitor uses %1, which is not in your layout list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den här skärmen använder %1, som inte finns i din layoutlista.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1035"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den här skärmen använder %1, som inte finns i din algoritmlista.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
@@ -18295,49 +18297,52 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="602"/>
         <source>PlasmaZones is not running</source>
         <comment>scrolling strip preview, the daemon is not running</comment>
-        <translation type="unfinished"></translation>
+        <translation>PlasmaZones körs inte</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="604"/>
         <source>Apply to start scrolling on this screen</source>
         <comment>scrolling strip preview, the mode is staged but not applied yet</comment>
-        <translation type="unfinished"></translation>
+        <translation>Tillämpa för att börja rulla på den här skärmen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</source>
-        <translation type="unfinished"></translation>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout. Windows are numbered in order, and Snap to Zone reaches the first nine.</source>
+        <oldsource>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</oldsource>
+        <translation>Rullningsläget ordnar fönster i kolumner med justerbar storlek på en oändlig remsa, utan zonlayout. Fönster numreras i ordning, och Fäst vid zon når de första nio.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
-        <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
-        <translation type="unfinished"></translation>
+        <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout.</source>
+        <translation>Rullningsläget ordnar fönster i kolumner med justerbar storlek på en oändlig remsa, utan zonlayout.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1115"/>
-        <source>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen is pinned to a template no longer in your list, so columns follow the built-in width and height steps.</source>
+        <oldsource>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</oldsource>
+        <translation>Den här skärmen är fäst vid en mall som inte längre finns i din lista, så kolumner följer de inbyggda bredd- och höjdstegen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1124"/>
         <source>Pick another template to replace it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj en annan mall som ersättning.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1126"/>
-        <source>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</source>
-        <oldsource>This screen has no template of its own, so it follows the default template from the Layouts page.</oldsource>
-        <translation type="unfinished"></translation>
+        <source>This screen has no template of its own, so it follows the default from Scrolling → Templates.</source>
+        <oldsource>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</oldsource>
+        <translation>Den här skärmen har ingen egen mall, så den följer standardmallen från Rullning → Mallar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
-        <source>Every starting column is in use, so further columns open at the template&apos;s own width and display.</source>
-        <translation type="unfinished"></translation>
+        <source>Every starting column is in use, so new columns open at the template&apos;s own width.</source>
+        <oldsource>Every starting column is in use, so further columns open at the template&apos;s own width and display.</oldsource>
+        <translation>Alla startkolumner är i bruk, så nya kolumner öppnas med mallens egen bredd.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
-        <source>This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.</source>
-        <translation type="unfinished"></translation>
+        <source>This screen has used %1 of %2 starting columns, and the rest shape the next ones you open.</source>
+        <translation>Den här skärmen har använt %1 av %2 startkolumner, och resten formar de nästa du öppnar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
@@ -18501,7 +18506,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="829"/>
         <source>Custom split</source>
         <oldsource>Custom Split</oldsource>
-        <translation type="unfinished">Anpassad delning</translation>
+        <translation>Egen delning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="846"/>
@@ -18645,7 +18650,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="335"/>
         <source>%1 px width</source>
         <comment>pixel-unit width in a preset tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>%1 px bred</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="297"/>
@@ -18849,13 +18854,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="120"/>
         <source>Scrolling strip</source>
         <comment>@item shader capability (the scrolling strip&apos;s view motion)</comment>
-        <translation type="unfinished"></translation>
+        <translation>Rullningsremsa</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="125"/>
         <source>Tab switch</source>
         <comment>@item shader capability (switching tabs in a scrolling column)</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flikväxling</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="163"/>
@@ -19201,7 +19206,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="16"/>
         <source>Create layouts on the Snapping → Layouts page first.</source>
         <oldsource>Create layouts in the Layouts page first.</oldsource>
-        <translation type="unfinished">Skapa layouter på sidan Layouter först.</translation>
+        <translation>Skapa först layouter på sidan Fästning → Layouter.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="17"/>
@@ -19212,34 +19217,34 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="69"/>
         <source>Zone highlight color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Färg för zonmarkering</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="100"/>
         <source>Inactive zone color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished">Färg för inaktiv zon</translation>
+        <translation>Färg för inaktiv zon</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="71"/>
         <source>Color for the active/hovered zone. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg för den aktiva zonen eller den under pekaren. Följer färgschemat om du inte väljer en. Opacitetsreglagen nedan ersätter all genomskinlighet som färgen bär med sig.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="102"/>
         <source>Color for zones that are not hovered. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg för zoner som pekaren inte är över. Följer färgschemat om du inte väljer en. Opacitetsreglagen nedan ersätter all genomskinlighet som färgen bär med sig.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="120"/>
         <source>Zone border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Färg för zonkant</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="122"/>
         <source>Color for zone borders. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg för zonkanter. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="156"/>
@@ -19259,23 +19264,23 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="244"/>
         <source>Corner rounding of zones in pixels</source>
-        <translation type="unfinished"></translation>
+        <translation>Zonernas hörnrundning i bildpunkter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="429"/>
         <source>Choose Zone Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj zonfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="289"/>
         <source>Zone label text color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Textfärg för zonetikett</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="291"/>
         <source>Text color for zone labels. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Textfärg för zonetiketter. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="306"/>
@@ -19289,7 +19294,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="312"/>
         <source>System font</source>
         <oldsource>System default</oldsource>
-        <translation type="unfinished">Systemstandard</translation>
+        <translation>Systemets teckensnitt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="350"/>
@@ -19340,12 +19345,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="99"/>
         <source>How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge överlagringen förblir aktiv efter att aktiveringsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå fästs. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="103"/>
         <source>Release grace period for drag activation</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp för dragaktivering</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="137"/>
@@ -19408,12 +19413,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="96"/>
         <source>How long the zones stay up after you let go of the trigger, so a window dropped just after letting go still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge zonerna syns efter att du släpper utlösaren, så att ett fönster som släpps strax efteråt ändå fästs. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="97"/>
         <source>Release grace period for showing zones</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp för att visa zoner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="110"/>
@@ -19438,12 +19443,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="87"/>
         <source>How long after the trigger is released a drop still counts as holding it. The picker is decided at the moment you let go of the window, which is when a trigger held by the same hand has usually lifted already. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge efter att utlösaren släppts ett släpp fortfarande räknas som att den hålls ned. Väljaren avgörs i det ögonblick du släpper fönstret, och då har en utlösare som samma hand höll oftast redan lyfts. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="88"/>
         <source>Release grace period for the snap assist picker</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp för fästhjälpsväljaren</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="25"/>
@@ -19484,7 +19489,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="121"/>
         <source>Keep the windows you float stacked above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Håll de fönster du gör flytande ovanför fönstren som fästs i zoner. En regel som anger ett fönsterlager har företräde för de fönster den matchar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="137"/>
@@ -19510,7 +19515,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
         <source>How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge överspannet förblir aktivt efter att spannmodifieraren släppts, så att ett fönster som släpps strax efteråt ändå tar de målade zonerna. Hjälper när modifieraren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -19862,7 +19867,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="85"/>
         <source>Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.</source>
         <oldsource>Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it</oldsource>
-        <translation type="unfinished">Tryck på återinfogningsutlösaren en gång för att aktivera stapelförhandsgranskningen, tryck igen för att inaktivera den</translation>
+        <translation>Tryck en gång på återinfogningsutlösaren för att aktivera stapelförhandsvisningen. Tryck igen för att avaktivera den.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="92"/>
@@ -19872,12 +19877,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="106"/>
         <source>How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge stapelförhandsvisningen förblir aktiv efter att återinfogningsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå hamnar i stapeln. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="107"/>
         <source>Release grace period for re-insert into stack</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp för återinfogning i stapeln</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="23"/>
@@ -19888,23 +19893,23 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation type="unfinished"></translation>
+        <translation>Med Aldrig står remsan stilla tills den fokuserade kolumnen skulle lämna skärmen. Med Alltid parkerar den fokuserade kolumnen i mitten. Med Vid överflöde centreras den först när remsan går förbi skärmens kant.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
         <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
         <comment>the quoted phrase Center the focused column and the word Never must match the sibling row&apos;s title and option label</comment>
-        <translation type="unfinished">När remsan bara innehåller en kolumn centreras den även när ”Centrera den fokuserade kolumnen” är inställt på ”Aldrig”.</translation>
+        <translation>När remsan innehåller en enda kolumn, centrera den även när ”Centrera den fokuserade kolumnen” är satt till Aldrig.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="77"/>
         <source>When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.</source>
-        <translation type="unfinished"></translation>
+        <translation>När det här är på behåller en kolumn vid skärmkanten sin fulla storlek och skärs av vid kanten. När det är av krymper kolumnen tills den får plats, eller glider bort när för lite av den är kvar. Beskärningen kostar viss effektivitet i helskärmsvideo och spel så länge någon skärm använder rullning.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="93"/>
         <source>Focus a window when it opens.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ge ett fönster fokus när det öppnas.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="97"/>
@@ -19915,44 +19920,44 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="109"/>
         <source>Moving the mouse pointer over a window gives it focus.</source>
-        <translation type="unfinished"></translation>
+        <translation>Att flytta muspekaren över ett fönster ger det fokus.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="125"/>
         <source>Turn the wheel with a scroll key held to move along the strip. When this is off, both scroll keys are left to the compositor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Vrid hjulet med en rullningstangent nedtryckt för att förflytta dig längs remsan. När det här är av lämnas båda rullningstangenterna till kompositorn.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="153"/>
         <source>Both scroll keys use the same chord, so the view one never runs. Give them different chords to use both.</source>
-        <translation type="unfinished"></translation>
+        <translation>Båda rullningstangenterna använder samma tangentkombination, så den för vyn körs aldrig. Ge dem olika kombinationer för att använda båda.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="160"/>
         <source>Hold this and turn the wheel to move focus from column to column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll ned det här och vrid hjulet för att flytta fokus från kolumn till kolumn.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="175"/>
         <source>the column focus scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
-        <translation type="unfinished"></translation>
+        <translation>rullningstangenten för kolumnfokus</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="188"/>
         <source>Hold this and turn the wheel to move the view along the strip without changing which column has focus.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll ned det här och vrid hjulet för att flytta vyn längs remsan utan att ändra vilken kolumn som har fokus.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="196"/>
         <source>the view scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
-        <translation type="unfinished"></translation>
+        <translation>rullningstangenten för vyn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="214"/>
         <source>Scrolling down moves toward the start of the strip instead of the end, for both scroll keys.</source>
-        <translation type="unfinished"></translation>
+        <translation>Att rulla nedåt förflyttar mot remsans början i stället för slutet, för båda rullningstangenterna.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="39"/>
@@ -20013,12 +20018,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="36"/>
         <source>Where a new window&apos;s column enters the strip. Restored windows and per-window rules keep their own position.</source>
-        <translation type="unfinished"></translation>
+        <translation>Var ett nytt fönsters kolumn kommer in på remsan. Återställda fönster och regler per fönster behåller sin egen position.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="53"/>
         <source>Keep columns at least as wide and tall as their windows&apos; minimum size, which can push other windows off screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll kolumner minst lika breda och höga som deras fönsters minsta storlek, vilket kan trycka ut andra fönster från skärmen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="57"/>
@@ -20029,56 +20034,56 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="69"/>
         <source>When windows reopen after a restart, rebuild their columns with the same order, widths, and tab groups</source>
-        <translation type="unfinished"></translation>
+        <translation>När fönster öppnas igen efter en omstart, återskapa deras kolumner med samma ordning, bredder och flikgrupper</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="85"/>
         <source>When a floated window reopens, it returns to the position and size it had before, rather than being placed by the compositor. A rule can override this either way, opting individual windows in or out.</source>
-        <translation type="unfinished"></translation>
+        <translation>När ett flytande fönster öppnas igen återgår det till positionen och storleken det hade förut, i stället för att placeras av kompositorn. En regel kan åsidosätta detta åt båda håll och ta med eller undanta enskilda fönster.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="101"/>
         <source>Keep the windows you float stacked above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Håll de fönster du gör flytande ovanför remsans kolumner. En regel som anger ett fönsterlager har företräde för de fönster den matchar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="117"/>
         <source>How to handle windows that are shown on all virtual desktops</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur fönster som visas på alla virtuella skrivbord ska hanteras</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="120"/>
         <source>Sticky window handling</source>
-        <translation type="unfinished"></translation>
+        <translation>Hantering av fastnålade fönster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="134"/>
         <source>How far the increase and decrease column width shortcuts resize a column per press, as a share of the strip</source>
         <oldsource>How far the increase and decrease column width shortcuts move a column per press, as a share of the strip</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Hur mycket kortkommandona för att öka och minska kolumnbredden ändrar en kolumn per tryck, som andel av remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="137"/>
         <source>Column width adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Steg för justering av kolumnbredd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="156"/>
         <source>How far the increase and decrease window height shortcuts resize a window per press, as a share of the work area across the strip</source>
         <oldsource>How far the increase and decrease window height shortcuts resize a window per press, as a share of the screen height</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Hur mycket kortkommandona för att öka och minska fönsterhöjden ändrar ett fönster per tryck, som andel av arbetsytan tvärs remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="159"/>
         <source>Window height adjustment step</source>
-        <translation type="unfinished"></translation>
+        <translation>Steg för justering av fönsterhöjd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="178"/>
         <source>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the work area along the strip</source>
         <oldsource>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the screen along the strip</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Hur långt ett hack av Meta+Skift+hjul flyttar remsan utan att ändra fokus, som andel av arbetsytan längs remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="77"/>
@@ -20089,7 +20094,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="93"/>
         <source>Keep the windows you float stacked above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Håll de fönster du gör flytande ovanför de panelagda fönstren. En regel som anger ett fönsterlager har företräde för de fönster den matchar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="126"/>
@@ -20176,7 +20181,7 @@
         <location filename=".qml-stubs/src/shared/CategoryBadge.qml.cpp" line="54"/>
         <source>Template</source>
         <comment>@label:badge</comment>
-        <translation type="unfinished">Mall</translation>
+        <translation>Mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CategoryBadge.qml.cpp" line="56"/>
@@ -20450,7 +20455,7 @@
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="398"/>
         <source>%1 (continued)</source>
         <comment>category heading for a section that continues from the previous column</comment>
-        <translation type="unfinished"></translation>
+        <translation>%1 (forts.)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
@@ -20462,7 +20467,7 @@
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="432"/>
         <source>%1, %2</source>
         <comment>shortcut row: action, state</comment>
-        <translation type="unfinished">%1, %2</translation>
+        <translation>%1, %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/CheatsheetContent.qml.cpp" line="559"/>
@@ -20473,7 +20478,7 @@
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="165"/>
         <source>%1, %2</source>
         <comment>accessible name of the scrolling strip OSD when the strip is empty; %1 is the card name, %2 the reason</comment>
-        <translation type="unfinished">%1, %2</translation>
+        <translation>%1, %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="356"/>
@@ -20578,7 +20583,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="201"/>
         <source>No window to switch to</source>
-        <translation type="unfinished"></translation>
+        <translation>Inget fönster att växla till</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="206"/>
@@ -20639,65 +20644,65 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
         <source>Already at that size</source>
-        <translation type="unfinished"></translation>
+        <translation>Redan den storleken</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="377"/>
         <source>Already centered</source>
-        <translation type="unfinished"></translation>
+        <translation>Redan centrerad</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="411"/>
         <source>Already in master position</source>
-        <translation type="unfinished"></translation>
+        <translation>Redan i huvudpositionen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="490"/>
         <source>Restored</source>
         <comment>@info:status the window&apos;s previous position was restored</comment>
-        <translation type="unfinished">Återställd</translation>
+        <translation>Återställd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="501"/>
         <source>Tiled</source>
         <comment>@info:status the window is now tiled (adjective, not a verb)</comment>
-        <translation type="unfinished">Panelindelad</translation>
+        <translation>Panelagt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="529"/>
         <source>Swapped with master window</source>
-        <translation type="unfinished"></translation>
+        <translation>Bytte plats med huvudfönstret</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="549"/>
         <source>Resized</source>
         <comment>@info:status the window was resized</comment>
-        <translation type="unfinished"></translation>
+        <translation>Storleken ändrades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="137"/>
         <source>Spanning is not available in this mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Överspann är inte tillgängligt i det här läget</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="151"/>
         <source>Pushing to an empty zone is not available in this mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Att skjuta till en tom zon är inte tillgängligt i det här läget</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
         <source>No window in that position</source>
-        <translation type="unfinished"></translation>
+        <translation>Inget fönster på den positionen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="287"/>
         <source>All windows are already arranged</source>
-        <translation type="unfinished"></translation>
+        <translation>Alla fönster är redan ordnade</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="289"/>
         <source>Could not arrange the windows</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönstren kunde inte ordnas</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="292"/>
@@ -20733,57 +20738,57 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
         <source>No column templates available</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga kolumnmallar tillgängliga</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="335"/>
         <source>That layout is not available on this screen</source>
-        <translation type="unfinished"></translation>
+        <translation>Den layouten är inte tillgänglig på den här skärmen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="337"/>
         <source>Layouts are not available in this mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Layouter är inte tillgängliga i det här läget</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="349"/>
         <source>Resizing is unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>Storleksändring är inte tillgänglig</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="356"/>
         <source>Tabbing is unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikar är inte tillgängliga</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
         <source>Windowed fullscreen is unavailable</source>
-        <translation type="unfinished"></translation>
+        <translation>Helskärm i fönster är inte tillgängligt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="369"/>
         <source>No window to move between columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Inget fönster att flytta mellan kolumner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="385"/>
         <source>The scroll step is too small to move the view</source>
-        <translation type="unfinished"></translation>
+        <translation>Rullningssteget är för litet för att flytta vyn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
         <source>Already at the end of the strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Redan i slutet av remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
         <source>Columns are already at their default sizes</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnerna har redan sina standardstorlekar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="400"/>
         <source>Could not refresh the layout</source>
-        <translation type="unfinished"></translation>
+        <translation>Layouten kunde inte uppdateras</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="408"/>
@@ -20835,7 +20840,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
         <source>Snapped</source>
         <comment>@info:status the window was snapped into a zone</comment>
-        <translation type="unfinished">Fäst</translation>
+        <translation>Fäst</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
@@ -20856,7 +20861,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="477"/>
         <source>Focus</source>
         <comment>@info:status focus moved in the pressed direction</comment>
-        <translation type="unfinished">Fokus</translation>
+        <translation>Fokus</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
@@ -20877,7 +20882,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="510"/>
         <source>Snapped</source>
         <comment>@info:status the snapped layer took focus</comment>
-        <translation type="unfinished">Fäst</translation>
+        <translation>Fäst</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="516"/>
@@ -20888,7 +20893,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="518"/>
         <source>Floating</source>
         <comment>@info:status the window is now floating (adjective, not a verb)</comment>
-        <translation type="unfinished">Flytande</translation>
+        <translation>Flytande</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="525"/>
@@ -20898,7 +20903,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="527"/>
         <source>Focused the master window</source>
-        <translation type="unfinished"></translation>
+        <translation>Huvudfönstret fokuserades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
@@ -20928,48 +20933,48 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="547"/>
         <source>Column widths equalized</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnbredderna utjämnades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="551"/>
         <source>Tabbed display toggled</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikvisningen växlades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="558"/>
         <source>Windowed fullscreen off</source>
-        <translation type="unfinished"></translation>
+        <translation>Helskärm i fönster av</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="560"/>
         <source>Windowed fullscreen on</source>
-        <translation type="unfinished"></translation>
+        <translation>Helskärm i fönster på</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="562"/>
         <source>Window moved between columns</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönstret flyttades mellan kolumner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="564"/>
         <source>Window expelled into its own column</source>
-        <translation type="unfinished"></translation>
+        <translation>Fönstret matades ut i en egen kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="569"/>
         <source>Visible columns centered</source>
-        <translation type="unfinished"></translation>
+        <translation>Synliga kolumner centrerades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="571"/>
         <source>Column centered</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnen centrerades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="576"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
-        <translation type="unfinished"></translation>
+        <translation>Rullad</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
@@ -20995,7 +21000,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="678"/>
         <source>Brief feedback for keyboard window and layout actions</source>
-        <translation type="unfinished"></translation>
+        <translation>Kort återkoppling för fönster- och layoutåtgärder via tangentbordet</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="170"/>
@@ -21038,7 +21043,7 @@
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="548"/>
         <source>No columns yet. Drop here to start the strip.</source>
         <comment>@info strip selector empty state</comment>
-        <translation type="unfinished"></translation>
+        <translation>Inga kolumner än. Släpp här för att börja remsan.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="645"/>
@@ -21055,7 +21060,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="110"/>
         <source>At least one monitor has its own column sizing, which wins over the values below. Switch to advanced mode to edit it on Scrolling → Columns.</source>
-        <translation type="unfinished"></translation>
+        <translation>Minst en skärm har egen kolumnstorlek, som går före värdena nedan. Byt till avancerat läge för att redigera den under Rullning → Kolumner.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="125"/>
@@ -21073,14 +21078,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="147"/>
         <source>How much of the strip a new column takes</source>
         <oldsource>How much of the usable screen width a new column takes</oldsource>
-        <translation type="unfinished">Hur stor del av den användbara skärmbredden en ny kolumn tar</translation>
+        <translation>Hur mycket av remsan en ny kolumn tar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="199"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="173"/>
         <source>How many pixels a new column takes along the strip</source>
         <oldsource>How many pixels wide a new column is</oldsource>
-        <translation type="unfinished">Hur många bildpunkter bred en ny kolumn är</translation>
+        <translation>Hur många bildpunkter en ny kolumn tar längs remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="206"/>
@@ -21092,264 +21097,264 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="207"/>
         <source>Column width preset number</source>
-        <translation type="unfinished"></translation>
+        <translation>Nummer på kolumnbreddsförinställningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="146"/>
         <source>How wide a column is when it first opens. A screen with a layout template of its own takes the width from that template instead, including the width set for this monitor.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur bred en kolumn är när den öppnas första gången. En skärm med en egen layoutmall tar i stället bredden från den mallen, inklusive bredden som satts för den här skärmen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="229"/>
         <source>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.</source>
         <oldsource>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Vilken bredd en ny kolumn öppnas med, räknat från 1 bland bredderna i skärmens layoutmall. Skärmar utan egen mall använder standardmallen från Rullning → Mallar, och helt utan mall gäller de inbyggda breddstegen. Kolumner som öppnas så följer senare ändringar i listan de kom från.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="261"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip. A screen with a layout template of its own takes this from that template instead, and the template&apos;s starting columns each carry their own.</source>
-        <translation type="unfinished"></translation>
+        <translation>Normal staplar kolumnens fönster ovanpå varandra. Flikar visar ett fönster i taget bakom en flikrad. En skärm med en egen layoutmall tar i stället detta från den mallen, och mallens startkolumner bär var och en sitt eget.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="280"/>
         <source>How tall a window is when it joins a column. With Share the column evenly, a new window splits the remaining space with its neighbors.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur högt ett fönster är när det ansluter till en kolumn. Med ”Dela kolumnen lika” delar ett nytt fönster det återstående utrymmet med sina grannar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="283"/>
         <source>Default window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Standardhöjd för fönster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="297"/>
         <source>How many pixels a new window takes across the strip</source>
         <oldsource>How many pixels tall a new window is</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Hur många bildpunkter ett nytt fönster tar tvärs remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="304"/>
         <source>Fixed window height</source>
-        <translation type="unfinished"></translation>
+        <translation>Fast fönsterhöjd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="323"/>
         <source>Which height a new window opens at, counted from 1 into the heights of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in height steps apply.</source>
         <oldsource>Which height a new window opens at, counted from 1 into the heights of the screen&apos;s layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in height steps apply.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Vilken höjd ett nytt fönster öppnas med, räknat från 1 bland höjderna i skärmens layoutmall. Skärmar utan egen mall använder standardmallen från Rullning → Mallar, och helt utan mall gäller de inbyggda höjdstegen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="330"/>
         <source>Window height preset number</source>
-        <translation type="unfinished"></translation>
+        <translation>Nummer på fönsterhöjdsförinställningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="369"/>
         <source>These are the steps the cycling shortcuts walk on a screen with no layout template. A screen using a template walks that template&apos;s own lists instead, and each list is replaced whole, so a template that carries widths but no heights leaves the heights here in play.</source>
-        <translation type="unfinished"></translation>
+        <translation>Det här är stegen som stegningskortkommandona går igenom på en skärm utan layoutmall. En skärm som använder en mall går i stället igenom den mallens egna listor, och varje lista ersätts i sin helhet, så en mall som bär bredder men inga höjder lämnar höjderna här i spel.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="381"/>
         <source>Percentages of the work area along the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area width, cycled in this order by the preset shortcuts</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Procentandelar av arbetsytan längs remsan, som förinställningskortkommandona går igenom i den här ordningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
         <source>%1% column width preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kolumnbreddsförinställning %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="390"/>
         <source>Remove the %1% column width preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort kolumnbreddsförinställningen %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="391"/>
         <source>New column width preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation type="unfinished"></translation>
+        <translation>Procentandel för en ny kolumnbreddsförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="392"/>
         <source>Add a column width preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en kolumnbreddsförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="403"/>
         <source>Percentages of the work area across the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area height, cycled in this order by the preset shortcuts</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Procentandelar av arbetsytan tvärs remsan, som förinställningskortkommandona går igenom i den här ordningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
         <source>%1% window height preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Fönsterhöjdsförinställning %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="413"/>
         <source>Remove the %1% window height preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort fönsterhöjdsförinställningen %1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="414"/>
         <source>New window height preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation type="unfinished"></translation>
+        <translation>Procentandel för en ny fönsterhöjdsförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="415"/>
         <source>Add a window height preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en fönsterhöjdsförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="200"/>
         <source>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>Vilken bredd en ny kolumn öppnas med, räknat från 1 bland bredderna i skärmens layoutmall. Skärmar utan egen mall använder standardmallen från Rullning → Mallar, och helt utan mall gäller de inbyggda breddstegen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="252"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="114"/>
         <source>Mark a tabbed column&apos;s windows on screen. Tabbed columns keep working without it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Markera fönstren i en kolumn med flikar på skärmen. Kolumner med flikar fungerar även utan det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="266"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="147"/>
         <source>Titled chips label each window. A segment bar is thinner and shows only how many there are.</source>
         <oldsource>Titled chips name each window. A segment bar is thinner and shows only how many there are.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Namngivna brickor namnger varje fönster. En segmentrad är tunnare och visar bara hur många de är.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="270"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="151"/>
         <source>Tab indicator style</source>
-        <translation type="unfinished"></translation>
+        <translation>Stil för flikindikatorn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="282"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="163"/>
         <source>Which edge of the column the indicator runs along.</source>
-        <translation type="unfinished"></translation>
+        <translation>Längs vilken kant av kolumnen indikatorn löper.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="286"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="167"/>
         <source>Tab indicator position</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns position</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="69"/>
         <source>Choose Tab Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj flikfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="128"/>
         <source>Leave a tabbed column unmarked while it holds only one window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Låt en kolumn med flikar vara omarkerad så länge den bara håller ett fönster.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="133"/>
         <source>Hide the tab indicator for a single window</source>
-        <translation type="unfinished"></translation>
+        <translation>Dölj flikindikatorn för ett enda fönster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="183"/>
         <source>Typeface and style for the tab labels. Their size comes from Thickness, so there is no size to set here. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Teckensnitt och stil för fliketiketterna. Deras storlek följer av Tjocklek, så det finns ingen storlek att ange här. En segmentrad ritar inga etiketter och struntar i detta.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="218"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="219"/>
         <source>Reset the tab label font</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ teckensnittet för fliketiketten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Krymp fönstren så att indikatorn får plats. Av ritas den bredvid kolumnen och kan överlappa en granne eller löpa utanför skärmen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
         <source>Make room for the tab indicator inside the column</source>
-        <translation type="unfinished"></translation>
+        <translation>Gör plats för flikindikatorn inuti kolumnen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="267"/>
         <source>Space between the indicator and the window. A negative gap draws it over the window instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Utrymme mellan indikatorn och fönstret. Ett negativt mellanrum ritar den i stället över fönstret.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="272"/>
         <source>Gap around the tab indicator</source>
-        <translation type="unfinished"></translation>
+        <translation>Mellanrum runt flikindikatorn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="294"/>
         <source>How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their labels, which on a left or right edge means a lot.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur tjock indikatorn är. När den gör plats inuti kolumnen är det exakt så mycket plats den tar. En segmentrad läser bra redan vid några bildpunkter. Namngivna brickor behöver tillräckligt för sina etiketter, vilket vid en vänster- eller högerkant betyder mycket.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="495"/>
         <source>Choose Tab Font</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj flikteckensnitt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="299"/>
         <source>Tab indicator thickness</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns tjocklek</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="315"/>
         <source>How much of the column edge the indicator spans, centered on it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur mycket av kolumnkanten indikatorn täcker, centrerad på den.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="758"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="318"/>
         <source>Tab indicator length</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikindikatorns längd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="337"/>
         <source>Space separating one tab from the next.</source>
-        <translation type="unfinished"></translation>
+        <translation>Utrymme som skiljer en flik från nästa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Runda varje flik till ett piller. Av gäller i stället hörnradien nedan.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
         <source>How rounded each tab&apos;s corners are. On a segment bar with no gap between tabs, only the two ends of the run are rounded.</source>
         <oldsource>How rounded each tab&apos;s corners are. With no gap between tabs, only the two ends are rounded.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Hur rundade varje fliks hörn är. På en segmentrad utan mellanrum mellan flikarna rundas bara radens två ändar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="397"/>
         <source>Tab corner radius</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikens hörnradie</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="441"/>
         <source>The tab of the window the column is currently showing.</source>
-        <translation type="unfinished"></translation>
+        <translation>Fliken för fönstret som kolumnen visar just nu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="455"/>
         <source>The tabs of the column&apos;s other windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flikarna för kolumnens andra fönster.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="470"/>
         <source>The tab of a window that is asking for attention.</source>
-        <translation type="unfinished"></translation>
+        <translation>Fliken för ett fönster som ber om uppmärksamhet.</translation>
     </message>
     <message>
         <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="672"/>
@@ -21371,7 +21376,7 @@
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="351"/>
         <source>Some animation settings could not be saved.</source>
-        <translation type="unfinished"></translation>
+        <translation>Vissa animeringsinställningar kunde inte sparas.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_groupwrites.cpp" line="483"/>
@@ -21382,13 +21387,13 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="51"/>
         <source>Reset %1 to the color scheme</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Återställ %1 till färgschemat</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="71"/>
         <source>%1 color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Färg för %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
@@ -21396,703 +21401,703 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="47"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="745"/>
         <source>Color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Färgschema</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="33"/>
         <source>Reset to the color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ till färgschemat</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="34"/>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="52"/>
         <source>Follow the color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Följ färgschemat</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="50"/>
         <source>Color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Färg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="103"/>
         <source>Following the color scheme</source>
-        <translation type="unfinished"></translation>
+        <translation>Följer färgschemat</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="34"/>
         <source>Dragged windows re-insert into the scroll strip at the cursor position without requiring a modifier key or mouse button</source>
-        <translation type="unfinished"></translation>
+        <translation>Dragna fönster infogas i rullningsremsan igen vid pekarens position, utan att en modifierartangent eller musknapp behövs</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="40"/>
         <source>Always re-insert into strip on drag</source>
-        <translation type="unfinished"></translation>
+        <translation>Återinfoga alltid i remsan vid dragning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="54"/>
         <source>Hold a modifier or mouse button while dragging a window to insert it into the strip under the cursor. It becomes a new column, or stacks into the column it lands on.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håll ned en modifierartangent eller musknapp medan du drar ett fönster för att infoga det i remsan under pekaren. Det blir en ny kolumn, eller staplas in i kolumnen det landar på.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="80"/>
         <source>Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tryck en gång på återinfogningsutlösaren för att aktivera remsförhandsvisningen. Tryck igen för att avaktivera den.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="87"/>
         <source>Toggle mode for re-insert into strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlingsläge för återinfogning i remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="101"/>
         <source>How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge remsförhandsvisningen förblir aktiv efter att återinfogningsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå hamnar i remsan. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="102"/>
         <source>Release grace period for re-insert into strip</source>
-        <translation type="unfinished"></translation>
+        <translation>Respittid vid släpp för återinfogning i remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="70"/>
         <source>Drop indicator fill color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikatorns fyllningsfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="72"/>
         <source>Color filling the space the window will land in. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg som fyller utrymmet där fönstret kommer att landa. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="99"/>
         <source>How solid the fill is. This replaces any transparency carried by the fill color.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur täckande fyllningen är. Detta ersätter all genomskinlighet som fyllningsfärgen bär med sig.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="117"/>
         <source>Drop indicator border color</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Släppindikatorns kantfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="119"/>
         <source>Color of the indicator&apos;s edge. Follows the color scheme unless you pick one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färg på indikatorns kant. Följer färgschemat om du inte väljer en.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="136"/>
         <source>Thickness of the indicator&apos;s edge in pixels. Zero draws the fill with no edge.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tjocklek på indikatorns kant i bildpunkter. Noll ritar fyllningen utan kant.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="165"/>
         <source>Corner rounding of the indicator in pixels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Indikatorns hörnrundning i bildpunkter.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/generalpagecontroller.cpp" line="61"/>
         <source>Unavailable device (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Otillgänglig enhet (%1)</translation>
     </message>
     <message>
         <location filename="../src/settings/utils/gpudevicelist.cpp" line="235"/>
         <source>GPU %1</source>
-        <translation type="unfinished"></translation>
+        <translation>GPU %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tilldela rullningsmallar till kortkommandon för snabb växling.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="30"/>
         <source>Choose Drop Indicator Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj färg för släppindikatorn</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger vilken placeringsmotor (fästning, panelläggning eller rullning) som körs på den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
         <source>Assigns a snapping layout to the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tilldelar en fästlayout till den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tilldelar en panelläggningsalgoritm till den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
         <source>Assigns a scrolling column template to the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tilldelar en rullningskolumnmall till den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
         <source>Turns the named engine off for the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stänger av den namngivna motorn för den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="45"/>
         <source>Locks the active layout for the matched context so it cannot be switched.</source>
-        <translation type="unfinished"></translation>
+        <translation>Låser den aktiva layouten för den matchande kontexten så att den inte kan växlas.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="48"/>
         <source>Allows or suppresses the automatic default layout for the matched context. Off means no engine activates there until you assign one yourself.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tillåter eller undertrycker den automatiska standardlayouten för den matchande kontexten. Av innebär att ingen motor aktiveras där förrän du tilldelar en själv.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar eller döljer skärmmeddelanden för den matchande skärmen, skrivbordet eller aktiviteten. Av tystar layout- och navigeringspopupperna där. På visar dem även när de globala reglagen är av, även om visningsstilen Ingen fortfarande döljer allt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
         <source>Keeps matching windows out of snapping, tiling and scrolling while their decorations and animations still apply.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håller matchande fönster utanför fästning, panelläggning och rullning, medan deras dekorationer och animationer fortfarande gäller.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="75"/>
         <source>Turns off every PlasmaZones animation for matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stänger av alla PlasmaZones-animationer för matchande fönster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="78"/>
         <source>Turns off PlasmaZones borders and decoration packs for matching windows. Placement and animations are untouched.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stänger av PlasmaZones-kanter och dekorationspaket för matchande fönster. Placering och animationer lämnas orörda.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="83"/>
         <source>Opens matching windows floating instead of placing them. A floated window can still be snapped or tiled by hand later.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppnar matchande fönster flytande i stället för att placera dem. Ett flytande fönster kan fortfarande fästas eller paneläggas för hand senare.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="94"/>
         <source>Moves matching windows to a chosen monitor when they open.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar matchande fönster till en vald skärm när de öppnas.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="97"/>
         <source>Moves matching windows to a chosen virtual desktop when they open.</source>
-        <translation type="unfinished"></translation>
+        <translation>Flyttar matchande fönster till ett valt virtuellt skrivbord när de öppnas.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="106"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
-        <translation type="unfinished"></translation>
+        <translation>Styr om ett matchande fönster återgår till sin tidigare zon när det öppnas igen, under sessionen eller efter en utloggning. Åsidosätter inställningen ”Återställ fönster till deras tidigare zon”, så att ett program som en webbläsare kan lämnas utanför medan alla andra fönster fortfarande återställs.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
         <source>Controls whether a matching window gets its original size back when unsnapped, overriding the global setting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Styr om ett matchande fönster får tillbaka sin ursprungliga storlek när det lossas från en zon, och åsidosätter den globala inställningen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="117"/>
         <source>When a matching floating window is unfloated without a remembered zone, places it into a zone anyway. Overrides the global fallback setting for this window.</source>
-        <translation type="unfinished"></translation>
+        <translation>När ett matchande flytande fönster tas ur flytläge utan en ihågkommen zon placeras det i en zon ändå. Åsidosätter den globala reservinställningen för det här fönstret.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="122"/>
         <source>Keeps matching windows above or below other windows, for example floating windows above tiled ones when paired with the Floating condition.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håller matchande fönster ovanför eller under andra fönster, till exempel flytande fönster ovanför panelagda när det kombineras med villkoret Flytande.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="128"/>
         <source>Sets how much of the strip a matching window&apos;s column takes on a scrolling screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur mycket av remsan ett matchande fönsters kolumn tar på en rullningsskärm.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="131"/>
         <source>Sets how much of its column a matching window takes when it opens.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur mycket av sin kolumn ett matchande fönster tar när det öppnas.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="134"/>
         <source>Opens a matching window&apos;s column tabbed, or forces it normal where the default is tabbed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppnar ett matchande fönsters kolumn med flikar, eller tvingar den till normal där flikar är standard.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="139"/>
         <source>Chooses whether a matching window opens its own column or joins the focused one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer om ett matchande fönster öppnar en egen kolumn eller ansluter till den fokuserade.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
         <source>Opens matching windows maximized, so their column fills the work area along the strip when they first appear.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppnar matchande fönster maximerade, så att deras kolumn fyller arbetsytan längs remsan när de först visas.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="147"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ger matchande fönster tangentbordsfokus så snart de öppnas, eller låter fokus vara kvar där det var när det är av.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="152"/>
         <source>Opens matching windows in fullscreen mode. Off stops apps from starting in fullscreen on their own.</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppnar matchande fönster i helskärmsläge. Av hindrar program från att starta i helskärm på egen hand.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="163"/>
         <source>Uses a different animation shader for one event on matching windows. An empty choice turns that event&apos;s shader off for them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Använder en annan animeringsshader för en händelse på matchande fönster. Ett tomt val stänger av den händelsens shader för dem.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="168"/>
         <source>Uses a different animation duration for one event on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Använder en annan animeringsvaraktighet för en händelse på matchande fönster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
         <source>Uses a different easing curve for one event on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Använder en annan mjukningskurva för en händelse på matchande fönster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
         <source>Replaces the decoration packs drawn on matching windows. An empty list removes their decorations.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ersätter dekorationspaketen som ritas på matchande fönster. En tom lista tar bort deras dekorationer.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
-        <translation type="unfinished"></translation>
+        <translation>Slår på eller av opacitets- och toningslagret för matchande fönster. Reglerna Ange opacitet och Ange toning behöver det här lagret för att ha någon effekt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur starkt toningen färgar matchande fönster. Har effekt bara medan opacitets- och toningslagret är på för fönstret.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="196"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger toningsfärgen för matchande fönster. Har effekt bara medan opacitets- och toningslagret är på för fönstret.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="202"/>
         <source>Hides the title bar on matching windows, or forces it visible where a mode would hide it.</source>
-        <translation type="unfinished"></translation>
+        <translation>Döljer namnlisten på matchande fönster, eller tvingar fram den där ett läge skulle dölja den.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="207"/>
         <source>Shows or hides the PlasmaZones border on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar eller döljer PlasmaZones-kanten på matchande fönster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="210"/>
         <source>Sets the border thickness on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger kanttjockleken på matchande fönster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="213"/>
         <source>Sets the border corner radius on matching windows.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger kantens hörnradie på matchande fönster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="216"/>
         <source>Sets the border color for matching windows while they are focused.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger kantfärgen för matchande fönster medan de är fokuserade.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
         <source>Sets the border color for matching windows while they are not focused.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger kantfärgen för matchande fönster medan de inte är fokuserade.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Använder en annan zonöverlagringsshader för den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar zonöverlagringen för den matchande kontexten mellan zonrektanglar och layoutförhandsvisningen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger överlagringens markerade zonfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger överlagringens inaktiva zonfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger överlagringens zonkantfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger opaciteten för överlagringens markerade zon för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger opaciteten för överlagringens inaktiva zon för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger överlagringens zonkanttjocklek för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger zonernas hörnradie i överlagringen för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar eller döljer zonnumren på överlagringen för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger mellanrummet mellan zoner för den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger det enhetliga mellanrummet runt skärmkanten för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar den matchande kontexten mellan ett enhetligt yttre mellanrum och yttre mellanrum per sida.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
         <source>Sets the top outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger det övre yttre mellanrummet för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
         <source>Sets the bottom outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger det nedre yttre mellanrummet för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
         <source>Sets the left outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger det vänstra yttre mellanrummet för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
         <source>Sets the right outer gap for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger det högra yttre mellanrummet för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Begränsar hur många fönster panelläggningsalgoritmen ordnar i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
         <source>Sets the master area split ratio for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger huvudområdets delningsförhållande för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
         <source>Sets how many windows the master area holds for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur många fönster huvudområdet håller i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer var nyöppnade fönster kommer in i panelläggningsstapeln i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
         <source>Sets how much of the strip newly opened columns take on the matched scrolling context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur mycket av remsan nyöppnade kolumner tar i den matchande rullningskontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="315"/>
         <source>Chooses whether new columns show their windows divided across the strip or tabbed on the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer om nya kolumner visar sina fönster fördelade tvärs remsan eller med flikar i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
         <source>Sets how much of their column newly opened windows take for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur mycket av sin kolumn nyöppnade fönster tar i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
         <source>Keeps columns on the matched context at least as large as each window asks to be. Off lets a column go smaller, which the compositor then clamps on its own.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håller kolumner i den matchande kontexten minst så stora som varje fönster begär. Av låter en kolumn bli mindre, vilket kompositorn sedan begränsar på egen hand.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="66"/>
         <source>Keeps matching windows out of PlasmaZones entirely, so they get no placement and no decorations.</source>
-        <translation type="unfinished"></translation>
+        <translation>Håller matchande fönster helt utanför PlasmaZones, så att de varken placeras eller dekoreras.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar eller döljer dragväljarens popup för den matchande skärmen, skrivbordet eller aktiviteten. Av innebär att dra ett fönster nära utlösarkanten inte erbjuder någon väljare där. På erbjuder den även när det globala väljarreglaget för den skärmen är av.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
         <source>Snaps matching windows into the given zones when they open. Zones can be picked by number or by name, and a name finds that zone in whichever layout is active. Several zones span their combined area.</source>
-        <translation type="unfinished"></translation>
+        <translation>Fäster matchande fönster i de angivna zonerna när de öppnas. Zoner kan väljas med nummer eller namn, och ett namn hittar den zonen i den layout som är aktiv. Flera zoner täcker deras gemensamma yta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
         <source>Controls whether a matching floated window returns to its remembered position and monitor when it reopens, during the session or after a logout. Overrides the restore-previous-position setting of whichever engine owns the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Styr om ett matchande flytande fönster återgår till sin ihågkomna position och skärm när det öppnas igen, under sessionen eller efter en utloggning. Åsidosätter inställningen för att återställa tidigare position hos den motor som äger skärmen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="157"/>
         <source>Scales mouse wheel and touchpad scrolling speed inside matching windows. Below 100% slows it down and above 100% speeds it up.</source>
-        <translation type="unfinished"></translation>
+        <translation>Skalar rullningshastigheten för mushjul och pekplatta inuti matchande fönster. Under 100 % är långsammare, över 100 % är snabbare.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dämpar matchande fönster till den angivna opaciteten. Det har effekt bara medan opacitets- och toningslagret är på för fönstret, antingen från den globala inställningen eller från en regel Visa opacitet och toning. Ett fönster med en egen dekorationskedja dämpas i stället via den kedjans paketparametrar.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
         <source>Chooses what happens to windows past the cap for the matched context. They can float, or the cap can be ignored.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer vad som händer med fönster utöver taket i den matchande kontexten. De kan flyta, eller så kan taket ignoreras.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer om att dra ett panelagt fönster gör det flytande eller byter plats på det inom stapeln, för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="300"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
-        <translation type="unfinished"></translation>
+        <translation>Åsidosätter en panelläggningsalgoritms egna parametrar för den matchande kontexten. Gäller bara medan den algoritmen är aktiv där.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="310"/>
         <source>Chooses when the scrolling view re-centers on the focused column for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer när rullningsvyn i den matchande kontexten centrerar om på den fokuserade kolumnen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="320"/>
         <source>Chooses where a new window&apos;s column enters the strip for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer var ett nytt fönsters kolumn kommer in på remsan i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="326"/>
         <source>Centers a column on the matched context whenever it is the only one on the strip, whatever the centering policy says.</source>
-        <translation type="unfinished"></translation>
+        <translation>Centrerar en kolumn i den matchande kontexten så snart den är den enda på remsan, oavsett vad centreringspolicyn säger.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="336"/>
         <source>Clips a column that hangs over the screen edge on the matched context so only the on-screen part is drawn. The column keeps its real size, so scrolling is unchanged.</source>
-        <translation type="unfinished"></translation>
+        <translation>Beskär i den matchande kontexten en kolumn som hänger utanför skärmkanten, så att bara den synliga delen ritas. Kolumnen behåller sin verkliga storlek, så rullningen är oförändrad.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="341"/>
         <source>Gives windows opening on the matched context keyboard focus. A per-window Focus when opened rule still wins over this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ger fönster som öppnas i den matchande kontexten tangentbordsfokus. En regel Fokusera vid öppning per fönster går fortfarande före.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
         <source>Drops the outer gaps on the matched context while a single column is on the strip, so a lone window fills the screen.</source>
-        <translation type="unfinished"></translation>
+        <translation>Utelämnar de yttre mellanrummen i den matchande kontexten medan en enda kolumn finns på remsan, så att ett ensamt fönster fyller skärmen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
-        <translation type="unfinished"></translation>
+        <translation>Fokuserar i den matchande kontexten den kolumn som pekaren förs över, utan klick. Gäller bara rullningsskärmar, så fäst- och panelläggningsskärmar följer fortfarande den globala inställningen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="357"/>
         <source>Chooses how the matched context treats windows shown on all desktops. Anything other than treating them as normal keeps them floating instead of in a column.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer hur den matchande kontexten hanterar fönster som visas på alla skrivbord. Allt utom att behandla dem som vanliga låter dem förbli flytande i stället för i en kolumn.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="362"/>
         <source>Chooses which way the matched context&apos;s strip runs, overriding the Strip direction setting and any per-monitor choice. Match the screen shape resolves from the usable area, so the rule can hand a pinned monitor back to that option for one desktop or activity.</source>
         <comment>&apos;Match the screen shape&apos; must stay identical to the option label shown in the picker</comment>
-        <translation type="unfinished"></translation>
+        <translation>Väljer åt vilket håll den matchande kontextens remsa löper, och åsidosätter inställningen Remsans riktning och alla val per skärm. ”Följ skärmens form” räknas ut från den användbara ytan, så regeln kan lämna tillbaka en fäst skärm till det alternativet för ett skrivbord eller en aktivitet.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
         <source>Shows or hides the tab indicator on tabbed columns for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar eller döljer flikindikatorn på kolumner med flikar för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="374"/>
         <source>Switches the tab indicator between a segment bar and titled chips for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Växlar flikindikatorn för den matchande kontexten mellan en segmentrad och namngivna brickor.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="379"/>
         <source>Chooses which column edge the tab indicator runs along for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Väljer längs vilken kolumnkant flikindikatorn löper för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="382"/>
         <source>Hides the tab indicator when a tabbed column holds only one window, for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Döljer flikindikatorn när en kolumn med flikar bara håller ett fönster, för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="387"/>
         <source>Reserves the tab indicator&apos;s space inside the column instead of drawing beside it, for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Reserverar flikindikatorns utrymme inuti kolumnen i stället för att rita bredvid den, för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="392"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger mellanrummet mellan flikindikatorn och fönstret för den matchande kontexten. Ett negativt mellanrum ritar den över fönstret.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="397"/>
         <source>Sets the tab indicator&apos;s thickness for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger flikindikatorns tjocklek för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="400"/>
         <source>Sets how much of the column edge the tab indicator spans for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur mycket av kolumnkanten flikindikatorn täcker för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="403"/>
         <source>Sets the gap between individual tabs for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger mellanrummet mellan enskilda flikar för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
         <source>Sets the corner radius of each tab for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger varje fliks hörnradie för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="409"/>
         <source>Sets the active tab color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger den aktiva flikens färg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="412"/>
         <source>Sets the inactive tab color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger de inaktiva flikarnas färg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="415"/>
         <source>Sets the color of a tab whose window asks for attention, for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger färgen på en flik vars fönster ber om uppmärksamhet, för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="418"/>
         <source>Sets the font the tab labels are drawn in for the matched context. Leave it empty to use the system font. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger teckensnittet som fliketiketterna ritas i för den matchande kontexten. Lämna tomt för att använda systemets teckensnitt. En segmentrad ritar inga etiketter och struntar i detta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="423"/>
         <source>Sets how heavy the tab label text is for the matched context, from 100 for the thinnest weight up to 900 for the boldest. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger hur tung fliketiketternas text är för den matchande kontexten, från 100 för den tunnaste vikten upp till 900 för den fetaste. En segmentrad ritar inga etiketter och struntar i detta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="429"/>
         <source>Draws the tab labels in italic for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ritar fliketiketterna kursivt för den matchande kontexten. En segmentrad ritar inga etiketter och struntar i detta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="434"/>
         <source>Underlines the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stryker under fliketiketterna för den matchande kontexten. En segmentrad ritar inga etiketter och struntar i detta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="439"/>
         <source>Draws a line through the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
-        <translation type="unfinished"></translation>
+        <translation>Stryker över fliketiketterna för den matchande kontexten. En segmentrad ritar inga etiketter och struntar i detta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="444"/>
         <source>Recolors a matching window&apos;s own tab while it is the active one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färgar om ett matchande fönsters egen flik medan den är den aktiva.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="447"/>
         <source>Recolors a matching window&apos;s own tab while another tab is active.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färgar om ett matchande fönsters egen flik medan en annan flik är aktiv.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="450"/>
         <source>Recolors a matching window&apos;s own tab while it asks for attention.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färgar om ett matchande fönsters egen flik medan det ber om uppmärksamhet.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="454"/>
         <source>Shows or hides the drop indicator during drag re-inserts for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Visar eller döljer släppindikatorn under återinfogning med dragning för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="457"/>
         <source>Sets the drop indicator&apos;s fill color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger släppindikatorns fyllningsfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="460"/>
         <source>Sets the drop indicator&apos;s border color for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger släppindikatorns kantfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="463"/>
         <source>Sets the drop indicator&apos;s fill opacity for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger opaciteten för släppindikatorns fyllning för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="466"/>
         <source>Sets the drop indicator&apos;s border thickness for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger släppindikatorns kanttjocklek för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="469"/>
         <source>Sets the drop indicator&apos;s corner radius for the matched context.</source>
-        <translation type="unfinished"></translation>
+        <translation>Anger släppindikatorns hörnradie för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="472"/>
         <source>Recolors the drop indicator&apos;s fill while a matching window is being dragged.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färgar om släppindikatorns fyllning medan ett matchande fönster dras.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="475"/>
         <source>Recolors the drop indicator&apos;s border while a matching window is being dragged.</source>
-        <translation type="unfinished"></translation>
+        <translation>Färgar om släppindikatorns kant medan ett matchande fönster dras.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="222"/>
         <source>%1 · %2</source>
         <comment>animation section, then the event inside it</comment>
-        <translation type="unfinished">%1 · %2</translation>
+        <translation>%1 · %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="174"/>
         <source>None</source>
         <comment>@item rule action layout value, explicitly none at all</comment>
-        <translation type="unfinished">Ingen</translation>
+        <translation>Ingen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="251"/>
         <source>None</source>
         <comment>@item no decoration packs in the chain</comment>
-        <translation type="unfinished">Ingen</translation>
+        <translation>Inga</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="299"/>
         <source>(invalid)</source>
         <comment>@item an action value the rule runtime rejects</comment>
-        <translation type="unfinished"></translation>
+        <translation>(ogiltigt)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="302"/>
         <source>%1%</source>
         <comment>a whole-number percentage</comment>
-        <translation type="unfinished">%1 %</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
@@ -22100,98 +22105,98 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="482"/>
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
-        <translation type="unfinished">%1: %2</translation>
+        <translation>%1: %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="41"/>
         <source>Scrolling animation events</source>
-        <translation type="unfinished"></translation>
+        <translation>Animeringshändelser för rullning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="42"/>
         <source>Animations for scrolling. Strip Scrolled covers the whole strip moving together, and Tab Switched covers a tab replacing another in its column. Each event offers only the shaders that can drive it.</source>
         <oldsource>Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Animationer för rullning. Remsan rullades omfattar hela remsan som rör sig tillsammans, och Fliken växlades omfattar en flik som ersätter en annan i sin kolumn. Varje händelse erbjuder bara de shaders som kan driva den.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="100"/>
         <source>This list is full at %1 presets. Remove one to add another.</source>
-        <translation type="unfinished"></translation>
+        <translation>Den här listan är full vid %1 förinställningar. Ta bort en för att lägga till en till.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="102"/>
         <source>There is already a preset at this percentage.</source>
-        <translation type="unfinished"></translation>
+        <translation>Det finns redan en förinställning vid den här procentandelen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="106"/>
         <source>A list needs at least one preset, so this one cannot be removed.</source>
-        <translation type="unfinished"></translation>
+        <translation>En lista behöver minst en förinställning, så den här går inte att ta bort.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="177"/>
         <source>%1%</source>
         <comment>a preset size as a percentage of the work area</comment>
-        <translation type="unfinished">%1 %</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
         <source>Remove this preset</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort den här förinställningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="226"/>
         <source>Add preset:</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till förinställning:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="233"/>
         <source>%</source>
         <comment>percent unit suffix in a spin box</comment>
-        <translation type="unfinished"></translation>
+        <translation> %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="250"/>
         <source>Add</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dra ett fönster på en rullningsskärm till den inställda skärmkanten för att öppna en popup som visar den aktuella remsan. Släpp mellan två kolumner för att infoga en ny kolumn, på en kolumn med flikar för att lägga till fönstret som en flik, eller på en kolumns övre eller nedre halva för att stapla det där.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsväljarens popup</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="101"/>
         <source>Show the current strip as drop targets when dragging windows to screen edges</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa den aktuella remsan som släppmål när fönster dras till skärmkanter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="105"/>
         <source>Enable strip selector popup</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktivera remsväljarens popup</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
         <source>%n tab</source>
         <comment>@info:label tabbed column tab count</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n flik</numerusform>
+            <numerusform>%n flikar</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
         <source>%n window</source>
         <comment>@info:label column window count</comment>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n fönster</numerusform>
+            <numerusform>%n fönster</numerusform>
         </translation>
     </message>
     <message>
@@ -22199,326 +22204,326 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="306"/>
         <source>%1%</source>
         <comment>@info preset percentage</comment>
-        <translation type="unfinished">%1 %</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Redigera förinställningen %1 % i %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
         <source>Click to edit this preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Klicka för att redigera den här förinställningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="197"/>
         <source>Edit preset percentage in %1</source>
         <comment>@label:textbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Redigera förinställningens procentandel i %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
         <source>Remove %1% from %2</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort %1 % från %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
         <source>Remove this preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort den här förinställningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="320"/>
         <source>New preset percentage for %1</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Procentandel för en ny förinställning i %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="342"/>
         <source>Add preset to %1</source>
         <comment>@action:button</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till förinställning i %1</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="346"/>
         <source>This list can hold at most %n preset</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Den här listan rymmer högst %n förinställning</numerusform>
+            <numerusform>Den här listan rymmer högst %n förinställningar</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="43"/>
         <source>This size is already a preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Den här storleken är redan en förinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="349"/>
         <source>Add this size as a preset</source>
         <comment>@info:tooltip</comment>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till den här storleken som en förinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="375"/>
         <source>No presets yet. Pick a size and add it.</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Inga förinställningar än. Välj en storlek och lägg till den.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="121"/>
         <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Det här är en inbyggd mall. Att spara lagrar en egen kopia, och om du tar bort den kopian kommer den inbyggda tillbaka.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="130"/>
         <source>Template</source>
         <comment>@title:group</comment>
-        <translation type="unfinished">Mall</translation>
+        <translation>Mall</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="137"/>
         <source>Description:</source>
         <comment>@label:textbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Beskrivning:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="138"/>
         <source>Template description</source>
         <comment>@label:textbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Mallbeskrivning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="139"/>
         <source>Optional description</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Valfri beskrivning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="172"/>
         <source>Later columns</source>
         <comment>@title:group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Senare kolumner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="179"/>
         <source>Default width:</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Standardbredd:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="180"/>
         <source>Default column width</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished">Standardkolumnbredd</translation>
+        <translation>Standardbredd för kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="185"/>
         <source>Proportion of the strip</source>
         <oldsource>Fraction of the screen</oldsource>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Andel av remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="189"/>
         <source>Fixed pixels</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Fasta bildpunkter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="193"/>
         <source>The window decides</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Fönstret bestämmer</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
         <source>Width preset</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation type="unfinished"></translation>
+        <translation>Breddförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
         <source>Width in pixels:</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Bredd i bildpunkter:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
         <source>Width:</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished">Bredd:</translation>
+        <translation>Bredd:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width in pixels</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Standardbredd för kolumn i bildpunkter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width</source>
         <comment>@label:spinbox</comment>
-        <translation type="unfinished">Standardkolumnbredd</translation>
+        <translation>Standardbredd för kolumn</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
         <source>%1%</source>
         <comment>@info:spinbox width percentage</comment>
-        <translation type="unfinished">%1 %</translation>
+        <translation>%1 %</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="256"/>
         <source>Start at preset:</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Börja vid förinställning:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="257"/>
         <source>Default width preset</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Standardbreddförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="260"/>
         <source>No width presets yet</source>
         <comment>@info:placeholder</comment>
-        <translation type="unfinished"></translation>
+        <translation>Inga breddförinställningar än</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="261"/>
         <source>Preset %1 (%2%)</source>
         <comment>@item:inlistbox preset number and percentage</comment>
-        <translation type="unfinished"></translation>
+        <translation>Förinställning %1 (%2 %)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
         <source>Show windows as:</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa fönster som:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="272"/>
         <source>Show windows as</source>
         <comment>@label:listbox</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa fönster som</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="280"/>
         <source>Stacked</source>
         <comment>@item:inlistbox column display</comment>
-        <translation type="unfinished"></translation>
+        <translation>Staplade</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation type="unfinished">Med flikar</translation>
+        <translation>Flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
         <source>Size presets</source>
         <comment>@title:group</comment>
-        <translation type="unfinished"></translation>
+        <translation>Storleksförinställningar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="300"/>
         <source>Widths:</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Bredder:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="303"/>
         <source>Width presets</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Breddförinställningar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="316"/>
         <source>Heights:</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Höjder:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="319"/>
         <source>Height presets</source>
         <comment>@label</comment>
-        <translation type="unfinished"></translation>
+        <translation>Höjdförinställningar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Standardbredden är satt till en breddförinställning, så den här mallen behöver minst en breddförinställning. Utan en sparas den i stället som en andel av remsan.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <comment>@info</comment>
-        <translation type="unfinished"></translation>
+        <translation>Förinställningar är de storlekar som kortkommandona för bredd- och höjdstegning går igenom medan den här mallen är tilldelad.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
         <source>Shell decoration surfaces</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekorationsytor för skalet</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
         <source>Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dekoration för ytor som Plasma-skalet äger. De förblir odekorerade tills en dekoration aktiveras här, och den globala standarddekorationen gäller aldrig för dem.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="20"/>
         <source>Plasma shell animation events</source>
-        <translation type="unfinished"></translation>
+        <translation>Animeringshändelser för Plasma-skalet</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation type="unfinished"></translation>
+        <translation>Animationer för ytorna som Plasma-skalet äger, som programstartaren och systemfältets popupper. Ingen shader du väljer för dina egna fönster når dem, så varje rad börjar utan shader och att välja en är hela anmälan. Tills du väljer en animeras dessa ytor så som Plasma animerar dem. ”Alla skalytor” är standard för båda händelserna, och båda kan åsidosätta den. Paneler har inga rader här, eftersom en panel stannar på skärmen hela sessionen i stället för att öppnas och stängas.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="23"/>
         <source>All Shell Surfaces</source>
-        <translation type="unfinished"></translation>
+        <translation>Alla skalytor</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="29"/>
         <source>Panels</source>
-        <translation type="unfinished">Paneler</translation>
+        <translation>Paneler</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="35"/>
         <source>Applet Popups</source>
-        <translation type="unfinished"></translation>
+        <translation>Appletpopupper</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ange prioritetsordningen för mallar vid stegning med kortkommandon och i layoutväljaren. Dra rader eller använd pilknapparna för att ordna om.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
         <source>No templates available</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga mallar tillgängliga</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="16"/>
         <source>Create templates on the Scrolling → Templates page first.</source>
-        <translation type="unfinished"></translation>
+        <translation>Skapa först mallar på sidan Rullning → Mallar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="17"/>
         <source>Reset template order to default</source>
-        <translation type="unfinished"></translation>
+        <translation>Återställ mallordningen till standard</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
@@ -22526,461 +22531,461 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="25"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="53"/>
         <source>Strip direction</source>
-        <translation type="unfinished"></translation>
+        <translation>Remsans riktning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="48"/>
         <source>Direction</source>
         <comment>row inside the Strip direction card</comment>
-        <translation type="unfinished">Riktning</translation>
+        <translation>Riktning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation type="unfinished"></translation>
+        <translation>Åt vilket håll remsan löper. ”Följ skärmens form” låter den löpa uppifrån och ned när den användbara ytan är högre än den är bred, och sida vid sida annars. Kolumner delar sig fortfarande tvärs remsan oavsett vilket håll den löper.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
         <source>Accordion Collapse</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Dragspel fälls ihop</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="64"/>
         <source>Accordion Expand</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Dragspel fälls ut</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Utseende</translation>
+        <translation>Utseende</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Appletpopup</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
         <source>Badge Hide</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Emblem döljs</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="76"/>
         <source>Badge Pulse</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Emblem pulserar</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="79"/>
         <source>Badge Show</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Emblem visas</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="82"/>
         <source>Border</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Kant</translation>
+        <translation>Kant</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Kortkommandoöversikt</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
         <source>Click</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Klicka</translation>
+        <translation>Klick</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="91"/>
         <source>Close</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Stäng</translation>
+        <translation>Stängning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="94"/>
         <source>Cursor</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Markör</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="97"/>
         <source>Desktop</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Skrivbord</translation>
+        <translation>Skrivbord</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="100"/>
         <source>Dim</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Dämpa</translation>
+        <translation>Dämpning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="103"/>
         <source>Editor</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Redigerare</translation>
+        <translation>Redigerare</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Tona in</translation>
+        <translation>Tona in</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Tona ut</translation>
+        <translation>Tona ut</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
         <source>Fast</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Snabb</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="115"/>
         <source>Focus</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Fokus</translation>
+        <translation>Fokus</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Global</translation>
+        <translation>Globalt</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
         <source>Hide</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Dölj</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Hovra</translation>
+        <translation>Hovring</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
         <source>Layout Picker</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Layoutväljare</translation>
+        <translation>Layoutväljare</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
         <source>Layout Switch</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Layoutväxling</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
         <source>Maximize</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Maximera</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="136"/>
         <source>Minimize</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Minimera</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="139"/>
         <source>Move</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flytta</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="142"/>
         <source>Movement</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Rörelse</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="145"/>
         <source>Open</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Öppna</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="148"/>
         <source>OSD</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Skärmmeddelande</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
         <source>Overlays</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Överlägg</translation>
+        <translation>Överlagringar</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="154"/>
         <source>Panel</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Panel</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="157"/>
         <source>Peek</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Titt</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="160"/>
         <source>Pop</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Popp</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Popup</translation>
+        <translation>Popup</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
         <source>Press</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Tryck</translation>
+        <translation>Tryck</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="169"/>
         <source>Progress</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Förlopp</translation>
+        <translation>Förlopp</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="172"/>
         <source>Pulse</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Puls</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Ändra ordning</translation>
+        <translation>Ordna om</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
         <source>Scrolling</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Rullning</translation>
+        <translation>Rullning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="181"/>
         <source>Shell</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Skal</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="184"/>
         <source>Show</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Visa</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Glid in</translation>
+        <translation>Glid in</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Glid ut</translation>
+        <translation>Glid ut</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
         <source>Slow</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Långsam</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="196"/>
         <source>Snap Assist</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Fästhjälp</translation>
+        <translation>Fästhjälp</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
         <source>Snap In</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Fäst in</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
         <source>Snap Out</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Fäst ut</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
         <source>Snap Resize</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Storleksändring vid fästning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="208"/>
         <source>Switch</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Växla</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="211"/>
         <source>Tab Switch</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Flikväxling</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="214"/>
         <source>Tint</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Färgton</translation>
+        <translation>Toning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="217"/>
         <source>Toggle Off</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Slå av</translation>
+        <translation>Slå av</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="220"/>
         <source>Toggle On</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Slå på</translation>
+        <translation>Slå på</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="223"/>
         <source>View</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Vy</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="226"/>
         <source>Widget</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Widget</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="229"/>
         <source>Window</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Fönster</translation>
+        <translation>Fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="232"/>
         <source>Zone Highlight</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Zonmarkering</translation>
+        <translation>Zonmarkering</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
         <source>Zone Overlay Flash</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished"></translation>
+        <translation>Blink i zonöverlagringen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="238"/>
         <source>Zone Selector</source>
         <comment>animation event or section</comment>
-        <translation type="unfinished">Zonväljare</translation>
+        <translation>Zonväljare</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="56"/>
         <source>How close to the edge of the working area the pointer has to be before the strip can start scrolling.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur nära arbetsytans kant pekaren måste vara innan remsan kan börja rulla.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="61"/>
         <source>Edge auto-scroll trigger width</source>
-        <translation type="unfinished"></translation>
+        <translation>Utlösarområdets bredd för automatisk rullning vid kanten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="85"/>
         <source>How long the pointer has to stay near the edge before the strip moves. Stops a drag that only passes by an edge from scrolling.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur länge pekaren måste stanna nära kanten innan remsan flyttar sig. Hindrar en dragning som bara passerar en kant från att rulla.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="90"/>
         <source>Edge auto-scroll start delay</source>
-        <translation type="unfinished"></translation>
+        <translation>Startfördröjning för automatisk rullning vid kanten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerGraceRow.qml.cpp" line="63"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="91"/>
         <source>ms</source>
         <comment>milliseconds unit suffix in a spin box</comment>
-        <translation type="unfinished">ms</translation>
+        <translation> ms</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="112"/>
         <source>How fast the strip scrolls with the pointer held right at the edge. It moves more slowly the further from the edge the pointer sits.</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur snabbt remsan rullar med pekaren hållen precis vid kanten. Den flyttar sig långsammare ju längre från kanten pekaren sitter.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="117"/>
         <source>Edge auto-scroll maximum speed</source>
-        <translation type="unfinished"></translation>
+        <translation>Högsta hastighet för automatisk rullning vid kanten</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="118"/>
         <source>px/s</source>
         <comment>pixels per second unit suffix in a spin box</comment>
-        <translation type="unfinished"></translation>
+        <translation> px/s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsSpinBox.qml.cpp" line="22"/>
         <source>px</source>
         <comment>pixels unit suffix in a spin box</comment>
-        <translation type="unfinished">px</translation>
+        <translation> px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="171"/>
         <source>Snapping (no layout)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fästning (ingen layout)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="338"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="153"/>
         <source>Tiling (no algorithm)</source>
-        <translation type="unfinished"></translation>
+        <translation>Panelläggning (ingen algoritm)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="170"/>
         <source>None</source>
         <comment>no tiling algorithm is set</comment>
-        <translation type="unfinished">Ingen</translation>
+        <translation>Ingen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="101"/>
         <source>This event is not driven per window, so the rule cannot change it</source>
-        <translation type="unfinished"></translation>
+        <translation>Den här händelsen styrs inte per fönster, så regeln kan inte ändra den</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. Set the animation for this event on the Animations pages instead, where it applies everywhere.</source>
-        <translation type="unfinished"></translation>
+        <translation>Regler matchar fönster, och den här händelsen hör inte till ett fönster, så den här åtgärden körs aldrig. Ställ in animeringen för den här händelsen på animeringssidorna i stället, där den gäller överallt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Regler matchar fönster, och den här händelsen hör inte till ett fönster, så den här åtgärden körs aldrig. Den här händelsen tar ingen shader någonstans, så åtgärden kan tas bort.</translation>
     </message>
 </context>
 </TS>
