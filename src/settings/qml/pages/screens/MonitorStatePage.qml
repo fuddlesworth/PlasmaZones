@@ -1094,7 +1094,7 @@ SettingsFlickable {
                     // Same caption predicate the well and its accessible name
                     // use: the numbering sentence describes tiles being drawn,
                     // so it must not survive a caption replacing them.
-                    const strip = stateView.scrollingEmptyCaption === "" ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
+                    const strip = stateView.scrollingEmptyCaption === "" ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout. Windows are numbered in order, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout.");
                     // The DAEMON's four states, not the dropdown's three. The
                     // note describes what the screen is doing now, so it
                     // keeps reading the applied value until Save, the same
@@ -1108,11 +1108,11 @@ SettingsFlickable {
                     // user the opposite of what the daemon was doing.
                     let template;
                     if (stateView.scrollingTemplateId === root._noTemplateToken)
-                        template = i18n("This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.");
+                        template = i18n("This screen uses no template, so columns follow the built-in width and height steps.");
                     else if (stateView.scrollingTemplateName.length > 0)
-                        template = i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName);
+                        template = i18n("This screen uses the %1 template, which sets its starting columns and the width and height presets.", stateView.scrollingTemplateName);
                     else if (stateView.scrollingTemplateId.length > 0) {
-                        template = i18n("This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.");
+                        template = i18n("This screen is pinned to a template no longer in your list, so columns follow the built-in width and height steps.");
                         // The description above is chosen off the DAEMON's
                         // value and so stands until Save. The instruction
                         // below must not: the dropdown writes the LOCAL slot,
@@ -1123,7 +1123,7 @@ SettingsFlickable {
                         if (!stateView.localTemplateTouched)
                             template += " " + i18n("Pick another template to replace it.");
                     } else
-                        template = i18n("This screen has no template of its own, so it follows the default template from Scrolling → Templates.");
+                        template = i18n("This screen has no template of its own, so it follows the default from Scrolling → Templates.");
                     if (stateView.blueprintTotal <= 0)
                         return strip + " " + template;
 
@@ -1140,7 +1140,7 @@ SettingsFlickable {
                     // whichever template arm ran, and every one of those ends
                     // on the template, so a bare pronoun read as the template
                     // having used the columns rather than the screen.
-                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("Every starting column is in use, so further columns open at the template's own width and display.") : i18n("This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.", stateView.blueprintUsed, stateView.blueprintTotal);
+                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("Every starting column is in use, so new columns open at the template's own width.") : i18n("This screen has used %1 of %2 starting columns, and the rest shape the next ones you open.", stateView.blueprintUsed, stateView.blueprintTotal);
                     return strip + " " + template + " " + seed;
                 }
                 visible: stateView.isScrolling
