@@ -19,7 +19,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="36"/>
         <source>Discard unsaved changes?</source>
-        <translation>Förkasta ändringar som inte sparats?</translation>
+        <translation>Förkasta osparade ändringar?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
@@ -34,7 +34,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="52"/>
         <source>Apply</source>
-        <translation>Tillämpa</translation>
+        <translation>Verkställ</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="67"/>
@@ -127,7 +127,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="173"/>
         <source>Unsaved changes</source>
-        <translation>Ändringar som inte sparats</translation>
+        <translation>Osparade ändringar</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
@@ -196,7 +196,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="59"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation>Fönsterfästning, panelläggning och rullning för Wayland-kompositorer</translation>
+        <translation>Fönsterfästning, panelindelning och rullning för Wayland-kompositorer</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="72"/>
@@ -206,7 +206,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="83"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation>Ställ in zoner, panelläggning, rullning, utseende, kortkommandon med mera</translation>
+        <translation>Ställ in zoner, panelindelning, rullning, utseende, genvägar med mera</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="100"/>
@@ -531,12 +531,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="464"/>
         <source>Focus Previous Column, Wrapping</source>
-        <translation>Fokusera föregående kolumn, runt</translation>
+        <translation>Fokusera föregående kolumn, med rundgång</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="470"/>
         <source>Focus Next Column, Wrapping</source>
-        <translation>Fokusera nästa kolumn, runt</translation>
+        <translation>Fokusera nästa kolumn, med rundgång</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
@@ -581,7 +581,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Grow Column into Empty Space</source>
-        <translation>Väx kolumnen in i tomt utrymme</translation>
+        <translation>Utvidga kolumnen till tomt utrymme</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
@@ -621,7 +621,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
         <source>Move Window to Tiled</source>
-        <translation>Flytta fönstret till panelagt</translation>
+        <translation>Flytta fönstret till panelindelat</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="491"/>
@@ -776,7 +776,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
         <source>Re-applies the tiling algorithm to every window on the screen.</source>
-        <translation>Tillämpar panelläggningsalgoritmen igen på varje fönster på skärmen.</translation>
+        <translation>Tillämpar panelindelningsalgoritmen igen på varje fönster på skärmen.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="158"/>
@@ -891,7 +891,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="369"/>
         <source>Grow into Empty Space</source>
-        <translation>Väx in i tomt utrymme</translation>
+        <translation>Utvidga till tomt utrymme</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="370"/>
@@ -926,7 +926,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="423"/>
         <source>Move to Tiled</source>
-        <translation>Flytta till panelagt</translation>
+        <translation>Flytta till panelindelat</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
@@ -952,7 +952,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="603"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
-        <translation>Tillämpa layout %1</translation>
+        <translation>Verkställ layout %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="385"/>
@@ -1007,7 +1007,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Flyttar fokus en kolumn mot remsans början och stannar vid kanten. Det vanliga fokuskortkommandot fortsätter i stället till nästa skärm.</translation>
+        <translation>Flyttar fokus en kolumn mot remsans början och stannar vid kanten. Det vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
@@ -1017,12 +1017,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Flyttar fokus en kolumn mot remsans slut och stannar vid kanten. Det vanliga fokuskortkommandot fortsätter i stället till nästa skärm.</translation>
+        <translation>Flyttar fokus en kolumn mot remsans slut och stannar vid kanten. Det vanliga fokusgenvägen fortsätter i stället till nästa skärm.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
         <source>Focus Previous Column (Wrap)</source>
-        <translation>Fokusera föregående kolumn (runt)</translation>
+        <translation>Fokusera föregående kolumn (med rundgång)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="307"/>
@@ -1032,7 +1032,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="311"/>
         <source>Focus Next Column (Wrap)</source>
-        <translation>Fokusera nästa kolumn (runt)</translation>
+        <translation>Fokusera nästa kolumn (med rundgång)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="312"/>
@@ -1360,7 +1360,7 @@
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="381"/>
         <source>Layout Unlocked</source>
-        <translation>Layouten låstes upp</translation>
+        <translation>Layout upplåst</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="457"/>
@@ -1459,7 +1459,7 @@
     <message>
         <location filename="../src/daemon/main.cpp" line="250"/>
         <source>Window snapping, tiling and scrolling</source>
-        <translation>Fönsterfästning, panelläggning och rullning</translation>
+        <translation>Fönsterfästning, panelindelning och rullning</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="255"/>
@@ -2168,12 +2168,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
-        <translation>Den layout som är aktiv på skärmen just nu, eller den rullningsmall som används där. Låter en regel ändra mellanrum, överlagringen eller låsläget för den skärm som visar en viss layout eller mall. Den kan inte ändra vilken layout som är tilldelad, det skulle bli cirkulärt.</translation>
+        <translation>Den layout som är aktiv på skärmen just nu, eller den rullningsmall som används där. Låter en regel ändra mellanrum, överlägget eller låsläget för den skärm som visar en viss layout eller mall. Den kan inte ändra vilken layout som är tilldelad, det skulle bli cirkulärt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation>Om systemets färgschema är ljust eller mörkt. Låter en regel välja andra mellanrum, överlagringsfärger eller layouter när skrivbordet växlar mellan dag- och nattteman. Reglerna tillämpas på nytt så snart temat ändras.</translation>
+        <translation>Om systemets färgschema är ljust eller mörkt. Låter en regel välja andra mellanrum, överläggsfärger eller layouter när skrivbordet växlar mellan dag- och nattteman. Reglerna tillämpas på nytt så snart temat ändras.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2500,7 +2500,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="88"/>
         <source>New column position</source>
-        <translation>Ny kolumns position</translation>
+        <translation>Position för nya kolumner</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="93"/>
@@ -2585,7 +2585,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="160"/>
         <source>Make room for it inside the column</source>
-        <translation>Gör plats för det inuti kolumnen</translation>
+        <translation>Gör plats för den inuti kolumnen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="163"/>
@@ -2665,7 +2665,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="239"/>
         <source>Place in a zone when no zone is remembered (off = stay floating)</source>
-        <translation>Placera i en zon när ingen zon minns (av = förbli flytande)</translation>
+        <translation>Placera i en zon när ingen zon finns sparad (av = förbli flytande)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="242"/>
@@ -2675,7 +2675,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="252"/>
         <source>Show on-screen displays here (off = hide them)</source>
-        <translation>Visa skärmmeddelanden här (av = dölj dem)</translation>
+        <translation>Visa skärmvisningar här (av = dölj dem)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="255"/>
@@ -2797,12 +2797,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="258"/>
         <source>Set new column position</source>
-        <translation>Ange ny kolumns position</translation>
+        <translation>Ange position för nya kolumner</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="261"/>
         <source>Set default window height</source>
-        <translation>Ange standardhöjd för fönster</translation>
+        <translation>Ange standardfönsterhöjd</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="264"/>
@@ -2840,7 +2840,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="294"/>
         <source>Set sticky window handling</source>
-        <translation>Ange hantering av fastnålade fönster</translation>
+        <translation>Ange hantering av klistriga fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="300"/>
@@ -3065,7 +3065,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="462"/>
         <source>Show on-screen displays</source>
-        <translation>Visa skärmmeddelanden</translation>
+        <translation>Visa skärmvisningar</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="470"/>
@@ -3075,12 +3075,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="488"/>
         <source>Override overlay shader</source>
-        <translation>Åsidosätt överlagringens shader</translation>
+        <translation>Åsidosätt överläggets shader</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="491"/>
         <source>Override overlay style</source>
-        <translation>Åsidosätt överlagringens stil</translation>
+        <translation>Åsidosätt överläggets stil</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="526"/>
@@ -3095,17 +3095,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
         <source>Stay floating when no zone is remembered</source>
-        <translation>Förbli flytande när ingen zon minns</translation>
+        <translation>Förbli flytande när ingen zon finns sparad</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Show on-screen displays here</source>
-        <translation>Visa skärmmeddelanden här</translation>
+        <translation>Visa skärmvisningar här</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Hide on-screen displays here</source>
-        <translation>Dölj skärmmeddelanden här</translation>
+        <translation>Dölj skärmvisningar här</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
@@ -3151,7 +3151,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
         <source>Set maximum tiled windows</source>
-        <translation>Ange högsta antal panelagda fönster</translation>
+        <translation>Ange högsta antal panelindelade fönster</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
@@ -3849,7 +3849,7 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="493"/>
         <source>Top to bottom</source>
-        <translation>Ovanför varandra</translation>
+        <translation>Uppifrån och ned</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="201"/>
@@ -4235,7 +4235,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="161"/>
         <source>Tiling (no algorithm assigned)</source>
-        <translation>Panelläggning (inget algoritm tilldelad)</translation>
+        <translation>Panelindelning (ingen algoritm tilldelad)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
@@ -4452,7 +4452,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="274"/>
         <source>Scrolling template: None</source>
-        <translation>Rullningsmall: ingen</translation>
+        <translation>Rullningsmall: Ingen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="276"/>
@@ -4462,7 +4462,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="292"/>
         <source>Tiling: None</source>
-        <translation>Panelläggning: ingen</translation>
+        <translation>Panelindelning: Ingen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="317"/>
@@ -4535,7 +4535,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
         <source>Overlay style (invalid)</source>
-        <translation>Överlagringsstil (ogiltig)</translation>
+        <translation>Överläggsstil (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="526"/>
@@ -4593,7 +4593,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
         <source>Max tiled windows (invalid)</source>
-        <translation>Max panelagda fönster (ogiltigt)</translation>
+        <translation>Max antal panelindelade fönster (ogiltiga)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
@@ -4638,7 +4638,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="661"/>
         <source>Drag (invalid)</source>
-        <translation>Dra (ogiltigt)</translation>
+        <translation>Dragning (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="662"/>
@@ -4708,7 +4708,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
         <source>Insert new windows (invalid)</source>
-        <translation>Infoga nya fönster (ogiltigt)</translation>
+        <translation>Infoga nya fönster (ogiltiga)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="698"/>
@@ -4718,12 +4718,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
         <source>Sticky windows (invalid)</source>
-        <translation>Fastnålade fönster (ogiltigt)</translation>
+        <translation>Klistriga fönster (ogiltiga)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
         <source>Sticky windows: %1</source>
-        <translation>Fastnålade fönster: %1</translation>
+        <translation>Klistriga fönster: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
@@ -4748,7 +4748,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
         <source>New columns (invalid)</source>
-        <translation>Nya kolumner (ogiltigt)</translation>
+        <translation>Nya kolumner (ogiltiga)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
@@ -4768,12 +4768,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <source>Tab indicator style (invalid)</source>
-        <translation>Stil för flikindikator (ogiltig)</translation>
+        <translation>Stil för flikindikatorn (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="738"/>
         <source>Tab indicator style: %1</source>
-        <translation>Stil för flikindikator: %1</translation>
+        <translation>Stil för flikindikatorn: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
@@ -4859,7 +4859,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="494"/>
         <source>Animation duration (invalid)</source>
-        <translation>Animeringens varaktighet (ogiltig)</translation>
+        <translation>Animeringslängd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="563"/>
@@ -5031,7 +5031,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="255"/>
         <source>Snapping: None</source>
-        <translation>Fästning: ingen</translation>
+        <translation>Fästning: Ingen</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="394"/>
@@ -5054,12 +5054,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="944"/>
         <source>Active opacity (invalid)</source>
-        <translation>Opacitet för aktivt (ogiltig)</translation>
+        <translation>Aktiv opacitet (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="945"/>
         <source>Inactive opacity (invalid)</source>
-        <translation>Opacitet för inaktivt (ogiltig)</translation>
+        <translation>Inaktiv opacitet (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="947"/>
@@ -5079,7 +5079,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
         <source>Overlay border width (invalid)</source>
-        <translation>Överlagringens kantbredd (ogiltig)</translation>
+        <translation>Överläggets kantbredd (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="957"/>
@@ -5089,7 +5089,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Overlay corner radius (invalid)</source>
-        <translation>Överlagringens hörnradie (ogiltig)</translation>
+        <translation>Överläggets hörnradie (ogiltig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
@@ -5516,12 +5516,12 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="153"/>
         <source>Keep one application&apos;s windows floating instead of tiled. The windows stay managed, so they can still be dragged into a zone.</source>
-        <translation>Håll ett programs fönster flytande i stället för panelagda. Fönstren förblir hanterade, så de går fortfarande att dra in i en zon.</translation>
+        <translation>Håll ett programs fönster flytande i stället för panelindelade. Fönstren förblir hanterade, så de går fortfarande att dra in i en zon.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="157"/>
         <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
-        <translation>Håll ett programs fönster utanför panelläggning, fästning och rullning. Kanter, dekorationspaket och animationer gäller fortfarande.</translation>
+        <translation>Håll ett programs fönster utanför panelindelning, fästning och rullning. Kanter, dekorationspaket och animationer gäller fortfarande.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
@@ -6484,7 +6484,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="22"/>
         <source>Zone span</source>
         <oldsource>Zone Span</oldsource>
-        <translation>Zonöverspann</translation>
+        <translation>Zonutsträckning</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="85"/>
@@ -7037,7 +7037,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <source>launcher</source>
-        <translation>startprogram</translation>
+        <translation>programstartare</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="219"/>
@@ -7999,7 +7999,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
         <source>pill</source>
-        <translation>piller</translation>
+        <translation>helrundad</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
@@ -8381,7 +8381,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1050"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Scrolling Quick Shortcuts</source>
-        <translation>Snabbkortkommandon för rullning</translation>
+        <translation>Snabbgenvägar för rullning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1068"/>
@@ -9121,7 +9121,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="187"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="77"/>
         <source>Zone span release grace period</source>
-        <translation>Respittid vid släpp för zonöverspann</translation>
+        <translation>Respittid vid släpp för zonutsträckning</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
@@ -9147,7 +9147,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>above</source>
-        <translation>överst</translation>
+        <translation>ovanför</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
@@ -9460,7 +9460,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingOrderingPage.qml.cpp" line="13"/>
         <source>Tiling algorithm priority</source>
         <oldsource>Tiling Algorithm Priority</oldsource>
-        <translation>Prioritet för panelläggningsalgoritmer</translation>
+        <translation>Prioritet för panelindelningsalgoritmer</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
@@ -9526,13 +9526,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="73"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="46"/>
         <source>Strip Scrolled</source>
-        <translation>Remsan rullades</translation>
+        <translation>Remsa rullades</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="80"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="51"/>
         <source>Tab Switched</source>
-        <translation>Fliken växlades</translation>
+        <translation>Flik växlades</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
@@ -11286,7 +11286,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
-        <translation>Hjälp för mallredigeraren</translation>
+        <translation>Hjälp för rullningsmallsredigeraren</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
@@ -11675,19 +11675,19 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="343"/>
         <source>Hover or select a column to reveal its action buttons</source>
         <comment>@info tip</comment>
-        <translation>Hovra över eller markera en kolumn för att visa dess åtgärdsknappar</translation>
+        <translation>För pekaren över eller markera en kolumn för att visa dess åtgärdsknappar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="348"/>
         <source>Add columns from the bottom bar</source>
         <comment>@info tip</comment>
-        <translation>Kolumner lägger du till från nedre raden</translation>
+        <translation>Lägg till kolumner från nedre raden</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="353"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through</source>
         <comment>@info tip</comment>
-        <translation>Förinställningar är de storlekar som kortkommandona för bredd- och höjdstegning går igenom</translation>
+        <translation>Förinställningar är de storlekar som genvägarna för bredd- och höjdstegning går igenom</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="361"/>
@@ -12699,7 +12699,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="767"/>
         <source>Apply the shader settings and close the dialog</source>
-        <translation>Tillämpa shaderinställningarna och stäng dialogrutan</translation>
+        <translation>Verkställ shaderinställningarna och stäng dialogrutan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="904"/>
@@ -13171,7 +13171,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
         <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
-        <translation>Fönsterfästning, panelläggning och rullning för Wayland-kompositorer. Fäst fönster i zoner du ritar själv, låt en algoritm panelägga dem åt dig, eller rulla dem längs en oändlig remsa. Varje skärm väljer sitt eget läge.</translation>
+        <translation>Fönsterfästning, panelindelning och rullning för Wayland-kompositorer. Fäst fönster i zoner du ritar själv, låt en algoritm panelindela dem åt dig, eller rulla dem längs en oändlig remsa. Varje skärm väljer sitt eget läge.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
@@ -13387,7 +13387,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="58"/>
         <source>GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.</source>
-        <translation>GPU som ritar zonöverlagringarna och skärmmeddelandena. Med Automatiskt bestämmer grafikdrivrutinen. KWin sätter samman fönsterinnehållet, så det påverkas inte.</translation>
+        <translation>GPU som ritar zonöverläggen och skärmvisningarna. Med Automatiskt bestämmer grafikdrivrutinen. KWin sätter samman fönsterinnehållet, så det påverkas inte.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
@@ -13408,7 +13408,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="163"/>
         <source>fps</source>
         <comment>frames per second, unit appended to a slider value</comment>
-        <translation>bilder/s</translation>
+        <translation>fps</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="191"/>
@@ -14211,7 +14211,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation>Om du stoppar PlasmaZones-tjänsten inaktiveras fönsterfästning, panelläggning och rullning tills du startar den igen.</translation>
+        <translation>Om du stoppar PlasmaZones-tjänsten inaktiveras fönsterfästning, panelindelning och rullning tills du startar den igen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>
@@ -15724,7 +15724,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation>Kantfärg för aktivt</translation>
+        <translation>Aktiv kantfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
@@ -15753,7 +15753,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation>Kantfärg för inaktivt</translation>
+        <translation>Inaktiv kantfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
@@ -15764,7 +15764,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="437"/>
         <source>Tint color</source>
         <comment>@action:button</comment>
-        <translation>Toningsfärg</translation>
+        <translation>Färgtonens färg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="439"/>
@@ -16791,22 +16791,22 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="174"/>
         <source>Shortcut %1, used on monitors in this mode</source>
         <comment>%1 is a keyboard shortcut such as Meta+Alt+1</comment>
-        <translation>Kortkommando %1, används på skärmar i det här läget</translation>
+        <translation>Genväg %1, används på skärmar i det här läget</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Tiling algorithm for quick shortcut %1</source>
-        <translation>Panelläggningsalgoritm för snabbkortkommandot %1</translation>
+        <translation>Panelindelningsalgoritm för snabbgenvägen %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Zone layout for quick shortcut %1</source>
-        <translation>Zonlayout för snabbkortkommandot %1</translation>
+        <translation>Zonlayout för snabbgenvägen %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Scrolling template for quick shortcut %1</source>
-        <translation>Rullningsmall för snabbkortkommandot %1</translation>
+        <translation>Rullningsmall för snabbgenvägen %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
@@ -16821,12 +16821,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear layout for quick shortcut %1</source>
-        <translation>Rensa layouten för snabbkortkommandot %1</translation>
+        <translation>Rensa layouten för snabbgenvägen %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear template for quick shortcut %1</source>
-        <translation>Rensa mallen för snabbkortkommandot %1</translation>
+        <translation>Rensa mallen för snabbgenvägen %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="43"/>
@@ -17577,7 +17577,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="258"/>
         <source>This template starts no columns</source>
         <comment>@info:placeholder</comment>
-        <translation>Den här mallen börjar med inga kolumner</translation>
+        <translation>Den här mallen har inga startkolumner</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="259"/>
@@ -17596,7 +17596,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation>Flikar</translation>
+        <translation>Med flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17711,7 +17711,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="753"/>
         <source>Column width divider</source>
         <comment>@action:button</comment>
-        <translation>Avdelare för kolumnbredd</translation>
+        <translation>Kolumnbreddsavdelare</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="837"/>
@@ -18249,7 +18249,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="287"/>
         <source>Scrolling strip preview, apply to start scrolling on this screen</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation>Förhandsvisning av rullningsremsan, tillämpa för att börja rulla på den här skärmen</translation>
+        <translation>Förhandsvisning av rullningsremsan, verkställ för att börja rulla på den här skärmen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="289"/>
@@ -18303,7 +18303,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="604"/>
         <source>Apply to start scrolling on this screen</source>
         <comment>scrolling strip preview, the mode is staged but not applied yet</comment>
-        <translation>Tillämpa för att börja rulla på den här skärmen</translation>
+        <translation>Verkställ för att börja rulla på den här skärmen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
@@ -18650,7 +18650,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="335"/>
         <source>%1 px width</source>
         <comment>pixel-unit width in a preset tooltip</comment>
-        <translation>%1 px bred</translation>
+        <translation>%1 px bredd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="297"/>
@@ -19217,7 +19217,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="69"/>
         <source>Zone highlight color</source>
         <comment>@action:button</comment>
-        <translation>Färg för zonmarkering</translation>
+        <translation>Zonmarkeringsfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="100"/>
@@ -19239,7 +19239,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="120"/>
         <source>Zone border color</source>
         <comment>@action:button</comment>
-        <translation>Färg för zonkant</translation>
+        <translation>Zonkantfärg</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="122"/>
@@ -19345,7 +19345,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="99"/>
         <source>How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>Hur länge överlagringen förblir aktiv efter att aktiveringsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå fästs. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
+        <translation>Hur länge överlägget förblir aktiv efter att aktiveringsutlösaren släppts, så att ett fönster som släpps strax efteråt ändå fästs. Hjälper när utlösaren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="103"/>
@@ -19515,7 +19515,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
         <source>How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>Hur länge överspannet förblir aktivt efter att spannmodifieraren släppts, så att ett fönster som släpps strax efteråt ändå tar de målade zonerna. Hjälper när modifieraren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
+        <translation>Hur länge utsträckningen förblir aktiv efter att utsträckningsmodifieraren släppts, så att ett fönster som släpps strax efteråt ändå tar de målade zonerna. Hjälper när modifieraren är en musknapp som släpps i samma veva. Ange 0 för att stänga av det.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -20055,29 +20055,29 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="120"/>
         <source>Sticky window handling</source>
-        <translation>Hantering av fastnålade fönster</translation>
+        <translation>Hantering av klistriga fönster</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="134"/>
         <source>How far the increase and decrease column width shortcuts resize a column per press, as a share of the strip</source>
         <oldsource>How far the increase and decrease column width shortcuts move a column per press, as a share of the strip</oldsource>
-        <translation>Hur mycket kortkommandona för att öka och minska kolumnbredden ändrar en kolumn per tryck, som andel av remsan</translation>
+        <translation>Hur mycket genvägarna för att öka och minska kolumnbredden ändrar en kolumn per tryck, som andel av remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="137"/>
         <source>Column width adjustment step</source>
-        <translation>Steg för justering av kolumnbredd</translation>
+        <translation>Steg för kolumnbreddsjustering</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="156"/>
         <source>How far the increase and decrease window height shortcuts resize a window per press, as a share of the work area across the strip</source>
         <oldsource>How far the increase and decrease window height shortcuts resize a window per press, as a share of the screen height</oldsource>
-        <translation>Hur mycket kortkommandona för att öka och minska fönsterhöjden ändrar ett fönster per tryck, som andel av arbetsytan tvärs remsan</translation>
+        <translation>Hur mycket genvägarna för att öka och minska fönsterhöjden ändrar ett fönster per tryck, som andel av arbetsytan tvärs remsan</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="159"/>
         <source>Window height adjustment step</source>
-        <translation>Steg för justering av fönsterhöjd</translation>
+        <translation>Steg för fönsterhöjdsjustering</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="178"/>
@@ -20094,7 +20094,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="93"/>
         <source>Keep the windows you float stacked above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
-        <translation>Håll de fönster du gör flytande ovanför de panelagda fönstren. En regel som anger ett fönsterlager har företräde för de fönster den matchar.</translation>
+        <translation>Håll de fönster du gör flytande ovanför de panelindelade fönstren. En regel som anger ett fönsterlager har företräde för de fönster den matchar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="126"/>
@@ -20644,7 +20644,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
         <source>Already at that size</source>
-        <translation>Redan den storleken</translation>
+        <translation>Redan i den storleken</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="377"/>
@@ -20666,7 +20666,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="501"/>
         <source>Tiled</source>
         <comment>@info:status the window is now tiled (adjective, not a verb)</comment>
-        <translation>Panelagt</translation>
+        <translation>Panelindelad</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="529"/>
@@ -20682,7 +20682,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="137"/>
         <source>Spanning is not available in this mode</source>
-        <translation>Överspann är inte tillgängligt i det här läget</translation>
+        <translation>Utsträckning är inte tillgänglig i det här läget</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="151"/>
@@ -20758,7 +20758,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="356"/>
         <source>Tabbing is unavailable</source>
-        <translation>Flikar är inte tillgängliga</translation>
+        <translation>Flikläge är inte tillgängligt</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
@@ -20974,7 +20974,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="576"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
-        <translation>Rullad</translation>
+        <translation>Rullades</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
@@ -21097,7 +21097,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="207"/>
         <source>Column width preset number</source>
-        <translation>Nummer på kolumnbreddsförinställningen</translation>
+        <translation>Nummer för kolumnbreddsförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="146"/>
@@ -21123,7 +21123,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="283"/>
         <source>Default window height</source>
-        <translation>Standardhöjd för fönster</translation>
+        <translation>Standardfönsterhöjd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="297"/>
@@ -21145,18 +21145,18 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="330"/>
         <source>Window height preset number</source>
-        <translation>Nummer på fönsterhöjdsförinställningen</translation>
+        <translation>Nummer för fönsterhöjdsförinställning</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="369"/>
         <source>These are the steps the cycling shortcuts walk on a screen with no layout template. A screen using a template walks that template&apos;s own lists instead, and each list is replaced whole, so a template that carries widths but no heights leaves the heights here in play.</source>
-        <translation>Det här är stegen som stegningskortkommandona går igenom på en skärm utan layoutmall. En skärm som använder en mall går i stället igenom den mallens egna listor, och varje lista ersätts i sin helhet, så en mall som bär bredder men inga höjder lämnar höjderna här i spel.</translation>
+        <translation>Det här är stegen som stegningsgenvägarna går igenom på en skärm utan layoutmall. En skärm som använder en mall går i stället igenom den mallens egna listor, och varje lista ersätts i sin helhet, så en mall som bär bredder men inga höjder lämnar höjderna här i spel.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="381"/>
         <source>Percentages of the work area along the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area width, cycled in this order by the preset shortcuts</oldsource>
-        <translation>Procentandelar av arbetsytan längs remsan, som förinställningskortkommandona går igenom i den här ordningen</translation>
+        <translation>Procentandelar av arbetsytan längs remsan, som förinställningsgenvägarna går igenom i den här ordningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
@@ -21186,7 +21186,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="403"/>
         <source>Percentages of the work area across the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area height, cycled in this order by the preset shortcuts</oldsource>
-        <translation>Procentandelar av arbetsytan tvärs remsan, som förinställningskortkommandona går igenom i den här ordningen</translation>
+        <translation>Procentandelar av arbetsytan tvärs remsan, som förinställningsgenvägarna går igenom i den här ordningen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation>Runda varje flik till ett piller. Av gäller i stället hörnradien nedan.</translation>
+        <translation>Runda varje flik helt. Av gäller i stället hörnradien nedan.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
@@ -21510,7 +21510,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation>Tilldela rullningsmallar till kortkommandon för snabb växling.</translation>
+        <translation>Tilldela rullningsmallar till genvägar för snabb växling.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="30"/>
@@ -21520,7 +21520,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
-        <translation>Anger vilken placeringsmotor (fästning, panelläggning eller rullning) som körs på den matchande skärmen, skrivbordet eller aktiviteten.</translation>
+        <translation>Anger vilken placeringsmotor (fästning, panelindelning eller rullning) som körs på den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
@@ -21530,7 +21530,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
-        <translation>Tilldelar en panelläggningsalgoritm till den matchande skärmen, skrivbordet eller aktiviteten.</translation>
+        <translation>Tilldelar en panelindelningsalgoritm till den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
@@ -21555,12 +21555,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation>Visar eller döljer skärmmeddelanden för den matchande skärmen, skrivbordet eller aktiviteten. Av tystar layout- och navigeringspopupperna där. På visar dem även när de globala reglagen är av, även om visningsstilen Ingen fortfarande döljer allt.</translation>
+        <translation>Visar eller döljer skärmvisningar för den matchande skärmen, skrivbordet eller aktiviteten. Av tystar layout- och navigeringspopupperna där. På visar dem även när de globala reglagen är av, även om visningsstilen Ingen fortfarande döljer allt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
         <source>Keeps matching windows out of snapping, tiling and scrolling while their decorations and animations still apply.</source>
-        <translation>Håller matchande fönster utanför fästning, panelläggning och rullning, medan deras dekorationer och animationer fortfarande gäller.</translation>
+        <translation>Håller matchande fönster utanför fästning, panelindelning och rullning, medan deras dekorationer och animationer fortfarande gäller.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="75"/>
@@ -21575,7 +21575,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="83"/>
         <source>Opens matching windows floating instead of placing them. A floated window can still be snapped or tiled by hand later.</source>
-        <translation>Öppnar matchande fönster flytande i stället för att placera dem. Ett flytande fönster kan fortfarande fästas eller paneläggas för hand senare.</translation>
+        <translation>Öppnar matchande fönster flytande i stället för att placera dem. Ett flytande fönster kan fortfarande fästas eller panelindelas för hand senare.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="94"/>
@@ -21590,7 +21590,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="106"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
-        <translation>Styr om ett matchande fönster återgår till sin tidigare zon när det öppnas igen, under sessionen eller efter en utloggning. Åsidosätter inställningen ”Återställ fönster till deras tidigare zon”, så att ett program som en webbläsare kan lämnas utanför medan alla andra fönster fortfarande återställs.</translation>
+        <translation>Styr om ett matchande fönster återgår till sin tidigare zon när det öppnas igen, under sessionen eller efter en utloggning. Åsidosätter inställningen ”Återställ fönster till deras föregående zon”, så att ett program som en webbläsare kan lämnas utanför medan alla andra fönster fortfarande återställs.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
@@ -21605,7 +21605,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="122"/>
         <source>Keeps matching windows above or below other windows, for example floating windows above tiled ones when paired with the Floating condition.</source>
-        <translation>Håller matchande fönster ovanför eller under andra fönster, till exempel flytande fönster ovanför panelagda när det kombineras med villkoret Flytande.</translation>
+        <translation>Håller matchande fönster ovanför eller under andra fönster, till exempel flytande fönster ovanför panelindelade när det kombineras med villkoret Flytande.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="128"/>
@@ -21710,52 +21710,52 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
-        <translation>Använder en annan zonöverlagringsshader för den matchande skärmen, skrivbordet eller aktiviteten.</translation>
+        <translation>Använder en annan zonöverläggsshader för den matchande skärmen, skrivbordet eller aktiviteten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
-        <translation>Växlar zonöverlagringen för den matchande kontexten mellan zonrektanglar och layoutförhandsvisningen.</translation>
+        <translation>Växlar zonöverlägget för den matchande kontexten mellan zonrektanglar och layoutförhandsvisningen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
-        <translation>Anger överlagringens markerade zonfärg för den matchande kontexten.</translation>
+        <translation>Anger överläggets markerade zonfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
-        <translation>Anger överlagringens inaktiva zonfärg för den matchande kontexten.</translation>
+        <translation>Anger överläggets inaktiva zonfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation>Anger överlagringens zonkantfärg för den matchande kontexten.</translation>
+        <translation>Anger överläggets zonkantfärg för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
-        <translation>Anger opaciteten för överlagringens markerade zon för den matchande kontexten.</translation>
+        <translation>Anger opaciteten för överläggets markerade zon för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
-        <translation>Anger opaciteten för överlagringens inaktiva zon för den matchande kontexten.</translation>
+        <translation>Anger opaciteten för överläggets inaktiva zon för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
-        <translation>Anger överlagringens zonkanttjocklek för den matchande kontexten.</translation>
+        <translation>Anger överläggets zonkanttjocklek för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
-        <translation>Anger zonernas hörnradie i överlagringen för den matchande kontexten.</translation>
+        <translation>Anger zonernas hörnradie i överlägget för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
-        <translation>Visar eller döljer zonnumren på överlagringen för den matchande kontexten.</translation>
+        <translation>Visar eller döljer zonnumren på överlägget för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
@@ -21795,7 +21795,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
-        <translation>Begränsar hur många fönster panelläggningsalgoritmen ordnar i den matchande kontexten.</translation>
+        <translation>Begränsar hur många fönster panelindelningsalgoritmen ordnar i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
@@ -21810,7 +21810,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
-        <translation>Väljer var nyöppnade fönster kommer in i panelläggningsstapeln i den matchande kontexten.</translation>
+        <translation>Väljer var nyöppnade fönster kommer in i panelindelningsstapeln i den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
@@ -21870,12 +21870,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
-        <translation>Väljer om att dra ett panelagt fönster gör det flytande eller byter plats på det inom stapeln, för den matchande kontexten.</translation>
+        <translation>Väljer om att dra ett panelindelat fönster gör det flytande eller byter plats på det inom stapeln, för den matchande kontexten.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="300"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
-        <translation>Åsidosätter en panelläggningsalgoritms egna parametrar för den matchande kontexten. Gäller bara medan den algoritmen är aktiv där.</translation>
+        <translation>Åsidosätter en panelindelningsalgoritms egna parametrar för den matchande kontexten. Gäller bara medan den algoritmen är aktiv där.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="310"/>
@@ -21910,7 +21910,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
-        <translation>Fokuserar i den matchande kontexten den kolumn som pekaren förs över, utan klick. Gäller bara rullningsskärmar, så fäst- och panelläggningsskärmar följer fortfarande den globala inställningen.</translation>
+        <translation>Fokuserar i den matchande kontexten den kolumn som pekaren förs över, utan klick. Gäller bara rullningsskärmar, så fäst- och panelindelningsskärmar följer fortfarande den globala inställningen.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="357"/>
@@ -22320,7 +22320,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="180"/>
         <source>Default column width</source>
         <comment>@label:listbox</comment>
-        <translation>Standardbredd för kolumn</translation>
+        <translation>Standardkolumnbredd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="185"/>
@@ -22363,13 +22363,13 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width in pixels</source>
         <comment>@label:spinbox</comment>
-        <translation>Standardbredd för kolumn i bildpunkter</translation>
+        <translation>Standardkolumnbredd i bildpunkter</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width</source>
         <comment>@label:spinbox</comment>
-        <translation>Standardbredd för kolumn</translation>
+        <translation>Standardkolumnbredd</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
@@ -22423,7 +22423,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>Flikar</translation>
+        <translation>Med flikar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
@@ -22465,12 +22465,12 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <comment>@info</comment>
-        <translation>Förinställningar är de storlekar som kortkommandona för bredd- och höjdstegning går igenom medan den här mallen är tilldelad.</translation>
+        <translation>Förinställningar är de storlekar som genvägarna för bredd- och höjdstegning går igenom medan den här mallen är tilldelad.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
         <source>Shell decoration surfaces</source>
-        <translation>Dekorationsytor för skalet</translation>
+        <translation>Dekorationsytor för skal</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="19"/>
@@ -22485,7 +22485,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation>Animationer för ytorna som Plasma-skalet äger, som programstartaren och systemfältets popupper. Ingen shader du väljer för dina egna fönster når dem, så varje rad börjar utan shader och att välja en är hela anmälan. Tills du väljer en animeras dessa ytor så som Plasma animerar dem. ”Alla skalytor” är standard för båda händelserna, och båda kan åsidosätta den. Paneler har inga rader här, eftersom en panel stannar på skärmen hela sessionen i stället för att öppnas och stängas.</translation>
+        <translation>Animationer för ytorna som Plasma-skalet äger, som programstartaren och systemfältets popupper. Ingen shader du väljer för dina egna fönster når dem, så varje rad börjar utan shader och det är först när du väljer en som något händer. Tills du väljer en animeras dessa ytor så som Plasma animerar dem. ”Alla skalytor” är standard för båda händelserna, och båda kan åsidosätta den. Paneler har inga rader här, eftersom en panel stannar på skärmen hela sessionen i stället för att öppnas och stängas.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
@@ -22508,7 +22508,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation>Ange prioritetsordningen för mallar vid stegning med kortkommandon och i layoutväljaren. Dra rader eller använd pilknapparna för att ordna om.</translation>
+        <translation>Ange prioritetsordningen för mallar vid stegning med genvägar och i layoutväljaren. Dra rader eller använd pilknapparna för att ordna om.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
@@ -22543,19 +22543,19 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>Åt vilket håll remsan löper. ”Följ skärmens form” låter den löpa uppifrån och ned när den användbara ytan är högre än den är bred, och sida vid sida annars. Kolumner delar sig fortfarande tvärs remsan oavsett vilket håll den löper.</translation>
+        <translation>Åt vilket håll remsan löper. ”Följ skärmens form” låter den löpa ”Uppifrån och ned” när den användbara ytan är högre än den är bred, och ”Sida vid sida” annars. Kolumner delar sig fortfarande tvärs remsan oavsett vilket håll den löper.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
         <source>Accordion Collapse</source>
         <comment>animation event or section</comment>
-        <translation>Dragspel fälls ihop</translation>
+        <translation>Fäll ihop dragspel</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="64"/>
         <source>Accordion Expand</source>
         <comment>animation event or section</comment>
-        <translation>Dragspel fälls ut</translation>
+        <translation>Fäll ut dragspel</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
@@ -22573,19 +22573,19 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
         <source>Badge Hide</source>
         <comment>animation event or section</comment>
-        <translation>Emblem döljs</translation>
+        <translation>Dölj emblem</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="76"/>
         <source>Badge Pulse</source>
         <comment>animation event or section</comment>
-        <translation>Emblem pulserar</translation>
+        <translation>Pulsera emblem</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="79"/>
         <source>Badge Show</source>
         <comment>animation event or section</comment>
-        <translation>Emblem visas</translation>
+        <translation>Visa emblem</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="82"/>
@@ -22597,19 +22597,19 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
-        <translation>Kortkommandoöversikt</translation>
+        <translation>Genvägsöversikt</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
         <source>Click</source>
         <comment>animation event or section</comment>
-        <translation>Klick</translation>
+        <translation>Klicka</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="91"/>
         <source>Close</source>
         <comment>animation event or section</comment>
-        <translation>Stängning</translation>
+        <translation>Stäng</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="94"/>
@@ -22627,7 +22627,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="100"/>
         <source>Dim</source>
         <comment>animation event or section</comment>
-        <translation>Dämpning</translation>
+        <translation>Dämpa</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="103"/>
@@ -22663,7 +22663,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
-        <translation>Globalt</translation>
+        <translation>Global</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
@@ -22675,7 +22675,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>Hovring</translation>
+        <translation>Hovra</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
@@ -22687,7 +22687,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
         <source>Layout Switch</source>
         <comment>animation event or section</comment>
-        <translation>Layoutväxling</translation>
+        <translation>Växla layout</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
@@ -22723,13 +22723,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="148"/>
         <source>OSD</source>
         <comment>animation event or section</comment>
-        <translation>Skärmmeddelande</translation>
+        <translation>Skärmvisning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
         <source>Overlays</source>
         <comment>animation event or section</comment>
-        <translation>Överlagringar</translation>
+        <translation>Överlägg</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="154"/>
@@ -22741,13 +22741,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="157"/>
         <source>Peek</source>
         <comment>animation event or section</comment>
-        <translation>Titt</translation>
+        <translation>Kika</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="160"/>
         <source>Pop</source>
         <comment>animation event or section</comment>
-        <translation>Popp</translation>
+        <translation>Studsa</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
@@ -22771,13 +22771,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="172"/>
         <source>Pulse</source>
         <comment>animation event or section</comment>
-        <translation>Puls</translation>
+        <translation>Pulsera</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
-        <translation>Ordna om</translation>
+        <translation>Ändra ordning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
@@ -22837,7 +22837,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
         <source>Snap Resize</source>
         <comment>animation event or section</comment>
-        <translation>Storleksändring vid fästning</translation>
+        <translation>Ändra storlek vid fästning</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="208"/>
@@ -22849,13 +22849,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="211"/>
         <source>Tab Switch</source>
         <comment>animation event or section</comment>
-        <translation>Flikväxling</translation>
+        <translation>Växla flik</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="214"/>
         <source>Tint</source>
         <comment>animation event or section</comment>
-        <translation>Toning</translation>
+        <translation>Färgton</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="217"/>
@@ -22897,7 +22897,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
         <source>Zone Overlay Flash</source>
         <comment>animation event or section</comment>
-        <translation>Blink i zonöverlagringen</translation>
+        <translation>Blinka zonöverlägg</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="238"/>
@@ -22964,7 +22964,7 @@
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="338"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="153"/>
         <source>Tiling (no algorithm)</source>
-        <translation>Panelläggning (ingen algoritm)</translation>
+        <translation>Panelindelning (ingen algoritm)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="170"/>

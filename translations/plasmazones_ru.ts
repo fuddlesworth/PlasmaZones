@@ -100,7 +100,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
         <source>Back to %1</source>
-        <translation>Назад к %1</translation>
+        <translation>Назад: %1</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
@@ -114,12 +114,12 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
         <source>%1 section, expanded</source>
-        <translation>Раздел %1, развёрнут</translation>
+        <translation>Раздел «%1», развёрнут</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarRow.qml" line="71"/>
         <source>%1 section, collapsed</source>
-        <translation>Раздел %1, свёрнут</translation>
+        <translation>Раздел «%1», свёрнут</translation>
     </message>
 </context>
 <context>
@@ -591,7 +591,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="416"/>
         <source>Cycle Window Height Preset Back</source>
-        <translation>Перебрать предустановку высоты окна назад</translation>
+        <translation>Переключить предустановку высоты окна назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
@@ -746,12 +746,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
         <source>Cycle Focus Forward</source>
-        <translation>Перебрать фокус вперёд</translation>
+        <translation>Переключить фокус вперёд</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="262"/>
         <source>Cycle Focus Backward</source>
-        <translation>Перебрать фокус назад</translation>
+        <translation>Переключить фокус назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="264"/>
@@ -957,7 +957,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="385"/>
         <source>Cycle Window Height</source>
-        <translation>Перебрать высоту окна</translation>
+        <translation>Переключить высоту окна</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="183"/>
@@ -997,7 +997,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
         <source>Cycle Window Height Back</source>
-        <translation>Перебрать высоту окна назад</translation>
+        <translation>Переключить высоту окна назад</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
@@ -2174,12 +2174,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
-        <translation>Раскладка, активная сейчас на мониторе, или используемый там шаблон прокрутки. Позволяет правилу менять отступы, наложение или состояние блокировки для экрана, показывающего заданную раскладку или шаблон. Изменить назначенную раскладку правило не может, это было бы замкнутым кругом.</translation>
+        <translation>Раскладка, активная сейчас на мониторе, или используемый там шаблон прокрутки. Позволяет правилу менять зазоры, наложение или состояние блокировки для экрана, показывающего заданную раскладку или шаблон. Изменить назначенную раскладку правило не может, это было бы замкнутым кругом.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation>Светлая или тёмная цветовая схема системы. Позволяет правилу выбирать другие отступы, цвета наложения или раскладки, когда рабочий стол переключается между дневной и ночной темой. Правила применяются заново сразу после смены темы.</translation>
+        <translation>Светлая или тёмная цветовая схема системы. Позволяет правилу выбирать другие зазоры, цвета наложения или раскладки, когда рабочий стол переключается между дневной и ночной темой. Правила применяются заново сразу после смены темы.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2556,7 +2556,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="134"/>
         <source>Drop the outer gaps for a lone column (off = keep them)</source>
-        <translation>Убирать внешние отступы для одиночного столбца (выкл. — сохранять их)</translation>
+        <translation>Убирать внешние зазоры для одиночного столбца (выкл. — сохранять их)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="137"/>
@@ -2596,12 +2596,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="163"/>
         <source>Gap (px, negative draws over the window)</source>
-        <translation>Отступ (px, отрицательное значение рисует поверх окна)</translation>
+        <translation>Зазор (пикс., отрицательное значение рисует поверх окна)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="166"/>
         <source>Thickness (px)</source>
-        <translation>Толщина (px)</translation>
+        <translation>Толщина (пикс.)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="169"/>
@@ -2611,12 +2611,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="172"/>
         <source>Gap between tabs (px)</source>
-        <translation>Отступ между вкладками (px)</translation>
+        <translation>Зазор между вкладками (пикс.)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="175"/>
         <source>Corner radius (px, -1 is fully rounded)</source>
-        <translation>Радиус скругления (px, -1 — полностью скруглённый)</translation>
+        <translation>Радиус скругления (пикс., -1 — полностью скруглённый)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="180"/>
@@ -2686,7 +2686,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="255"/>
         <source>Show the drag selector here (off = hide it)</source>
-        <translation>Показывать селектор перетаскивания здесь (выкл. — скрывать его)</translation>
+        <translation>Показывать выбор при перетаскивании здесь (выкл. — скрывать его)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="280"/>
@@ -2901,7 +2901,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="329"/>
         <source>Set the gap around the tab indicator</source>
-        <translation>Задать отступ вокруг индикатора вкладок</translation>
+        <translation>Задать зазор вокруг индикатора вкладок</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="332"/>
@@ -2916,7 +2916,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="338"/>
         <source>Set the gap between tabs</source>
-        <translation>Задать отступ между вкладками</translation>
+        <translation>Задать зазор между вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="341"/>
@@ -3002,7 +3002,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="395"/>
         <source>Set the drop indicator border width</source>
-        <translation>Задать толщину рамки индикатора сброса</translation>
+        <translation>Задать ширину рамки индикатора сброса</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="398"/>
@@ -3076,7 +3076,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="470"/>
         <source>Show the drag selector</source>
-        <translation>Показывать селектор перетаскивания</translation>
+        <translation>Показывать выбор при перетаскивании</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="488"/>
@@ -3116,12 +3116,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
         <source>Show the drag selector here</source>
-        <translation>Показывать селектор перетаскивания здесь</translation>
+        <translation>Показывать выбор при перетаскивании здесь</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
         <source>Hide the drag selector here</source>
-        <translation>Скрывать селектор перетаскивания здесь</translation>
+        <translation>Скрывать выбор при перетаскивании здесь</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="647"/>
@@ -3152,7 +3152,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="288"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="667"/>
         <source>Drop the outer gaps for a lone column</source>
-        <translation>Убирать внешние отступы для одиночного столбца</translation>
+        <translation>Убирать внешние зазоры для одиночного столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
@@ -3162,7 +3162,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Keep the outer gaps for a lone column</source>
-        <translation>Сохранять внешние отступы для одиночного столбца</translation>
+        <translation>Сохранять внешние зазоры для одиночного столбца</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
@@ -4500,12 +4500,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="449"/>
         <source>Block %1 shader</source>
-        <translation>Блокировать шейдер %1</translation>
+        <translation>Блокировать шейдер «%1»</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="453"/>
         <source>%1 shader: %2</source>
-        <translation>Шейдер %1: %2</translation>
+        <translation>Шейдер «%1»: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="462"/>
@@ -4561,7 +4561,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
         <source>Border width (invalid)</source>
-        <translation>Толщина рамки (недопустимо)</translation>
+        <translation>Ширина рамки (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
@@ -4599,7 +4599,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
         <source>Max tiled windows (invalid)</source>
-        <translation>Макс. окон в мозаике (недопустимо)</translation>
+        <translation>Максимум окон в мозаике (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
@@ -4794,12 +4794,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="748"/>
         <source>Tab indicator gap: %1 px</source>
-        <translation>Отступ индикатора вкладок: %1 px</translation>
+        <translation>Зазор индикатора вкладок: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="749"/>
         <source>Tab indicator gap (invalid)</source>
-        <translation>Отступ индикатора вкладок (недопустимо)</translation>
+        <translation>Зазор индикатора вкладок (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
@@ -4824,12 +4824,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="764"/>
         <source>Gap between tabs: %1 px</source>
-        <translation>Отступ между вкладками: %1 px</translation>
+        <translation>Зазор между вкладками: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="765"/>
         <source>Gap between tabs (invalid)</source>
-        <translation>Отступ между вкладками (недопустимо)</translation>
+        <translation>Зазор между вкладками (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
@@ -4946,12 +4946,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="849"/>
         <source>Drop indicator border width: %1 px</source>
-        <translation>Толщина рамки индикатора сброса: %1 px</translation>
+        <translation>Ширина рамки индикатора сброса: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="850"/>
         <source>Drop indicator border width (invalid)</source>
-        <translation>Толщина рамки индикатора сброса (недопустимо)</translation>
+        <translation>Ширина рамки индикатора сброса (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="855"/>
@@ -5006,7 +5006,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
         <source>Right gap (invalid)</source>
-        <translation>Правый отступ (недопустимо)</translation>
+        <translation>Правый зазор (недопустимо)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
@@ -5063,12 +5063,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="944"/>
         <source>Active opacity (invalid)</source>
-        <translation>Непрозрачность активного (недопустимо)</translation>
+        <translation>Непрозрачность активной зоны (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="945"/>
         <source>Inactive opacity (invalid)</source>
-        <translation>Непрозрачность неактивного (недопустимо)</translation>
+        <translation>Непрозрачность неактивной зоны (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="947"/>
@@ -5088,7 +5088,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
         <source>Overlay border width (invalid)</source>
-        <translation>Толщина рамки наложения (недопустимо)</translation>
+        <translation>Ширина рамки наложения (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="957"/>
@@ -5098,17 +5098,17 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Overlay corner radius (invalid)</source>
-        <translation>Радиус скругления наложения (недопустимо)</translation>
+        <translation>Радиус скругления углов наложения (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
         <source>Gap (invalid)</source>
-        <translation>Отступ (недопустимо)</translation>
+        <translation>Зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="967"/>
         <source>Outer gap (invalid)</source>
-        <translation>Внешний отступ (недопустимо)</translation>
+        <translation>Внешний зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
@@ -5118,7 +5118,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Top gap (invalid)</source>
-        <translation>Верхний отступ (недопустимо)</translation>
+        <translation>Верхний зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
@@ -5128,7 +5128,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
         <source>Bottom gap (invalid)</source>
-        <translation>Нижний отступ (недопустимо)</translation>
+        <translation>Нижний зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
@@ -5138,7 +5138,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
         <source>Left gap (invalid)</source>
-        <translation>Левый отступ (недопустимо)</translation>
+        <translation>Левый зазор (недопустимо)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
@@ -7008,7 +7008,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="160"/>
         <source>selector</source>
-        <translation>селектор</translation>
+        <translation>выбор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="217"/>
@@ -7967,7 +7967,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="732"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="265"/>
         <source>Gap</source>
-        <translation>Отступ</translation>
+        <translation>Зазор</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="735"/>
@@ -7991,7 +7991,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="335"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="342"/>
         <source>Gap between tabs</source>
-        <translation>Отступ между вкладками</translation>
+        <translation>Зазор между вкладками</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
@@ -9891,7 +9891,7 @@
         <translation>
             <numerusform>Выбранный вами %n шаблон прокрутки был удалён, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
             <numerusform>Выбранные вами %n шаблона прокрутки были удалены, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
-            <numerusform>Выбранных вами %n шаблонов прокрутки были удалены, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
+            <numerusform>Выбранные вами %n шаблонов прокрутки были удалены, поэтому эти мониторы сохранили прежние шаблоны. Выберите их заново на странице обзора.</numerusform>
         </translation>
     </message>
     <message>
@@ -10429,7 +10429,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="305"/>
         <source>An old backup at %1 is in the way and could not be removed, so nothing was imported.</source>
-        <translation>Старая резервная копия в %1 мешает и не может быть удалена, поэтому ничего не импортировано.</translation>
+        <translation>Старая резервная копия в %1 помешала, и удалить её не удалось, поэтому ничего не импортировано.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="312"/>
@@ -11699,7 +11699,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="353"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through</source>
         <comment>@info tip</comment>
-        <translation>Предустановки — это размеры, по которым перебирают комбинации переключения ширины и высоты</translation>
+        <translation>Предустановки — это размеры, которые перебираются комбинациями переключения ширины и высоты</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="361"/>
@@ -13422,7 +13422,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="163"/>
         <source>fps</source>
         <comment>frames per second, unit appended to a slider value</comment>
-        <translation>кадр/с</translation>
+        <translation>fps</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="191"/>
@@ -13868,7 +13868,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="238"/>
         <source>Advanced</source>
         <comment>@info search result mode badge</comment>
-        <translation>Расширенный</translation>
+        <translation>Дополнительно</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalSearchField.qml.cpp" line="256"/>
@@ -14022,7 +14022,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="193"/>
         <source>Change trigger %1 for %2</source>
         <comment>@action:button %1 is a key chord such as Meta+Shift, %2 names the setting being edited</comment>
-        <translation>Изменить триггер %1 для %2</translation>
+        <translation>Изменить триггер %1 для «%2»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="212"/>
@@ -14038,7 +14038,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="240"/>
         <source>Remove trigger for %1</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation>Удалить триггер для %1</translation>
+        <translation>Удалить триггер для «%1»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="260"/>
@@ -14059,7 +14059,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="288"/>
         <source>Reset %1 to defaults</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation>Сбросить %1 к значениям по умолчанию</translation>
+        <translation>Сбросить «%1» к значениям по умолчанию</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="324"/>
@@ -15748,7 +15748,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation>Цвет рамки активного</translation>
+        <translation>Цвет рамки активного окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
@@ -15777,7 +15777,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation>Цвет рамки неактивного</translation>
+        <translation>Цвет рамки неактивного окна</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
@@ -17628,14 +17628,14 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation>Вкладки</translation>
+        <translation>С вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Stacked</source>
         <comment>@info column display</comment>
-        <translation>Стопка</translation>
+        <translation>Стопкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="493"/>
@@ -18320,12 +18320,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
         <source>This monitor uses %1, which is not in your layout list.</source>
-        <translation>Этот монитор использует %1, которого нет в вашем списке раскладок.</translation>
+        <translation>Этот монитор использует раскладку «%1». Её нет в вашем списке раскладок.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1035"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
-        <translation>Этот монитор использует %1, которого нет в вашем списке алгоритмов.</translation>
+        <translation>Этот монитор использует алгоритм «%1». Его нет в вашем списке алгоритмов.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
@@ -18690,7 +18690,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="335"/>
         <source>%1 px width</source>
         <comment>pixel-unit width in a preset tooltip</comment>
-        <translation>Ширина %1 px</translation>
+        <translation>Ширина %1 пикс.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="297"/>
@@ -19941,13 +19941,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation>При значении «Никогда» лента стоит на месте, пока активный столбец не начал бы уходить с экрана. При «Всегда» активный столбец останавливается по центру. При «При переполнении» центрирование происходит только когда лента выходит за край экрана.</translation>
+        <translation>При значении «Никогда» лента стоит на месте, пока активный столбец не начал бы уходить с экрана. При «Всегда» активный столбец останавливается по центру. При «При переполнении» центрирование происходит только тогда, когда лента выходит за край экрана.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
         <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
         <comment>the quoted phrase Center the focused column and the word Never must match the sibling row&apos;s title and option label</comment>
-        <translation>Когда на ленте один столбец, центрировать его даже если «Центрировать активный столбец» установлено в «Никогда».</translation>
+        <translation>Когда на ленте один столбец, центрировать его, даже если «Центрировать активный столбец» установлено в «Никогда».</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="77"/>
@@ -20891,7 +20891,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
         <source>Snapped</source>
         <comment>@info:status the window was snapped into a zone</comment>
-        <translation>Прилеплено</translation>
+        <translation>Прилипло</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
@@ -20933,7 +20933,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="510"/>
         <source>Snapped</source>
         <comment>@info:status the snapped layer took focus</comment>
-        <translation>Прилеплённые</translation>
+        <translation>Прилипшие</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="516"/>
@@ -21201,7 +21201,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="369"/>
         <source>These are the steps the cycling shortcuts walk on a screen with no layout template. A screen using a template walks that template&apos;s own lists instead, and each list is replaced whole, so a template that carries widths but no heights leaves the heights here in play.</source>
-        <translation>Это шаги, по которым перебирают комбинации переключения на экране без шаблона раскладки. Экран с шаблоном перебирает вместо этого собственные списки шаблона, и каждый список заменяется целиком, поэтому шаблон с ширинами, но без высот оставляет здешние высоты в силе.</translation>
+        <translation>Это шаги, которые перебираются комбинациями переключения на экране без шаблона раскладки. Экран с шаблоном перебирает вместо этого собственные списки шаблона, и каждый список заменяется целиком, поэтому шаблон с ширинами, но без высот оставляет здешние высоты в силе.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="381"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation>Уменьшать окна, чтобы индикатор поместился. Выключено, он рисуется рядом со столбцом и может перекрыть соседа или уйти за экран.</translation>
+        <translation>Уменьшать окна, чтобы индикатор поместился. Если выключено, он рисуется рядом со столбцом и может перекрыть соседа или уйти за экран.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
@@ -21338,12 +21338,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="267"/>
         <source>Space between the indicator and the window. A negative gap draws it over the window instead.</source>
-        <translation>Расстояние между индикатором и окном. Отрицательный отступ рисует его поверх окна.</translation>
+        <translation>Расстояние между индикатором и окном. Отрицательный зазор рисует его поверх окна.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="272"/>
         <source>Gap around the tab indicator</source>
-        <translation>Отступ вокруг индикатора вкладок</translation>
+        <translation>Зазор вокруг индикатора вкладок</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="294"/>
@@ -21379,13 +21379,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation>Скруглять каждую вкладку до пилюли. Выключено, действует радиус скругления ниже.</translation>
+        <translation>Скруглять каждую вкладку до пилюли. Если выключено, вместо этого действует радиус скругления ниже.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
         <source>How rounded each tab&apos;s corners are. On a segment bar with no gap between tabs, only the two ends of the run are rounded.</source>
         <oldsource>How rounded each tab&apos;s corners are. With no gap between tabs, only the two ends are rounded.</oldsource>
-        <translation>Насколько скруглены углы каждой вкладки. На сегментной полосе без отступа между вкладками скругляются только два конца ряда.</translation>
+        <translation>Насколько скруглены углы каждой вкладки. На сегментной полосе без зазора между вкладками скругляются только два конца ряда.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="397"/>
@@ -21438,7 +21438,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="51"/>
         <source>Reset %1 to the color scheme</source>
         <comment>@action:button</comment>
-        <translation>Вернуть %1 к цветовой схеме</translation>
+        <translation>Вернуть «%1» к цветовой схеме</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="71"/>
@@ -21641,7 +21641,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="106"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
-        <translation>Определяет, возвращается ли подходящее окно в свою прежнюю зону при повторном открытии, в течение сеанса или после выхода. Переопределяет параметр «Восстанавливать окна в их прежней зоне», поэтому приложение вроде браузера можно исключить, пока все остальные окна восстанавливаются.</translation>
+        <translation>Определяет, возвращается ли подходящее окно в свою прежнюю зону при повторном открытии, в течение сеанса или после выхода. Переопределяет параметр «Восстанавливать окна в их предыдущую зону», поэтому приложение вроде браузера можно исключить, пока все остальные окна восстанавливаются.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
@@ -21716,7 +21716,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
-        <translation>Включает или выключает слой непрозрачности и оттенка для подходящих окон. Правилам «Задать непрозрачность» и «Задать оттенок» нужен этот слой, чтобы вообще подействовать.</translation>
+        <translation>Включает или выключает слой непрозрачности и оттенка для подходящих окон. Правилам «Задать непрозрачность», «Задать силу оттенка» и «Задать цвет оттенка» нужен этот слой, чтобы вообще подействовать.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
@@ -21811,37 +21811,37 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
-        <translation>Задаёт отступ между зонами для подходящего экрана, рабочего стола или комнаты.</translation>
+        <translation>Задаёт зазор между зонами для подходящего экрана, рабочего стола или комнаты.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
-        <translation>Задаёт единый отступ по краю экрана для подходящего контекста.</translation>
+        <translation>Задаёт единый зазор по краю экрана для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
-        <translation>Переключает подходящий контекст между единым внешним отступом и отступами по сторонам.</translation>
+        <translation>Переключает подходящий контекст между единым внешним зазором и зазорами по сторонам.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
         <source>Sets the top outer gap for the matched context.</source>
-        <translation>Задаёт верхний внешний отступ для подходящего контекста.</translation>
+        <translation>Задаёт верхний внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
         <source>Sets the bottom outer gap for the matched context.</source>
-        <translation>Задаёт нижний внешний отступ для подходящего контекста.</translation>
+        <translation>Задаёт нижний внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
         <source>Sets the left outer gap for the matched context.</source>
-        <translation>Задаёт левый внешний отступ для подходящего контекста.</translation>
+        <translation>Задаёт левый внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
         <source>Sets the right outer gap for the matched context.</source>
-        <translation>Задаёт правый внешний отступ для подходящего контекста.</translation>
+        <translation>Задаёт правый внешний зазор для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
@@ -21891,7 +21891,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation>Показывает или скрывает всплывающее окно селектора перетаскивания для подходящего экрана, рабочего стола или комнаты. Выключено означает, что перетаскивание окна к краю срабатывания не предлагает там выбора. Включено предлагает его даже при выключенном общем переключателе селектора для этого экрана.</translation>
+        <translation>Показывает или скрывает всплывающее окно выбора при перетаскивании для подходящего экрана, рабочего стола или комнаты. Выключено означает, что перетаскивание окна к краю срабатывания не предлагает там выбора. Включено предлагает его даже при выключенном общем переключателе выбора для этого экрана.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
@@ -21956,7 +21956,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
         <source>Drops the outer gaps on the matched context while a single column is on the strip, so a lone window fills the screen.</source>
-        <translation>Убирает в подходящем контексте внешние отступы, пока на ленте один столбец, чтобы одиночное окно заполняло экран.</translation>
+        <translation>Убирает в подходящем контексте внешние зазоры, пока на ленте один столбец, чтобы одиночное окно заполняло экран.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
@@ -22002,7 +22002,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="392"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
-        <translation>Задаёт расстояние между индикатором вкладок и окном для подходящего контекста. Отрицательный отступ рисует его поверх окна.</translation>
+        <translation>Задаёт расстояние между индикатором вкладок и окном для подходящего контекста. Отрицательный зазор рисует его поверх окна.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="397"/>
@@ -22017,7 +22017,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="403"/>
         <source>Sets the gap between individual tabs for the matched context.</source>
-        <translation>Задаёт отступ между отдельными вкладками для подходящего контекста.</translation>
+        <translation>Задаёт зазор между отдельными вкладками для подходящего контекста.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
@@ -22172,7 +22172,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="100"/>
         <source>This list is full at %1 presets. Remove one to add another.</source>
-        <translation>Этот список заполнен при %1 предустановках. Удалите одну, чтобы добавить другую.</translation>
+        <translation>В этом списке уже максимум предустановок (%1). Удалите одну, чтобы добавить другую.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="102"/>
@@ -22263,7 +22263,7 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation>Изменить предустановку %1% в %2</translation>
+        <translation>Изменить предустановку %1% в «%2»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
@@ -22275,13 +22275,13 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="197"/>
         <source>Edit preset percentage in %1</source>
         <comment>@label:textbox</comment>
-        <translation>Изменить процент предустановки в %1</translation>
+        <translation>Изменить процент предустановки в «%1»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
         <source>Remove %1% from %2</source>
         <comment>@action:button</comment>
-        <translation>Удалить %1% из %2</translation>
+        <translation>Удалить %1% из «%2»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
@@ -22293,13 +22293,13 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="320"/>
         <source>New preset percentage for %1</source>
         <comment>@label:spinbox</comment>
-        <translation>Процент новой предустановки в %1</translation>
+        <translation>Процент новой предустановки в «%1»</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="342"/>
         <source>Add preset to %1</source>
         <comment>@action:button</comment>
-        <translation>Добавить предустановку в %1</translation>
+        <translation>Добавить предустановку в «%1»</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="346"/>
@@ -22471,13 +22471,13 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="280"/>
         <source>Stacked</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>Стопка</translation>
+        <translation>Стопкой</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>Вкладки</translation>
+        <translation>С вкладками</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
@@ -22519,7 +22519,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <comment>@info</comment>
-        <translation>Предустановки — это размеры, по которым перебирают комбинации переключения ширины и высоты, пока назначен этот шаблон.</translation>
+        <translation>Предустановки — это размеры, которые перебираются комбинациями переключения ширины и высоты, пока назначен этот шаблон.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
@@ -22597,7 +22597,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>В какую сторону идёт лента. «По форме экрана» ведёт её сверху вниз, когда полезная область выше, чем шире, и в остальных случаях рядом друг с другом. Столбцы по-прежнему делятся поперёк ленты, в какую бы сторону она ни шла.</translation>
+        <translation>В какую сторону идёт лента. «По форме экрана» ведёт её сверху вниз, когда полезная область выше, чем шире, а в остальных случаях — рядом друг с другом. Столбцы по-прежнему делятся поперёк ленты, в какую бы сторону она ни шла.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22615,7 +22615,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation>Появление</translation>
+        <translation>Появление и исчезновение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
@@ -22693,13 +22693,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation>Проявление</translation>
+        <translation>Появление</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation>Затухание</translation>
+        <translation>Исчезание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
@@ -22717,7 +22717,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
-        <translation>Общее</translation>
+        <translation>Глобальные</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
@@ -22819,7 +22819,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="169"/>
         <source>Progress</source>
         <comment>animation event or section</comment>
-        <translation>Ход выполнения</translation>
+        <translation>Прогресс</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="172"/>
@@ -22831,7 +22831,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
-        <translation>Изменение порядка</translation>
+        <translation>Переупорядочивание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
@@ -22855,13 +22855,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
-        <translation>Выезд</translation>
+        <translation>Вдвигание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
-        <translation>Уезд</translation>
+        <translation>Выдвигание</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
@@ -22915,7 +22915,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="217"/>
         <source>Toggle Off</source>
         <comment>animation event or section</comment>
-        <translation>Выключение</translation>
+        <translation>Отключение</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="220"/>

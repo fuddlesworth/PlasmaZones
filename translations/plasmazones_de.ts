@@ -127,7 +127,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="173"/>
         <source>Unsaved changes</source>
-        <translation>Nicht gespeicherte Änderungen</translation>
+        <translation>Ungespeicherte Änderungen</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/UnsavedChangesFooter.qml" line="183"/>
@@ -206,7 +206,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="83"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation>Zonen, Kachelung, Bildlauf, Erscheinungsbild, Kurzbefehle und mehr einrichten</translation>
+        <translation>Zonen, Kachelung, Bildlauf, Darstellung, Kurzbefehle und mehr einrichten</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="100"/>
@@ -692,12 +692,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="475"/>
         <source>Move Window to Floating</source>
-        <translation>Fenster in schwebend verschieben</translation>
+        <translation>Fenster zu Schwebend verschieben</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="480"/>
         <source>Move Window to Tiled</source>
-        <translation>Fenster in gekachelt verschieben</translation>
+        <translation>Fenster zu Gekachelt verschieben</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="491"/>
@@ -992,7 +992,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
         <source>Move to Floating</source>
-        <translation>In schwebend verschieben</translation>
+        <translation>Zu Schwebend verschieben</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="420"/>
@@ -1002,7 +1002,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="423"/>
         <source>Move to Tiled</source>
-        <translation>In gekachelt verschieben</translation>
+        <translation>Zu Gekachelt verschieben</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="424"/>
@@ -3713,7 +3713,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="391"/>
         <source>Zone numbers like “1, 2”, or a range like “1-3”. Multiple zones snap the window to their combined area.</source>
-        <translation>Zonennummern wie „1, 2“ oder ein Bereich wie „1-3“. Mehrere Zonen docken das Fenster an ihre gemeinsame Fläche an.</translation>
+        <translation>Zonennummern wie „1, 2“ oder ein Bereich wie „1-3“. Mehrere Zonen rasten das Fenster in ihre gemeinsame Fläche ein.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="396"/>
@@ -6878,7 +6878,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
         <source>kickoff</source>
-        <translation>kickoff</translation>
+        <translation>Kickoff</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
@@ -7424,7 +7424,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
         <source>pill</source>
-        <translation>Pille</translation>
+        <translation>Pillenform</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
@@ -9220,7 +9220,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
-        <translation>Voreinstellungen für Übergänge</translation>
+        <translation>Easing-Voreinstellungen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1064"/>
@@ -15724,7 +15724,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation>Randfarbe im aktiven Zustand</translation>
+        <translation>Aktive Randfarbe</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
@@ -15753,7 +15753,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation>Randfarbe im inaktiven Zustand</translation>
+        <translation>Inaktive Randfarbe</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
@@ -15764,12 +15764,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="437"/>
         <source>Tint color</source>
         <comment>@action:button</comment>
-        <translation>Einfärbungsfarbe</translation>
+        <translation>Tönungsfarbe</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="439"/>
         <source>Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.</source>
-        <translation>Farbe, mit der das Fenster überzogen wird, wenn die Einfärbungsstärke über null liegt. Folgt dem Farbschema, sofern Sie keine wählen.</translation>
+        <translation>Farbe, mit der das Fenster überzogen wird, wenn die Tönungsstärke über null liegt. Folgt dem Farbschema, sofern Sie keine wählen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="475"/>
@@ -16811,12 +16811,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear layout</source>
-        <translation>Layout löschen</translation>
+        <translation>Layout entfernen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear template</source>
-        <translation>Vorlage löschen</translation>
+        <translation>Vorlage entfernen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
@@ -18309,12 +18309,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout. Windows are numbered in order, and Snap to Zone reaches the first nine.</source>
         <oldsource>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</oldsource>
-        <translation>Der Scroll-Modus ordnet Fenster in Spalten mit veränderbarer Größe auf einem endlosen Streifen an, ohne Zonenlayout. Fenster sind der Reihe nach nummeriert, und An Zone andocken erreicht die ersten neun.</translation>
+        <translation>Der Bildlauf-Modus ordnet Fenster in Spalten mit veränderbarer Größe auf einem endlosen Streifen an, ohne Zonenlayout. Fenster sind der Reihe nach nummeriert, und In Zone einrasten erreicht die ersten neun.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip, with no zone layout.</source>
-        <translation>Der Scroll-Modus ordnet Fenster in Spalten mit veränderbarer Größe auf einem endlosen Streifen an, ohne Zonenlayout.</translation>
+        <translation>Der Bildlauf-Modus ordnet Fenster in Spalten mit veränderbarer Größe auf einem endlosen Streifen an, ohne Zonenlayout.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1115"/>
@@ -18331,7 +18331,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1126"/>
         <source>This screen has no template of its own, so it follows the default from Scrolling → Templates.</source>
         <oldsource>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</oldsource>
-        <translation>Dieser Bildschirm hat keine eigene Vorlage, daher folgt er der Standardvorlage aus Scrollen → Vorlagen.</translation>
+        <translation>Dieser Bildschirm hat keine eigene Vorlage, daher folgt er der Standardvorlage aus Bildlauf → Vorlagen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
@@ -19223,7 +19223,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="100"/>
         <source>Inactive zone color</source>
         <comment>@action:button</comment>
-        <translation>Farbe für inaktive Zonen</translation>
+        <translation>Farbe der inaktiven Zone</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="71"/>
@@ -19239,12 +19239,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="120"/>
         <source>Zone border color</source>
         <comment>@action:button</comment>
-        <translation>Farbe für Zonenrahmen</translation>
+        <translation>Zonenrandfarbe</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="122"/>
         <source>Color for zone borders. Follows the color scheme unless you pick one.</source>
-        <translation>Farbe für Zonenrahmen. Folgt dem Farbschema, sofern Sie keine wählen.</translation>
+        <translation>Farbe für Zonenränder. Folgt dem Farbschema, sofern Sie keine wählen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="156"/>
@@ -19893,7 +19893,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation>Bei Nie steht der Streifen still, bis die fokussierte Spalte den Bildschirm verlassen würde. Bei Immer parkt die fokussierte Spalte in der Mitte. Bei Bei Überlauf wird erst zentriert, sobald der Streifen über den Bildschirmrand hinausreicht.</translation>
+        <translation>Bei „Nie“ steht der Streifen still, bis die fokussierte Spalte den Bildschirm verlassen würde. Bei „Immer“ parkt die fokussierte Spalte in der Mitte. Bei „Bei Überlauf“ wird erst zentriert, sobald der Streifen über den Bildschirmrand hinausreicht.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
@@ -19904,7 +19904,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="77"/>
         <source>When this is on, a column at the screen edge keeps its full size and is cut off at the edge. When it is off, the column shrinks to fit, or slides away once too little of it is left. Cropping costs some efficiency in fullscreen video and games while any screen uses scrolling.</source>
-        <translation>Wenn dies an ist, behält eine Spalte am Bildschirmrand ihre volle Größe und wird am Rand abgeschnitten. Wenn es aus ist, schrumpft die Spalte, bis sie passt, oder gleitet weg, sobald zu wenig von ihr übrig ist. Das Abschneiden kostet etwas Effizienz bei Vollbildvideo und Spielen, solange irgendein Bildschirm das Bildlauf nutzt.</translation>
+        <translation>Wenn dies an ist, behält eine Spalte am Bildschirmrand ihre volle Größe und wird am Rand abgeschnitten. Wenn es aus ist, schrumpft die Spalte, bis sie passt, oder gleitet weg, sobald zu wenig von ihr übrig ist. Das Abschneiden kostet etwas Effizienz bei Vollbildvideo und Spielen, solange irgendein Bildschirm den Bildlauf-Modus nutzt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="93"/>
@@ -20974,7 +20974,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="576"/>
         <source>Scrolled</source>
         <comment>@info:status the strip view was scrolled without moving focus</comment>
-        <translation>Verschoben</translation>
+        <translation>Ansicht verschoben</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="579"/>
@@ -21277,7 +21277,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation>Die Fenster verkleinern, damit die Anzeige hineinpasst. Aus wird sie neben der Spalte gezeichnet und kann einen Nachbarn überlagern oder aus dem Bildschirm laufen.</translation>
+        <translation>Die Fenster verkleinern, damit die Anzeige hineinpasst. Wenn aus, wird sie neben der Spalte gezeichnet und kann einen Nachbarn überlagern oder aus dem Bildschirm laufen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation>Jeden Reiter zu einer Pille runden. Aus gilt stattdessen der Eckenradius unten.</translation>
+        <translation>Jeden Reiter zur Pillenform runden. Wenn aus, gilt stattdessen der Eckenradius unten.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
@@ -21555,7 +21555,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation>Blendet Bildschirmanzeigen für den passenden Bildschirm, die passende Arbeitsfläche oder Aktivität ein oder aus. Aus verstummen dort die Layout- und Navigations-Aufklappfenster. An werden sie auch dann gezeigt, wenn die globalen Schalter aus sind, wobei der Anzeigestil Keiner weiterhin alles ausblendet.</translation>
+        <translation>Blendet Bildschirmanzeigen für den passenden Bildschirm, die passende Arbeitsfläche oder Aktivität ein oder aus. Wenn aus, verstummen dort die Layout- und Navigations-Aufklappfenster. Wenn an, werden sie auch dann gezeigt, wenn die globalen Schalter aus sind, wobei der Anzeigestil Keiner weiterhin alles ausblendet.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
@@ -21655,7 +21655,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
         <source>Uses a different easing curve for one event on matching windows.</source>
-        <translation>Verwendet für ein Ereignis auf passenden Fenstern eine andere Übergangskurve.</translation>
+        <translation>Verwendet für ein Ereignis auf passenden Fenstern eine andere Animationskurve.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
@@ -21665,17 +21665,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
-        <translation>Schaltet die Deckkraft- und Einfärbensebene für passende Fenster ein oder aus. Die Regeln „Deckkraft setzen“ und „Einfärben setzen“ brauchen diese Ebene, um überhaupt zu wirken.</translation>
+        <translation>Schaltet die Deckkraft- und Tönungsebene für passende Fenster ein oder aus. Die Regeln zum Festlegen von Deckkraft und Tönung brauchen diese Ebene, um überhaupt zu wirken.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation>Legt fest, wie stark die Einfärben passende Fenster einfärbt. Wirkt nur, solange die Deckkraft- und Einfärbensebene für das Fenster an ist.</translation>
+        <translation>Legt fest, wie stark die Tönung passende Fenster einfärbt. Wirkt nur, solange die Deckkraft- und Tönungsebene für das Fenster an ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="196"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation>Legt die Einfärbungsfarbe für passende Fenster fest. Wirkt nur, solange die Deckkraft- und Einfärbensebene für das Fenster an ist.</translation>
+        <translation>Legt die Tönungsfarbe für passende Fenster fest. Wirkt nur, solange die Deckkraft- und Tönungsebene für das Fenster an ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="202"/>
@@ -21730,7 +21730,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation>Legt die Zonenrahmenfarbe des Overlays für den passenden Kontext fest.</translation>
+        <translation>Legt die Zonenrandfarbe des Overlays für den passenden Kontext fest.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
@@ -21745,7 +21745,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
-        <translation>Legt die Zonenrahmendicke des Overlays für den passenden Kontext fest.</translation>
+        <translation>Legt die Zonenranddicke des Overlays für den passenden Kontext fest.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
@@ -21830,7 +21830,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
         <source>Keeps columns on the matched context at least as large as each window asks to be. Off lets a column go smaller, which the compositor then clamps on its own.</source>
-        <translation>Hält Spalten im passenden Kontext mindestens so groß, wie jedes Fenster verlangt. Aus darf eine Spalte kleiner werden, was der Compositor dann von sich aus begrenzt.</translation>
+        <translation>Hält Spalten im passenden Kontext mindestens so groß, wie jedes Fenster verlangt. Wenn aus, darf eine Spalte kleiner werden, was der Compositor dann von sich aus begrenzt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="66"/>
@@ -21840,12 +21840,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation>Blendet das Aufklappfenster der Ziehauswahl für den passenden Bildschirm, die passende Arbeitsfläche oder Aktivität ein oder aus. Aus bietet das Ziehen eines Fensters nahe der Auslösekante dort keine Auswahl. An bietet sie auch dann, wenn der globale Auswahlschalter für diesen Bildschirm aus ist.</translation>
+        <translation>Blendet das Aufklappfenster der Ziehauswahl für den passenden Bildschirm, die passende Arbeitsfläche oder Aktivität ein oder aus. Wenn aus, bietet das Ziehen eines Fensters nahe der Auslösekante dort keine Auswahl. Wenn an, wird sie auch dann geboten, wenn der globale Auswahlschalter für diesen Bildschirm aus ist.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
         <source>Snaps matching windows into the given zones when they open. Zones can be picked by number or by name, and a name finds that zone in whichever layout is active. Several zones span their combined area.</source>
-        <translation>Dockt passende Fenster beim Öffnen an die angegebenen Zonen an. Zonen lassen sich per Nummer oder Namen wählen, und ein Name findet die Zone im jeweils aktiven Layout. Mehrere Zonen umfassen ihre gemeinsame Fläche.</translation>
+        <translation>Rastet passende Fenster beim Öffnen in die angegebenen Zonen ein. Zonen lassen sich per Nummer oder Namen wählen, und ein Name findet die Zone im jeweils aktiven Layout. Mehrere Zonen umfassen ihre gemeinsame Fläche.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
@@ -21860,7 +21860,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
-        <translation>Dimmt passende Fenster auf die angegebene Deckkraft. Das wirkt nur, solange die Deckkraft- und Einfärbensebene für das Fenster an ist, sei es aus der globalen Einstellung oder aus einer Regel „Deckkraft und Einfärben anzeigen“. Ein Fenster mit einer eigenen Dekorationskette wird stattdessen über die Paketparameter dieser Kette gedimmt.</translation>
+        <translation>Dimmt passende Fenster auf die angegebene Deckkraft. Das wirkt nur, solange die Deckkraft- und Tönungsebene für das Fenster an ist, sei es aus der globalen Einstellung oder aus einer Regel „Deckkraft und Tönung anzeigen“. Ein Fenster mit einer eigenen Dekorationskette wird stattdessen über die Paketparameter dieser Kette gedimmt.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
@@ -22163,7 +22163,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
-        <translation>Ziehen Sie ein Fenster auf einem Bildlauf-Bildschirm an die eingestellte Bildschirmkante, um ein Aufklappfenster mit dem aktuellen Streifen zu öffnen. Legen Sie es zwischen zwei Spalten ab, um eine neue Spalte einzufügen, auf einer Spalte mit Reitern, um das Fenster mit Reitern hinzuzufügen, oder auf der oberen oder unteren Hälfte einer Spalte, um es dort zu stapeln.</translation>
+        <translation>Ziehen Sie ein Fenster auf einem Bildlauf-Bildschirm an die eingestellte Bildschirmkante, um ein Aufklappfenster mit dem aktuellen Streifen zu öffnen. Legen Sie es zwischen zwei Spalten ab, um eine neue Spalte einzufügen, auf eine Spalte mit Reitern, um das Fenster dort als weiteren Reiter aufzunehmen, oder auf die obere oder untere Hälfte einer Spalte, um es dort zu stapeln.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
@@ -22485,7 +22485,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation>Animationen für die Flächen, die der Plasma-Shell gehören, etwa den Anwendungsstarter und die Aufklappfenster des Systemabschnitts. Kein Shader, den Sie für Ihre eigenen Fenster wählen, erreicht sie, daher beginnt jede Zeile ohne Shader, und einen zu wählen ist die ganze Anmeldung. Bis Sie einen wählen, animieren diese Flächen so, wie Plasma sie animiert. „Alle Shell-Flächen“ ist die Vorgabe für beide Ereignisse, und beide können sie übergehen. Kontrollleisten haben hier keine Zeilen, weil eine Kontrollleiste die ganze Sitzung über auf dem Bildschirm bleibt, statt zu öffnen und zu schließen.</translation>
+        <translation>Animationen für die Flächen, die der Plasma-Shell gehören, etwa den Anwendungsstarter und die Aufklappfenster des Systemabschnitts. Kein Shader, den Sie für Ihre eigenen Fenster wählen, erreicht sie, daher beginnt jede Zeile ohne Shader, und erst das Auswählen eines Shaders schaltet sie ein. Bis Sie einen wählen, animieren diese Flächen so, wie Plasma sie animiert. „Alle Shell-Flächen“ ist die Vorgabe für beide Ereignisse, und beide können sie übergehen. Kontrollleisten haben hier keine Zeilen, weil eine Kontrollleiste die ganze Sitzung über auf dem Bildschirm bleibt, statt zu öffnen und zu schließen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
@@ -22543,7 +22543,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>In welche Richtung der Streifen läuft. „An die Bildschirmform anpassen“ lässt ihn von oben nach unten laufen, wenn die nutzbare Fläche höher als breit ist, und sonst nebeneinander. Spalten teilen sich weiterhin quer zum Streifen auf, egal in welche Richtung er läuft.</translation>
+        <translation>In welche Richtung der Streifen läuft. „An die Bildschirmform anpassen“ wählt „Übereinander“, wenn die nutzbare Fläche höher als breit ist, und sonst „Nebeneinander“. Spalten teilen sich weiterhin quer zum Streifen auf, egal in welche Richtung er läuft.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22561,7 +22561,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation>Erscheinung</translation>
+        <translation>Darstellung</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
@@ -22669,13 +22669,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
         <source>Hide</source>
         <comment>animation event or section</comment>
-        <translation>Ausblenden</translation>
+        <translation>Verbergen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>Mauszeiger darüber</translation>
+        <translation>Überfahren</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
@@ -22777,7 +22777,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
-        <translation>Umsortieren</translation>
+        <translation>Neu anordnen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
@@ -22795,19 +22795,19 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="184"/>
         <source>Show</source>
         <comment>animation event or section</comment>
-        <translation>Einblenden</translation>
+        <translation>Anzeigen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
-        <translation>Hereinschieben</translation>
+        <translation>Hereingleiten</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
-        <translation>Hinausschieben</translation>
+        <translation>Herausgleiten</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
@@ -22913,7 +22913,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="61"/>
         <source>Edge auto-scroll trigger width</source>
-        <translation>Breite des Auslösebereichs für automatischer Bildlauf am Rand</translation>
+        <translation>Breite des Auslösebereichs für automatischen Bildlauf am Rand</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="85"/>
@@ -22923,7 +22923,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="90"/>
         <source>Edge auto-scroll start delay</source>
-        <translation>Startverzögerung für automatischer Bildlauf am Rand</translation>
+        <translation>Startverzögerung für automatischen Bildlauf am Rand</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerGraceRow.qml.cpp" line="63"/>
@@ -22940,7 +22940,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="117"/>
         <source>Edge auto-scroll maximum speed</source>
-        <translation>Höchstgeschwindigkeit für automatischer Bildlauf am Rand</translation>
+        <translation>Höchstgeschwindigkeit für automatischen Bildlauf am Rand</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="118"/>

@@ -24,7 +24,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
         <source>You have unsaved settings. Apply them now, or close without saving?</source>
-        <translation>გაქვთ შეუნახავი პარამეტრები. გადავიტანო ახლა თუ დავხურო შენახვის გარეშე?</translation>
+        <translation>გაქვთ შეუნახავი პარამეტრები. გადავატარო ახლა თუ დავხურო შენახვის გარეშე?</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/DiscardChangesDialog.qml" line="37"/>
@@ -196,7 +196,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="59"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors</source>
-        <translation>ფანჯრების მიმაგრება, დაფილვა და გადახვევა Wayland-კომპოზიტორებისთვის</translation>
+        <translation>ფანჯრების მიმაგრება, ფილებად დაწყობა და გადახვევა Wayland-კომპოზიტორებისთვის</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="72"/>
@@ -206,7 +206,7 @@
     <message>
         <location filename="../kcm/about/ui/main.qml" line="83"/>
         <source>Configure zones, tiling, scrolling, appearance, shortcuts, and more</source>
-        <translation>ზონების, დაფილვის, გადახვევის, გარეგნობის, მალსახმობების და სხვის მორგება</translation>
+        <translation>ზონების, ფილებად დაწყობის, გადახვევის, გარეგნობის, მალსახმობების და სხვის მორგება</translation>
     </message>
     <message>
         <location filename="../kcm/about/ui/main.qml" line="100"/>
@@ -591,7 +591,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="416"/>
         <source>Cycle Window Height Preset Back</source>
-        <translation>ფანჯრის სიმაღლის წინასწარი პარამეტრის უკან გადართვა</translation>
+        <translation>ფანჯრის სიმაღლის შაბლონის უკან გადართვა</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
@@ -704,7 +704,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
         <source>Locks this screen&apos;s column template so nothing switches it until unlocked.</source>
-        <translation>დაბლოკავს ამ ეკრანის სვეტის შაბლონს, ისე რომ განბლოკვამდე არაფერი გადართავს მას.</translation>
+        <translation>დაბლოკავს ამ ეკრანის სვეტის ნიმუშს, ისე რომ განბლოკვამდე არაფერი გადართავს მას.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="203"/>
@@ -776,7 +776,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
         <source>Re-applies the tiling algorithm to every window on the screen.</source>
-        <translation>ეკრანის ყველა ფანჯარაზე ხელახლა გადაიტანს დაფილვის ალგორითმს.</translation>
+        <translation>ეკრანის ყველა ფანჯარაზე ხელახლა გადაატარებს ფილების ალგორითმს.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="158"/>
@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation>ფოკუსირებულ სვეტს ეკრანის ზომის წინასწარ პარამეტრებში გადაატარებს ზოლის გასწვრივ.</translation>
+        <translation>ფოკუსირებულ სვეტს ეკრანის ზომის შაბლონებში გადაატარებს ზოლის გასწვრივ.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,7 +846,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation>ფოკუსირებულ სვეტს ეკრანის ზომის წინასწარ პარამეტრებში უკუმიმართულებით გადაატარებს ზოლის გასწვრივ.</translation>
+        <translation>ფოკუსირებულ სვეტს ეკრანის ზომის შაბლონებში უკუმიმართულებით გადაატარებს ზოლის გასწვრივ.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
@@ -866,12 +866,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation>ფოკუსირებულ ფანჯარას ეკრანის ზომის წინასწარ პარამეტრებში გადაატარებს მის სვეტში.</translation>
+        <translation>ფოკუსირებულ ფანჯარას ეკრანის ზომის შაბლონებში გადაატარებს მის სვეტში.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation>ფოკუსირებულ ფანჯარას ეკრანის ზომის წინასწარ პარამეტრებში უკუმიმართულებით გადაატარებს მის სვეტში.</translation>
+        <translation>ფოკუსირებულ ფანჯარას ეკრანის ზომის შაბლონებში უკუმიმართულებით გადაატარებს მის სვეტში.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
@@ -936,12 +936,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="447"/>
         <source>Applies the numbered layout to this screen.</source>
-        <translation>ამ ეკრანზე დანომრილ განლაგებას გადაიტანს.</translation>
+        <translation>ამ ეკრანზე დანომრილ განლაგებას გადაატარებს.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="448"/>
         <source>Applies the numbered column template to this screen.</source>
-        <translation>ამ ეკრანზე დანომრილ სვეტის შაბლონს გადაიტანს.</translation>
+        <translation>ამ ეკრანზე დანომრილ სვეტის ნიმუშს გადაატარებს.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="463"/>
@@ -952,7 +952,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="603"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
-        <translation>განლაგება %1-ის გადატარება</translation>
+        <translation>განლაგებების %1 გადატარება</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="385"/>
@@ -962,17 +962,17 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="183"/>
         <source>Switches this screen to the previous column template.</source>
-        <translation>ამ ეკრანს წინა სვეტის შაბლონზე გადაიყვანს.</translation>
+        <translation>ამ ეკრანს წინა სვეტის ნიმუშზე გადაიყვანს.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="186"/>
         <source>Switches this screen to the next column template.</source>
-        <translation>ამ ეკრანს შემდეგ სვეტის შაბლონზე გადაიყვანს.</translation>
+        <translation>ამ ეკრანს შემდეგ სვეტის ნიმუშზე გადაიყვანს.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
         <source>Opens a picker to choose this screen&apos;s column template. Its column widths become the widths columns cycle through.</source>
-        <translation>გახსნის ამრჩევს ამ ეკრანის სვეტის შაბლონისთვის. მისი სვეტების სიგანეები ხდება ის სიგანეები, რომლებშიც სვეტები გადადიან.</translation>
+        <translation>გახსნის ამრჩევს ამ ეკრანის სვეტის ნიმუშისთვის. მისი სვეტების სიგანეები ხდება ის სიგანეები, რომლებშიც სვეტები გადადიან.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="330"/>
@@ -1057,7 +1057,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
-        <translation>ფოკუსირებულ სვეტს უმცირეს ზომის წინასწარ პარამეტრამდე შეამცირებს.</translation>
+        <translation>ფოკუსირებულ სვეტს ზომის უმცირეს შაბლონამდე შეამცირებს.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="569"/>
@@ -1241,12 +1241,12 @@
     <message>
         <location filename="../src/editor/main.cpp" line="182"/>
         <source>Scrolling template ID to edit</source>
-        <translation>რედაქტირებადი გადახვევის შაბლონის ID</translation>
+        <translation>რედაქტირებადი გადახვევის ნიმუშის ID</translation>
     </message>
     <message>
         <location filename="../src/editor/main.cpp" line="184"/>
         <source>Create new scrolling template</source>
-        <translation>ახალი გადახვევის შაბლონის შექმნა</translation>
+        <translation>ახალი გადახვევის ნიმუშის შექმნა</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/clipboard.cpp" line="96"/>
@@ -1394,7 +1394,7 @@
         <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
-        <translation>სვეტის შაბლონი — %1</translation>
+        <translation>სვეტის ნიმუში — %1</translation>
     </message>
     <message>
         <location filename="../src/daemon/daemon/cheatsheet.cpp" line="117"/>
@@ -1459,7 +1459,7 @@
     <message>
         <location filename="../src/daemon/main.cpp" line="250"/>
         <source>Window snapping, tiling and scrolling</source>
-        <translation>ფანჯრების მიმაგრება, დაფილვა და გადახვევა</translation>
+        <translation>ფანჯრების მიმაგრება, ფილებად დაწყობა და გადახვევა</translation>
     </message>
     <message>
         <location filename="../src/daemon/main.cpp" line="255"/>
@@ -2168,12 +2168,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
-        <translation>განლაგება, რომელიც ამჟამად აქტიურია მონიტორზე, ან იქ გამოყენებული გადახვევის შაბლონი. საშუალებას აძლევს წესს შეცვალოს შუალედები, გადაფარვა ან დაბლოკვის მდგომარეობა იმ ეკრანისთვის, რომელიც მოცემულ განლაგებას ან შაბლონს აჩვენებს. მას არ შეუძლია შეცვალოს, რომელი განლაგებაა მინიჭებული, ეს წრიული იქნებოდა.</translation>
+        <translation>განლაგება, რომელიც ამჟამად აქტიურია მონიტორზე, ან იქ გამოყენებული გადახვევის ნიმუში. საშუალებას აძლევს წესს შეცვალოს შუალედები, გადადება ან დაბლოკვის მდგომარეობა იმ ეკრანისთვის, რომელიც მოცემულ განლაგებას ან ნიმუშს აჩვენებს. მას არ შეუძლია შეცვალოს, რომელი განლაგებაა მინიჭებული, ეს წრიული იქნებოდა.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation>სისტემის ფერთა სქემა ღიაა თუ მუქი. საშუალებას აძლევს წესს აირჩიოს სხვა შუალედები, გადაფარვის ფერები ან განლაგებები, როცა სამუშაო მაგიდა დღისა და ღამის თემებს შორის გადაირთვება. წესები ხელახლა ამოქმედდება თემის შეცვლისთანავე.</translation>
+        <translation>სისტემის ფერთა სქემა ღიაა თუ მუქი. საშუალებას აძლევს წესს აირჩიოს სხვა შუალედები, გადადების ფერები ან განლაგებები, როცა სამუშაო მაგიდა დღისა და ღამის თემებს შორის გადაირთვება. წესები ხელახლა ამოქმედდება თემის შეცვლისთანავე.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2470,7 +2470,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="51"/>
         <source>Template layout</source>
-        <translation>შაბლონის განლაგება</translation>
+        <translation>ნიმუშის განლაგება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="57"/>
@@ -2747,7 +2747,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="225"/>
         <source>Set scrolling template</source>
-        <translation>გადახვევის შაბლონის დაყენება</translation>
+        <translation>გადახვევის ნიმუშის დაყენება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="231"/>
@@ -2840,7 +2840,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="294"/>
         <source>Set sticky window handling</source>
-        <translation>მიმაგრებული ფანჯრების დამუშავების დაყენება</translation>
+        <translation>წებოვანი ფანჯრების დამუშავების დაყენება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="300"/>
@@ -3075,12 +3075,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="488"/>
         <source>Override overlay shader</source>
-        <translation>გადაფარვის შეიდერის გადაფარვა</translation>
+        <translation>გადადების შეიდერის გადაფარვა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="491"/>
         <source>Override overlay style</source>
-        <translation>გადაფარვის სტილის გადაფარვა</translation>
+        <translation>გადადების სტილის გადაფარვა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="526"/>
@@ -3151,7 +3151,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
         <source>Set maximum tiled windows</source>
-        <translation>დაფილული ფანჯრების მაქსიმუმის დაყენება</translation>
+        <translation>ფილებად დაწყობილი ფანჯრების მაქსიმუმის დაყენება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
@@ -3843,7 +3843,7 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="196"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="490"/>
         <source>Side to side</source>
-        <translation>გვერდიგვერდ</translation>
+        <translation>მარცხნიდან მარჯვნივ</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="197"/>
@@ -4030,7 +4030,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="198"/>
         <source>Preset width</source>
-        <translation>წინასწარ განსაზღვრული სიგანე</translation>
+        <translation>შაბლონის სიგანე</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="208"/>
@@ -4049,7 +4049,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
-        <translation>წინასწარ განსაზღვრული სიმაღლე</translation>
+        <translation>შაბლონის სიმაღლე</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="214"/>
@@ -4235,7 +4235,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="161"/>
         <source>Tiling (no algorithm assigned)</source>
-        <translation>დაფილვა (ალგორითმი მინიჭებული არაა)</translation>
+        <translation>ფილებად დაწყობა (ალგორითმი მინიჭებული არაა)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="187"/>
@@ -4447,22 +4447,22 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="265"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1049"/>
         <source>Scrolling template</source>
-        <translation>გადახვევის შაბლონი</translation>
+        <translation>გადახვევის ნიმუში</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="274"/>
         <source>Scrolling template: None</source>
-        <translation>გადახვევის შაბლონი: არცერთი</translation>
+        <translation>გადახვევის ნიმუში: არცერთი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="276"/>
         <source>Scrolling template: %1</source>
-        <translation>გადახვევის შაბლონი: %1</translation>
+        <translation>გადახვევის ნიმუში: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="292"/>
         <source>Tiling: None</source>
-        <translation>დაფილვა: არცერთი</translation>
+        <translation>ფილებად დაწყობა: არცერთი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="317"/>
@@ -4535,7 +4535,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
         <source>Overlay style (invalid)</source>
-        <translation>გადაფარვის სტილი (არასწორი)</translation>
+        <translation>გადადების სტილი (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="526"/>
@@ -4555,7 +4555,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="567"/>
         <source>Border width (invalid)</source>
-        <translation>საზღვრის სისქე (არასწორი)</translation>
+        <translation>საზღვრის სიგანე (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="571"/>
@@ -4593,7 +4593,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
         <source>Max tiled windows (invalid)</source>
-        <translation>დაფილული ფანჯრების მაქსიმუმი (არასწორი)</translation>
+        <translation>ფილებად დაწყობილი ფანჯრების მაქსიმუმი (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
@@ -4603,7 +4603,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
         <source>Master count (invalid)</source>
-        <translation>მთავარი ფანჯრების რაოდენობა (არასწორი)</translation>
+        <translation>მთავრების რაოდენობა (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="638"/>
@@ -4718,12 +4718,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="703"/>
         <source>Sticky windows (invalid)</source>
-        <translation>მიმაგრებული ფანჯრები (არასწორი)</translation>
+        <translation>წებოვანი ფანჯრები (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="704"/>
         <source>Sticky windows: %1</source>
-        <translation>მიმაგრებული ფანჯრები: %1</translation>
+        <translation>წებოვანი ფანჯრები: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="709"/>
@@ -5000,7 +5000,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
         <source>Right gap (invalid)</source>
-        <translation>მარჯვენა შუალედი (არასწორი)</translation>
+        <translation>მარჯვენა დაშორება (არასწორი)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
@@ -5038,7 +5038,7 @@
         <source>Snap to zones %1</source>
         <translation>
             <numerusform>ზონა %1-ზე მიმაგრება</numerusform>
-            <numerusform>ზონებზე %1 მიმაგრება</numerusform>
+            <numerusform>%1 ზონებზე მიმაგრება</numerusform>
         </translation>
     </message>
     <message>
@@ -5079,7 +5079,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="953"/>
         <source>Overlay border width (invalid)</source>
-        <translation>გადაფარვის საზღვრის სისქე (არასწორი)</translation>
+        <translation>გადადების საზღვრის სისქე (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="957"/>
@@ -5089,7 +5089,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="958"/>
         <source>Overlay corner radius (invalid)</source>
-        <translation>გადაფარვის კუთხის რადიუსი (არასწორი)</translation>
+        <translation>გადადების კუთხის რადიუსი (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
@@ -5099,7 +5099,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="967"/>
         <source>Outer gap (invalid)</source>
-        <translation>გარე შუალედი (არასწორი)</translation>
+        <translation>გარე დაშორება (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
@@ -5109,7 +5109,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Top gap (invalid)</source>
-        <translation>ზედა შუალედი (არასწორი)</translation>
+        <translation>ზედა დაშორება (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
@@ -5119,7 +5119,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
         <source>Bottom gap (invalid)</source>
-        <translation>ქვედა შუალედი (არასწორი)</translation>
+        <translation>ქვედა დაშორება (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
@@ -5129,7 +5129,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
         <source>Left gap (invalid)</source>
-        <translation>მარცხენა შუალედი (არასწორი)</translation>
+        <translation>მარცხენა დაშორება (არასწორი)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
@@ -5521,7 +5521,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="157"/>
         <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
-        <translation>ერთი აპლიკაციის ფანჯრები დაფილვის, მიმაგრებისა და გადახვევის მიღმა დარჩეს. საზღვრები, მორთულობის პაკეტები და ანიმაციები კვლავ მოქმედებს.</translation>
+        <translation>ერთი აპლიკაციის ფანჯრები ფილებად დაწყობის, მიმაგრებისა და გადახვევის მიღმა დარჩეს. საზღვრები, მორთულობის პაკეტები და ანიმაციები კვლავ მოქმედებს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
@@ -7083,12 +7083,12 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
         <source>preview</source>
-        <translation>მინიატურა</translation>
+        <translation>გადახედვა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
         <source>thumbnail</source>
-        <translation>ესკიზი</translation>
+        <translation>მინიატურა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="302"/>
@@ -7876,7 +7876,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="694"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="354"/>
         <source>Width and height presets</source>
-        <translation>სიგანისა და სიმაღლის წინასწარი პარამეტრები</translation>
+        <translation>სიგანისა და სიმაღლის შაბლონები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
@@ -8217,7 +8217,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="789"/>
         <source>strip preview</source>
-        <translation>ზოლის მინიატურა</translation>
+        <translation>ზოლის გადახედვა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="174"/>
@@ -9446,7 +9446,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="385"/>
         <source>Preview size</source>
         <oldsource>Preview Size</oldsource>
-        <translation>მინიატურის ზომა</translation>
+        <translation>გადახედვის ზომა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1040"/>
@@ -9460,13 +9460,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingOrderingPage.qml.cpp" line="13"/>
         <source>Tiling algorithm priority</source>
         <oldsource>Tiling Algorithm Priority</oldsource>
-        <translation>დაფილვის ალგორითმების პრიორიტეტი</translation>
+        <translation>ფილების ალგორითმების პრიორიტეტი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="13"/>
         <source>Scrolling template priority</source>
-        <translation>გადახვევის შაბლონების პრიორიტეტი</translation>
+        <translation>გადახვევის ნიმუშების პრიორიტეტი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1046"/>
@@ -9493,14 +9493,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
-        <translation>შერბილების წინასწარი პარამეტრები</translation>
+        <translation>დარბილების შაბლონები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1064"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="282"/>
         <source>Spring presets</source>
         <oldsource>Spring Presets</oldsource>
-        <translation>ზამბარის წინასწარი პარამეტრები</translation>
+        <translation>ზამბარის შაბლონები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1066"/>
@@ -9762,62 +9762,62 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="409"/>
         <source>Could not read the template file.</source>
-        <translation>შაბლონის ფაილის წაკითხვა ვერ მოხერხდა.</translation>
+        <translation>ნიმუშის ფაილის წაკითხვა ვერ მოხერხდა.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="404"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="418"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="424"/>
         <source>That file is not a scrolling template this app can read.</source>
-        <translation>ეს ფაილი არაა გადახვევის შაბლონი, რომლის წაკითხვაც ამ აპლიკაციას შეუძლია.</translation>
+        <translation>ეს ფაილი არაა გადახვევის ნიმუში, რომლის წაკითხვაც ამ აპლიკაციას შეუძლია.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="462"/>
         <source>That template no longer exists.</source>
-        <translation>ეს შაბლონი აღარ არსებობს.</translation>
+        <translation>ეს ნიმუში აღარ არსებობს.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="200"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="520"/>
         <source>The daemon refused the template. Check that it has a name.</source>
-        <translation>დემონმა შაბლონი უარყო. შეამოწმეთ, აქვს თუ არა მას სახელი.</translation>
+        <translation>დემონმა ნიმუში უარყო. შეამოწმეთ, აქვს თუ არა მას სახელი.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="213"/>
         <source>Could not save the template.</source>
-        <translation>შაბლონის შენახვა ვერ მოხერხდა.</translation>
+        <translation>ნიმუშის შენახვა ვერ მოხერხდა.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="226"/>
         <source>Could not save the template. Check that it has a name.</source>
-        <translation>შაბლონის შენახვა ვერ მოხერხდა. შეამოწმეთ, აქვს თუ არა მას სახელი.</translation>
+        <translation>ნიმუშის შენახვა ვერ მოხერხდა. შეამოწმეთ, აქვს თუ არა მას სახელი.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="522"/>
         <source>Could not save the template: %1</source>
-        <translation>შაბლონის შენახვა ვერ მოხერხდა: %1</translation>
+        <translation>ნიმუშის შენახვა ვერ მოხერხდა: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="542"/>
         <source>Could not delete the template: %1</source>
-        <translation>შაბლონის წაშლა ვერ მოხერხდა: %1</translation>
+        <translation>ნიმუშის წაშლა ვერ მოხერხდა: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="549"/>
         <source>Could not delete the template.</source>
-        <translation>შაბლონის წაშლა ვერ მოხერხდა.</translation>
+        <translation>ნიმუშის წაშლა ვერ მოხერხდა.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="561"/>
         <source>Could not duplicate the template: %1</source>
-        <translation>შაბლონის დუბლირება ვერ მოხერხდა: %1</translation>
+        <translation>ნიმუშის დუბლირება ვერ მოხერხდა: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="885"/>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="360"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="126"/>
         <source>Scrolling (no template)</source>
-        <translation>გადახვევა (შაბლონის გარეშე)</translation>
+        <translation>გადახვევა (ნიმუშის გარეშე)</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="396"/>
@@ -9839,7 +9839,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="571"/>
         <source>Could not duplicate the template.</source>
-        <translation>შაბლონის დუბლირება ვერ მოხერხდა.</translation>
+        <translation>ნიმუშის დუბლირება ვერ მოხერხდა.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="603"/>
@@ -9869,19 +9869,19 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="348"/>
         <source>Template: %1</source>
-        <translation>შაბლონი: %1</translation>
+        <translation>ნიმუში: %1</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="302"/>
         <source>A scrolling template you picked has been deleted, so that monitor kept its previous template. Pick one again on the Overview page.</source>
-        <translation>თქვენ მიერ არჩეული გადახვევის შაბლონი წაიშალა, ამიტომ ამ მონიტორმა წინა შაბლონი შეინარჩუნა. აირჩიეთ ხელახლა მიმოხილვის გვერდზე.</translation>
+        <translation>თქვენ მიერ არჩეული გადახვევის ნიმუში წაიშალა, ამიტომ ამ მონიტორმა წინა ნიმუში შეინარჩუნა. აირჩიეთ ხელახლა მიმოხილვის გვერდზე.</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/controller/settingscontroller_lifecycle.cpp" line="304"/>
         <source>%n scrolling templates you picked have been deleted, so those monitors kept their previous templates. Pick them again on the Overview page.</source>
         <translation>
-            <numerusform>თქვენ მიერ არჩეული %n გადახვევის შაბლონი წაიშალა, ამიტომ ამ მონიტორებმა წინა შაბლონები შეინარჩუნეს. აირჩიეთ ისინი ხელახლა მიმოხილვის გვერდზე.</numerusform>
-            <numerusform>თქვენ მიერ არჩეული %n გადახვევის შაბლონი წაიშალა, ამიტომ ამ მონიტორებმა წინა შაბლონები შეინარჩუნეს. აირჩიეთ ისინი ხელახლა მიმოხილვის გვერდზე.</numerusform>
+            <numerusform>თქვენ მიერ არჩეული %n გადახვევის ნიმუში წაიშალა, ამიტომ ამ მონიტორებმა წინა ნიმუშები შეინარჩუნეს. აირჩიეთ ისინი ხელახლა მიმოხილვის გვერდზე.</numerusform>
+            <numerusform>თქვენ მიერ არჩეული %n გადახვევის ნიმუში წაიშალა, ამიტომ ამ მონიტორებმა წინა ნიმუშები შეინარჩუნეს. აირჩიეთ ისინი ხელახლა მიმოხილვის გვერდზე.</numerusform>
         </translation>
     </message>
     <message>
@@ -10025,7 +10025,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="329"/>
         <source>Templates</source>
-        <translation>შაბლონები</translation>
+        <translation>ნიმუშები</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="349"/>
@@ -10037,7 +10037,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="363"/>
         <source>Strip Selector</source>
-        <translation>ზოლის ამრჩევი</translation>
+        <translation>ზოლის ამომრჩევი</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="399"/>
@@ -10580,7 +10580,7 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="114"/>
         <source>Use no template on this screen, so columns keep the built-in widths and heights</source>
-        <translation>ამ ეკრანზე შაბლონი არ გამოიყენოს, რათა სვეტებმა ჩაშენებული სიგანეები და სიმაღლეები შეინარჩუნონ</translation>
+        <translation>ამ ეკრანზე ნიმუში არ გამოიყენოს, რათა სვეტებმა ჩაშენებული სიგანეები და სიმაღლეები შეინარჩუნონ</translation>
     </message>
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="137"/>
@@ -10905,15 +10905,15 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="238"/>
         <source>Add a starting column to the template</source>
         <comment>@info</comment>
-        <translation>შაბლონისთვის საწყისი სვეტის დამატება</translation>
+        <translation>ნიმუშისთვის საწყისი სვეტის დამატება</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="224"/>
         <source>A template can start at most %n column</source>
         <comment>@info</comment>
         <translation>
-            <numerusform>შაბლონს შეუძლია დაიწყოს მაქსიმუმ %n სვეტით</numerusform>
-            <numerusform>შაბლონს შეუძლია დაიწყოს მაქსიმუმ %n სვეტით</numerusform>
+            <numerusform>ნიმუშს შეუძლია დაიწყოს მაქსიმუმ %n სვეტით</numerusform>
+            <numerusform>ნიმუშს შეუძლია დაიწყოს მაქსიმუმ %n სვეტით</numerusform>
         </translation>
     </message>
     <message>
@@ -11099,7 +11099,7 @@
         <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="575"/>
         <source>Save template and close editor</source>
         <comment>@info</comment>
-        <translation>შაბლონის შენახვა და რედაქტორის დახურვა</translation>
+        <translation>ნიმუშის შენახვა და რედაქტორის დახურვა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="64"/>
@@ -11201,7 +11201,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="229"/>
         <source>Scrolling Template Editor</source>
         <comment>@title</comment>
-        <translation>გადახვევის შაბლონების რედაქტორი</translation>
+        <translation>გადახვევის ნიმუშების რედაქტორი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="799"/>
@@ -11244,7 +11244,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="933"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
-        <translation>სხვა რამის გახსნა ჩაანაცვლებს შაბლონს, რომელსაც არედაქტირებთ. რა გსურთ თქვენს შეუნახავ ცვლილებებთან დაკავშირებით?</translation>
+        <translation>სხვა რამის გახსნა ჩაანაცვლებს ნიმუშს, რომელსაც არედაქტირებთ. რა გსურთ თქვენს შეუნახავ ცვლილებებთან დაკავშირებით?</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="960"/>
@@ -11286,7 +11286,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1000"/>
         <source>Template Editor Help</source>
         <comment>@title:window</comment>
-        <translation>შაბლონის რედაქტორის დახმარება</translation>
+        <translation>ნიმუშის რედაქტორის დახმარება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
@@ -11298,7 +11298,7 @@
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1047"/>
         <source>Template saved</source>
         <comment>@info</comment>
-        <translation>შაბლონი შენახულია</translation>
+        <translation>ნიმუში შენახულია</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1051"/>
@@ -11494,7 +11494,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="66"/>
         <source>Save template</source>
         <comment>@action</comment>
-        <translation>შაბლონის შენახვა</translation>
+        <translation>ნიმუშის შენახვა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="28"/>
@@ -11518,7 +11518,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="173"/>
         <source>Template Columns</source>
         <comment>@title:group</comment>
-        <translation>შაბლონის სვეტები</translation>
+        <translation>ნიმუშის სვეტები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="180"/>
@@ -11687,7 +11687,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="353"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through</source>
         <comment>@info tip</comment>
-        <translation>წინასწარი პარამეტრები არის ის ზომები, რომლებშიც სიგანისა და სიმაღლის გადართვის მალსახმობები გადადიან</translation>
+        <translation>შაბლონები არის ის ზომები, რომლებშიც სიგანისა და სიმაღლის გადართვის მალსახმობები გადადიან</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="361"/>
@@ -12769,7 +12769,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
         <source>Template:</source>
         <comment>@label</comment>
-        <translation>შაბლონი:</translation>
+        <translation>ნიმუში:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="175"/>
@@ -12787,7 +12787,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
         <source>Template name</source>
         <comment>@label</comment>
-        <translation>შაბლონის სახელი</translation>
+        <translation>ნიმუშის სახელი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
@@ -12799,7 +12799,7 @@
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
         <source>Enter name for the template</source>
         <comment>@info</comment>
-        <translation>შეიყვანეთ შაბლონის სახელი</translation>
+        <translation>შეიყვანეთ ნიმუშის სახელი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="242"/>
@@ -13171,7 +13171,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="19"/>
         <source>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</source>
         <oldsource>Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you drew, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.</oldsource>
-        <translation>ფანჯრების მიმაგრება, დაფილვა და გადახვევა Wayland-კომპოზიტორებისთვის. მიამაგრეთ ფანჯრები თქვენ მიერ დახატულ ზონებში, მიანდეთ ალგორითმს მათი დაფილვა ან გადააადგილეთ ისინი უსასრულო ზოლზე. თითოეული მონიტორი თავის რეჟიმს ირჩევს.</translation>
+        <translation>ფანჯრების მიმაგრება, ფილებად დაწყობა და გადახვევა Wayland-კომპოზიტორებისთვის. მიამაგრეთ ფანჯრები თქვენ მიერ დახატულ ზონებში, მიანდეთ ალგორითმს მათი ფილებად დაწყობა ან გადააადგილეთ ისინი უსასრულო ზოლზე. თითოეული მონიტორი თავის რეჟიმს ირჩევს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="22"/>
@@ -13387,7 +13387,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="58"/>
         <source>GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.</source>
-        <translation>GPU, რომელიც ზონების გადაფარვებსა და ეკრანულ შეტყობინებებს ხატავს. ავტომატურის დროს გადაწყვეტილებას გრაფიკული დრაივერი იღებს. ფანჯრების შიგთავსს KWin ამუშავებს, ამიტომ მათზე ეს არ მოქმედებს.</translation>
+        <translation>GPU, რომელიც ზონების გადადებებსა და ეკრანულ შეტყობინებებს ხატავს. ავტომატურის დროს გადაწყვეტილებას გრაფიკული დრაივერი იღებს. ფანჯრების შიგთავსს KWin ამუშავებს, ამიტომ მათზე ეს არ მოქმედებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
@@ -14211,7 +14211,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation>PlasmaZones-ის დემონის გაჩერება გამორთავს ფანჯრების მიმაგრებას, დაფილვასა და გადახვევას, სანამ მას ხელახლა არ გაუშვებთ.</translation>
+        <translation>PlasmaZones-ის დემონის გაჩერება გამორთავს ფანჯრების მიმაგრებას, ფილებად დაწყობასა და გადახვევას, სანამ მას ხელახლა არ გაუშვებთ.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>
@@ -14941,7 +14941,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="232"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="364"/>
         <source>User preset %1</source>
-        <translation>მომხმარებლის წინასწარი პარამეტრი %1</translation>
+        <translation>მომხმარებლის შაბლონი %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
@@ -15764,7 +15764,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="437"/>
         <source>Tint color</source>
         <comment>@action:button</comment>
-        <translation>ტონირების ფერი</translation>
+        <translation>ტონის ფერი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="439"/>
@@ -15841,7 +15841,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="688"/>
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
-        <translation>სხვა ფანჯრები მორთულობას ინარჩუნებენ, მაგრამ მოტივტივებას წყვეტენ. ეს ზოგავს ვიდეობარათის დატვირთვას დაახლოებით იმის პროპორციულად, რამდენი ფანჯარა გაქვთ გახსნილი. პანელები და აპლეტების ამომხტომები ანიმაციას აგრძელებენ, რადგან პანელი არასოდეს არის აქტიური ფანჯარა.</translation>
+        <translation>სხვა ფანჯრები მორთულობას ინარჩუნებენ, მაგრამ მოძრაობას წყვეტენ. ეს ზოგავს ვიდეობარათის დატვირთვას დაახლოებით იმის პროპორციულად, რამდენი ფანჯარა გაქვთ გახსნილი. პანელები და აპლეტების ამომხტომები ანიმაციას აგრძელებენ, რადგან პანელი არასოდეს არის აქტიური ფანჯარა.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -15929,7 +15929,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="564"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="587"/>
         <source>No template</source>
-        <translation>შაბლონის გარეშე</translation>
+        <translation>ნიმუშის გარეშე</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="566"/>
@@ -15946,7 +15946,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="577"/>
         <source>No template assigned</source>
-        <translation>შაბლონი მინიჭებული არაა</translation>
+        <translation>ნიმუში მინიჭებული არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="579"/>
@@ -16122,7 +16122,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="429"/>
         <source>Filter Templates</source>
-        <translation>შაბლონების გაფილტვრა</translation>
+        <translation>ნიმუშების გაფილტვრა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="455"/>
@@ -16203,7 +16203,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
         <source>Unnamed Template</source>
-        <translation>უსახელო შაბლონი</translation>
+        <translation>უსახელო ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
@@ -16222,14 +16222,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
         <source>Template with %n width</source>
         <translation>
-            <numerusform>შაბლონი %n სიგანით</numerusform>
-            <numerusform>შაბლონი %n სიგანით</numerusform>
+            <numerusform>ნიმუში %n სიგანით</numerusform>
+            <numerusform>ნიმუში %n სიგანით</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="304"/>
         <source>Default scrolling template</source>
-        <translation>ნაგულისხმევი გადახვევის შაბლონი</translation>
+        <translation>ნაგულისხმევი გადახვევის ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="307"/>
@@ -16244,7 +16244,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="331"/>
         <source>Built-in template. Editing stores your own copy.</source>
-        <translation>ჩაშენებული შაბლონი. რედაქტირებისას ინახება თქვენი საკუთარი ასლი.</translation>
+        <translation>ჩაშენებული ნიმუში. რედაქტირებისას ინახება თქვენი საკუთარი ასლი.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="334"/>
@@ -16259,7 +16259,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="340"/>
         <source>Edited copy of a built-in template. Deleting it brings the built-in one back.</source>
-        <translation>ჩაშენებული შაბლონის რედაქტირებული ასლი. წაშლისას ჩაშენებული ბრუნდება.</translation>
+        <translation>ჩაშენებული ნიმუშის რედაქტირებული ასლი. წაშლისას ჩაშენებული ბრუნდება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="342"/>
@@ -16316,7 +16316,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="114"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="50"/>
         <source>User templates</source>
-        <translation>მომხმარებლის შაბლონები</translation>
+        <translation>მომხმარებლის ნიმუშები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
@@ -16331,7 +16331,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="61"/>
         <source>Drop a template file here to import it, or use the buttons below. Your templates live under your data directory.</source>
-        <translation>ჩამოაგდეთ შაბლონის ფაილი აქ მის შემოსატანად ან გამოიყენეთ ქვემოთ მოცემული ღილაკები. თქვენი შაბლონები თქვენს მონაცემთა საქაღალდეშია.</translation>
+        <translation>ჩამოაგდეთ ნიმუშის ფაილი აქ მის შემოსატანად ან გამოიყენეთ ქვემოთ მოცემული ღილაკები. თქვენი ნიმუშები თქვენს მონაცემთა საქაღალდეშია.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="70"/>
@@ -16346,7 +16346,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="70"/>
         <source>Drop a template file here</source>
-        <translation>ჩამოაგდეთ შაბლონის ფაილი აქ</translation>
+        <translation>ჩამოაგდეთ ნიმუშის ფაილი აქ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="71"/>
@@ -16361,7 +16361,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="71"/>
         <source>Release to import template</source>
-        <translation>გაუშვით შაბლონის შემოსატანად</translation>
+        <translation>გაუშვით ნიმუშის შემოსატანად</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="621"/>
@@ -16410,7 +16410,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="166"/>
         <source>Open user templates directory</source>
-        <translation>მომხმარებლის შაბლონების საქაღალდის გახსნა</translation>
+        <translation>მომხმარებლის ნიმუშების საქაღალდის გახსნა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutThumbnail.qml.cpp" line="151"/>
@@ -16421,12 +16421,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="267"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="438"/>
         <source>Your Templates</source>
-        <translation>თქვენი შაბლონები</translation>
+        <translation>თქვენი ნიმუშები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="268"/>
         <source>All templates</source>
-        <translation>ყველა შაბლონი</translation>
+        <translation>ყველა ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="280"/>
@@ -16447,7 +16447,7 @@
     <message>
         <location filename="../src/core/utils/unifiedlayoutlist.cpp" line="93"/>
         <source>Scrolling Templates</source>
-        <translation>გადახვევის შაბლონები</translation>
+        <translation>გადახვევის ნიმუშები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
@@ -16462,7 +16462,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search templates…</source>
-        <translation>შაბლონების ძებნა…</translation>
+        <translation>ნიმუშების ძებნა…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
@@ -16473,17 +16473,17 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Template</source>
-        <translation>ახალი შაბლონი</translation>
+        <translation>ახალი ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No matching templates</source>
-        <translation>შესაბამისი შაბლონები არაა</translation>
+        <translation>შესაბამისი ნიმუშები არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No scrolling templates available</source>
-        <translation>გადახვევის შაბლონები ხელმისაწვდომი არაა</translation>
+        <translation>გადახვევის ნიმუშები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="456"/>
@@ -16524,7 +16524,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="473"/>
         <source>Both Built-in and Your Templates sources are hidden</source>
-        <translation>დამალულია როგორც ჩაშენებული, ისე თქვენი შაბლონები</translation>
+        <translation>დამალულია როგორც ჩაშენებული, ისე თქვენი ნიმუშები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="475"/>
@@ -16534,7 +16534,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="481"/>
         <source>Start the PlasmaZones daemon to create a template, or import one</source>
-        <translation>შაბლონის შესაქმნელად გაუშვით PlasmaZones-ის დემონი ან შემოიტანეთ შაბლონი</translation>
+        <translation>ნიმუშის შესაქმნელად გაუშვით PlasmaZones-ის დემონი ან შემოიტანეთ ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="485"/>
@@ -16571,8 +16571,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="511"/>
         <source>%n template</source>
         <translation>
-            <numerusform>%n შაბლონი</numerusform>
-            <numerusform>%n შაბლონი</numerusform>
+            <numerusform>%n ნიმუში</numerusform>
+            <numerusform>%n ნიმუში</numerusform>
         </translation>
     </message>
     <message>
@@ -16608,12 +16608,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="629"/>
         <source>Import Scrolling Template</source>
-        <translation>გადახვევის შაბლონის შემოტანა</translation>
+        <translation>გადახვევის ნიმუშის შემოტანა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="642"/>
         <source>Export Scrolling Template</source>
-        <translation>გადახვევის შაბლონის გატანა</translation>
+        <translation>გადახვევის ნიმუშის გატანა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="655"/>
@@ -16638,7 +16638,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="825"/>
         <source>Delete Template</source>
-        <translation>შაბლონის წაშლა</translation>
+        <translation>ნიმუშის წაშლა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
@@ -16796,7 +16796,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Tiling algorithm for quick shortcut %1</source>
-        <translation>დაფილვის ალგორითმი სწრაფი მალსახმობისთვის %1</translation>
+        <translation>ფილების ალგორითმი სწრაფი მალსახმობისთვის %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
@@ -16806,7 +16806,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="209"/>
         <source>Scrolling template for quick shortcut %1</source>
-        <translation>გადახვევის შაბლონი სწრაფი მალსახმობისთვის %1</translation>
+        <translation>გადახვევის ნიმუში სწრაფი მალსახმობისთვის %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
@@ -16816,7 +16816,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="237"/>
         <source>Clear template</source>
-        <translation>შაბლონის გასუფთავება</translation>
+        <translation>ნიმუშის გასუფთავება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
@@ -16826,7 +16826,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="238"/>
         <source>Clear template for quick shortcut %1</source>
-        <translation>შაბლონის გასუფთავება სწრაფი მალსახმობისთვის %1</translation>
+        <translation>ნიმუშის გასუფთავება სწრაფი მალსახმობისთვის %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/NewProfileDialog.qml.cpp" line="43"/>
@@ -17268,7 +17268,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="551"/>
         <source>Choose a template…</source>
-        <translation>აირჩიეთ შაბლონი…</translation>
+        <translation>აირჩიეთ ნიმუში…</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="574"/>
@@ -17566,7 +17566,7 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="141"/>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="171"/>
         <source>That template is no longer available.</source>
-        <translation>ეს შაბლონი აღარაა ხელმისაწვდომი.</translation>
+        <translation>ეს ნიმუში აღარაა ხელმისაწვდომი.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="242"/>
@@ -17577,13 +17577,13 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="258"/>
         <source>This template starts no columns</source>
         <comment>@info:placeholder</comment>
-        <translation>ეს შაბლონი სვეტებით არ იწყება</translation>
+        <translation>ეს ნიმუში სვეტებით არ იწყება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="259"/>
         <source>The first windows you open form the starting columns, in order along the strip. Later windows use the default width from the panel. A template without starting columns only sets the width presets.</source>
         <comment>@info:placeholder</comment>
-        <translation>პირველი ფანჯრები, რომლებსაც გახსნით, ქმნის საწყის სვეტებს ზოლის გასწვრივ, რიგის მიხედვით. მოგვიანებით გახსნილი ფანჯრები პანელიდან ნაგულისხმევ სიგანეს იყენებს. საწყისი სვეტების გარეშე შაბლონი მხოლოდ სიგანის წინასწარ პარამეტრებს აყენებს.</translation>
+        <translation>პირველი ფანჯრები, რომლებსაც გახსნით, ქმნის საწყის სვეტებს ზოლის გასწვრივ, რიგის მიხედვით. მოგვიანებით გახსნილი ფანჯრები პანელიდან ნაგულისხმევ სიგანეს იყენებს. საწყისი სვეტების გარეშე ნიმუში მხოლოდ სიგანის შაბლონებს აყენებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17596,7 +17596,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation>ჩანართებით</translation>
+        <translation>ჩანართებიანი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17699,7 +17699,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="613"/>
         <source>Remove this column from the template</source>
         <comment>@info:tooltip</comment>
-        <translation>ამ სვეტის წაშლა შაბლონიდან</translation>
+        <translation>ამ სვეტის წაშლა ნიმუშიდან</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="614"/>
@@ -17739,12 +17739,12 @@
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="377"/>
         <source>Change Width Presets</source>
-        <translation>სიგანის წინასწარი პარამეტრების შეცვლა</translation>
+        <translation>სიგანის შაბლონების შეცვლა</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="390"/>
         <source>Change Height Presets</source>
-        <translation>სიმაღლის წინასწარი პარამეტრების შეცვლა</translation>
+        <translation>სიმაღლის შაბლონების შეცვლა</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="411"/>
@@ -18243,39 +18243,39 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="285"/>
         <source>Scrolling strip preview, PlasmaZones is not running</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation>გადახვევის ზოლის მინიატურა, PlasmaZones გაშვებული არაა</translation>
+        <translation>გადახვევის ზოლის გადახედვა, PlasmaZones გაშვებული არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="287"/>
         <source>Scrolling strip preview, apply to start scrolling on this screen</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation>გადახვევის ზოლის მინიატურა, გადაატარეთ ამ ეკრანზე გადახვევის დასაწყებად</translation>
+        <translation>გადახვევის ზოლის გადახედვა, გადაატარეთ ამ ეკრანზე გადახვევის დასაწყებად</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="289"/>
         <source>Scrolling strip preview, no windows on the strip yet</source>
         <comment>accessible name of the scrolling strip preview</comment>
-        <translation>გადახვევის ზოლის მინიატურა, ზოლზე ჯერ ფანჯრები არაა</translation>
+        <translation>გადახვევის ზოლის გადახედვა, ზოლზე ჯერ ფანჯრები არაა</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="291"/>
         <source>Scrolling strip preview with %n window</source>
         <translation>
-            <numerusform>გადახვევის ზოლის მინიატურა %n ფანჯრით</numerusform>
-            <numerusform>გადახვევის ზოლის მინიატურა %n ფანჯრით</numerusform>
+            <numerusform>გადახვევის ზოლის გადახედვა %n ფანჯრით</numerusform>
+            <numerusform>გადახვევის ზოლის გადახედვა %n ფანჯრით</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1111"/>
         <source>This screen uses no template, so columns follow the built-in width and height steps.</source>
         <oldsource>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</oldsource>
-        <translation>ეს ეკრანი შაბლონს არ იყენებს, ამიტომ სვეტები ჩაშენებულ სიგანისა და სიმაღლის ბიჯებს მიჰყვება.</translation>
+        <translation>ეს ეკრანი ნიმუშს არ იყენებს, ამიტომ სვეტები ჩაშენებულ სიგანისა და სიმაღლის ბიჯებს მიჰყვება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1113"/>
         <source>This screen uses the %1 template, which sets its starting columns and the width and height presets.</source>
         <oldsource>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</oldsource>
-        <translation>ეს ეკრანი იყენებს შაბლონს %1, რომელიც აყენებს მის საწყის სვეტებსა და სიგანისა და სიმაღლის წინასწარ პარამეტრებს.</translation>
+        <translation>ეს ეკრანი იყენებს ნიმუშს %1, რომელიც აყენებს მის საწყის სვეტებსა და სიგანისა და სიმაღლის შაბლონებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
@@ -18320,24 +18320,24 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1115"/>
         <source>This screen is pinned to a template no longer in your list, so columns follow the built-in width and height steps.</source>
         <oldsource>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</oldsource>
-        <translation>ეს ეკრანი მიბმულია შაბლონზე, რომელიც აღარაა თქვენს სიაში, ამიტომ სვეტები ჩაშენებულ სიგანისა და სიმაღლის ბიჯებს მიჰყვება.</translation>
+        <translation>ეს ეკრანი მიბმულია ნიმუშზე, რომელიც აღარაა თქვენს სიაში, ამიტომ სვეტები ჩაშენებულ სიგანისა და სიმაღლის ბიჯებს მიჰყვება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1124"/>
         <source>Pick another template to replace it.</source>
-        <translation>აირჩიეთ სხვა შაბლონი მის ჩასანაცვლებლად.</translation>
+        <translation>აირჩიეთ სხვა ნიმუში მის ჩასანაცვლებლად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1126"/>
         <source>This screen has no template of its own, so it follows the default from Scrolling → Templates.</source>
         <oldsource>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</oldsource>
-        <translation>ამ ეკრანს საკუთარი შაბლონი არ აქვს, ამიტომ ის მიჰყვება ნაგულისხმევს გადახვევა → შაბლონებიდან.</translation>
+        <translation>ამ ეკრანს საკუთარი ნიმუში არ აქვს, ამიტომ ის მიჰყვება ნაგულისხმევს გადახვევა → ნიმუშებიდან.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
         <source>Every starting column is in use, so new columns open at the template&apos;s own width.</source>
         <oldsource>Every starting column is in use, so further columns open at the template&apos;s own width and display.</oldsource>
-        <translation>ყველა საწყისი სვეტი გამოყენებულია, ამიტომ ახალი სვეტები შაბლონის საკუთარი სიგანით იხსნება.</translation>
+        <translation>ყველა საწყისი სვეტი გამოყენებულია, ამიტომ ახალი სვეტები ნიმუშის საკუთარი სიგანით იხსნება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
@@ -19345,7 +19345,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="99"/>
         <source>How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>რამდენ ხანს რჩება გადაფარვა აქტიური გააქტიურების გამშვების გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებული ფანჯარაც მიემაგროს. ეხმარება, როცა გამშვები არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
+        <translation>რამდენ ხანს რჩება გადადება აქტიური გააქტიურების გამშვების გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებული ფანჯარაც მიემაგროს. ეხმარება, როცა გამშვები არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="103"/>
@@ -19867,7 +19867,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="85"/>
         <source>Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.</source>
         <oldsource>Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it</oldsource>
-        <translation>ერთხელ დააჭირეთ ხელახლა ჩასმის გამშვებს დაწყობის მინიატურის გასააქტიურებლად. კიდევ ერთხელ დააჭირეთ მის გამოსართავად.</translation>
+        <translation>ერთხელ დააჭირეთ ხელახლა ჩასმის გამშვებს დაწყობის გადახედვის გასააქტიურებლად. კიდევ ერთხელ დააჭირეთ მის გამოსართავად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="92"/>
@@ -19877,7 +19877,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="106"/>
         <source>How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>რამდენ ხანს რჩება დაწყობის მინიატურა აქტიური ხელახლა ჩასმის გამშვების გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებული ფანჯარაც დაწყობაში მოხვდეს. ეხმარება, როცა გამშვები არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
+        <translation>რამდენ ხანს რჩება დაწყობის გადახედვა აქტიური ხელახლა ჩასმის გამშვების გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებული ფანჯარაც დაწყობაში მოხვდეს. ეხმარება, როცა გამშვები არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="107"/>
@@ -19899,7 +19899,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
         <source>When the strip holds a single column, center it even when Center the focused column is set to Never.</source>
         <comment>the quoted phrase Center the focused column and the word Never must match the sibling row&apos;s title and option label</comment>
-        <translation>როცა ზოლს ერთი სვეტი აქვს, ის მაინც ცენტრში მოთავსდეს, თუნდაც „ფოკუსირებული სვეტის ცენტრირება“ „არასოდეს“-ზე იყოს.</translation>
+        <translation>როცა ზოლს ერთი სვეტი აქვს, ის მაინც ცენტრში მოთავსდეს, თუნდაც „ფოკუსირებული სვეტის ცენტრში მოქცევა“ „არასდროს“-ზე იყოს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="77"/>
@@ -20055,7 +20055,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="120"/>
         <source>Sticky window handling</source>
-        <translation>მიმაგრებული ფანჯრების დამუშავება</translation>
+        <translation>წებოვანი ფანჯრების დამუშავება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="134"/>
@@ -20181,7 +20181,7 @@
         <location filename=".qml-stubs/src/shared/CategoryBadge.qml.cpp" line="54"/>
         <source>Template</source>
         <comment>@label:badge</comment>
-        <translation>შაბლონი</translation>
+        <translation>ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CategoryBadge.qml.cpp" line="56"/>
@@ -20738,7 +20738,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
         <source>No column templates available</source>
-        <translation>სვეტების შაბლონები ხელმისაწვდომი არაა</translation>
+        <translation>სვეტების ნიმუშები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="335"/>
@@ -20953,7 +20953,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="562"/>
         <source>Window moved between columns</source>
-        <translation>ფანჯარა სვეტებს შორის გადაიტანა</translation>
+        <translation>ფანჯარა სვეტებს შორის გადავიდა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="564"/>
@@ -21097,23 +21097,23 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="207"/>
         <source>Column width preset number</source>
-        <translation>სვეტის სიგანის წინასწარი პარამეტრის ნომერი</translation>
+        <translation>სვეტის სიგანის შაბლონის ნომერი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="146"/>
         <source>How wide a column is when it first opens. A screen with a layout template of its own takes the width from that template instead, including the width set for this monitor.</source>
-        <translation>რამდენად განიერია სვეტი პირველად გახსნისას. ეკრანი, რომელსაც საკუთარი განლაგების შაბლონი აქვს, სიგანეს ნაცვლად ამ შაბლონიდან იღებს, მათ შორის ამ მონიტორისთვის დაყენებულ სიგანესაც.</translation>
+        <translation>რამდენად განიერია სვეტი პირველად გახსნისას. ეკრანი, რომელსაც საკუთარი განლაგების ნიმუში აქვს, სიგანეს ნაცვლად ამ ნიმუშიდან იღებს, მათ შორის ამ მონიტორისთვის დაყენებულ სიგანესაც.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="229"/>
         <source>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.</source>
         <oldsource>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.</oldsource>
-        <translation>რომელი სიგანით იხსნება ახალი სვეტი, 1-იდან დათვლილი ეკრანის განლაგების შაბლონის სიგანეებში. ეკრანები, რომლებსაც საკუთარი შაბლონი არ აქვთ, იყენებენ ნაგულისხმევ შაბლონს გადახვევა → შაბლონებიდან, ხოლო შაბლონის სრულად არარსებობისას ჩაშენებული სიგანის ბიჯები მოქმედებს. ასე გახსნილი სვეტები მიჰყვება იმ სიის შემდგომ ცვლილებებს, საიდანაც ისინი მოვიდნენ.</translation>
+        <translation>რომელი სიგანით იხსნება ახალი სვეტი, 1-იდან დათვლილი ეკრანის განლაგების ნიმუშის სიგანეებში. ეკრანები, რომლებსაც საკუთარი ნიმუში არ აქვთ, იყენებენ ნაგულისხმევ ნიმუშს გადახვევა → ნიმუშებიდან, ხოლო ნიმუშის სრულად არარსებობისას ჩაშენებული სიგანის ბიჯები მოქმედებს. ასე გახსნილი სვეტები მიჰყვება იმ სიის შემდგომ ცვლილებებს, საიდანაც ისინი მოვიდნენ.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="261"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip. A screen with a layout template of its own takes this from that template instead, and the template&apos;s starting columns each carry their own.</source>
-        <translation>ჩვეულებრივი სვეტის ფანჯრებს ერთმანეთზე აწყობს. ჩანართებით თითო ფანჯარას აჩვენებს ჩანართების ზოლის უკან. ეკრანი, რომელსაც საკუთარი განლაგების შაბლონი აქვს, ამას ნაცვლად ამ შაბლონიდან იღებს, ხოლო შაბლონის საწყის სვეტებს თითოეულს თავისი აქვს.</translation>
+        <translation>ჩვეულებრივი სვეტის ფანჯრებს ერთმანეთზე აწყობს. ჩანართებით თითო ფანჯარას აჩვენებს ჩანართების ზოლის უკან. ეკრანი, რომელსაც საკუთარი განლაგების ნიმუში აქვს, ამას ნაცვლად ამ ნიმუშიდან იღებს, ხოლო ნიმუშის საწყის სვეტებს თითოეულს თავისი აქვს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="280"/>
@@ -21140,82 +21140,82 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="323"/>
         <source>Which height a new window opens at, counted from 1 into the heights of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in height steps apply.</source>
         <oldsource>Which height a new window opens at, counted from 1 into the heights of the screen&apos;s layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in height steps apply.</oldsource>
-        <translation>რომელი სიმაღლით იხსნება ახალი ფანჯარა, 1-იდან დათვლილი ეკრანის განლაგების შაბლონის სიმაღლეებში. ეკრანები, რომლებსაც საკუთარი შაბლონი არ აქვთ, იყენებენ ნაგულისხმევ შაბლონს გადახვევა → შაბლონებიდან, ხოლო შაბლონის სრულად არარსებობისას ჩაშენებული სიმაღლის ბიჯები მოქმედებს.</translation>
+        <translation>რომელი სიმაღლით იხსნება ახალი ფანჯარა, 1-იდან დათვლილი ეკრანის განლაგების ნიმუშის სიმაღლეებში. ეკრანები, რომლებსაც საკუთარი ნიმუში არ აქვთ, იყენებენ ნაგულისხმევ ნიმუშს გადახვევა → ნიმუშებიდან, ხოლო ნიმუშის სრულად არარსებობისას ჩაშენებული სიმაღლის ბიჯები მოქმედებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="330"/>
         <source>Window height preset number</source>
-        <translation>ფანჯრის სიმაღლის წინასწარი პარამეტრის ნომერი</translation>
+        <translation>ფანჯრის სიმაღლის შაბლონის ნომერი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="369"/>
         <source>These are the steps the cycling shortcuts walk on a screen with no layout template. A screen using a template walks that template&apos;s own lists instead, and each list is replaced whole, so a template that carries widths but no heights leaves the heights here in play.</source>
-        <translation>ეს არის ის ბიჯები, რომლებშიც გადართვის მალსახმობები გადადის ეკრანზე, რომელსაც განლაგების შაბლონი არ აქვს. შაბლონის მქონე ეკრანი ნაცვლად ამისა თავად შაბლონის სიებში გადადის, და თითოეული სია მთლიანად ჩანაცვლდება, ამიტომ შაბლონი, რომელსაც სიგანეები აქვს, სიმაღლეები კი არა, აქაურ სიმაღლეებს ძალაში ტოვებს.</translation>
+        <translation>ეს არის ის ბიჯები, რომლებშიც გადართვის მალსახმობები გადადის ეკრანზე, რომელსაც განლაგების ნიმუში არ აქვს. ნიმუშის მქონე ეკრანი ნაცვლად ამისა თავად ნიმუშის სიებში გადადის, და თითოეული სია მთლიანად ჩანაცვლდება, ამიტომ ნიმუში, რომელსაც სიგანეები აქვს, სიმაღლეები კი არა, აქაურ სიმაღლეებს ძალაში ტოვებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="381"/>
         <source>Percentages of the work area along the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area width, cycled in this order by the preset shortcuts</oldsource>
-        <translation>სამუშაო არის პროცენტები ზოლის გასწვრივ, რომლებშიც წინასწარი პარამეტრების მალსახმობები ამ რიგით გადადის</translation>
+        <translation>სამუშაო არის პროცენტები ზოლის გასწვრივ, რომლებშიც შაბლონების მალსახმობები ამ რიგით გადადის</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
         <source>%1% column width preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>სვეტის სიგანის წინასწარი პარამეტრი %1%</translation>
+        <translation>სვეტის სიგანის შაბლონი %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="390"/>
         <source>Remove the %1% column width preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>%1% სვეტის სიგანის წინასწარი პარამეტრის წაშლა</translation>
+        <translation>%1% სვეტის სიგანის შაბლონის წაშლა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="391"/>
         <source>New column width preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation>ახალი სვეტის სიგანის წინასწარი პარამეტრის პროცენტი</translation>
+        <translation>სვეტის სიგანის ახალი შაბლონის პროცენტი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="392"/>
         <source>Add a column width preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation>სვეტის სიგანის წინასწარი პარამეტრის დამატება</translation>
+        <translation>სვეტის სიგანის შაბლონის დამატება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="403"/>
         <source>Percentages of the work area across the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area height, cycled in this order by the preset shortcuts</oldsource>
-        <translation>სამუშაო არის პროცენტები ზოლის განივად, რომლებშიც წინასწარი პარამეტრების მალსახმობები ამ რიგით გადადის</translation>
+        <translation>სამუშაო არის პროცენტები ზოლის განივად, რომლებშიც შაბლონების მალსახმობები ამ რიგით გადადის</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
         <source>%1% window height preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>ფანჯრის სიმაღლის წინასწარი პარამეტრი %1%</translation>
+        <translation>ფანჯრის სიმაღლის შაბლონი %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="413"/>
         <source>Remove the %1% window height preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>%1% ფანჯრის სიმაღლის წინასწარი პარამეტრის წაშლა</translation>
+        <translation>%1% ფანჯრის სიმაღლის შაბლონის წაშლა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="414"/>
         <source>New window height preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation>ახალი ფანჯრის სიმაღლის წინასწარი პარამეტრის პროცენტი</translation>
+        <translation>ფანჯრის სიმაღლის ახალი შაბლონის პროცენტი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="415"/>
         <source>Add a window height preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation>ფანჯრის სიმაღლის წინასწარი პარამეტრის დამატება</translation>
+        <translation>ფანჯრის სიმაღლის შაბლონის დამატება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="200"/>
         <source>Which width a new column opens at, counted from 1 into the widths of the screen&apos;s layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply.</source>
-        <translation>რომელი სიგანით იხსნება ახალი სვეტი, 1-იდან დათვლილი ეკრანის განლაგების შაბლონის სიგანეებში. ეკრანები, რომლებსაც საკუთარი შაბლონი არ აქვთ, იყენებენ ნაგულისხმევ შაბლონს გადახვევა → შაბლონებიდან, ხოლო შაბლონის სრულად არარსებობისას ჩაშენებული სიგანის ბიჯები მოქმედებს.</translation>
+        <translation>რომელი სიგანით იხსნება ახალი სვეტი, 1-იდან დათვლილი ეკრანის განლაგების ნიმუშის სიგანეებში. ეკრანები, რომლებსაც საკუთარი ნიმუში არ აქვთ, იყენებენ ნაგულისხმევ ნიმუშს გადახვევა → ნიმუშებიდან, ხოლო ნიმუშის სრულად არარსებობისას ჩაშენებული სიგანის ბიჯები მოქმედებს.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="252"/>
@@ -21443,7 +21443,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="80"/>
         <source>Tap the re-insert trigger once to activate the strip preview. Tap it again to deactivate.</source>
-        <translation>ერთხელ დააჭირეთ ხელახლა ჩასმის გამშვებს ზოლის მინიატურის გასააქტიურებლად. კიდევ ერთხელ დააჭირეთ მის გამოსართავად.</translation>
+        <translation>ერთხელ დააჭირეთ ხელახლა ჩასმის გამშვებს ზოლის გადახედვის გასააქტიურებლად. კიდევ ერთხელ დააჭირეთ მის გამოსართავად.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="87"/>
@@ -21453,7 +21453,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="101"/>
         <source>How long the strip preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the strip. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>რამდენ ხანს რჩება ზოლის მინიატურა აქტიური ხელახლა ჩასმის გამშვების გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებული ფანჯარაც ზოლში მოხვდეს. ეხმარება, როცა გამშვები არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
+        <translation>რამდენ ხანს რჩება ზოლის გადახედვა აქტიური ხელახლა ჩასმის გამშვების გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებული ფანჯარაც ზოლში მოხვდეს. ეხმარება, როცა გამშვები არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="102"/>
@@ -21510,7 +21510,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation>მიანიჭეთ გადახვევის შაბლონებს კლავიატურის მალსახმობები სწრაფი გადართვისთვის.</translation>
+        <translation>მიანიჭეთ გადახვევის ნიმუშებს კლავიატურის მალსახმობები სწრაფი გადართვისთვის.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="30"/>
@@ -21520,7 +21520,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
-        <translation>განსაზღვრავს, რომელი განთავსების ძრავი (მიმაგრება, დაფილვა თუ გადახვევა) მუშაობს შესაბამის ეკრანზე, სამუშაო მაგიდაზე ან აქტივობაში.</translation>
+        <translation>განსაზღვრავს, რომელი განთავსების ძრავი (მიმაგრება, ფილებად დაწყობა თუ გადახვევა) მუშაობს შესაბამის ეკრანზე, სამუშაო მაგიდაზე ან აქტივობაში.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
@@ -21530,12 +21530,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
-        <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს დაფილვის ალგორითმს.</translation>
+        <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს ფილების ალგორითმს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
         <source>Assigns a scrolling column template to the matched screen, desktop or activity.</source>
-        <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს გადახვევის სვეტების შაბლონს.</translation>
+        <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს გადახვევის სვეტების ნიმუშს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
@@ -21560,7 +21560,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
         <source>Keeps matching windows out of snapping, tiling and scrolling while their decorations and animations still apply.</source>
-        <translation>შესაბამის ფანჯრებს მიმაგრების, დაფილვისა და გადახვევის მიღმა ტოვებს, ხოლო მათი მორთულობები და ანიმაციები კვლავ მოქმედებს.</translation>
+        <translation>შესაბამის ფანჯრებს მიმაგრების, ფილებად დაწყობისა და გადახვევის მიღმა ტოვებს, ხოლო მათი მორთულობები და ანიმაციები კვლავ მოქმედებს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="75"/>
@@ -21590,7 +21590,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="106"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
-        <translation>განსაზღვრავს, დაბრუნდება თუ არა შესაბამისი ფანჯარა თავის წინა ზონაში ხელახლა გახსნისას, სესიის განმავლობაში ან გამოსვლის შემდეგ. გადაფარავს პარამეტრს „ფანჯრების აღდგენა წინა ზონაში“, ამიტომ ისეთი აპლიკაცია, როგორიც ბრაუზერია, შეიძლება გამოირიცხოს, სანამ ყველა სხვა ფანჯარა კვლავ აღდგება.</translation>
+        <translation>განსაზღვრავს, დაბრუნდება თუ არა შესაბამისი ფანჯარა თავის წინა ზონაში ხელახლა გახსნისას, სესიის განმავლობაში ან გამოსვლის შემდეგ. გადაფარავს პარამეტრს „ფანჯრების წინა ზონაში აღდგენა“, ამიტომ ისეთი აპლიკაცია, როგორიც ბრაუზერია, შეიძლება გამოირიცხოს, სანამ ყველა სხვა ფანჯარა კვლავ აღდგება.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
@@ -21665,7 +21665,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
-        <translation>შესაბამისი ფანჯრებისთვის ჩართავს ან გამორთავს გაუმჭვირვალობისა და ტონირების ფენას. წესებს „გაუმჭვირვალობის დაყენება“ და „ტონირების დაყენება“ ეს ფენა სჭირდება, რომ საერთოდ იმოქმედოს.</translation>
+        <translation>შესაბამისი ფანჯრებისთვის ჩართავს ან გამორთავს გაუმჭვირვალობისა და ტონის ფენას. წესებს „გაუმჭვირვალობის დაყენება“ და „ტონის დაყენება“ ეს ფენა სჭირდება, რომ საერთოდ იმოქმედოს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
@@ -21710,52 +21710,52 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
-        <translation>შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის სხვა ზონების გადაფარვის შეიდერს იყენებს.</translation>
+        <translation>შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის სხვა ზონების გადადების შეიდერს იყენებს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
-        <translation>შესაბამისი კონტექსტისთვის ზონების გადაფარვას ზონების მართკუთხედებსა და განლაგების მინიატურას შორის გადართავს.</translation>
+        <translation>შესაბამისი კონტექსტისთვის ზონების გადადებას ზონების მართკუთხედებსა და განლაგების გადახედვას შორის გადართავს.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის გამოკვეთილი ზონის ფერს შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების გამოკვეთილი ზონის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის არააქტიური ზონის ფერს შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების არააქტიური ზონის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის ზონის საზღვრის ფერს შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების ზონის საზღვრის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის გამოკვეთილი ზონის გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების გამოკვეთილი ზონის გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის არააქტიური ზონის გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების არააქტიური ზონის გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის ზონის საზღვრის სისქეს შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების ზონის საზღვრის სისქეს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
-        <translation>განსაზღვრავს გადაფარვის ზონების კუთხის რადიუსს შესაბამისი კონტექსტისთვის.</translation>
+        <translation>განსაზღვრავს გადადების ზონების კუთხის რადიუსს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
-        <translation>აჩვენებს ან მალავს ზონების ნომრებს გადაფარვაზე შესაბამისი კონტექსტისთვის.</translation>
+        <translation>აჩვენებს ან მალავს ზონების ნომრებს გადადებაზე შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
@@ -21795,7 +21795,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
-        <translation>ზღუდავს, რამდენ ფანჯარას ალაგებს დაფილვის ალგორითმი შესაბამის კონტექსტში.</translation>
+        <translation>ზღუდავს, რამდენ ფანჯარას ალაგებს ფილების ალგორითმი შესაბამის კონტექსტში.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
@@ -21810,7 +21810,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
-        <translation>ირჩევს, სად შედის ახლად გახსნილი ფანჯრები დაფილვის დაწყობაში შესაბამის კონტექსტში.</translation>
+        <translation>ირჩევს, სად შედის ახლად გახსნილი ფანჯრები ფილების დაწყობაში შესაბამის კონტექსტში.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
@@ -21860,7 +21860,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
-        <translation>შესაბამის ფანჯრებს მითითებულ გაუმჭვირვალობამდე აბნელებს. ეს მოქმედებს მხოლოდ მაშინ, როცა ფანჯრისთვის გაუმჭვირვალობისა და ტონირების ფენა ჩართულია, გლობალური პარამეტრიდან ან წესიდან „გაუმჭვირვალობისა და ტონირების ჩვენება“. ფანჯარა, რომელსაც საკუთარი მორთულობის ჯაჭვი აქვს, ნაცვლად ამისა ამ ჯაჭვის პაკეტის პარამეტრებით ბნელდება.</translation>
+        <translation>შესაბამის ფანჯრებს მითითებულ გაუმჭვირვალობამდე აბნელებს. ეს მოქმედებს მხოლოდ მაშინ, როცა ფანჯრისთვის გაუმჭვირვალობისა და ტონის ფენა ჩართულია, გლობალური პარამეტრიდან ან წესიდან „გაუმჭვირვალობისა და ტონის ჩვენება“. ფანჯარა, რომელსაც საკუთარი მორთულობის ჯაჭვი აქვს, ნაცვლად ამისა ამ ჯაჭვის პაკეტის პარამეტრებით ბნელდება.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
@@ -21875,7 +21875,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="300"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
-        <translation>გადაფარავს დაფილვის ალგორითმის საკუთარ პარამეტრებს შესაბამისი კონტექსტისთვის. მოქმედებს მხოლოდ მაშინ, როცა ეს ალგორითმი იქ აქტიურია.</translation>
+        <translation>გადაფარავს ფილების ალგორითმის საკუთარ პარამეტრებს შესაბამისი კონტექსტისთვის. მოქმედებს მხოლოდ მაშინ, როცა ეს ალგორითმი იქ აქტიურია.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="310"/>
@@ -21910,7 +21910,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
-        <translation>შესაბამის კონტექსტში ფოკუსირებას ახდენს იმ სვეტზე, რომელზეც კურსორი გადადის, დაწკაპუნების გარეშე. ეხება მხოლოდ გადახვევის ეკრანებს, ამიტომ მიმაგრებისა და დაფილვის ეკრანები კვლავ გლობალურ პარამეტრს მიჰყვება.</translation>
+        <translation>შესაბამის კონტექსტში ფოკუსირებას ახდენს იმ სვეტზე, რომელზეც კურსორი გადადის, დაწკაპუნების გარეშე. ეხება მხოლოდ გადახვევის ეკრანებს, ამიტომ მიმაგრებისა და ფილებად დაწყობის ეკრანები კვლავ გლობალურ პარამეტრს მიჰყვება.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="357"/>
@@ -22121,17 +22121,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="100"/>
         <source>This list is full at %1 presets. Remove one to add another.</source>
-        <translation>ეს სია სავსეა %1 წინასწარი პარამეტრით. წაშალეთ ერთი, რომ სხვა დაამატოთ.</translation>
+        <translation>ეს სია სავსეა %1 შაბლონით. წაშალეთ ერთი, რომ სხვა დაამატოთ.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="102"/>
         <source>There is already a preset at this percentage.</source>
-        <translation>ამ პროცენტზე უკვე არსებობს წინასწარი პარამეტრი.</translation>
+        <translation>ამ პროცენტზე უკვე არსებობს შაბლონი.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="106"/>
         <source>A list needs at least one preset, so this one cannot be removed.</source>
-        <translation>სიას სულ მცირე ერთი წინასწარი პარამეტრი სჭირდება, ამიტომ ამის წაშლა შეუძლებელია.</translation>
+        <translation>სიას სულ მცირე ერთი შაბლონი სჭირდება, ამიტომ ამის წაშლა შეუძლებელია.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="177"/>
@@ -22142,12 +22142,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
         <source>Remove this preset</source>
-        <translation>ამ წინასწარი პარამეტრის წაშლა</translation>
+        <translation>ამ შაბლონის წაშლა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="226"/>
         <source>Add preset:</source>
-        <translation>წინასწარი პარამეტრის დამატება:</translation>
+        <translation>შაბლონის დამატება:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="233"/>
@@ -22210,19 +22210,19 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation>%1% წინასწარი პარამეტრის რედაქტირება %2-ში</translation>
+        <translation>%1% შაბლონის რედაქტირება %2-ში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
         <source>Click to edit this preset</source>
         <comment>@info:tooltip</comment>
-        <translation>დააწკაპუნეთ ამ წინასწარი პარამეტრის სარედაქტირებლად</translation>
+        <translation>დააწკაპუნეთ ამ შაბლონის სარედაქტირებლად</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="197"/>
         <source>Edit preset percentage in %1</source>
         <comment>@label:textbox</comment>
-        <translation>წინასწარი პარამეტრის პროცენტის რედაქტირება %1-ში</translation>
+        <translation>შაბლონის პროცენტის რედაქტირება %1-ში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
@@ -22234,57 +22234,57 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
         <source>Remove this preset</source>
         <comment>@info:tooltip</comment>
-        <translation>ამ წინასწარი პარამეტრის წაშლა</translation>
+        <translation>ამ შაბლონის წაშლა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="320"/>
         <source>New preset percentage for %1</source>
         <comment>@label:spinbox</comment>
-        <translation>ახალი წინასწარი პარამეტრის პროცენტი %1-ისთვის</translation>
+        <translation>ახალი შაბლონის პროცენტი %1-ისთვის</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="342"/>
         <source>Add preset to %1</source>
         <comment>@action:button</comment>
-        <translation>წინასწარი პარამეტრის დამატება %1-ში</translation>
+        <translation>შაბლონის დამატება %1-ში</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="346"/>
         <source>This list can hold at most %n preset</source>
         <translation>
-            <numerusform>ეს სია მაქსიმუმ %n წინასწარ პარამეტრს იტევს</numerusform>
-            <numerusform>ეს სია მაქსიმუმ %n წინასწარ პარამეტრს იტევს</numerusform>
+            <numerusform>ეს სია მაქსიმუმ %n შაბლონს იტევს</numerusform>
+            <numerusform>ეს სია მაქსიმუმ %n შაბლონს იტევს</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="43"/>
         <source>This size is already a preset</source>
         <comment>@info:tooltip</comment>
-        <translation>ეს ზომა უკვე წინასწარი პარამეტრია</translation>
+        <translation>ეს ზომა უკვე შაბლონია</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="349"/>
         <source>Add this size as a preset</source>
         <comment>@info:tooltip</comment>
-        <translation>ამ ზომის დამატება წინასწარ პარამეტრად</translation>
+        <translation>ამ ზომის შაბლონად დამატება</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="375"/>
         <source>No presets yet. Pick a size and add it.</source>
         <comment>@info:placeholder</comment>
-        <translation>ჯერ წინასწარი პარამეტრები არაა. აირჩიეთ ზომა და დაამატეთ.</translation>
+        <translation>ჯერ შაბლონები არაა. აირჩიეთ ზომა და დაამატეთ.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="121"/>
         <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <comment>@info</comment>
-        <translation>ეს ჩაშენებული შაბლონია. შენახვისას ინახება თქვენი საკუთარი ასლი, ხოლო ამ ასლის წაშლისას ჩაშენებული ბრუნდება.</translation>
+        <translation>ეს ჩაშენებული ნიმუშია. შენახვისას ინახება თქვენი საკუთარი ასლი, ხოლო ამ ასლის წაშლისას ჩაშენებული ბრუნდება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="130"/>
         <source>Template</source>
         <comment>@title:group</comment>
-        <translation>შაბლონი</translation>
+        <translation>ნიმუში</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="137"/>
@@ -22296,7 +22296,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="138"/>
         <source>Template description</source>
         <comment>@label:textbox</comment>
-        <translation>შაბლონის აღწერა</translation>
+        <translation>ნიმუშის აღწერა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="139"/>
@@ -22320,7 +22320,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="180"/>
         <source>Default column width</source>
         <comment>@label:listbox</comment>
-        <translation>სვეტის ნაგულისხმევი სიგანე</translation>
+        <translation>ნაგულისხმევი სვეტის სიგანე</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="185"/>
@@ -22345,7 +22345,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
         <source>Width preset</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation>სიგანის წინასწარი პარამეტრი</translation>
+        <translation>სიგანის შაბლონი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
@@ -22369,7 +22369,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="213"/>
         <source>Default column width</source>
         <comment>@label:spinbox</comment>
-        <translation>სვეტის ნაგულისხმევი სიგანე</translation>
+        <translation>ნაგულისხმევი სვეტის სიგანე</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
@@ -22381,25 +22381,25 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="256"/>
         <source>Start at preset:</source>
         <comment>@label:listbox</comment>
-        <translation>დაწყება წინასწარი პარამეტრიდან:</translation>
+        <translation>დაწყება შაბლონიდან:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="257"/>
         <source>Default width preset</source>
         <comment>@label:listbox</comment>
-        <translation>ნაგულისხმევი სიგანის წინასწარი პარამეტრი</translation>
+        <translation>ნაგულისხმევი სიგანის შაბლონი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="260"/>
         <source>No width presets yet</source>
         <comment>@info:placeholder</comment>
-        <translation>ჯერ სიგანის წინასწარი პარამეტრები არაა</translation>
+        <translation>ჯერ სიგანის შაბლონები არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="261"/>
         <source>Preset %1 (%2%)</source>
         <comment>@item:inlistbox preset number and percentage</comment>
-        <translation>წინასწარი პარამეტრი %1 (%2%)</translation>
+        <translation>შაბლონი %1 (%2%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
@@ -22423,13 +22423,13 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>ჩანართებით</translation>
+        <translation>ჩანართებიანი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
         <source>Size presets</source>
         <comment>@title:group</comment>
-        <translation>ზომის წინასწარი პარამეტრები</translation>
+        <translation>ზომის შაბლონები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="300"/>
@@ -22441,7 +22441,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="303"/>
         <source>Width presets</source>
         <comment>@label</comment>
-        <translation>სიგანის წინასწარი პარამეტრები</translation>
+        <translation>სიგანის შაბლონები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="316"/>
@@ -22453,19 +22453,19 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="319"/>
         <source>Height presets</source>
         <comment>@label</comment>
-        <translation>სიმაღლის წინასწარი პარამეტრები</translation>
+        <translation>სიმაღლის შაბლონები</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation>ნაგულისხმევი სიგანე სიგანის წინასწარ პარამეტრზეა დაყენებული, ამიტომ ამ შაბლონს სულ მცირე ერთი სიგანის წინასწარი პარამეტრი სჭირდება. მის გარეშე ის ნაცვლად ამისა ზოლის წილად შეინახება.</translation>
+        <translation>ნაგულისხმევი სიგანე სიგანის შაბლონზეა დაყენებული, ამიტომ ამ ნიმუშს სულ მცირე ერთი სიგანის შაბლონი სჭირდება. მის გარეშე ის ნაცვლად ამისა ზოლის წილად შეინახება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <comment>@info</comment>
-        <translation>წინასწარი პარამეტრები არის ის ზომები, რომლებშიც სიგანისა და სიმაღლის გადართვის მალსახმობები გადადიან, სანამ ეს შაბლონია მინიჭებული.</translation>
+        <translation>შაბლონები არის ის ზომები, რომლებშიც სიგანისა და სიმაღლის გადართვის მალსახმობები გადადიან, სანამ ეს ნიმუშია მინიჭებული.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
@@ -22508,22 +22508,22 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation>დააყენეთ შაბლონების პრიორიტეტის რიგი კლავიატურის მალსახმობებით გადართვისა და განლაგების ამრჩევისთვის. გადალაგებისთვის გადაათრიეთ მწკრივები ან გამოიყენეთ ისრიანი ღილაკები.</translation>
+        <translation>დააყენეთ ნიმუშების პრიორიტეტის რიგი კლავიატურის მალსახმობებით გადართვისა და განლაგების ამრჩევისთვის. გადალაგებისთვის გადაათრიეთ მწკრივები ან გამოიყენეთ ისრიანი ღილაკები.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
         <source>No templates available</source>
-        <translation>შაბლონები ხელმისაწვდომი არაა</translation>
+        <translation>ნიმუშები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="16"/>
         <source>Create templates on the Scrolling → Templates page first.</source>
-        <translation>ჯერ შექმენით შაბლონები გვერდზე გადახვევა → შაბლონები.</translation>
+        <translation>ჯერ შექმენით ნიმუშები გვერდზე გადახვევა → ნიმუშები.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="17"/>
         <source>Reset template order to default</source>
-        <translation>შაბლონების რიგის ნაგულისხმევზე დაბრუნება</translation>
+        <translation>ნიმუშების რიგის ნაგულისხმევზე დაბრუნება</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
@@ -22543,7 +22543,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>რომელი მიმართულებით მიდის ზოლი. „ეკრანის ფორმის მიხედვით“ მას ზემოდან ქვემოთ ატარებს, როცა გამოსაყენებელი ფართობი უფრო მაღალია, ვიდრე განიერი, სხვა შემთხვევაში კი გვერდიგვერდ. სვეტები ისევ ზოლის განივად იყოფა, მიუხედავად იმისა, რომელი მიმართულებით მიდის ის.</translation>
+        <translation>რომელი მიმართულებით მიდის ზოლი. „ეკრანის ფორმის მიხედვით“ მას ზემოდან ქვემოთ ატარებს, როცა გამოსაყენებელი ფართობი უფრო მაღალია, ვიდრე განიერი, სხვა შემთხვევაში კი მარცხნიდან მარჯვნივ. სვეტები ისევ ზოლის განივად იყოფა, მიუხედავად იმისა, რომელი მიმართულებით მიდის ის.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22561,7 +22561,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation>გამოჩენა</translation>
+        <translation>გარეგნობა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
@@ -22627,7 +22627,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="100"/>
         <source>Dim</source>
         <comment>animation event or section</comment>
-        <translation>დაბნელება</translation>
+        <translation>დაბინდვა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="103"/>
@@ -22639,13 +22639,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation>გამოჩენა</translation>
+        <translation>თანდათანობითი გამოჩენა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation>გაქრობა</translation>
+        <translation>თანდათანობითი გაქრობა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
@@ -22675,7 +22675,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>კურსორის გადატარება</translation>
+        <translation>თავზე დაცურება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
@@ -22711,7 +22711,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="142"/>
         <source>Movement</source>
         <comment>animation event or section</comment>
-        <translation>მოტივტივება</translation>
+        <translation>მოძრაობა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="145"/>
@@ -22729,7 +22729,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
         <source>Overlays</source>
         <comment>animation event or section</comment>
-        <translation>გადაფარვები</translation>
+        <translation>გადადებები</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="154"/>
@@ -22753,7 +22753,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
-        <translation>ამომხტომი</translation>
+        <translation>ამომხტომი ფანჯარა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
@@ -22777,7 +22777,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="175"/>
         <source>Reorder</source>
         <comment>animation event or section</comment>
-        <translation>გადალაგება</translation>
+        <translation>თანმიმდევრობის შეცვლა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="178"/>
@@ -22801,13 +22801,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="187"/>
         <source>Slide In</source>
         <comment>animation event or section</comment>
-        <translation>შემოსრიალება</translation>
+        <translation>შემოცურება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="190"/>
         <source>Slide Out</source>
         <comment>animation event or section</comment>
-        <translation>გასრიალება</translation>
+        <translation>გამოსრიალება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="193"/>
@@ -22825,13 +22825,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
         <source>Snap In</source>
         <comment>animation event or section</comment>
-        <translation>მიმაგრება</translation>
+        <translation>ზონაში მიმაგრება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="202"/>
         <source>Snap Out</source>
         <comment>animation event or section</comment>
-        <translation>მოხსნა</translation>
+        <translation>ზონიდან მოხსნა</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
@@ -22897,13 +22897,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
         <source>Zone Overlay Flash</source>
         <comment>animation event or section</comment>
-        <translation>ზონების გადაფარვის აელვარება</translation>
+        <translation>ზონების გადადების აელვარება</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="238"/>
         <source>Zone Selector</source>
         <comment>animation event or section</comment>
-        <translation>ზონის ამრჩევი</translation>
+        <translation>ზონის ამომრჩევი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="56"/>
@@ -22964,7 +22964,7 @@
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="338"/>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="153"/>
         <source>Tiling (no algorithm)</source>
-        <translation>დაფილვა (ალგორითმის გარეშე)</translation>
+        <translation>ფილებად დაწყობა (ალგორითმის გარეშე)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="170"/>

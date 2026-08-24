@@ -1147,7 +1147,7 @@
     <message>
         <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="729"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
-        <translation>Indelingkiezer: bevestigen (Enter op numeriek toetsenbord)</translation>
+        <translation>Indelingskiezer: bevestigen (Enter op numeriek toetsenbord)</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="22"/>
@@ -2043,7 +2043,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="133"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
-        <translation>Een scrollvenster in schermvullend-in-venster telt hier als schermvullend.</translation>
+        <translation>Een scrollvenster dat schermvullend in venster is, telt hier als schermvullend.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="135"/>
@@ -2168,12 +2168,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="201"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
-        <translation>De indeling die op de monitor actief is, of het scrollsjabloon dat daar in gebruik is. Hiermee kan een regel de marges, de overlay of de vergrendelstatus wijzigen voor het scherm dat een bepaalde indeling of sjabloon toont. De regel kan niet wijzigen welke indeling is toegewezen, dat zou circulair zijn.</translation>
+        <translation>De indeling die op de monitor actief is, of het scrollsjabloon dat daar in gebruik is. Hiermee kan een regel de tussenruimten, de overlay of de vergrendelstatus wijzigen voor het scherm dat een bepaalde indeling of sjabloon toont. De regel kan niet wijzigen welke indeling is toegewezen, dat zou circulair zijn.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation>Of het kleurschema van het systeem licht of donker is. Hiermee kan een regel andere marges, overlaykleuren of indelingen kiezen wanneer het bureaublad wisselt tussen dag- en nachtthema&apos;s. De regels worden opnieuw toegepast zodra het thema verandert.</translation>
+        <translation>Of het kleurschema van het systeem licht of donker is. Hiermee kan een regel andere tussenruimten, overlaykleuren of indelingen kiezen wanneer het bureaublad wisselt tussen dag- en nachtthema&apos;s. De regels worden opnieuw toegepast zodra het thema verandert.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2550,7 +2550,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="134"/>
         <source>Drop the outer gaps for a lone column (off = keep them)</source>
-        <translation>De buitenmarges weglaten bij een enkele kolom (uit = ze behouden)</translation>
+        <translation>De buitenste tussenruimten weglaten bij een enkele kolom (uit = ze behouden)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="137"/>
@@ -2675,7 +2675,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="252"/>
         <source>Show on-screen displays here (off = hide them)</source>
-        <translation>Schermmeldingen hier tonen (uit = ze verbergen)</translation>
+        <translation>Schermweergaven hier tonen (uit = ze verbergen)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="255"/>
@@ -2812,7 +2812,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="267"/>
         <source>Open at window height</source>
-        <translation>Openen op deze vensterhoogte</translation>
+        <translation>Openen op vensterhoogte</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="270"/>
@@ -3065,7 +3065,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="462"/>
         <source>Show on-screen displays</source>
-        <translation>Schermmeldingen tonen</translation>
+        <translation>Schermweergaven tonen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="470"/>
@@ -3100,12 +3100,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Show on-screen displays here</source>
-        <translation>Schermmeldingen hier tonen</translation>
+        <translation>Schermweergaven hier tonen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="631"/>
         <source>Hide on-screen displays here</source>
-        <translation>Schermmeldingen hier verbergen</translation>
+        <translation>Schermweergaven hier verbergen</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="637"/>
@@ -3146,7 +3146,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="288"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="667"/>
         <source>Drop the outer gaps for a lone column</source>
-        <translation>De buitenmarges weglaten bij een enkele kolom</translation>
+        <translation>De buitenste tussenruimten weglaten bij een enkele kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
@@ -3156,7 +3156,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Keep the outer gaps for a lone column</source>
-        <translation>De buitenmarges behouden bij een enkele kolom</translation>
+        <translation>De buitenste tussenruimten behouden bij een enkele kolom</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
@@ -3533,7 +3533,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
         <source>Plasma applet popup</source>
-        <translation>Plasma-appletpopup</translation>
+        <translation>Pop-up van een Plasma-applet</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="300"/>
@@ -4030,7 +4030,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="198"/>
         <source>Preset width</source>
-        <translation>Vooringestelde breedte</translation>
+        <translation>Breedtevoorinstelling</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="208"/>
@@ -4049,7 +4049,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
-        <translation>Vooringestelde hoogte</translation>
+        <translation>Hoogtevoorinstelling</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="214"/>
@@ -4097,7 +4097,7 @@
         <location filename="../src/config/settingsvaluelabels.cpp" line="227"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="424"/>
         <source>Titled chips</source>
-        <translation>Chips met titel</translation>
+        <translation>Blokjes met titel</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="228"/>
@@ -4768,7 +4768,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="737"/>
         <source>Tab indicator style (invalid)</source>
-        <translation>Stijl van tabbladindicator (ongeldig)</translation>
+        <translation>Stijl van de tabbladindicator (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="738"/>
@@ -4778,7 +4778,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="743"/>
         <source>Tab indicator position (invalid)</source>
-        <translation>Positie van tabbladindicator (ongeldig)</translation>
+        <translation>Positie van de tabbladindicator (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="744"/>
@@ -4788,12 +4788,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="748"/>
         <source>Tab indicator gap: %1 px</source>
-        <translation>Tussenruimte van tabbladindicator: %1 px</translation>
+        <translation>Tussenruimte rond de tabbladindicator: %1 px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="749"/>
         <source>Tab indicator gap (invalid)</source>
-        <translation>Tussenruimte van tabbladindicator (ongeldig)</translation>
+        <translation>Tussenruimte rond de tabbladindicator (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="753"/>
@@ -4803,12 +4803,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="754"/>
         <source>Tab indicator thickness (invalid)</source>
-        <translation>Dikte van tabbladindicator (ongeldig)</translation>
+        <translation>Dikte van de tabbladindicator (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="759"/>
         <source>Tab indicator length (invalid)</source>
-        <translation>Lengte van tabbladindicator (ongeldig)</translation>
+        <translation>Lengte van de tabbladindicator (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
@@ -4828,7 +4828,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="770"/>
         <source>Tab corner radius (invalid)</source>
-        <translation>Hoekradius van tabblad (ongeldig)</translation>
+        <translation>Hoekradius van tabbladen (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="774"/>
@@ -5000,7 +5000,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
         <source>Right gap (invalid)</source>
-        <translation>Rechtermarge (ongeldig)</translation>
+        <translation>Tussenruimte rechts (ongeldig)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
@@ -5099,7 +5099,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="967"/>
         <source>Outer gap (invalid)</source>
-        <translation>Buitenmarge (ongeldig)</translation>
+        <translation>Buitenste tussenruimte (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
@@ -5109,7 +5109,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Top gap (invalid)</source>
-        <translation>Bovenmarge (ongeldig)</translation>
+        <translation>Tussenruimte boven (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
@@ -5119,7 +5119,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
         <source>Bottom gap (invalid)</source>
-        <translation>Ondermarge (ongeldig)</translation>
+        <translation>Tussenruimte onder (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
@@ -5129,7 +5129,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
         <source>Left gap (invalid)</source>
-        <translation>Linkermarge (ongeldig)</translation>
+        <translation>Tussenruimte links (ongeldig)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
@@ -7029,7 +7029,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="251"/>
         <source>applet popup</source>
-        <translation>appletpopup</translation>
+        <translation>applet-pop-up</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
@@ -9206,7 +9206,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="797"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="54"/>
         <source>Trigger width</source>
-        <translation>Breedte van het triggergebied</translation>
+        <translation>Triggerbreedte</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="802"/>
@@ -9493,7 +9493,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
-        <translation>Voorinstellingen voor easing</translation>
+        <translation>Voorinstellingen voor versoepeling</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1064"/>
@@ -9538,13 +9538,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="30"/>
         <source>Applet Popup Shown</source>
-        <translation>Appletpopup getoond</translation>
+        <translation>Applet-pop-up getoond</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="35"/>
         <source>Applet Popup Hidden</source>
-        <translation>Appletpopup verborgen</translation>
+        <translation>Applet-pop-up verborgen</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="134"/>
@@ -9780,7 +9780,7 @@
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="200"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="520"/>
         <source>The daemon refused the template. Check that it has a name.</source>
-        <translation>De achtergronddienst heeft het sjabloon geweigerd. Controleer of het een naam heeft.</translation>
+        <translation>De daemon heeft het sjabloon geweigerd. Controleer of het een naam heeft.</translation>
     </message>
     <message>
         <location filename="../src/editor/controller/scrollingtemplate.cpp" line="213"/>
@@ -9844,7 +9844,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="603"/>
         <source>Could not open the editor. The daemon may not be running.</source>
-        <translation>De editor kon niet worden geopend. Mogelijk draait de achtergronddienst niet.</translation>
+        <translation>De editor kon niet worden geopend. Mogelijk draait de daemon niet.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="609"/>
@@ -11531,7 +11531,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="186"/>
         <source>Resize column 1%</source>
         <comment>@action</comment>
-        <translation>Kolomformaat 1% wijzigen</translation>
+        <translation>Kolomformaat met 1% wijzigen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="192"/>
@@ -13223,7 +13223,7 @@
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="139"/>
         <source>Snapping is inspired by FancyZones and scrolling by the niri compositor.</source>
         <oldsource>Inspired by FancyZones, extended with automatic tiling.</oldsource>
-        <translation>Vastklikken is geïnspireerd op FancyZones en scrollen op de compositor niri.</translation>
+        <translation>Vastklikken is geïnspireerd op FancyZones en scrollen op de niri-compositor.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/AboutPage.qml.cpp" line="149"/>
@@ -13387,17 +13387,17 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="58"/>
         <source>GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.</source>
-        <translation>GPU die de zone-overlays en schermmeldingen tekent. Bij Automatisch beslist het grafische stuurprogramma. KWin stelt de vensterinhoud samen, die blijft dus ongewijzigd.</translation>
+        <translation>GPU die de zone-overlays en schermweergaven tekent. Bij Automatisch beslist het grafische stuurprogramma. KWin stelt de vensterinhoud samen, die blijft dus ongewijzigd.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
         <source>Stop the daemon to change rendering settings.</source>
-        <translation>Stop de achtergronddienst om de renderinstellingen te wijzigen.</translation>
+        <translation>Stop de daemon om de renderinstellingen te wijzigen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
         <source>Rendering changes take effect after restarting the daemon.</source>
-        <translation>Wijzigingen in het renderen worden actief nadat de achtergronddienst is herstart.</translation>
+        <translation>Wijzigingen in het renderen worden actief nadat de daemon is herstart.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="156"/>
@@ -14211,7 +14211,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="182"/>
         <source>Stopping the PlasmaZones daemon disables window snapping, tiling and scrolling until you start it again.</source>
         <oldsource>Stopping the PlasmaZones daemon disables window tiling and snapping until you start it again.</oldsource>
-        <translation>Als u de PlasmaZones-achtergronddienst stopt, zijn vensters vastklikken, tegelen en scrollen uitgeschakeld tot u die weer start.</translation>
+        <translation>Als u de PlasmaZones-daemon stopt, zijn vensters vastklikken, tegelen en scrollen uitgeschakeld tot u die weer start.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="186"/>
@@ -15724,7 +15724,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation>Randkleur bij actief</translation>
+        <translation>Kleur van actieve rand</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
@@ -15753,7 +15753,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation>Randkleur bij inactief</translation>
+        <translation>Kleur van inactieve rand</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
@@ -15841,7 +15841,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="688"/>
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
-        <translation>Andere vensters behouden hun decoratie maar bewegen niet meer. Dat bespaart grafische belasting ongeveer in verhouding tot het aantal geopende vensters. Panelen en appletpopups blijven animeren, omdat een paneel nooit het actieve venster is.</translation>
+        <translation>Andere vensters behouden hun decoratie maar bewegen niet meer. Dat bespaart grafische belasting ongeveer in verhouding tot het aantal geopende vensters. Panelen en applet-pop-ups blijven animeren, omdat een paneel nooit het actieve venster is.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -16534,7 +16534,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="481"/>
         <source>Start the PlasmaZones daemon to create a template, or import one</source>
-        <translation>Start de PlasmaZones-achtergronddienst om een sjabloon aan te maken, of importeer er een</translation>
+        <translation>Start de PlasmaZones-daemon om een sjabloon aan te maken, of importeer er een</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="485"/>
@@ -17577,7 +17577,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="258"/>
         <source>This template starts no columns</source>
         <comment>@info:placeholder</comment>
-        <translation>Dit sjabloon begint met geen kolommen</translation>
+        <translation>Dit sjabloon begint zonder kolommen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="259"/>
@@ -17596,7 +17596,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation>Met tabbladen</translation>
+        <translation>Tabbladen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17899,16 +17899,16 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="161"/>
         <source>%n animation action that cannot run</source>
         <translation>
-            <numerusform>%n animatieactie die niet kan draaien</numerusform>
-            <numerusform>%n animatieacties die niet kunnen draaien</numerusform>
+            <numerusform>%n animatieactie die niet kan worden uitgevoerd</numerusform>
+            <numerusform>%n animatieacties die niet kunnen worden uitgevoerd</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="165"/>
         <source>This rule has %n animation action naming an event that does not belong to a window, so it never runs. Rules match windows.</source>
         <translation>
-            <numerusform>Deze regel heeft %n animatieactie die een gebeurtenis noemt die niet bij een venster hoort, dus die draait nooit. Regels komen overeen met vensters.</numerusform>
-            <numerusform>Deze regel heeft %n animatieacties die een gebeurtenis noemen die niet bij een venster hoort, dus die draaien nooit. Regels komen overeen met vensters.</numerusform>
+            <numerusform>Deze regel heeft %n animatieactie die een gebeurtenis noemt die niet bij een venster hoort, dus die wordt nooit uitgevoerd. Regels komen overeen met vensters.</numerusform>
+            <numerusform>Deze regel heeft %n animatieacties die een gebeurtenis noemen die niet bij een venster hoort, dus die worden nooit uitgevoerd. Regels komen overeen met vensters.</numerusform>
         </translation>
     </message>
     <message>
@@ -19223,7 +19223,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="100"/>
         <source>Inactive zone color</source>
         <comment>@action:button</comment>
-        <translation>Kleur voor inactieve zone</translation>
+        <translation>Kleur van inactieve zone</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="71"/>
@@ -19443,7 +19443,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="87"/>
         <source>How long after the trigger is released a drop still counts as holding it. The picker is decided at the moment you let go of the window, which is when a trigger held by the same hand has usually lifted already. Set 0 to turn it off.</source>
-        <translation>Hoe lang na het loslaten van de trigger een neerzetting nog telt als vastgehouden. De kiezer wordt bepaald op het moment dat u het venster loslaat, en dan is een trigger die dezelfde hand vasthield meestal al omhoog. Zet 0 om het uit te schakelen.</translation>
+        <translation>Hoe lang na het loslaten van de trigger een venster neerzetten nog telt als vastgehouden. De kiezer wordt bepaald op het moment dat u het venster loslaat, en dan is een trigger die dezelfde hand vasthield meestal al omhoog. Zet 0 om het uit te schakelen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="88"/>
@@ -19515,7 +19515,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="76"/>
         <source>How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.</source>
-        <translation>Hoe lang het overspannen actief blijft nadat de overspantoets is losgelaten, zodat een venster dat vlak daarna wordt neergezet nog de getekende zones inneemt. Handig als de toets een muisknop is die met het neerzetten wordt losgelaten. Zet 0 om het uit te schakelen.</translation>
+        <translation>Hoe lang het overspannen actief blijft nadat de overspanningstoets is losgelaten, zodat een venster dat vlak daarna wordt neergezet nog de getekende zones inneemt. Handig als de toets een muisknop is die met het neerzetten wordt losgelaten. Zet 0 om het uit te schakelen.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
@@ -19893,7 +19893,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation>Bij Nooit blijft de strook stilstaan tot de gefocuste kolom het scherm zou verlaten. Bij Altijd parkeert de gefocuste kolom in het midden. Bij Bij overloop wordt pas gecentreerd zodra de strook voorbij de schermrand loopt.</translation>
+        <translation>Bij Nooit blijft de strook stilstaan tot de gefocuste kolom het scherm zou verlaten. Bij Altijd parkeert de gefocuste kolom in het midden. Met de instelling Bij overloop wordt pas gecentreerd zodra de strook voorbij de schermrand loopt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
@@ -21043,7 +21043,7 @@
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="548"/>
         <source>No columns yet. Drop here to start the strip.</source>
         <comment>@info strip selector empty state</comment>
-        <translation>Nog geen kolommen. Zet hier iets neer om de strook te starten.</translation>
+        <translation>Nog geen kolommen. Zet hier een venster neer om de strook te starten.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/ZoneSelectorContent.qml.cpp" line="645"/>
@@ -21228,7 +21228,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="147"/>
         <source>Titled chips label each window. A segment bar is thinner and shows only how many there are.</source>
         <oldsource>Titled chips name each window. A segment bar is thinner and shows only how many there are.</oldsource>
-        <translation>Chips met titel benoemen elk venster. Een segmentbalk is dunner en toont alleen hoeveel er zijn.</translation>
+        <translation>Blokjes met titel benoemen elk venster. Een segmentbalk is dunner en toont alleen hoeveel er zijn.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="270"/>
@@ -21277,7 +21277,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation>De vensters verkleinen zodat de indicator past. Uit wordt hij naast de kolom getekend en kan hij een buur overlappen of van het scherm lopen.</translation>
+        <translation>De vensters verkleinen zodat de indicator past. Staat dit uit, dan wordt hij naast de kolom getekend en kan hij een buur overlappen of van het scherm lopen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
@@ -21297,7 +21297,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="294"/>
         <source>How thick the indicator is. When it makes room inside the column, this is exactly how much room it takes. A segment bar reads well at a few pixels. Titled chips need enough for their labels, which on a left or right edge means a lot.</source>
-        <translation>Hoe dik de indicator is. Wanneer die ruimte maakt binnen de kolom, is dit precies de ruimte die hij inneemt. Een segmentbalk leest al goed bij een paar pixels. Chips met titel hebben genoeg nodig voor hun labels, wat op een linker- of rechterrand veel betekent.</translation>
+        <translation>Hoe dik de indicator is. Wanneer die ruimte maakt binnen de kolom, is dit precies de ruimte die hij inneemt. Een segmentbalk leest al goed bij een paar pixels. Blokjes met titel hebben genoeg nodig voor hun labels, wat op een linker- of rechterrand veel betekent.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="495"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation>Elk tabblad tot een pil afronden. Uit geldt in plaats daarvan de hoekradius hieronder.</translation>
+        <translation>Elk tabblad tot een pil afronden. Staat dit uit, dan geldt in plaats daarvan de hoekradius hieronder.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
@@ -21520,7 +21520,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
-        <translation>Bepaalt welke plaatsingsmotor (vastklikken, tegelen of scrollen) draait op het overeenkomende scherm, bureaublad of activiteit.</translation>
+        <translation>Bepaalt welke plaatsingsengine (vastklikken, tegelen of scrollen) draait op het overeenkomende scherm, bureaublad of activiteit.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
@@ -21540,7 +21540,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
         <source>Turns the named engine off for the matched screen, desktop or activity.</source>
-        <translation>Schakelt de genoemde motor uit voor het overeenkomende scherm, bureaublad of activiteit.</translation>
+        <translation>Schakelt de genoemde engine uit voor het overeenkomende scherm, bureaublad of activiteit.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="45"/>
@@ -21550,12 +21550,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="48"/>
         <source>Allows or suppresses the automatic default layout for the matched context. Off means no engine activates there until you assign one yourself.</source>
-        <translation>Staat de automatische standaardindeling voor de overeenkomende context toe of onderdrukt die. Uit betekent dat daar geen motor start tot u er zelf een toewijst.</translation>
+        <translation>Staat de automatische standaardindeling voor de overeenkomende context toe of onderdrukt die. Staat dit uit, dan start daar geen engine tot u er zelf een toewijst.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation>Toont of verbergt schermmeldingen voor het overeenkomende scherm, bureaublad of activiteit. Uit zwijgen de indelings- en navigatiepopups daar. Aan worden ze getoond, ook als de globale schakelaars uit staan, al verbergt de weergavestijl Geen nog steeds alles.</translation>
+        <translation>Toont of verbergt schermweergaven voor het overeenkomende scherm, bureaublad of activiteit. Staat dit uit, dan blijven de indelings- en navigatie-pop-ups daar stil. Staat het aan, dan worden ze getoond, ook als de globale schakelaars uit staan, al verbergt de weergavestijl Geen nog steeds alles.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
@@ -21600,7 +21600,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="117"/>
         <source>When a matching floating window is unfloated without a remembered zone, places it into a zone anyway. Overrides the global fallback setting for this window.</source>
-        <translation>Wanneer een overeenkomend zwevend venster wordt teruggehaald zonder onthouden zone, wordt het toch in een zone geplaatst. Gaat voor op de globale terugvalinstelling voor dit venster.</translation>
+        <translation>Wanneer een overeenkomend zwevend venster niet meer mag zweven en er geen zone is onthouden, wordt het toch in een zone geplaatst. Gaat voor op de globale terugvalinstelling voor dit venster.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="122"/>
@@ -21730,7 +21730,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation>Bepaalt de zoneranderkleur van de overlay voor de overeenkomende context.</translation>
+        <translation>Bepaalt de zonerandkleur van de overlay voor de overeenkomende context.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
@@ -21765,32 +21765,32 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
-        <translation>Bepaalt de uniforme marge rond de schermrand voor de overeenkomende context.</translation>
+        <translation>Bepaalt de uniforme tussenruimte rond de schermrand voor de overeenkomende context.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
-        <translation>Schakelt de overeenkomende context tussen één uniforme buitenmarge en buitenmarges per zijde.</translation>
+        <translation>Schakelt de overeenkomende context tussen één uniforme buitenste tussenruimte en buitenste tussenruimten per zijde.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
         <source>Sets the top outer gap for the matched context.</source>
-        <translation>Bepaalt de bovenste buitenmarge voor de overeenkomende context.</translation>
+        <translation>Bepaalt de buitenste tussenruimte boven voor de overeenkomende context.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
         <source>Sets the bottom outer gap for the matched context.</source>
-        <translation>Bepaalt de onderste buitenmarge voor de overeenkomende context.</translation>
+        <translation>Bepaalt de buitenste tussenruimte onder voor de overeenkomende context.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
         <source>Sets the left outer gap for the matched context.</source>
-        <translation>Bepaalt de linker buitenmarge voor de overeenkomende context.</translation>
+        <translation>Bepaalt de buitenste tussenruimte links voor de overeenkomende context.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
         <source>Sets the right outer gap for the matched context.</source>
-        <translation>Bepaalt de rechter buitenmarge voor de overeenkomende context.</translation>
+        <translation>Bepaalt de buitenste tussenruimte rechts voor de overeenkomende context.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
@@ -21830,7 +21830,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
         <source>Keeps columns on the matched context at least as large as each window asks to be. Off lets a column go smaller, which the compositor then clamps on its own.</source>
-        <translation>Houdt kolommen in de overeenkomende context minstens zo groot als elk venster vraagt. Uit mag een kolom kleiner worden, wat de compositor dan zelf begrenst.</translation>
+        <translation>Houdt kolommen in de overeenkomende context minstens zo groot als elk venster vraagt. Staat dit uit, dan mag een kolom kleiner worden, wat de compositor dan zelf begrenst.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="66"/>
@@ -21840,7 +21840,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation>Toont of verbergt de popup van de sleepkiezer voor het overeenkomende scherm, bureaublad of activiteit. Uit biedt een venster slepen bij de triggerrand daar geen kiezer. Aan wordt die ook geboden wanneer de globale kiezerschakelaar voor dat scherm uit staat.</translation>
+        <translation>Toont of verbergt de pop-up van de sleepkiezer voor het overeenkomende scherm, bureaublad of activiteit. Staat dit uit, dan levert een venster naar de triggerrand slepen daar geen kiezer op. Staat het aan, dan wordt die ook geboden wanneer de globale kiezerschakelaar voor dat scherm uit staat.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
@@ -21850,7 +21850,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
         <source>Controls whether a matching floated window returns to its remembered position and monitor when it reopens, during the session or after a logout. Overrides the restore-previous-position setting of whichever engine owns the screen.</source>
-        <translation>Bepaalt of een overeenkomend zwevend venster bij heropenen terugkeert naar zijn onthouden positie en monitor, binnen de sessie of na een afmelding. Gaat voor op de instelling voor het herstellen van de vorige positie van de motor die het scherm bezit.</translation>
+        <translation>Bepaalt of een overeenkomend zwevend venster bij heropenen terugkeert naar zijn onthouden positie en monitor, binnen de sessie of na een afmelding. Gaat voor op de instelling voor het herstellen van de vorige positie van de engine die het scherm bezit.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="157"/>
@@ -21905,7 +21905,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
         <source>Drops the outer gaps on the matched context while a single column is on the strip, so a lone window fills the screen.</source>
-        <translation>Laat in de overeenkomende context de buitenmarges weg zolang er één kolom op de strook staat, zodat een enkel venster het scherm vult.</translation>
+        <translation>Laat in de overeenkomende context de buitenste tussenruimten weg zolang er één kolom op de strook staat, zodat een enkel venster het scherm vult.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
@@ -22163,13 +22163,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
-        <translation>Sleep op een scrollscherm een venster naar de ingestelde schermrand om een popup met de huidige strook te openen. Zet het tussen twee kolommen neer om een nieuwe kolom in te voegen, op een kolom met tabbladen om het venster als tabblad toe te voegen, of op de bovenste of onderste helft van een kolom om het daar te stapelen.</translation>
+        <translation>Sleep op een scrollscherm een venster naar de ingestelde schermrand om een pop-up met de huidige strook te openen. Zet het tussen twee kolommen neer om een nieuwe kolom in te voegen, op een kolom met tabbladen om het venster als tabblad toe te voegen, of op de bovenste of onderste helft van een kolom om het daar te stapelen.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
-        <translation>Popup van de strookkiezer</translation>
+        <translation>Pop-up van de strookkiezer</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="101"/>
@@ -22179,7 +22179,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="105"/>
         <source>Enable strip selector popup</source>
-        <translation>Popup van de strookkiezer inschakelen</translation>
+        <translation>Pop-up van de strookkiezer inschakelen</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
@@ -22423,7 +22423,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>Met tabbladen</translation>
+        <translation>Tabbladen</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
@@ -22459,7 +22459,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation>De standaardbreedte staat op een breedtevoorinstelling, dus dit sjabloon heeft minstens één breedtevoorinstelling nodig. Zonder een slaat het in plaats daarvan op als fractie van de strook.</translation>
+        <translation>De standaardbreedte staat op een breedtevoorinstelling, dus dit sjabloon heeft minstens één breedtevoorinstelling nodig. Zonder zo'n voorinstelling wordt het in plaats daarvan opgeslagen als fractie van de strook.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
@@ -22485,7 +22485,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation>Animaties voor de oppervlakken die de Plasma-shell bezit, zoals de programmastarter en de popups van het systeemvak. Geen shader die u voor uw eigen vensters kiest bereikt ze, dus elke rij begint zonder shader en er een kiezen is de hele aanmelding. Tot u er een kiest, animeren deze oppervlakken zoals Plasma ze animeert. “Alle shell-oppervlakken” is de standaard voor beide gebeurtenissen, en beide kunnen die overschrijven. Panelen hebben hier geen rijen, omdat een paneel de hele sessie op het scherm blijft in plaats van te openen en te sluiten.</translation>
+        <translation>Animaties voor de oppervlakken die de Plasma-shell bezit, zoals de programmastarter en de pop-ups van het systeemvak. Geen shader die u voor uw eigen vensters kiest bereikt ze, dus elke rij begint zonder shader en er een kiezen is alles wat nodig is om ze in te schakelen. Tot u er een kiest, animeren deze oppervlakken zoals Plasma ze animeert. “Alle shell-oppervlakken” is de standaard voor beide gebeurtenissen, en beide kunnen die overschrijven. Panelen hebben hier geen rijen, omdat een paneel de hele sessie op het scherm blijft in plaats van te openen en te sluiten.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
@@ -22503,12 +22503,12 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="35"/>
         <source>Applet Popups</source>
-        <translation>Appletpopups</translation>
+        <translation>Applet-pop-ups</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
         <source>Set the priority order for templates when cycling with keyboard shortcuts and in the layout picker. Drag rows or use the arrow buttons to reorder.</source>
-        <translation>Stel de prioriteitsvolgorde van sjablonen in voor het doorlopen met sneltoetsen en in de indelingkiezer. Sleep rijen of gebruik de pijlknoppen om ze te herordenen.</translation>
+        <translation>Stel de prioriteitsvolgorde van sjablonen in voor het doorlopen met sneltoetsen en in de indelingskiezer. Sleep rijen of gebruik de pijlknoppen om ze te herordenen.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="15"/>
@@ -22543,7 +22543,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>Welke kant de strook op loopt. “Volg de vorm van het scherm” laat hem van boven naar beneden lopen wanneer het bruikbare gebied hoger is dan breed, en anders naast elkaar. Kolommen verdelen zich nog steeds dwars op de strook, welke kant die ook op loopt.</translation>
+        <translation>Welke kant de strook op loopt. “Volg de vorm van het scherm” zet de kolommen boven elkaar wanneer het bruikbare gebied hoger is dan breed, en anders naast elkaar. Kolommen verdelen zich nog steeds dwars op de strook, welke kant die ook op loopt.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22561,13 +22561,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation>Verschijning</translation>
+        <translation>Uiterlijk</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
-        <translation>Appletpopup</translation>
+        <translation>Applet-pop-up</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
@@ -22603,7 +22603,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
         <source>Click</source>
         <comment>animation event or section</comment>
-        <translation>Klik</translation>
+        <translation>Klikken</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="91"/>
@@ -22639,13 +22639,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation>Invloeien</translation>
+        <translation>Invagen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation>Uitvloeien</translation>
+        <translation>Uitvagen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
@@ -22663,7 +22663,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
         <source>Global</source>
         <comment>animation event or section</comment>
-        <translation>Globaal</translation>
+        <translation>Algemeen</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="121"/>
@@ -22675,19 +22675,19 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>Aanwijzen</translation>
+        <translation>Zweven</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
         <source>Layout Picker</source>
         <comment>animation event or section</comment>
-        <translation>Indelingkiezer</translation>
+        <translation>Indelingskiezer</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="130"/>
         <source>Layout Switch</source>
         <comment>animation event or section</comment>
-        <translation>Indelingwissel</translation>
+        <translation>Indelingswissel</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="133"/>
@@ -22723,7 +22723,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="148"/>
         <source>OSD</source>
         <comment>animation event or section</comment>
-        <translation>Schermmelding</translation>
+        <translation>Schermweergave</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="151"/>
@@ -22753,7 +22753,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
-        <translation>Popup</translation>
+        <translation>Pop-up</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
@@ -22837,7 +22837,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="205"/>
         <source>Snap Resize</source>
         <comment>animation event or section</comment>
-        <translation>Formaat bij vastklikken</translation>
+        <translation>Formaat wijzigen bij vastklikken</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="208"/>
@@ -22891,7 +22891,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="232"/>
         <source>Zone Highlight</source>
         <comment>animation event or section</comment>
-        <translation>Zonemarkering</translation>
+        <translation>Zone-markering</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="235"/>
@@ -22913,7 +22913,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="61"/>
         <source>Edge auto-scroll trigger width</source>
-        <translation>Breedte van het triggergebied voor automatisch scrollen aan de rand</translation>
+        <translation>Triggerbreedte voor automatisch scrollen aan de rand</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="85"/>
@@ -22980,12 +22980,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. Set the animation for this event on the Animations pages instead, where it applies everywhere.</source>
-        <translation>Regels komen overeen met vensters, en deze gebeurtenis hoort bij geen venster, dus deze actie draait nooit. Stel de animatie voor deze gebeurtenis in plaats daarvan in op de animatiepagina&apos;s, waar die overal geldt.</translation>
+        <translation>Regels komen overeen met vensters, en deze gebeurtenis hoort bij geen venster, dus deze actie wordt nooit uitgevoerd. Stel de animatie voor deze gebeurtenis in plaats daarvan in op de animatiepagina&apos;s, waar die overal geldt.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
-        <translation>Regels komen overeen met vensters, en deze gebeurtenis hoort bij geen venster, dus deze actie draait nooit. Deze gebeurtenis neemt nergens een shader aan, dus de actie kan worden verwijderd.</translation>
+        <translation>Regels komen overeen met vensters, en deze gebeurtenis hoort bij geen venster, dus deze actie wordt nooit uitgevoerd. Deze gebeurtenis neemt nergens een shader aan, dus de actie kan worden verwijderd.</translation>
     </message>
 </context>
 </TS>

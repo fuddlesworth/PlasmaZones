@@ -100,7 +100,7 @@
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
         <source>Back to %1</source>
-        <translation>Wstecz do %1</translation>
+        <translation>Powrót do %1</translation>
     </message>
     <message>
         <location filename="../libs/phosphor-control/qml/SidebarBackButton.qml" line="34"/>
@@ -336,7 +336,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
         <source>Switch Focus Between Floating and Placed Windows</source>
-        <translation>Przełącz zaznaczenie między oknami pływającymi a rozmieszczonymi</translation>
+        <translation>Przełącz uaktywnienie między oknami pływającymi a rozmieszczonymi</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="163"/>
@@ -511,32 +511,32 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="441"/>
         <source>Focus First Window in Column</source>
-        <translation>Zaznacz pierwsze okno w kolumnie</translation>
+        <translation>Uaktywnij pierwsze okno w kolumnie</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="446"/>
         <source>Focus Last Window in Column</source>
-        <translation>Zaznacz ostatnie okno w kolumnie</translation>
+        <translation>Uaktywnij ostatnie okno w kolumnie</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="452"/>
         <source>Focus Previous Column, Stopping at the Edge</source>
-        <translation>Zaznacz poprzednią kolumnę, zatrzymując się na krawędzi</translation>
+        <translation>Uaktywnij poprzednią kolumnę, zatrzymując się na krawędzi</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="458"/>
         <source>Focus Next Column, Stopping at the Edge</source>
-        <translation>Zaznacz następną kolumnę, zatrzymując się na krawędzi</translation>
+        <translation>Uaktywnij następną kolumnę, zatrzymując się na krawędzi</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="464"/>
         <source>Focus Previous Column, Wrapping</source>
-        <translation>Zaznacz poprzednią kolumnę z zawijaniem</translation>
+        <translation>Uaktywnij poprzednią kolumnę z zawijaniem</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="470"/>
         <source>Focus Next Column, Wrapping</source>
-        <translation>Zaznacz następną kolumnę z zawijaniem</translation>
+        <translation>Uaktywnij następną kolumnę z zawijaniem</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
@@ -591,7 +591,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="416"/>
         <source>Cycle Window Height Preset Back</source>
-        <translation>Przełączaj wstępną wysokość okna wstecz</translation>
+        <translation>Przełączaj nastawę wysokości okna wstecz</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="421"/>
@@ -669,17 +669,17 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="168"/>
         <source>Switch Floating and Placed Focus</source>
-        <translation>Przełącz zaznaczenie między pływającymi a rozmieszczonymi</translation>
+        <translation>Przełącz uaktywnienie między pływającymi a rozmieszczonymi</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="169"/>
         <source>Moves focus between the floating windows and the placed layout. It returns to the window that last had focus there when that window is still available.</source>
-        <translation>Przenosi zaznaczenie między oknami pływającymi a rozmieszczonym układem. Wraca do okna, które ostatnio było tam zaznaczone, o ile jest nadal dostępne.</translation>
+        <translation>Przenosi uaktywnienie między oknami pływającymi a rozmieszczonym układem. Wraca do okna, które ostatnio było tam uaktywnione, o ile jest nadal dostępne.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="172"/>
         <source>Moves focus between the floating windows and the scrolling columns. It returns to the window that last had focus there when that window is still available.</source>
-        <translation>Przenosi zaznaczenie między oknami pływającymi a kolumnami przewijania. Wraca do okna, które ostatnio było tam zaznaczone, o ile jest nadal dostępne.</translation>
+        <translation>Przenosi uaktywnienie między oknami pływającymi a kolumnami przewijania. Wraca do okna, które ostatnio było tam uaktywnione, o ile jest nadal dostępne.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="182"/>
@@ -714,22 +714,22 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
         <source>Move Focus Left</source>
-        <translation>Przenieś zaznaczenie w lewo</translation>
+        <translation>Przenieś uaktywnienie w lewo</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="230"/>
         <source>Move Focus Right</source>
-        <translation>Przenieś zaznaczenie w prawo</translation>
+        <translation>Przenieś uaktywnienie w prawo</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
         <source>Move Focus Up</source>
-        <translation>Przenieś zaznaczenie w górę</translation>
+        <translation>Przenieś uaktywnienie w górę</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
         <source>Move Focus Down</source>
-        <translation>Przenieś zaznaczenie w dół</translation>
+        <translation>Przenieś uaktywnienie w dół</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
@@ -746,12 +746,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
         <source>Cycle Focus Forward</source>
-        <translation>Przełączaj zaznaczenie do przodu</translation>
+        <translation>Przełączaj uaktywnienie do przodu</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="262"/>
         <source>Cycle Focus Backward</source>
-        <translation>Przełączaj zaznaczenie wstecz</translation>
+        <translation>Przełączaj uaktywnienie wstecz</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="264"/>
@@ -786,12 +786,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="292"/>
         <source>Moves focus to the first column.</source>
-        <translation>Przenosi zaznaczenie na pierwszą kolumnę.</translation>
+        <translation>Przenosi uaktywnienie na pierwszą kolumnę.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="294"/>
         <source>Moves focus to the last column.</source>
-        <translation>Przenosi zaznaczenie na ostatnią kolumnę.</translation>
+        <translation>Przenosi uaktywnienie na ostatnią kolumnę.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="325"/>
@@ -836,7 +836,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="353"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip.</source>
-        <translation>Przełącza aktywną kolumnę przez ustawienia wstępne rozmiaru ekranu wzdłuż pasa.</translation>
+        <translation>Przełącza aktywną kolumnę przez nastawy rozmiaru ekranu wzdłuż pasa.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="356"/>
@@ -846,7 +846,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="357"/>
         <source>Steps the focused column through the screen&apos;s size presets along the strip, in reverse.</source>
-        <translation>Przełącza aktywną kolumnę przez ustawienia wstępne rozmiaru ekranu wzdłuż pasa, w odwrotnej kolejności.</translation>
+        <translation>Przełącza aktywną kolumnę przez nastawy rozmiaru ekranu wzdłuż pasa, w odwrotnej kolejności.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="348"/>
@@ -866,12 +866,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="386"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column.</source>
-        <translation>Przełącza aktywne okno przez ustawienia wstępne rozmiaru ekranu w obrębie jego kolumny.</translation>
+        <translation>Przełącza aktywne okno przez nastawy rozmiaru ekranu w obrębie jego kolumny.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="390"/>
         <source>Steps the focused window through the screen&apos;s size presets within its column, in reverse.</source>
-        <translation>Przełącza aktywne okno przez ustawienia wstępne rozmiaru ekranu w obrębie jego kolumny, w odwrotnej kolejności.</translation>
+        <translation>Przełącza aktywne okno przez nastawy rozmiaru ekranu w obrębie jego kolumny, w odwrotnej kolejności.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="381"/>
@@ -906,12 +906,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="320"/>
         <source>Moves focus to the first window of the focused column.</source>
-        <translation>Przenosi zaznaczenie na pierwsze okno aktywnej kolumny.</translation>
+        <translation>Przenosi uaktywnienie na pierwsze okno aktywnej kolumny.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="322"/>
         <source>Moves focus to the last window of the focused column.</source>
-        <translation>Przenosi zaznaczenie na ostatnie okno aktywnej kolumny.</translation>
+        <translation>Przenosi uaktywnienie na ostatnie okno aktywnej kolumny.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="419"/>
@@ -987,12 +987,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="337"/>
         <source>Splits the focused window out of a shared column toward the start of the strip. A window alone in its column merges into the previous column instead.</source>
-        <translation>Wydziela aktywne okno ze wspólnej kolumny w stronę początku pasa. Okno samotne w swojej kolumnie zostaje zamiast tego scalone z poprzednią kolumną.</translation>
+        <translation>Wydziela aktywne okno ze wspólnej kolumny w stronę początku pasa. Okno samo w swojej kolumnie zostaje zamiast tego scalone z poprzednią kolumną.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
         <source>Splits the focused window out of a shared column toward the end of the strip. A window alone in its column merges into the next column instead.</source>
-        <translation>Wydziela aktywne okno ze wspólnej kolumny w stronę końca pasa. Okno samotne w swojej kolumnie zostaje zamiast tego scalone z następną kolumną.</translation>
+        <translation>Wydziela aktywne okno ze wspólnej kolumny w stronę końca pasa. Okno samo w swojej kolumnie zostaje zamiast tego scalone z następną kolumną.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
@@ -1002,52 +1002,52 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="296"/>
         <source>Focus Previous Column (Edge Stop)</source>
-        <translation>Zaznacz poprzednią kolumnę (zatrzymanie na krawędzi)</translation>
+        <translation>Uaktywnij poprzednią kolumnę (zatrzymanie na krawędzi)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Przenosi zaznaczenie o jedną kolumnę w stronę początku pasa i zatrzymuje się na krawędzi. Zwykły skrót zaznaczenia przechodzi zamiast tego na następny monitor.</translation>
+        <translation>Przenosi uaktywnienie o jedną kolumnę w stronę początku pasa i zatrzymuje się na krawędzi. Zwykły skrót uaktywnienia przechodzi zamiast tego na następny monitor.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
         <source>Focus Next Column (Edge Stop)</source>
-        <translation>Zaznacz następną kolumnę (zatrzymanie na krawędzi)</translation>
+        <translation>Uaktywnij następną kolumnę (zatrzymanie na krawędzi)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Przenosi zaznaczenie o jedną kolumnę w stronę końca pasa i zatrzymuje się na krawędzi. Zwykły skrót zaznaczenia przechodzi zamiast tego na następny monitor.</translation>
+        <translation>Przenosi uaktywnienie o jedną kolumnę w stronę końca pasa i zatrzymuje się na krawędzi. Zwykły skrót uaktywnienia przechodzi zamiast tego na następny monitor.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
         <source>Focus Previous Column (Wrap)</source>
-        <translation>Zaznacz poprzednią kolumnę (zawijanie)</translation>
+        <translation>Uaktywnij poprzednią kolumnę (zawijanie)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="307"/>
         <source>Moves focus one column toward the start of the strip, wrapping to the last column at the edge.</source>
-        <translation>Przenosi zaznaczenie o jedną kolumnę w stronę początku pasa, a na krawędzi zawija na ostatnią kolumnę.</translation>
+        <translation>Przenosi uaktywnienie o jedną kolumnę w stronę początku pasa, a na krawędzi zawija na ostatnią kolumnę.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="311"/>
         <source>Focus Next Column (Wrap)</source>
-        <translation>Zaznacz następną kolumnę (zawijanie)</translation>
+        <translation>Uaktywnij następną kolumnę (zawijanie)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="312"/>
         <source>Moves focus one column toward the end of the strip, wrapping to the first column at the edge.</source>
-        <translation>Przenosi zaznaczenie o jedną kolumnę w stronę końca pasa, a na krawędzi zawija na pierwszą kolumnę.</translation>
+        <translation>Przenosi uaktywnienie o jedną kolumnę w stronę końca pasa, a na krawędzi zawija na pierwszą kolumnę.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="405"/>
         <source>Scrolls the view toward the start of the strip by a whole screen. Focus stays where it is.</source>
-        <translation>Przewija widok o cały ekran w stronę początku pasa. Zaznaczenie pozostaje na miejscu.</translation>
+        <translation>Przewija widok o cały ekran w stronę początku pasa. Uaktywnienie pozostaje na miejscu.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="409"/>
         <source>Scrolls the view toward the end of the strip by a whole screen. Focus stays where it is.</source>
-        <translation>Przewija widok o cały ekran w stronę końca pasa. Zaznaczenie pozostaje na miejscu.</translation>
+        <translation>Przewija widok o cały ekran w stronę końca pasa. Uaktywnienie pozostaje na miejscu.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="376"/>
@@ -1057,7 +1057,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
         <source>Shrinks the focused column to the smallest size preset.</source>
-        <translation>Zmniejsza aktywną kolumnę do najmniejszego ustawienia wstępnego rozmiaru.</translation>
+        <translation>Zmniejsza aktywną kolumnę do najmniejszej nastawy rozmiaru.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="569"/>
@@ -1072,7 +1072,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="619"/>
         <source>Move Focus</source>
-        <translation>Przenieś zaznaczenie</translation>
+        <translation>Przenieś uaktywnienie</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="624"/>
@@ -2179,7 +2179,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
         <source>Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme changes.</source>
-        <translation>Czy zestaw kolorów systemu jest jasny czy ciemny. Pozwala regule wybrać inne odstępy, kolory nakładki lub układy, gdy pulpit przełącza się między motywem dziennym a nocnym. Reguły są stosowane ponownie zaraz po zmianie motywu.</translation>
+        <translation>Czy zestaw kolorów systemu jest jasny czy ciemny. Pozwala regule wybrać inne odstępy, barwy nakładki lub układy, gdy pulpit przełącza się między motywem dziennym a nocnym. Reguły są stosowane ponownie zaraz po zmianie motywu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="100"/>
@@ -2526,7 +2526,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="108"/>
         <source>Focus the window when it opens (off = keep the current focus)</source>
-        <translation>Zaznaczaj okno przy otwarciu (wył. = zachowaj bieżące zaznaczenie)</translation>
+        <translation>Uaktywniaj okno przy otwarciu (wył. = zachowaj bieżące uaktywnienie)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="111"/>
@@ -2536,7 +2536,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="122"/>
         <source>Center a lone column (off = leave it where it sits)</source>
-        <translation>Wyśrodkuj samotną kolumnę (wył. = zostaw ją tam, gdzie jest)</translation>
+        <translation>Wyśrodkuj pojedynczą kolumnę (wył. = zostaw ją tam, gdzie jest)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="125"/>
@@ -2551,23 +2551,23 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="131"/>
         <source>Focus new windows (off = keep focus where it is)</source>
-        <translation>Zaznaczaj nowe okna (wył. = zostaw zaznaczenie tam, gdzie jest)</translation>
+        <translation>Uaktywniaj nowe okna (wył. = zostaw uaktywnienie tam, gdzie jest)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="134"/>
         <source>Drop the outer gaps for a lone column (off = keep them)</source>
-        <translation>Pomijaj odstępy zewnętrzne przy samotnej kolumnie (wył. = zachowuj je)</translation>
+        <translation>Pomijaj odstępy zewnętrzne przy pojedynczej kolumnie (wył. = zachowuj je)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="137"/>
         <source>Focus follows the mouse (off = focus stays until you click)</source>
-        <translation>Zaznaczenie podąża za myszą (wył. = zaznaczenie pozostaje do kliknięcia)</translation>
+        <translation>Uaktywnianie podąża za myszą (wył. = uaktywnienie pozostaje do kliknięcia)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="145"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="199"/>
         <source>Color</source>
-        <translation>Kolor</translation>
+        <translation>Barwa</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="148"/>
@@ -2841,7 +2841,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="291"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Focus follows the mouse</source>
-        <translation>Zaznaczenie podąża za myszą</translation>
+        <translation>Uaktywnianie podąża za myszą</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="294"/>
@@ -2857,7 +2857,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="303"/>
         <source>Focus when opened</source>
-        <translation>Zaznaczaj przy otwarciu</translation>
+        <translation>Uaktywniaj przy otwarciu</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="306"/>
@@ -2926,17 +2926,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="344"/>
         <source>Set the active tab color</source>
-        <translation>Ustaw kolor aktywnej karty</translation>
+        <translation>Ustaw barwę aktywnej karty</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="347"/>
         <source>Set the inactive tab color</source>
-        <translation>Ustaw kolor nieaktywnej karty</translation>
+        <translation>Ustaw barwę nieaktywnej karty</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="350"/>
         <source>Set the urgent tab color</source>
-        <translation>Ustaw kolor pilnej karty</translation>
+        <translation>Ustaw barwę pilnej karty</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="357"/>
@@ -2966,17 +2966,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="372"/>
         <source>Set this window&apos;s active tab color</source>
-        <translation>Ustaw kolor aktywnej karty tego okna</translation>
+        <translation>Ustaw barwę aktywnej karty tego okna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="375"/>
         <source>Set this window&apos;s inactive tab color</source>
-        <translation>Ustaw kolor nieaktywnej karty tego okna</translation>
+        <translation>Ustaw barwę nieaktywnej karty tego okna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="378"/>
         <source>Set this window&apos;s urgent tab color</source>
-        <translation>Ustaw kolor pilnej karty tego okna</translation>
+        <translation>Ustaw barwę pilnej karty tego okna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="383"/>
@@ -2987,12 +2987,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="386"/>
         <source>Set the drop indicator fill color</source>
-        <translation>Ustaw kolor wypełnienia wskaźnika upuszczania</translation>
+        <translation>Ustaw barwę wypełnienia wskaźnika upuszczania</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="389"/>
         <source>Set the drop indicator border color</source>
-        <translation>Ustaw kolor obramowania wskaźnika upuszczania</translation>
+        <translation>Ustaw barwę obramowania wskaźnika upuszczania</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="392"/>
@@ -3012,12 +3012,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="405"/>
         <source>Set the drop indicator fill color when dragging this window</source>
-        <translation>Ustaw kolor wypełnienia wskaźnika upuszczania podczas przeciągania tego okna</translation>
+        <translation>Ustaw barwę wypełnienia wskaźnika upuszczania podczas przeciągania tego okna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="408"/>
         <source>Set the drop indicator border color when dragging this window</source>
-        <translation>Ustaw kolor obramowania wskaźnika upuszczania podczas przeciągania tego okna</translation>
+        <translation>Ustaw barwę obramowania wskaźnika upuszczania podczas przeciągania tego okna</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="411"/>
@@ -3081,7 +3081,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="488"/>
         <source>Override overlay shader</source>
-        <translation>Zastąp cieniowanie nakładki</translation>
+        <translation>Zastąp shader nakładki</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="491"/>
@@ -3131,7 +3131,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="654"/>
         <source>Leave a lone column where it sits</source>
-        <translation>Zostaw samotną kolumnę tam, gdzie jest</translation>
+        <translation>Zostaw pojedynczą kolumnę tam, gdzie jest</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="657"/>
@@ -3146,13 +3146,13 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
         <source>Keep focus where it is</source>
-        <translation>Zostaw zaznaczenie tam, gdzie jest</translation>
+        <translation>Zostaw uaktywnienie tam, gdzie jest</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="288"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="667"/>
         <source>Drop the outer gaps for a lone column</source>
-        <translation>Pomijaj odstępy zewnętrzne przy samotnej kolumnie</translation>
+        <translation>Pomijaj odstępy zewnętrzne przy pojedynczej kolumnie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="228"/>
@@ -3162,22 +3162,22 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
         <source>Keep the outer gaps for a lone column</source>
-        <translation>Zachowuj odstępy zewnętrzne przy samotnej kolumnie</translation>
+        <translation>Zachowuj odstępy zewnętrzne przy pojedynczej kolumnie</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="671"/>
         <source>Focus stays until you click</source>
-        <translation>Zaznaczenie pozostaje do kliknięcia</translation>
+        <translation>Uaktywnienie pozostaje do kliknięcia</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="676"/>
         <source>Focus the window when it opens</source>
-        <translation>Zaznaczaj okno przy otwarciu</translation>
+        <translation>Uaktywniaj okno przy otwarciu</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="677"/>
         <source>Keep focus where it was when it opens</source>
-        <translation>Zostaw zaznaczenie przy otwarciu tam, gdzie było</translation>
+        <translation>Zostaw uaktywnienie przy otwarciu tam, gdzie było</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="682"/>
@@ -3539,7 +3539,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
         <source>Plasma applet popup</source>
-        <translation>Okienko apletu Plasmy</translation>
+        <translation>Okno wyskakujące apletu Plasmy</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="300"/>
@@ -4036,7 +4036,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="198"/>
         <source>Preset width</source>
-        <translation>Szerokość wstępna</translation>
+        <translation>Nastawa szerokości</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="208"/>
@@ -4055,7 +4055,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
-        <translation>Wysokość wstępna</translation>
+        <translation>Nastawa wysokości</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="214"/>
@@ -4500,43 +4500,43 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="449"/>
         <source>Block %1 shader</source>
-        <translation>Zablokuj cieniowanie %1</translation>
+        <translation>Zablokuj shader dla „%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="453"/>
         <source>%1 shader: %2</source>
-        <translation>Cieniowanie %1: %2</translation>
+        <translation>Shader „%1”: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="462"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="475"/>
         <source>Decoration packs: none</source>
-        <translation>Pakiety dekoracji: brak</translation>
+        <translation>Paczki dekoracji: brak</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="492"/>
         <source>%1 duration</source>
-        <translation>Czas trwania: %1</translation>
+        <translation>Czas trwania „%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="495"/>
         <source>%1 duration (invalid)</source>
-        <translation>Czas trwania: %1 (nieprawidłowy)</translation>
+        <translation>Czas trwania „%1” (nieprawidłowy)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="498"/>
         <source>%1 duration: %2 ms</source>
-        <translation>Czas trwania: %1: %2 ms</translation>
+        <translation>Czas trwania „%1”: %2 ms</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="504"/>
         <source>%1 curve</source>
-        <translation>Krzywa: %1</translation>
+        <translation>Krzywa „%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="508"/>
         <source>%1 curve: %2</source>
-        <translation>Krzywa: %1: %2</translation>
+        <translation>Krzywa „%1”: %2</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="525"/>
@@ -4599,7 +4599,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="620"/>
         <source>Max tiled windows (invalid)</source>
-        <translation>Maks. kafelkowanych okien (nieprawidłowe)</translation>
+        <translation>Maksymalna liczba kafelkowanych okien (nieprawidłowa)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="624"/>
@@ -5006,7 +5006,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
         <source>Right gap (invalid)</source>
-        <translation>Prawy odstęp (nieprawidłowy)</translation>
+        <translation>Odstęp prawy (nieprawidłowy)</translation>
     </message>
     <message numerus="yes">
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="240"/>
@@ -5063,12 +5063,12 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="944"/>
         <source>Active opacity (invalid)</source>
-        <translation>Nieprzezroczystość aktywnego (nieprawidłowa)</translation>
+        <translation>Nieprzezroczystość aktywnej (nieprawidłowa)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="945"/>
         <source>Inactive opacity (invalid)</source>
-        <translation>Nieprzezroczystość nieaktywnego (nieprawidłowa)</translation>
+        <translation>Nieprzezroczystość nieaktywnej (nieprawidłowa)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="947"/>
@@ -5118,7 +5118,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="971"/>
         <source>Top gap (invalid)</source>
-        <translation>Górny odstęp (nieprawidłowy)</translation>
+        <translation>Odstęp górny (nieprawidłowy)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
@@ -5128,7 +5128,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="975"/>
         <source>Bottom gap (invalid)</source>
-        <translation>Dolny odstęp (nieprawidłowy)</translation>
+        <translation>Odstęp dolny (nieprawidłowy)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
@@ -5138,7 +5138,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="979"/>
         <source>Left gap (invalid)</source>
-        <translation>Lewy odstęp (nieprawidłowy)</translation>
+        <translation>Odstęp lewy (nieprawidłowy)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="983"/>
@@ -5530,7 +5530,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="157"/>
         <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
-        <translation>Wyłącz okna jednego programu z kafelkowania, przyciągania i przewijania. Obramowania, pakiety dekoracji i animacje nadal obowiązują.</translation>
+        <translation>Wyłącz okna jednego programu z kafelkowania, przyciągania i przewijania. Obramowania, paczki dekoracji i animacje nadal obowiązują.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
@@ -7038,7 +7038,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="251"/>
         <source>applet popup</source>
-        <translation>okienko apletu</translation>
+        <translation>okno wyskakujące apletu</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="218"/>
@@ -7885,7 +7885,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="694"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="354"/>
         <source>Width and height presets</source>
-        <translation>Ustawienia wstępne szerokości i wysokości</translation>
+        <translation>Nastawy szerokości i wysokości</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
@@ -9292,7 +9292,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="158"/>
         <source>Scroll key for column focus</source>
-        <translation>Klawisz przewijania dla zaznaczenia kolumny</translation>
+        <translation>Klawisz przewijania dla uaktywniania kolumny</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="915"/>
@@ -9371,7 +9371,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="157"/>
         <source>Layout arrangement</source>
         <oldsource>Layout Arrangement</oldsource>
-        <translation>Ułożenie układów</translation>
+        <translation>Rozmieszczenie układu</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1010"/>
@@ -9502,14 +9502,14 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
-        <translation>Ustawienia wstępne wygładzania</translation>
+        <translation>Nastawy wygładzania</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1064"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="282"/>
         <source>Spring presets</source>
         <oldsource>Spring Presets</oldsource>
-        <translation>Ustawienia wstępne sprężyn</translation>
+        <translation>Nastawy sprężyn</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1066"/>
@@ -9547,13 +9547,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="30"/>
         <source>Applet Popup Shown</source>
-        <translation>Pokazano okienko apletu</translation>
+        <translation>Pokazano okno wyskakujące apletu</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="35"/>
         <source>Applet Popup Hidden</source>
-        <translation>Ukryto okienko apletu</translation>
+        <translation>Ukryto okno wyskakujące apletu</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="134"/>
@@ -9586,7 +9586,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="826"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="67"/>
         <source>Fill color</source>
-        <translation>Kolor wypełnienia</translation>
+        <translation>Barwa wypełnienia</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
@@ -11699,7 +11699,7 @@
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="353"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through</source>
         <comment>@info tip</comment>
-        <translation>Ustawienia wstępne to rozmiary, przez które przechodzą skróty przełączania szerokości i wysokości</translation>
+        <translation>Nastawy to rozmiary, przez które przechodzą skróty przełączania szerokości i wysokości</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="361"/>
@@ -12701,7 +12701,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="759"/>
         <source>Reset every shader parameter to its default value</source>
-        <translation>Przywróć wszystkim parametrom cieniowania wartości domyślne</translation>
+        <translation>Przywróć wszystkim parametrom shadera wartości domyślne</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="764"/>
@@ -12713,7 +12713,7 @@
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="767"/>
         <source>Apply the shader settings and close the dialog</source>
-        <translation>Zastosuj ustawienia cieniowania i zamknij okno</translation>
+        <translation>Zastosuj ustawienia shadera i zamknij okno</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="904"/>
@@ -13422,7 +13422,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="163"/>
         <source>fps</source>
         <comment>frames per second, unit appended to a slider value</comment>
-        <translation>kl./s</translation>
+        <translation>fps</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="191"/>
@@ -14022,7 +14022,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="193"/>
         <source>Change trigger %1 for %2</source>
         <comment>@action:button %1 is a key chord such as Meta+Shift, %2 names the setting being edited</comment>
-        <translation>Zmień wyzwalacz %1 dla %2</translation>
+        <translation>Zmień wyzwalacz %1 dla „%2”</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="212"/>
@@ -14038,7 +14038,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="240"/>
         <source>Remove trigger for %1</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation>Usuń wyzwalacz dla %1</translation>
+        <translation>Usuń wyzwalacz dla „%1”</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="260"/>
@@ -14059,7 +14059,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="288"/>
         <source>Reset %1 to defaults</source>
         <comment>@action:button %1 names the setting being edited</comment>
-        <translation>Przywróć %1 do wartości domyślnych</translation>
+        <translation>Przywróć „%1” do wartości domyślnych</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsCard.qml.cpp" line="324"/>
@@ -14448,9 +14448,9 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="131"/>
         <source>%n event below this one kept settings from a different shader pack, so they no longer apply.</source>
         <translation>
-            <numerusform>%n zdarzenie poniżej zachowało ustawienia z innego pakietu cieniowania, więc już nie obowiązują.</numerusform>
-            <numerusform>%n zdarzenia poniżej zachowały ustawienia z innego pakietu cieniowania, więc już nie obowiązują.</numerusform>
-            <numerusform>%n zdarzeń poniżej zachowało ustawienia z innego pakietu cieniowania, więc już nie obowiązują.</numerusform>
+            <numerusform>%n zdarzenie poniżej zachowało ustawienia z innej paczki shaderów, więc już nie obowiązują.</numerusform>
+            <numerusform>%n zdarzenia poniżej zachowały ustawienia z innej paczki shaderów, więc już nie obowiązują.</numerusform>
+            <numerusform>%n zdarzeń poniżej zachowało ustawienia z innej paczki shaderów, więc już nie obowiązują.</numerusform>
         </translation>
     </message>
     <message>
@@ -14520,12 +14520,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="269"/>
         <source>Following the inherited pack, with saved settings that no longer apply</source>
-        <translation>Podąża za odziedziczonym pakietem, z zapisanymi ustawieniami, które już nie obowiązują</translation>
+        <translation>Podąża za odziedziczoną paczką, z zapisanymi ustawieniami, które już nie obowiązują</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="271"/>
         <source>Following the inherited pack, with settings of its own</source>
-        <translation>Podąża za odziedziczonym pakietem, z własnymi ustawieniami</translation>
+        <translation>Podąża za odziedziczoną paczką, z własnymi ustawieniami</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="274"/>
@@ -14601,7 +14601,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="654"/>
         <source>No shader for this event, and no inherited one either.</source>
-        <translation>Brak cieniowania dla tego zdarzenia i brak odziedziczonego.</translation>
+        <translation>Brak shadera dla tego zdarzenia i brak odziedziczonego.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="656"/>
@@ -14617,12 +14617,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="673"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="775"/>
         <source>Revert shader to inherited</source>
-        <translation>Przywróć cieniowanie do odziedziczonego</translation>
+        <translation>Przywróć shader do odziedziczonego</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="816"/>
         <source>Remove the shader pack</source>
-        <translation>Usuń pakiet cieniowania</translation>
+        <translation>Usuń paczkę shaderów</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="818"/>
@@ -14633,7 +14633,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="806"/>
         <source>Use no shader for this event</source>
-        <translation>Nie używaj cieniowania dla tego zdarzenia</translation>
+        <translation>Nie używaj shadera dla tego zdarzenia</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationProfileEditor.qml.cpp" line="991"/>
@@ -14874,7 +14874,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="57"/>
         <source>Widgets</source>
         <comment>@label motion event group</comment>
-        <translation>Elementy interfejsu</translation>
+        <translation>Widżety</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsMotionSetsPage.qml.cpp" line="59"/>
@@ -14959,7 +14959,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="232"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="364"/>
         <source>User preset %1</source>
-        <translation>Własne ustawienie wstępne %1</translation>
+        <translation>Własna nastawa %1</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
@@ -15606,7 +15606,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="232"/>
         <source>Not decorated. Add a decoration pack to style this surface.</source>
-        <translation>Bez dekoracji. Dodaj pakiet dekoracji, aby nadać tej powierzchni styl.</translation>
+        <translation>Bez dekoracji. Dodaj paczkę dekoracji, aby nadać tej powierzchni styl.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="235"/>
@@ -15748,7 +15748,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
         <source>Active border color</source>
         <comment>@action:button</comment>
-        <translation>Kolor obramowania aktywnego</translation>
+        <translation>Barwa obramowania aktywnego okna</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="58"/>
@@ -15771,29 +15771,29 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="300"/>
         <source>Border color for the focused window. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor obramowania aktywnego okna. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa obramowania aktywnego okna. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="324"/>
         <source>Inactive border color</source>
         <comment>@action:button</comment>
-        <translation>Kolor obramowania nieaktywnego</translation>
+        <translation>Barwa obramowania nieaktywnego okna</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="326"/>
         <source>Border color for unfocused windows. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor obramowania nieaktywnych okien. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa obramowania nieaktywnych okien. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="437"/>
         <source>Tint color</source>
         <comment>@action:button</comment>
-        <translation>Kolor zabarwienia</translation>
+        <translation>Barwa zabarwienia</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="439"/>
         <source>Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor, którym okno jest przemywane, gdy siła zabarwienia jest większa od zera. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa, którą okno jest przemywane, gdy siła zabarwienia jest większa od zera. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="475"/>
@@ -15843,13 +15843,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="601"/>
         <source>This applies to windows that use decoration shader packs with blur.</source>
-        <translation>Dotyczy to okien używających pakietów cieniowania dekoracji z rozmyciem.</translation>
+        <translation>Dotyczy to okien używających paczek shaderów dekoracji z rozmyciem.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="610"/>
         <source>How sharply decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</source>
         <oldsource>How sharp decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</oldsource>
-        <translation>Jak ostro cieniowania dekoracji liczą swoje rozmycie względem tego, co wybiera dla siebie każdy pakiet cieniowania. Niższa wartość mniej obciąża kartę graficzną i w ruchu wygląda nieco miękcej. Wyższa jest ostrzejsza i kosztuje więcej.</translation>
+        <translation>Jak ostro shadery dekoracji liczą swoje rozmycie względem tego, co wybiera dla siebie każda paczka shaderów. Niższa wartość mniej obciąża kartę graficzną i w ruchu wygląda nieco miękcej. Wyższa jest ostrzejsza i kosztuje więcej.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="636"/>
@@ -15865,7 +15865,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="688"/>
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
-        <translation>Pozostałe okna zachowują dekorację, ale przestają się poruszać. Oszczędza to obciążenie karty graficznej mniej więcej proporcjonalnie do liczby otwartych okien. Panele i okienka apletów nadal się animują, bo panel nigdy nie jest oknem aktywnym.</translation>
+        <translation>Pozostałe okna zachowują dekorację, ale przestają się poruszać. Oszczędza to obciążenie karty graficznej mniej więcej proporcjonalnie do liczby otwartych okien. Panele i okna wyskakujące apletów nadal się animują, bo panel nigdy nie jest oknem aktywnym.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -17284,12 +17284,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="406"/>
         <source>Reset to the system accent color</source>
-        <translation>Przywróć systemowy kolor wiodący</translation>
+        <translation>Przywróć do systemowej barwy wiodącej</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="407"/>
         <source>Follow the system accent color</source>
-        <translation>Podążaj za systemowym kolorem wiodącym</translation>
+        <translation>Podążaj za systemową barwą wiodącą</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="534"/>
@@ -17615,7 +17615,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="259"/>
         <source>The first windows you open form the starting columns, in order along the strip. Later windows use the default width from the panel. A template without starting columns only sets the width presets.</source>
         <comment>@info:placeholder</comment>
-        <translation>Pierwsze otwarte okna tworzą kolumny początkowe, kolejno wzdłuż pasa. Późniejsze okna używają domyślnej szerokości z panelu. Szablon bez kolumn początkowych ustawia jedynie wstępne szerokości.</translation>
+        <translation>Pierwsze otwarte okna tworzą kolumny początkowe, kolejno wzdłuż pasa. Późniejsze okna używają domyślnej szerokości z panelu. Szablon bez kolumn początkowych ustawia jedynie nastawy szerokości.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17628,7 +17628,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="506"/>
         <source>Tabbed</source>
         <comment>@info column display</comment>
-        <translation>Karty</translation>
+        <translation>W kartach</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17771,12 +17771,12 @@
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="377"/>
         <source>Change Width Presets</source>
-        <translation>Zmień wstępne szerokości</translation>
+        <translation>Zmień nastawy szerokości</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="390"/>
         <source>Change Height Presets</source>
-        <translation>Zmień wstępne wysokości</translation>
+        <translation>Zmień nastawy wysokości</translation>
     </message>
     <message>
         <location filename="../src/editor/EditorTemplateModel.cpp" line="411"/>
@@ -18071,7 +18071,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="385"/>
         <source>Choose Color</source>
-        <translation>Wybierz kolor</translation>
+        <translation>Wybierz barwę</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="427"/>
@@ -18315,17 +18315,17 @@
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1113"/>
         <source>This screen uses the %1 template, which sets its starting columns and the width and height presets.</source>
         <oldsource>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</oldsource>
-        <translation>Ten ekran używa szablonu %1, który ustawia jego kolumny początkowe oraz wstępne szerokości i wysokości.</translation>
+        <translation>Ten ekran używa szablonu „%1”, który ustawia jego kolumny początkowe oraz nastawy szerokości i wysokości.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
         <source>This monitor uses %1, which is not in your layout list.</source>
-        <translation>Ten monitor używa %1, którego nie ma na Twojej liście układów.</translation>
+        <translation>Ten monitor używa układu „%1”, którego nie ma na Twojej liście układów.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1035"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
-        <translation>Ten monitor używa %1, którego nie ma na Twojej liście algorytmów.</translation>
+        <translation>Ten monitor używa algorytmu „%1”, którego nie ma na Twojej liście algorytmów.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
@@ -19262,34 +19262,34 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="69"/>
         <source>Zone highlight color</source>
         <comment>@action:button</comment>
-        <translation>Kolor podświetlenia strefy</translation>
+        <translation>Barwa podświetlenia strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="100"/>
         <source>Inactive zone color</source>
         <comment>@action:button</comment>
-        <translation>Kolor nieaktywnej strefy</translation>
+        <translation>Barwa nieaktywnej strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="71"/>
         <source>Color for the active/hovered zone. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.</source>
-        <translation>Kolor aktywnej strefy lub tej pod kursorem. Podąża za zestawem kolorów, chyba że wybierzesz własny. Suwaki nieprzezroczystości poniżej zastępują wszelką przezroczystość niesioną przez kolor.</translation>
+        <translation>Barwa aktywnej strefy lub tej pod kursorem. Podąża za zestawem kolorów, chyba że wybierzesz własną. Suwaki nieprzezroczystości poniżej zastępują wszelką przezroczystość niesioną przez barwę.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="102"/>
         <source>Color for zones that are not hovered. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.</source>
-        <translation>Kolor stref, nad którymi nie ma kursora. Podąża za zestawem kolorów, chyba że wybierzesz własny. Suwaki nieprzezroczystości poniżej zastępują wszelką przezroczystość niesioną przez kolor.</translation>
+        <translation>Barwa stref, nad którymi nie ma kursora. Podąża za zestawem kolorów, chyba że wybierzesz własną. Suwaki nieprzezroczystości poniżej zastępują wszelką przezroczystość niesioną przez barwę.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="120"/>
         <source>Zone border color</source>
         <comment>@action:button</comment>
-        <translation>Kolor obramowania strefy</translation>
+        <translation>Barwa obramowania strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="122"/>
         <source>Color for zone borders. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor obramowań stref. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa obramowań stref. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="156"/>
@@ -19314,18 +19314,18 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="429"/>
         <source>Choose Zone Color</source>
-        <translation>Wybierz kolor strefy</translation>
+        <translation>Wybierz barwę strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="289"/>
         <source>Zone label text color</source>
         <comment>@action:button</comment>
-        <translation>Kolor tekstu etykiety strefy</translation>
+        <translation>Barwa tekstu etykiety strefy</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="291"/>
         <source>Text color for zone labels. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor tekstu etykiet stref. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa tekstu etykiet stref. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="306"/>
@@ -19941,7 +19941,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation>Przy ustawieniu Nigdy pas stoi w miejscu, dopóki aktywna kolumna nie zeszłaby z ekranu. Przy Zawsze aktywna kolumna zatrzymuje się na środku. Przy Przy przepełnieniu wyśrodkowanie następuje dopiero, gdy pas wykracza poza krawędź ekranu.</translation>
+        <translation>Przy ustawieniu „Nigdy” pas stoi w miejscu, dopóki aktywna kolumna nie zeszłaby z ekranu. Przy „Zawsze” aktywna kolumna zatrzymuje się na środku. Przy „Przy przepełnieniu” wyśrodkowanie następuje dopiero, gdy pas wykracza poza krawędź ekranu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
@@ -19957,7 +19957,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="93"/>
         <source>Focus a window when it opens.</source>
-        <translation>Zaznaczaj okno przy jego otwarciu.</translation>
+        <translation>Uaktywniaj okno przy jego otwarciu.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="97"/>
@@ -19968,7 +19968,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="109"/>
         <source>Moving the mouse pointer over a window gives it focus.</source>
-        <translation>Przesunięcie wskaźnika myszy nad okno zaznacza je.</translation>
+        <translation>Przesunięcie wskaźnika myszy nad okno uaktywnia je.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="125"/>
@@ -19983,18 +19983,18 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="160"/>
         <source>Hold this and turn the wheel to move focus from column to column.</source>
-        <translation>Przytrzymaj to i obracaj kółkiem, aby przenosić zaznaczenie z kolumny na kolumnę.</translation>
+        <translation>Przytrzymaj to i obracaj kółkiem, aby przenosić uaktywnienie z kolumny na kolumnę.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="175"/>
         <source>the column focus scroll key</source>
         <comment>@info:accessibility a sentence fragment substituted into &apos;Remove trigger for %1&apos; and &apos;Reset %1 to defaults&apos;</comment>
-        <translation>klawisz przewijania dla zaznaczenia kolumny</translation>
+        <translation>klawisz przewijania dla uaktywniania kolumny</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="188"/>
         <source>Hold this and turn the wheel to move the view along the strip without changing which column has focus.</source>
-        <translation>Przytrzymaj to i obracaj kółkiem, aby przesuwać widok wzdłuż pasa bez zmiany zaznaczonej kolumny.</translation>
+        <translation>Przytrzymaj to i obracaj kółkiem, aby przesuwać widok wzdłuż pasa bez zmiany uaktywnionej kolumny.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="196"/>
@@ -20131,7 +20131,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="178"/>
         <source>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the work area along the strip</source>
         <oldsource>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the screen along the strip</oldsource>
-        <translation>O ile jedno kliknięcie Meta+Shift+kółko przesuwa pas bez zmiany zaznaczenia, jako część obszaru roboczego wzdłuż pasa</translation>
+        <translation>O ile jedno kliknięcie Meta+Shift+kółko przesuwa pas bez zmiany uaktywnienia, jako część obszaru roboczego wzdłuż pasa</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="77"/>
@@ -20891,7 +20891,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
         <source>Snapped</source>
         <comment>@info:status the window was snapped into a zone</comment>
-        <translation>Przyciągnięto</translation>
+        <translation>Przyciągnięte</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
@@ -20912,7 +20912,7 @@
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="477"/>
         <source>Focus</source>
         <comment>@info:status focus moved in the pressed direction</comment>
-        <translation>Zaznaczenie</translation>
+        <translation>Uaktywnienie</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
@@ -20954,7 +20954,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="527"/>
         <source>Focused the master window</source>
-        <translation>Zaznaczono okno główne</translation>
+        <translation>Uaktywniono okno główne</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="534"/>
@@ -21148,12 +21148,12 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="207"/>
         <source>Column width preset number</source>
-        <translation>Numer wstępnej szerokości kolumny</translation>
+        <translation>Numer nastawy szerokości kolumny</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="146"/>
         <source>How wide a column is when it first opens. A screen with a layout template of its own takes the width from that template instead, including the width set for this monitor.</source>
-        <translation>Jak szeroka jest kolumna, gdy otwiera się po raz pierwszy. Ekran z własnym szablonem układu bierze szerokość z tego szablonu, wraz z szerokością ustawioną dla tego monitora.</translation>
+        <translation>Jak szeroka jest kolumna zaraz po otwarciu. Ekran z własnym szablonem układu bierze szerokość z tego szablonu, wraz z szerokością ustawioną dla tego monitora.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="229"/>
@@ -21196,7 +21196,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="330"/>
         <source>Window height preset number</source>
-        <translation>Numer wstępnej wysokości okna</translation>
+        <translation>Numer nastawy wysokości okna</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="369"/>
@@ -21207,61 +21207,61 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="381"/>
         <source>Percentages of the work area along the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area width, cycled in this order by the preset shortcuts</oldsource>
-        <translation>Procenty obszaru roboczego wzdłuż pasa, przechodzone w tej kolejności przez skróty ustawień wstępnych</translation>
+        <translation>Procenty obszaru roboczego wzdłuż pasa, przechodzone w tej kolejności przez skróty nastaw</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
         <source>%1% column width preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>Wstępna szerokość kolumny %1%</translation>
+        <translation>Nastawa szerokości kolumny %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="390"/>
         <source>Remove the %1% column width preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>Usuń wstępną szerokość kolumny %1%</translation>
+        <translation>Usuń nastawę szerokości kolumny %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="391"/>
         <source>New column width preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation>Procent nowej wstępnej szerokości kolumny</translation>
+        <translation>Procent nowej nastawy szerokości kolumny</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="392"/>
         <source>Add a column width preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation>Dodaj wstępną szerokość kolumny</translation>
+        <translation>Dodaj nastawę szerokości kolumny</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="403"/>
         <source>Percentages of the work area across the strip, cycled in this order by the preset shortcuts</source>
         <oldsource>Percentages of the work area height, cycled in this order by the preset shortcuts</oldsource>
-        <translation>Procenty obszaru roboczego w poprzek pasa, przechodzone w tej kolejności przez skróty ustawień wstępnych</translation>
+        <translation>Procenty obszaru roboczego w poprzek pasa, przechodzone w tej kolejności przez skróty nastaw</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
         <source>%1% window height preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>Wstępna wysokość okna %1%</translation>
+        <translation>Nastawa wysokości okna %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="413"/>
         <source>Remove the %1% window height preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>Usuń wstępną wysokość okna %1%</translation>
+        <translation>Usuń nastawę wysokości okna %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="414"/>
         <source>New window height preset percentage</source>
         <comment>accessible name for the add-preset percentage field</comment>
-        <translation>Procent nowej wstępnej wysokości okna</translation>
+        <translation>Procent nowej nastawy wysokości okna</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="415"/>
         <source>Add a window height preset</source>
         <comment>accessible name for the add-preset button</comment>
-        <translation>Dodaj wstępną wysokość okna</translation>
+        <translation>Dodaj nastawę wysokości okna</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="200"/>
@@ -21302,7 +21302,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="69"/>
         <source>Choose Tab Color</source>
-        <translation>Wybierz kolor karty</translation>
+        <translation>Wybierz barwę karty</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="128"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation>Zmniejsz okna, aby zmieścić wskaźnik. Wyłączony rysuje się obok kolumny i może nachodzić na sąsiada lub wyjść poza ekran.</translation>
+        <translation>Zmniejsz okna, aby zmieścić wskaźnik. Gdy jest wyłączone, wskaźnik rysuje się obok kolumny i może nachodzić na sąsiada lub wyjść poza ekran.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
@@ -21438,13 +21438,13 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="51"/>
         <source>Reset %1 to the color scheme</source>
         <comment>@action:button</comment>
-        <translation>Przywróć %1 do zestawu kolorów</translation>
+        <translation>Przywróć „%1” do zestawu kolorów</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorRow.qml.cpp" line="71"/>
         <source>%1 color</source>
         <comment>@action:button</comment>
-        <translation>Kolor: %1</translation>
+        <translation>Barwa „%1”</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_fieldtables.cpp" line="129"/>
@@ -21469,7 +21469,7 @@
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="50"/>
         <source>Color</source>
         <comment>@action:button</comment>
-        <translation>Kolor</translation>
+        <translation>Barwa</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/ThemeFallbackColorControl.qml.cpp" line="103"/>
@@ -21515,28 +21515,28 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="70"/>
         <source>Drop indicator fill color</source>
         <comment>@action:button</comment>
-        <translation>Kolor wypełnienia wskaźnika upuszczania</translation>
+        <translation>Barwa wypełnienia wskaźnika upuszczania</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="72"/>
         <source>Color filling the space the window will land in. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor wypełniający miejsce, w którym wyląduje okno. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa wypełniająca miejsce, w którym wyląduje okno. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="99"/>
         <source>How solid the fill is. This replaces any transparency carried by the fill color.</source>
-        <translation>Jak kryjące jest wypełnienie. Zastępuje to wszelką przezroczystość niesioną przez kolor wypełnienia.</translation>
+        <translation>Jak kryjące jest wypełnienie. Zastępuje to wszelką przezroczystość niesioną przez barwę wypełnienia.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="117"/>
         <source>Drop indicator border color</source>
         <comment>@action:button</comment>
-        <translation>Kolor obramowania wskaźnika upuszczania</translation>
+        <translation>Barwa obramowania wskaźnika upuszczania</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="119"/>
         <source>Color of the indicator&apos;s edge. Follows the color scheme unless you pick one.</source>
-        <translation>Kolor krawędzi wskaźnika. Podąża za zestawem kolorów, chyba że wybierzesz własny.</translation>
+        <translation>Barwa krawędzi wskaźnika. Podąża za zestawem kolorów, chyba że wybierzesz własną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="136"/>
@@ -21566,32 +21566,32 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="30"/>
         <source>Choose Drop Indicator Color</source>
-        <translation>Wybierz kolor wskaźnika upuszczania</translation>
+        <translation>Wybierz barwę wskaźnika upuszczania</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
-        <translation>Ustala, który silnik rozmieszczania (przyciąganie, kafelkowanie lub przewijanie) działa na dopasowanym ekranie, pulpicie lub w działaniu.</translation>
+        <translation>Ustala, który silnik rozmieszczania (przyciąganie, kafelkowanie lub przewijanie) działa na dopasowanym ekranie, pulpicie lub w aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
         <source>Assigns a snapping layout to the matched screen, desktop or activity.</source>
-        <translation>Przypisuje układ przyciągania do dopasowanego ekranu, pulpitu lub działania.</translation>
+        <translation>Przypisuje układ przyciągania do dopasowanego ekranu, pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
-        <translation>Przypisuje algorytm kafelkowania do dopasowanego ekranu, pulpitu lub działania.</translation>
+        <translation>Przypisuje algorytm kafelkowania do dopasowanego ekranu, pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
         <source>Assigns a scrolling column template to the matched screen, desktop or activity.</source>
-        <translation>Przypisuje szablon kolumn przewijania do dopasowanego ekranu, pulpitu lub działania.</translation>
+        <translation>Przypisuje szablon kolumn przewijania do dopasowanego ekranu, pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
         <source>Turns the named engine off for the matched screen, desktop or activity.</source>
-        <translation>Wyłącza wskazany silnik dla dopasowanego ekranu, pulpitu lub działania.</translation>
+        <translation>Wyłącza wskazany silnik dla dopasowanego ekranu, pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="45"/>
@@ -21606,7 +21606,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation>Pokazuje lub ukrywa komunikaty ekranowe dla dopasowanego ekranu, pulpitu lub działania. Wyłączone wycisza tam okienka układu i nawigacji. Włączone pokazuje je nawet przy wyłączonych przełącznikach globalnych, choć styl wyświetlania Brak nadal ukrywa wszystko.</translation>
+        <translation>Pokazuje lub ukrywa komunikaty ekranowe dla dopasowanego ekranu, pulpitu lub aktywności. Wyłączone wycisza tam wyskakujące okna układu i nawigacji. Włączone pokazuje je nawet przy wyłączonych przełącznikach globalnych, choć styl wyświetlania „Brak” nadal ukrywa wszystko.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
@@ -21621,7 +21621,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="78"/>
         <source>Turns off PlasmaZones borders and decoration packs for matching windows. Placement and animations are untouched.</source>
-        <translation>Wyłącza obramowania PlasmaZones i pakiety dekoracji dla dopasowanych okien. Rozmieszczanie i animacje pozostają nietknięte.</translation>
+        <translation>Wyłącza obramowania PlasmaZones i paczki dekoracji dla dopasowanych okien. Rozmieszczanie i animacje pozostają nietknięte.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="83"/>
@@ -21686,7 +21686,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="147"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
-        <translation>Przekazuje dopasowanym oknom zaznaczenie klawiatury zaraz po otwarciu, a wyłączone zostawia zaznaczenie tam, gdzie było.</translation>
+        <translation>Przekazuje dopasowanym oknom uaktywnienie klawiatury zaraz po otwarciu, a wyłączone zostawia uaktywnienie tam, gdzie było.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="152"/>
@@ -21696,7 +21696,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="163"/>
         <source>Uses a different animation shader for one event on matching windows. An empty choice turns that event&apos;s shader off for them.</source>
-        <translation>Używa innego cieniowania animacji dla jednego zdarzenia w dopasowanych oknach. Pusty wybór wyłącza dla nich cieniowanie tego zdarzenia.</translation>
+        <translation>Używa innego shadera animacji dla jednego zdarzenia w dopasowanych oknach. Pusty wybór wyłącza dla nich shader tego zdarzenia.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="168"/>
@@ -21711,22 +21711,22 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
         <source>Replaces the decoration packs drawn on matching windows. An empty list removes their decorations.</source>
-        <translation>Zastępuje pakiety dekoracji rysowane na dopasowanych oknach. Pusta lista usuwa ich dekoracje.</translation>
+        <translation>Zastępuje paczki dekoracji rysowane na dopasowanych oknach. Pusta lista usuwa ich dekoracje.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
-        <translation>Włącza lub wyłącza warstwę nieprzezroczystości i zabarwienia dla dopasowanych okien. Reguły ustawiania nieprzezroczystości i zabarwienia wymagają tej warstwy, aby w ogóle zadziałać.</translation>
+        <translation>Włącza lub wyłącza warstwę nieprzezroczystości i zabarwienia dla dopasowanych okien. Reguły „Ustaw nieprzezroczystość” i „Ustaw zabarwienie” wymagają włączonej tej warstwy, aby w ogóle zadziałać.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation>Ustala, jak mocno zabarwienie koloruje dopasowane okna. Działa tylko wtedy, gdy warstwa nieprzezroczystości i zabarwienia jest włączona dla okna.</translation>
+        <translation>Ustala, jak mocno zabarwienie barwi dopasowane okna. Działa tylko wtedy, gdy warstwa nieprzezroczystości i zabarwienia jest włączona dla okna.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="196"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
-        <translation>Ustala kolor zabarwienia dla dopasowanych okien. Działa tylko wtedy, gdy warstwa nieprzezroczystości i zabarwienia jest włączona dla okna.</translation>
+        <translation>Ustala barwę zabarwienia dla dopasowanych okien. Działa tylko wtedy, gdy warstwa nieprzezroczystości i zabarwienia jest włączona dla okna.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="202"/>
@@ -21751,17 +21751,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="216"/>
         <source>Sets the border color for matching windows while they are focused.</source>
-        <translation>Ustala kolor obramowania dopasowanych okien, gdy są aktywne.</translation>
+        <translation>Ustala barwę obramowania dopasowanych okien, gdy są aktywne.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
         <source>Sets the border color for matching windows while they are not focused.</source>
-        <translation>Ustala kolor obramowania dopasowanych okien, gdy nie są aktywne.</translation>
+        <translation>Ustala barwę obramowania dopasowanych okien, gdy nie są aktywne.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
-        <translation>Używa innego cieniowania nakładki stref dla dopasowanego ekranu, pulpitu lub działania.</translation>
+        <translation>Używa innego shadera nakładki stref dla dopasowanego ekranu, pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
@@ -21771,17 +21771,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
-        <translation>Ustala kolor podświetlonej strefy nakładki dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę podświetlonej strefy nakładki dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
-        <translation>Ustala kolor nieaktywnej strefy nakładki dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę nieaktywnej strefy nakładki dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
-        <translation>Ustala kolor obramowania stref nakładki dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę obramowania stref nakładki dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
@@ -21811,7 +21811,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
-        <translation>Ustala odstęp między strefami dla dopasowanego ekranu, pulpitu lub działania.</translation>
+        <translation>Ustala odstęp między strefami dla dopasowanego ekranu, pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
@@ -21891,7 +21891,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
-        <translation>Pokazuje lub ukrywa okienko wyboru przeciągania dla dopasowanego ekranu, pulpitu lub działania. Wyłączone sprawia, że przeciąganie okna przy krawędzi wyzwalania nie oferuje tam wyboru. Włączone oferuje go nawet przy wyłączonym globalnym przełączniku wyboru dla tego ekranu.</translation>
+        <translation>Pokazuje lub ukrywa wyskakujące okno wyboru przeciągania dla dopasowanego ekranu, pulpitu lub aktywności. Wyłączone sprawia, że przeciąganie okna przy krawędzi wyzwalania nie oferuje tam wyboru. Włączone oferuje go nawet przy wyłączonym globalnym przełączniku wyboru dla tego ekranu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
@@ -21911,7 +21911,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
-        <translation>Przyciemnia dopasowane okna do podanej nieprzezroczystości. Działa tylko wtedy, gdy warstwa nieprzezroczystości i zabarwienia jest włączona dla okna, z ustawienia globalnego lub z reguły pokazywania nieprzezroczystości i zabarwienia. Okno z własnym łańcuchem dekoracji przyciemnia się przez parametry pakietów tego łańcucha.</translation>
+        <translation>Przyciemnia dopasowane okna do podanej nieprzezroczystości. Działa tylko wtedy, gdy warstwa nieprzezroczystości i zabarwienia jest włączona dla okna, z ustawienia globalnego lub z reguły pokazywania nieprzezroczystości i zabarwienia. Okno z własnym łańcuchem dekoracji przyciemnia się przez parametry paczek tego łańcucha.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
@@ -21921,7 +21921,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
-        <translation>Wybiera, czy przeciągnięcie kafelkowanego okna wyswobadza je, czy zamienia je w obrębie stosu, dla dopasowanego kontekstu.</translation>
+        <translation>Wybiera, czy przeciągnięcie kafelkowanego okna uwalnia je, czy zamienia je w obrębie stosu, dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="300"/>
@@ -21951,7 +21951,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="341"/>
         <source>Gives windows opening on the matched context keyboard focus. A per-window Focus when opened rule still wins over this.</source>
-        <translation>Przekazuje zaznaczenie klawiatury oknom otwieranym w dopasowanym kontekście. Reguła „Zaznaczaj przy otwarciu” dla pojedynczego okna nadal ma pierwszeństwo.</translation>
+        <translation>Przekazuje uaktywnienie klawiatury oknom otwieranym w dopasowanym kontekście. Reguła „Uaktywniaj przy otwarciu” dla pojedynczego okna nadal ma pierwszeństwo.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
@@ -21961,7 +21961,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
-        <translation>Zaznacza w dopasowanym kontekście kolumnę, nad którą przesuwa się wskaźnik, bez kliknięcia. Dotyczy tylko ekranów z przewijaniem, więc ekrany z przyciąganiem i kafelkowaniem nadal podążają za ustawieniem globalnym.</translation>
+        <translation>Uaktywnia w dopasowanym kontekście kolumnę, nad którą przesuwa się wskaźnik, bez kliknięcia. Dotyczy tylko ekranów z przewijaniem, więc ekrany z przyciąganiem i kafelkowaniem nadal podążają za ustawieniem globalnym.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="357"/>
@@ -21972,7 +21972,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="362"/>
         <source>Chooses which way the matched context&apos;s strip runs, overriding the Strip direction setting and any per-monitor choice. Match the screen shape resolves from the usable area, so the rule can hand a pinned monitor back to that option for one desktop or activity.</source>
         <comment>&apos;Match the screen shape&apos; must stay identical to the option label shown in the picker</comment>
-        <translation>Wybiera, w którą stronę biegnie pas dopasowanego kontekstu, nadpisując ustawienie kierunku pasa i wybór dla poszczególnych monitorów. „Dopasuj do kształtu ekranu” wynika z użytecznego obszaru, więc reguła może zwrócić przypięty monitor tej opcji dla jednego pulpitu lub działania.</translation>
+        <translation>Wybiera, w którą stronę biegnie pas dopasowanego kontekstu, nadpisując ustawienie kierunku pasa i wybór dla poszczególnych monitorów. „Dopasuj do kształtu ekranu” wynika z użytecznego obszaru, więc reguła może zwrócić przypięty monitor tej opcji dla jednego pulpitu lub aktywności.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
@@ -22027,17 +22027,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="409"/>
         <source>Sets the active tab color for the matched context.</source>
-        <translation>Ustala kolor aktywnej karty dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę aktywnej karty dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="412"/>
         <source>Sets the inactive tab color for the matched context.</source>
-        <translation>Ustala kolor nieaktywnych kart dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę nieaktywnych kart dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="415"/>
         <source>Sets the color of a tab whose window asks for attention, for the matched context.</source>
-        <translation>Ustala kolor karty, której okno prosi o uwagę, dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę karty, której okno prosi o uwagę, dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="418"/>
@@ -22067,17 +22067,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="444"/>
         <source>Recolors a matching window&apos;s own tab while it is the active one.</source>
-        <translation>Zmienia kolor własnej karty dopasowanego okna, gdy jest ona aktywna.</translation>
+        <translation>Zmienia barwę własnej karty dopasowanego okna, gdy jest ona aktywna.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="447"/>
         <source>Recolors a matching window&apos;s own tab while another tab is active.</source>
-        <translation>Zmienia kolor własnej karty dopasowanego okna, gdy aktywna jest inna karta.</translation>
+        <translation>Zmienia barwę własnej karty dopasowanego okna, gdy aktywna jest inna karta.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="450"/>
         <source>Recolors a matching window&apos;s own tab while it asks for attention.</source>
-        <translation>Zmienia kolor własnej karty dopasowanego okna, gdy prosi ono o uwagę.</translation>
+        <translation>Zmienia barwę własnej karty dopasowanego okna, gdy prosi ono o uwagę.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="454"/>
@@ -22087,12 +22087,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="457"/>
         <source>Sets the drop indicator&apos;s fill color for the matched context.</source>
-        <translation>Ustala kolor wypełnienia wskaźnika upuszczania dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę wypełnienia wskaźnika upuszczania dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="460"/>
         <source>Sets the drop indicator&apos;s border color for the matched context.</source>
-        <translation>Ustala kolor obramowania wskaźnika upuszczania dla dopasowanego kontekstu.</translation>
+        <translation>Ustala barwę obramowania wskaźnika upuszczania dla dopasowanego kontekstu.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="463"/>
@@ -22112,12 +22112,12 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="472"/>
         <source>Recolors the drop indicator&apos;s fill while a matching window is being dragged.</source>
-        <translation>Zmienia kolor wypełnienia wskaźnika upuszczania, gdy przeciągane jest dopasowane okno.</translation>
+        <translation>Zmienia barwę wypełnienia wskaźnika upuszczania, gdy przeciągane jest dopasowane okno.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="475"/>
         <source>Recolors the drop indicator&apos;s border while a matching window is being dragged.</source>
-        <translation>Zmienia kolor obramowania wskaźnika upuszczania, gdy przeciągane jest dopasowane okno.</translation>
+        <translation>Zmienia barwę obramowania wskaźnika upuszczania, gdy przeciągane jest dopasowane okno.</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_rulelookups.cpp" line="236"/>
@@ -22167,22 +22167,22 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="42"/>
         <source>Animations for scrolling. Strip Scrolled covers the whole strip moving together, and Tab Switched covers a tab replacing another in its column. Each event offers only the shaders that can drive it.</source>
         <oldsource>Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.</oldsource>
-        <translation>Animacje przewijania. „Przewinięto pas” obejmuje cały pas poruszający się razem, a „Przełączono kartę” obejmuje kartę zastępującą inną w swojej kolumnie. Każde zdarzenie oferuje tylko te cieniowania, które mogą je napędzać.</translation>
+        <translation>Animacje przewijania. „Przewinięto pas” obejmuje cały pas poruszający się razem, a „Przełączono kartę” obejmuje kartę zastępującą inną w swojej kolumnie. Każde zdarzenie oferuje tylko te shadery, które mogą je napędzać.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="100"/>
         <source>This list is full at %1 presets. Remove one to add another.</source>
-        <translation>Ta lista jest pełna przy %1 ustawieniach wstępnych. Usuń jedno, aby dodać kolejne.</translation>
+        <translation>Ta lista jest pełna przy %1 nastawach. Usuń jedną, aby dodać kolejną.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="102"/>
         <source>There is already a preset at this percentage.</source>
-        <translation>Przy tym procencie już istnieje ustawienie wstępne.</translation>
+        <translation>Przy tym procencie już istnieje nastawa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="106"/>
         <source>A list needs at least one preset, so this one cannot be removed.</source>
-        <translation>Lista wymaga co najmniej jednego ustawienia wstępnego, więc tego nie można usunąć.</translation>
+        <translation>Lista wymaga co najmniej jednej nastawy, więc tej nie można usunąć.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="177"/>
@@ -22193,12 +22193,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
         <source>Remove this preset</source>
-        <translation>Usuń to ustawienie wstępne</translation>
+        <translation>Usuń tę nastawę</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="226"/>
         <source>Add preset:</source>
-        <translation>Dodaj ustawienie wstępne:</translation>
+        <translation>Dodaj nastawę:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="233"/>
@@ -22214,13 +22214,13 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
-        <translation>Podczas przeciągania okna na ekranie z przewijaniem przesuń je do ustawionej krawędzi ekranu, aby otworzyć okienko z bieżącym pasem. Upuść między dwiema kolumnami, aby wstawić nową kolumnę, na kolumnie z kartami, aby dodać okno jako kartę, albo na górnej lub dolnej połowie kolumny, aby ułożyć je tam w stosie.</translation>
+        <translation>Podczas przeciągania okna na ekranie z przewijaniem przesuń je do ustawionej krawędzi ekranu, aby otworzyć wyskakujące okno z bieżącym pasem. Upuść między dwiema kolumnami, aby wstawić nową kolumnę, na kolumnie z kartami, aby dodać okno jako kartę, albo na górnej lub dolnej połowie kolumny, aby ułożyć je tam w stosie.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
-        <translation>Okienko wyboru pasa</translation>
+        <translation>Wyskakujące okno wyboru pasa</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="101"/>
@@ -22230,7 +22230,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="105"/>
         <source>Enable strip selector popup</source>
-        <translation>Włącz okienko wyboru pasa</translation>
+        <translation>Włącz wyskakujące okno wyboru pasa</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
@@ -22263,70 +22263,70 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation>Edytuj ustawienie wstępne %1% w %2</translation>
+        <translation>Edytuj nastawę %1% w „%2”</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
         <source>Click to edit this preset</source>
         <comment>@info:tooltip</comment>
-        <translation>Kliknij, aby edytować to ustawienie wstępne</translation>
+        <translation>Kliknij, aby edytować tę nastawę</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="197"/>
         <source>Edit preset percentage in %1</source>
         <comment>@label:textbox</comment>
-        <translation>Edytuj procent ustawienia wstępnego w %1</translation>
+        <translation>Edytuj procent nastawy w „%1”</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
         <source>Remove %1% from %2</source>
         <comment>@action:button</comment>
-        <translation>Usuń %1% z %2</translation>
+        <translation>Usuń %1% z „%2”</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
         <source>Remove this preset</source>
         <comment>@info:tooltip</comment>
-        <translation>Usuń to ustawienie wstępne</translation>
+        <translation>Usuń tę nastawę</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="320"/>
         <source>New preset percentage for %1</source>
         <comment>@label:spinbox</comment>
-        <translation>Procent nowego ustawienia wstępnego dla %1</translation>
+        <translation>Procent nowej nastawy dla „%1”</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="342"/>
         <source>Add preset to %1</source>
         <comment>@action:button</comment>
-        <translation>Dodaj ustawienie wstępne do %1</translation>
+        <translation>Dodaj nastawę do „%1”</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="346"/>
         <source>This list can hold at most %n preset</source>
         <translation>
-            <numerusform>Ta lista mieści najwyżej %n ustawienie wstępne</numerusform>
-            <numerusform>Ta lista mieści najwyżej %n ustawienia wstępne</numerusform>
-            <numerusform>Ta lista mieści najwyżej %n ustawień wstępnych</numerusform>
+            <numerusform>Ta lista mieści najwyżej %n nastawę</numerusform>
+            <numerusform>Ta lista mieści najwyżej %n nastawy</numerusform>
+            <numerusform>Ta lista mieści najwyżej %n nastaw</numerusform>
         </translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="43"/>
         <source>This size is already a preset</source>
         <comment>@info:tooltip</comment>
-        <translation>Ten rozmiar jest już ustawieniem wstępnym</translation>
+        <translation>Ten rozmiar jest już nastawą</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="349"/>
         <source>Add this size as a preset</source>
         <comment>@info:tooltip</comment>
-        <translation>Dodaj ten rozmiar jako ustawienie wstępne</translation>
+        <translation>Dodaj ten rozmiar jako nastawę</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="375"/>
         <source>No presets yet. Pick a size and add it.</source>
         <comment>@info:placeholder</comment>
-        <translation>Brak ustawień wstępnych. Wybierz rozmiar i dodaj go.</translation>
+        <translation>Brak nastaw. Wybierz rozmiar i dodaj go.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="121"/>
@@ -22399,7 +22399,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
         <source>Width preset</source>
         <comment>@item:inlistbox default width kind</comment>
-        <translation>Wstępna szerokość</translation>
+        <translation>Nastawa szerokości</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
@@ -22435,25 +22435,25 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="256"/>
         <source>Start at preset:</source>
         <comment>@label:listbox</comment>
-        <translation>Zacznij od ustawienia wstępnego:</translation>
+        <translation>Zacznij od nastawy:</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="257"/>
         <source>Default width preset</source>
         <comment>@label:listbox</comment>
-        <translation>Domyślna wstępna szerokość</translation>
+        <translation>Domyślna nastawa szerokości</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="260"/>
         <source>No width presets yet</source>
         <comment>@info:placeholder</comment>
-        <translation>Brak wstępnych szerokości</translation>
+        <translation>Brak nastaw szerokości</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="261"/>
         <source>Preset %1 (%2%)</source>
         <comment>@item:inlistbox preset number and percentage</comment>
-        <translation>Ustawienie wstępne %1 (%2%)</translation>
+        <translation>Nastawa %1 (%2%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
@@ -22477,13 +22477,13 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
         <source>Tabbed</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>Karty</translation>
+        <translation>W kartach</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="295"/>
         <source>Size presets</source>
         <comment>@title:group</comment>
-        <translation>Wstępne rozmiary</translation>
+        <translation>Nastawy rozmiarów</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="300"/>
@@ -22495,7 +22495,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="303"/>
         <source>Width presets</source>
         <comment>@label</comment>
-        <translation>Wstępne szerokości</translation>
+        <translation>Nastawy szerokości</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="316"/>
@@ -22507,19 +22507,19 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="319"/>
         <source>Height presets</source>
         <comment>@label</comment>
-        <translation>Wstępne wysokości</translation>
+        <translation>Nastawy wysokości</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation>Domyślna szerokość jest ustawiona na wstępną szerokość, więc ten szablon wymaga co najmniej jednej wstępnej szerokości. Bez niej zapisze się jako ułamek pasa.</translation>
+        <translation>Domyślna szerokość jest ustawiona na nastawę szerokości, więc ten szablon wymaga co najmniej jednej nastawy szerokości. Bez niej zapisze się jako ułamek pasa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <comment>@info</comment>
-        <translation>Ustawienia wstępne to rozmiary, przez które przechodzą skróty przełączania szerokości i wysokości, dopóki ten szablon jest przypisany.</translation>
+        <translation>Nastawy to rozmiary, przez które przechodzą skróty przełączania szerokości i wysokości, dopóki ten szablon jest przypisany.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="18"/>
@@ -22539,7 +22539,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation>Animacje powierzchni należących do powłoki Plasmy, takich jak program uruchamiający i okienka zasobnika systemowego. Żadne cieniowanie wybrane dla Twoich własnych okien ich nie dosięga, więc każdy wiersz zaczyna bez cieniowania, a wybranie go jest całą zgodą. Dopóki nie wybierzesz, powierzchnie te animują się tak, jak animuje je Plasma. „Wszystkie powierzchnie powłoki” to domyślna opcja dla obu zdarzeń, a każde z nich może ją nadpisać. Panele nie mają tu wierszy, bo panel pozostaje na ekranie przez całą sesję zamiast się otwierać i zamykać.</translation>
+        <translation>Animacje powierzchni należących do powłoki Plasmy, takich jak program uruchamiający i wyskakujące okna zasobnika systemowego. Żaden shader wybrany dla Twoich własnych okien ich nie dosięga, więc każdy wiersz zaczyna bez shadera, a wybranie go jest jedynym sposobem, by je włączyć. Dopóki nie wybierzesz, powierzchnie te animują się tak, jak animuje je Plasma. „Wszystkie powierzchnie powłoki” to domyślna opcja dla obu zdarzeń, a każde z nich może ją nadpisać. Panele nie mają tu wierszy, bo panel pozostaje na ekranie przez całą sesję zamiast się otwierać i zamykać.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
@@ -22557,7 +22557,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="35"/>
         <source>Applet Popups</source>
-        <translation>Okienka apletów</translation>
+        <translation>Okna wyskakujące apletów</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
@@ -22597,7 +22597,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="50"/>
         <source>Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.</source>
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
-        <translation>W którą stronę biegnie pas. „Dopasuj do kształtu ekranu” prowadzi go z góry na dół, gdy użyteczny obszar jest wyższy niż szerszy, a w przeciwnym razie obok siebie. Kolumny nadal dzielą się w poprzek pasa, niezależnie od kierunku.</translation>
+        <translation>W którą stronę biegnie pas. „Dopasuj do kształtu ekranu” ustawia „Jedno pod drugim”, gdy użyteczny obszar jest wyższy niż szerszy, a w przeciwnym razie „Obok siebie”. Kolumny nadal dzielą się w poprzek pasa, niezależnie od kierunku.</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
@@ -22615,13 +22615,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
         <source>Appearance</source>
         <comment>animation event or section</comment>
-        <translation>Pojawienie</translation>
+        <translation>Wygląd</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
-        <translation>Okienko apletu</translation>
+        <translation>Okno wyskakujące apletu</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
@@ -22693,13 +22693,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="106"/>
         <source>Fade In</source>
         <comment>animation event or section</comment>
-        <translation>Wyłonienie</translation>
+        <translation>Pojawienie</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="109"/>
         <source>Fade Out</source>
         <comment>animation event or section</comment>
-        <translation>Zanik</translation>
+        <translation>Zanikanie</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="112"/>
@@ -22711,7 +22711,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="115"/>
         <source>Focus</source>
         <comment>animation event or section</comment>
-        <translation>Zaznaczenie</translation>
+        <translation>Uaktywnienie</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="118"/>
@@ -22795,7 +22795,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="157"/>
         <source>Peek</source>
         <comment>animation event or section</comment>
-        <translation>Podejrzenie</translation>
+        <translation>Zerknięcie</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="160"/>
@@ -22807,7 +22807,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
-        <translation>Okienko</translation>
+        <translation>Okno wyskakujące</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
@@ -22873,7 +22873,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="196"/>
         <source>Snap Assist</source>
         <comment>animation event or section</comment>
-        <translation>Pomocnik przyciągania</translation>
+        <translation>Asystent przyciągania</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="199"/>
@@ -23039,7 +23039,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
-        <translation>Reguły dopasowują się do okien, a to zdarzenie nie należy do okna, więc to działanie nigdy nie zadziała. To zdarzenie nigdzie nie przyjmuje cieniowania, więc działanie można usunąć.</translation>
+        <translation>Reguły dopasowują się do okien, a to zdarzenie nie należy do okna, więc to działanie nigdy nie zadziała. To zdarzenie nigdzie nie przyjmuje shaderów, więc działanie można usunąć.</translation>
     </message>
 </context>
 </TS>
