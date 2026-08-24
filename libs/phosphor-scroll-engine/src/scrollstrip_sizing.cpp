@@ -492,17 +492,11 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     if (!tile || params.presetWindowHeights.isEmpty() || (delta != -1 && delta != 1)) {
         return false;
     }
-    // Tabbed columns have no per-tile height, adjustActiveWindowHeight's
-    // guard and its reason. It binds here too now that the entry rule reads
-    // the RENDERED extent: relayout draws every tab at the column's whole
-    // content rect, so the measurement is the same on every press and taller
-    // than any preset — a forward press would answer the smallest entry
-    // whatever is on screen, and the press after it would find that intent
-    // already written and decline. Neither press moves a pixel.
     const Column* activeCol = activeColumn();
-    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
-        return false;
-    }
+    // A tabbed column sizes ITSELF from this tile's intent
+    // (tabbedColumnCrossPx), so the press works there as well; what changes is
+    // the space the comparison happens in. See the reservation below.
+    const bool tabbed = activeCol && activeCol->display == ColumnDisplay::Tabbed;
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area, the sibling verbs' bail
@@ -513,9 +507,18 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
     // "no determinate fraction" arm entered at vocabulary entry 0 regardless
     // of the height on screen, so the first press on an evenly-split column
     // could shrink or grow the tile depending only on where entry 0 sat.
-    const int currentPx = activeTileCrossPx(params);
+    int currentPx = activeTileCrossPx(params);
     if (currentPx < 0) {
         return false;
+    }
+    if (tabbed) {
+        // A tab is committed at the column's CONTENT rect, so what the
+        // relayout measures is the column minus whatever the indicator
+        // reserved across the strip, while the intent below sizes the whole
+        // column. Compare in the column's space or the entry rule enters one
+        // reservation-width off, and a press could answer the entry the
+        // column already renders at.
+        currentPx += tabbedCrossReservationPx(*activeCol, params);
     }
     // Each entry resolved the way relayout's Preset arm resolves it, so the
     // entry the cycle picks is the extent that will actually render. The
@@ -531,7 +534,10 @@ bool ScrollStrip::cycleActiveWindowPresetHeight(int delta, const ScrollLayoutPar
             }
         }
     }
-    const int availH = qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
+    // A tabbed column stacks nothing, so it spends no inner gaps and its
+    // whole budget is the work area — tabbedColumnCrossPx caps the entries at
+    // exactly that.
+    const int availH = tabbed ? workH : qMax(qMax(1, visibleTiles), workH - params.gap * qMax(0, visibleTiles - 1));
     const int idx = cyclePresetIndexByExtent(params.presetWindowHeights.size(), currentPx, delta, [&](int i) {
         return qMin(availH, proportionalPx(params.presetWindowHeights.at(i), workH, params.gap));
     });
@@ -550,19 +556,12 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
-    // Tabbed columns have no per-tile height to adjust: relayout lays every
-    // visible tile out at the column's whole content rect and never reads
-    // Tile::height there, so the measured extent is the same on every press
-    // and a write would move nothing while the verb reported success forever.
-    // Refuse instead. cycleActiveWindowPresetHeight carries the same guard,
-    // for the same reason once its entry rule reads the rendered extent.
-    // setActiveWindowHeight deliberately does NOT: it promises an INTENT
-    // change, which stays true while tabbed, and the restore and handoff
-    // paths write intent into tabbed columns on purpose.
+    // A tabbed column adjusts too, in the same space the preset cycle
+    // measures in: the intent sizes the COLUMN there, and the tab is
+    // committed at the column minus the indicator's cross-axis reservation.
     const Column* activeCol = activeColumn();
-    if (activeCol && activeCol->display == ColumnDisplay::Tabbed) {
-        return false;
-    }
+    const bool tabbed = activeCol && activeCol->display == ColumnDisplay::Tabbed;
+    const int reservationPx = tabbed ? tabbedCrossReservationPx(*activeCol, params) : 0;
     const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area: qBound(1, …, workH) would invert
@@ -570,7 +569,7 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // Current pixel height: read off a fresh relayout so the adjustment
     // starts from what is actually on screen (activeTileCrossPx's doc carries
     // the why). The preset cycle enters from the same measurement.
-    const int currentPx = activeTileCrossPx(params);
+    int currentPx = activeTileCrossPx(params);
     if (currentPx < 0) {
         // The active tile resolved to nothing — a minimized tile is dropped
         // from the relayout entirely. Seeding the full work area instead
@@ -579,6 +578,10 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
         // seam can drive it.
         return false;
     }
+    // Into the column's space while tabbed, the cycle's adjustment and its
+    // reason: what gets written below is the extent tabbedColumnCrossPx will
+    // resolve, and that is the COLUMN's.
+    currentPx += reservationPx;
     // Clamp to the tile's own floor as well (niri clamps against the client
     // min size in the verb): without it a shrink below minHeight would
     // "succeed" here while relayout re-clamps, so every further press
@@ -606,7 +609,11 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // commits with is defensive on an already-gated value.
     const int fractionFloor = qMax(1, qRound(MinWindowHeightFraction * workH));
     const int clientFloor = params.respectMinimumSize ? tile->minCross(params.axis) : 0;
-    const int floorPx = qBound(1, qMax(fractionFloor, clientFloor), workH);
+    // Both floors describe the WINDOW, and while tabbed the value being
+    // clamped is the column, so the reservation is added once on the outside
+    // rather than to either of them. Zero unless the indicator is placed
+    // within a tabbed column and eats the cross axis.
+    const int floorPx = qBound(1, qMax(fractionFloor, clientFloor) + reservationPx, workH);
     // Lowered to the current height when the tile already renders below the
     // floor, the twin of the guard adjustActiveColumnWidth documents: the
     // smallest LEGAL preset height resolves through proportionalPx to a gap's

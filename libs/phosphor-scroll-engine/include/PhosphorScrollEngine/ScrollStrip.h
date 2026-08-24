@@ -353,18 +353,18 @@ public:
     /// TALLER going forward, nearest shorter going back, wrapping at each
     /// end), measured off a fresh relayout so an AUTO tile enters the cycle
     /// at what it currently renders rather than always at the first entry.
-    /// Declines on a TABBED column, adjustActiveWindowHeight's guard: every
-    /// tab is drawn at the column's whole height, so there is no per-window
-    /// height for the measurement to read or the press to change.
+    /// A TABBED column cycles too: the shown tab's intent sizes the whole
+    /// column (tabbedColumnCrossPx), so the press moves the column's cross
+    /// extent. The measurement then reads the column rather than the tile,
+    /// since the indicator's reservation sits between the two.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
     /// Adjust the active tile's height by @p deltaPercent of the work area's
     /// CROSS extent. The current height is read off a fresh relayout, since an
     /// Auto tile only gets a pixel value from the whole column distribution,
     /// and the result is floored the way adjustActiveColumnWidth floors its
     /// width (MinWindowHeightFraction, raised to the client minimum while
-    /// @c respectMinimumSize is on). Refuses on a TABBED column: relayout lays
-    /// every tile out at the column's content rect and never reads the height
-    /// intent there, so the write would move nothing.
+    /// @c respectMinimumSize is on). A TABBED column adjusts too, in the same
+    /// column-extent space the cycle measures in.
     bool adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayoutParams& params);
     /// Back to the even auto-split for EVERY tile in the active column.
     bool resetActiveColumnHeights();
@@ -571,6 +571,22 @@ private:
     /// sizes are not respected. Shared with equalizeVisibleColumnWidths so a
     /// share the floor would overrule is never written as if it could render.
     int columnMinExtentPx(const Column& c, const ScrollLayoutParams& params) const;
+    /// Pixel CROSS extent of TABBED column @p c: the shown tab's own height
+    /// intent, resolved exactly the way the stack branch resolves a single
+    /// tile's Fixed/Preset height, so an entry of the preset vocabulary lands
+    /// on the same pixels whichever display the column is in. Auto means the
+    /// whole work area, which is what a tabbed column used to be pinned at.
+    /// Raised to the tallest visible tab's own cross minimum plus
+    /// @c tabbedCrossReservationPx while minimum sizes are respected: every
+    /// tab is committed at this column's content rect, including the hidden
+    /// ones, so the floor is the whole set's and not just the shown tab's.
+    static int tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params);
+    /// Pixels the tab indicator takes out of column @p c ACROSS the strip, the
+    /// cross-axis twin of the main-axis reservation columnMinExtentPx applies.
+    /// 0 for a column that is not tabbed, and whenever the indicator's
+    /// thickness eats the MAIN axis instead (which of the two it eats depends
+    /// on the strip's axis, see TabIndicatorParams::reservedThickness).
+    static int tabbedCrossReservationPx(const Column& c, const ScrollLayoutParams& params);
     /// Strip-coordinate LEADING edge of @p columnIndex under @p params.
     int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;
     /// Total strip MAIN extent under @p params.

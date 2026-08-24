@@ -48,8 +48,8 @@ private Q_SLOTS:
     // Declaration order IS definition order, and the run order: the list
     // doubles as the file's table of contents (the ops suite's rule).
     void heightAdjustFloorsAtTheClientMinimum();
-    void heightAdjustRefusesOnATabbedColumn();
-    void heightPresetCycleRefusesOnATabbedColumn();
+    void heightAdjustResizesATabbedColumn();
+    void heightPresetCycleResizesATabbedColumn();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
 };
@@ -95,63 +95,62 @@ void TestScrollStripSizing::heightAdjustFloorsAtTheClientMinimum()
     QVERIFY(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))) > clientMin);
 }
 
-// A tabbed column lays every visible tile out at the column's whole content
-// rect and never reads Tile::height, so the measured extent is identical on
-// every press. Without the refusal the verb wrote a Fixed intent nothing
-// consumed and reported success forever.
-void TestScrollStripSizing::heightAdjustRefusesOnATabbedColumn()
+// A tabbed column takes its cross extent from the SHOWN tab's height intent,
+// so the adjust verb moves the whole column there (niri parity). Both tabs
+// are committed at that one rect, the hidden one included, which is the part
+// a verdict-only assertion would miss.
+void TestScrollStripSizing::heightAdjustResizesATabbedColumn()
 {
     ScrollLayoutParams params = defaultParams();
+    const int crossExtent = Ax::crossLen(ScrollTestUtils::defaultScreenRect());
 
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.toggleActiveColumnTabbed());
 
-    const int before = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
-    QVERIFY(!strip.adjustActiveWindowHeight(10.0, params));
-    QVERIFY(!strip.adjustActiveWindowHeight(-10.0, params));
-    // Geometry, not just the verdict: a refusal that had already written the
-    // intent would still return false on the way out.
-    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), before);
-    // And no intent was buried for a later untab to spring.
-    const Column* col = strip.activeColumn();
-    QVERIFY(col);
-    QCOMPARE(col->tiles.at(col->activeTileIdx).height.kind, WindowHeight::Auto);
+    // Auto while tabbed means the whole work area, which is where a tabbed
+    // column used to be pinned for good.
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), crossExtent);
 
-    // The refusal is the tabbed state, not the fixture: untabbed, the same
-    // press on the same strip is accepted.
-    QVERIFY(strip.toggleActiveColumnTabbed());
-    QVERIFY(strip.adjustActiveWindowHeight(10.0, params));
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const int shrunk = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY2(shrunk < crossExtent, "a shrink press must shorten the tabbed column");
+    // The hidden tab rides the same rect, so it cannot be left at the old
+    // height for the next tab switch to reveal.
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), shrunk);
+
+    QVERIFY(strip.adjustActiveWindowHeight(25.0, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), crossExtent);
 }
 
-// The preset cycle's half of the tabbed refusal. It matters once the cycle
-// enters from the RENDERED extent: a tab is drawn at the column's whole
-// content height, which is taller than any preset, so a forward press would
-// find nothing taller and answer the SMALLEST entry — a "taller" press
-// writing the shortest height, and the press after it declining because that
-// intent is already there. Neither press moves a pixel.
-void TestScrollStripSizing::heightPresetCycleRefusesOnATabbedColumn()
+// The preset cycle's half of the same parity. A tabbed column at Auto renders
+// at the full work area, which is taller than every entry, so the FORWARD
+// press wraps to the vocabulary's smallest and a backward press takes the
+// nearest shorter entry — cyclePresetIndexByExtent's rule, reached here
+// through the column's own extent rather than a tile's share of it.
+void TestScrollStripSizing::heightPresetCycleResizesATabbedColumn()
 {
     ScrollLayoutParams params = defaultParams();
+    const int crossExtent = Ax::crossLen(ScrollTestUtils::defaultScreenRect());
 
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.toggleActiveColumnTabbed());
 
-    const int before = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
-    QVERIFY(!strip.cycleActiveWindowPresetHeight(+1, params));
-    QVERIFY(!strip.cycleActiveWindowPresetHeight(-1, params));
-    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), before);
-    // No intent was buried for a later untab to spring.
-    const Column* col = strip.activeColumn();
-    QVERIFY(col);
-    QCOMPARE(col->tiles.at(col->activeTileIdx).height.kind, WindowHeight::Auto);
+    QVERIFY(strip.cycleActiveWindowPresetHeight(-1, params));
+    const int tall = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY2(tall < crossExtent, "the tallest entry is still shorter than the whole work area");
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), tall);
 
-    // The refusal is the tabbed state, not the fixture.
-    QVERIFY(strip.toggleActiveColumnTabbed());
+    QVERIFY(strip.cycleActiveWindowPresetHeight(-1, params));
+    const int middle = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY2(middle < tall, "a backward press must keep walking down the vocabulary");
+
+    // And back up, so the walk is not one-way.
     QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), tall);
 }
 
 // The grow side's budget invariant. Deliberately NOT an exact ceiling

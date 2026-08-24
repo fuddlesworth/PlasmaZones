@@ -53,6 +53,86 @@ int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayo
     return qMin(workW, proportionalPx(0.5, workW, params.gap));
 }
 
+int ScrollStrip::tabbedCrossReservationPx(const Column& c, const ScrollLayoutParams& params)
+{
+    if (c.display != ColumnDisplay::Tabbed) {
+        return 0;
+    }
+    // The inverse of columnMinExtentPx's indicatorEatsMainAxis gate, and the
+    // same reasoning: a Left/Right indicator is thick along x, which is the
+    // CROSS axis exactly while the strip runs vertically.
+    if (isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal()) {
+        return 0;
+    }
+    int visibleTiles = 0;
+    for (const Tile& tile : c.tiles) {
+        if (!tile.minimized) {
+            ++visibleTiles;
+        }
+    }
+    return params.tabIndicator.reservedThickness(visibleTiles);
+}
+
+int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& params)
+{
+    const int fullCross = crossExtent(params);
+    if (fullCross <= 0) {
+        return 1; // degenerate work area, resolveColumnWidthPx's bail
+    }
+    if (c.tiles.isEmpty()) {
+        return fullCross;
+    }
+    // The SHOWN tab decides, which is the tile the height verbs write: the
+    // hidden tabs share its rect, so reading any other intent would size the
+    // column around a window nobody is looking at.
+    int activeTi = qBound(0, c.activeTileIdx, c.tiles.size() - 1);
+    if (c.tiles.at(activeTi).minimized) {
+        for (int ti = 0; ti < c.tiles.size(); ++ti) {
+            if (!c.tiles.at(ti).minimized) {
+                activeTi = ti;
+                break;
+            }
+        }
+    }
+    const WindowHeight& height = c.tiles.at(activeTi).height;
+    int px = fullCross;
+    switch (height.kind) {
+    case WindowHeight::Fixed:
+        px = qBound(1, height.fixedPx, fullCross);
+        break;
+    case WindowHeight::Preset:
+        // Resolved through the same snap-at-resolve path the stack branch
+        // takes, so a template swap reflows a tabbed column the way it
+        // reflows a stacked one.
+        px = qMin(fullCross,
+                  proportionalPx(nearestPresetValue(params.presetWindowHeights, height.presetFraction), fullCross,
+                                 params.gap));
+        break;
+    case WindowHeight::Auto:
+        // The whole work area, which is what every tabbed column was pinned
+        // at before the intent was read here at all.
+        px = fullCross;
+        break;
+    }
+    if (params.respectMinimumSize) {
+        // Every visible tab is committed at this column's content rect, the
+        // hidden ones included, so the floor is the tallest minimum in the
+        // set and not just the shown tab's. Capped at the work area for the
+        // same reason the stack branch caps its own floors: a client minimum
+        // larger than the output must not size the column past the screen.
+        int floorPx = 0;
+        for (const Tile& tile : c.tiles) {
+            if (!tile.minimized) {
+                floorPx = qMax(floorPx, tile.minCross(params.axis));
+            }
+        }
+        if (floorPx > 0) {
+            px = qMax(px, qMin(floorPx + tabbedCrossReservationPx(c, params), fullCross));
+        }
+    }
+    return qMax(1, px);
+}
+
 int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& params) const
 {
     // isEmpty first: isFullyMinimized answers FALSE for an empty column, so
@@ -92,8 +172,9 @@ int ScrollStrip::columnMinExtentPx(const Column& c, const ScrollLayoutParams& pa
         // Applied HERE, in the one function every consumer
         // (columnStripPos / stripExtentPx / relayout / the anchor math) goes
         // through, so the strip widens consistently for such columns. The
-        // CROSS axis needs nothing: the tabbed branch applies no minimum floor
-        // across the column, so there is no contradicted clamp there.
+        // The CROSS axis has its own copy of this, in tabbedColumnCrossPx:
+        // that branch raises a tabbed column to its tabs' minimum plus the
+        // cross-axis reservation for exactly the same reason.
         //
         // The gate asks whether the indicator's THICKNESS eats the MAIN axis,
         // which is not the same question as whether the indicator sits on a
@@ -569,8 +650,15 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         }
 
         if (rc.tabbed) {
-            // Only the active tile is laid out, at full column height; the
-            // others share its rect but are reported hidden.
+            // A tabbed column takes its CROSS extent from the shown tab's own
+            // height intent (niri parity: a tabbed column may be shorter than
+            // the work area), so the rect the full-cross default above wrote
+            // is replaced before anything derives from it. Everything below —
+            // the indicator rect, the content rect the tabs are committed at —
+            // then follows the shortened column on its own.
+            rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, tabbedColumnCrossPx(col, params));
+            // Only the active tile is laid out, at the column's content rect;
+            // the others share its rect but are reported hidden.
             int activeTi = qBound(0, col.activeTileIdx, col.tiles.size() - 1);
             if (col.tiles.at(activeTi).minimized && !visible.isEmpty()) {
                 activeTi = visible.first();
