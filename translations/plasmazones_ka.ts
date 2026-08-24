@@ -19893,7 +19893,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="44"/>
         <source>With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.</source>
         <comment>the words Never, Always, and On overflow must match the option labels shown in the picker beside this text</comment>
-        <translation>„არასოდეს“-ის დროს ზოლი უძრავად რჩება, სანამ ფოკუსირებული სვეტი ეკრანს არ დატოვებდა. „ყოველთვის“-ის დროს ფოკუსირებული სვეტი შუაში ჩერდება. „გადავსებისას“-ის დროს ცენტრირება მხოლოდ მაშინ ხდება, როცა ზოლი ეკრანის კიდეს გასცდება.</translation>
+        <translation>„არასდროს“-ის დროს ზოლი უძრავად რჩება, სანამ ფოკუსირებული სვეტი ეკრანს არ დატოვებდა. „ყოველთვის“-ის დროს ფოკუსირებული სვეტი შუაში ჩერდება. „გადავსებისას“-ის დროს ცენტრირება მხოლოდ მაშინ ხდება, როცა ზოლი ეკრანის კიდეს გასცდება.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="61"/>
@@ -22930,7 +22930,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="91"/>
         <source>ms</source>
         <comment>milliseconds unit suffix in a spin box</comment>
-        <translation> მწმ</translation>
+        <translation>მწმ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="112"/>
@@ -22946,13 +22946,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="118"/>
         <source>px/s</source>
         <comment>pixels per second unit suffix in a spin box</comment>
-        <translation> პქს/წმ</translation>
+        <translation>პქს/წმ</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsSpinBox.qml.cpp" line="22"/>
         <source>px</source>
         <comment>pixels unit suffix in a spin box</comment>
-        <translation> პქს</translation>
+        <translation>პქს</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>

@@ -22153,7 +22153,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="233"/>
         <source>%</source>
         <comment>percent unit suffix in a spin box</comment>
-        <translation> %</translation>
+        <translation>%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="250"/>
@@ -22930,7 +22930,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="91"/>
         <source>ms</source>
         <comment>milliseconds unit suffix in a spin box</comment>
-        <translation> ms</translation>
+        <translation>ms</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="112"/>
@@ -22946,13 +22946,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="118"/>
         <source>px/s</source>
         <comment>pixels per second unit suffix in a spin box</comment>
-        <translation> px/s</translation>
+        <translation>px/s</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsSpinBox.qml.cpp" line="22"/>
         <source>px</source>
         <comment>pixels unit suffix in a spin box</comment>
-        <translation> px</translation>
+        <translation>px</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>

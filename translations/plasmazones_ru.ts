@@ -4425,7 +4425,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="910"/>
         <source>Scroll speed: %1%</source>
-        <translation>Скорость прокрутки: %1 %</translation>
+        <translation>Скорость прокрутки: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="963"/>
@@ -4694,7 +4694,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="684"/>
         <source>Window height: %1%</source>
-        <translation>Высота окна: %1 %</translation>
+        <translation>Высота окна: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="688"/>
@@ -4709,7 +4709,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="689"/>
         <source>Open at height: %1%</source>
-        <translation>Высота при открытии: %1 %</translation>
+        <translation>Высота при открытии: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="697"/>
@@ -4819,7 +4819,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="760"/>
         <source>Tab indicator length: %1%</source>
-        <translation>Длина индикатора вкладок: %1 %</translation>
+        <translation>Длина индикатора вкладок: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="764"/>
@@ -4941,7 +4941,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="845"/>
         <source>Drop indicator fill opacity: %1%</source>
-        <translation>Непрозрачность заливки индикатора сброса: %1 %</translation>
+        <translation>Непрозрачность заливки индикатора сброса: %1%</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="849"/>
@@ -17621,7 +17621,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
         <source>Column %1, %2% wide, %3</source>
         <comment>@info accessible column summary; %3 is Stacked or Tabbed</comment>
-        <translation>Столбец %1, ширина %2 %, %3</translation>
+        <translation>Столбец %1, ширина %2%, %3</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="408"/>
@@ -17641,7 +17641,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="493"/>
         <source>%1%</source>
         <comment>@info column width percentage</comment>
-        <translation>%1 %</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="500"/>
@@ -21213,13 +21213,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="389"/>
         <source>%1% column width preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>Предустановка ширины столбца %1 %</translation>
+        <translation>Предустановка ширины столбца %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="390"/>
         <source>Remove the %1% column width preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>Удалить предустановку ширины столбца %1 %</translation>
+        <translation>Удалить предустановку ширины столбца %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="391"/>
@@ -21243,13 +21243,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="412"/>
         <source>%1% window height preset</source>
         <comment>accessible name for one preset card, %1 is a percentage</comment>
-        <translation>Предустановка высоты окна %1 %</translation>
+        <translation>Предустановка высоты окна %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="413"/>
         <source>Remove the %1% window height preset</source>
         <comment>accessible name for a preset card&apos;s remove button, %1 is a percentage</comment>
-        <translation>Удалить предустановку высоты окна %1 %</translation>
+        <translation>Удалить предустановку высоты окна %1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="414"/>
@@ -22148,7 +22148,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="302"/>
         <source>%1%</source>
         <comment>a whole-number percentage</comment>
-        <translation>%1 %</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="348"/>
@@ -22188,7 +22188,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="177"/>
         <source>%1%</source>
         <comment>a preset size as a percentage of the work area</comment>
-        <translation>%1 %</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="203"/>
@@ -22204,7 +22204,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="233"/>
         <source>%</source>
         <comment>percent unit suffix in a spin box</comment>
-        <translation> %</translation>
+        <translation>%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="250"/>
@@ -22257,13 +22257,13 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="306"/>
         <source>%1%</source>
         <comment>@info preset percentage</comment>
-        <translation>%1 %</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="157"/>
         <source>Edit the %1% preset in %2</source>
         <comment>@action:button</comment>
-        <translation>Изменить предустановку %1 % в %2</translation>
+        <translation>Изменить предустановку %1% в %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="170"/>
@@ -22281,7 +22281,7 @@
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="277"/>
         <source>Remove %1% from %2</source>
         <comment>@action:button</comment>
-        <translation>Удалить %1 % из %2</translation>
+        <translation>Удалить %1% из %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="279"/>
@@ -22429,7 +22429,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
         <source>%1%</source>
         <comment>@info:spinbox width percentage</comment>
-        <translation>%1 %</translation>
+        <translation>%1%</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="256"/>
@@ -22453,7 +22453,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="261"/>
         <source>Preset %1 (%2%)</source>
         <comment>@item:inlistbox preset number and percentage</comment>
-        <translation>Предустановка %1 (%2 %)</translation>
+        <translation>Предустановка %1 (%2%)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
@@ -22984,7 +22984,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="91"/>
         <source>ms</source>
         <comment>milliseconds unit suffix in a spin box</comment>
-        <translation> мс</translation>
+        <translation>мс</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="112"/>
@@ -23000,13 +23000,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="118"/>
         <source>px/s</source>
         <comment>pixels per second unit suffix in a spin box</comment>
-        <translation> px/с</translation>
+        <translation>пикс/с</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/SettingsSpinBox.qml.cpp" line="22"/>
         <source>px</source>
         <comment>pixels unit suffix in a spin box</comment>
-        <translation> px</translation>
+        <translation>пикс.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="331"/>
