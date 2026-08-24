@@ -908,6 +908,15 @@ add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 # one expression, so a regression in either is silent at runtime.
 add_executable(test_zone_preview_highlight ui/zones/test_zone_preview_highlight.cpp)
 target_link_libraries(test_zone_preview_highlight PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick plasmazones_shared_qmlplugin)
+# The settings app's QML module hangs off its EXECUTABLE target, so it cannot
+# be linked here. LayoutThumbnail imports nothing beyond QtQuick, Kirigami and
+# org.plasmazones.common (all present), so its chain case loads the file
+# straight from the source tree instead. That is the only case in this binary
+# reading the SOURCE tree rather than the linked build-tree module, so an edit
+# to that one file without a rebuild would be checked against a stale
+# org.plasmazones.common. Running ctest after a build, which is the only
+# supported flow, cannot hit that.
+target_compile_definitions(test_zone_preview_highlight PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_zone_preview_highlight COMMAND test_zone_preview_highlight)
 
 # Component-load canary for the shared QML module: "X is not a type" at app

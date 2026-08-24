@@ -723,6 +723,15 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // silently dropping the request. The highlight can still have gone stale
     // under the open picker (a quick-slot press swaps the template or layout
     // without closing it), so re-push the active id before bailing.
+    //
+    // stripAxisVertical is deliberately NOT re-pushed here, though it goes
+    // stale the same way. The template cards derive their ticks from that
+    // scalar live, but their preview BANDS are baked into the layouts list at
+    // build time (buildUnifiedLayoutList's trailing axis argument). Refreshing
+    // only the scalar would flip the ticks while the bands stayed laid the old
+    // way, so one card would contradict itself — worse than a stale axis, which
+    // at least keeps the two halves agreeing. The pair has one owner: a rebuild
+    // of the list, which is what reopening the picker does.
     if (m_layoutPickerVisible && m_layoutPickerScreenId == resolvedId) {
         auto it = m_screenStates.find(resolvedId);
         if (it != m_screenStates.end() && it->shell && it->layoutPickerSlot()) {

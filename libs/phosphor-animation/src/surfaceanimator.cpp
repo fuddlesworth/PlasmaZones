@@ -258,17 +258,12 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
         // (which may mutate `m_tracks`) is bounded: the callback runs
         // AFTER cancelTracking has already erased our `surface` entry,
         // so any new entry the callback inserts is its own to manage.
-        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
-            if (auto prevOnComplete = std::move(it->second.onComplete)) {
-                auto cb = std::move(prevOnComplete);
-                d->cancelTrackingFor(surface, rootItem);
-                cb();
-            } else {
-                d->cancelTrackingFor(surface, rootItem);
-            }
-        } else {
-            d->cancelTrackingFor(surface, rootItem);
-        }
+        // Supersede, do not salvage. An in-flight track for this same
+        // (surface, item) belongs to an operation THIS call replaces, so its
+        // onComplete is dropped — exactly what the enabled path does, where
+        // runLeg's cancelTrackingFor drops it and legCompleted never fires on
+        // cancellation. See the contract note on setEnabled.
+        d->cancelTrackingFor(surface, rootItem);
         if (rootItem) {
             rootItem->setOpacity(1.0);
             rootItem->setScale(1.0);
@@ -331,17 +326,12 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
         // (which may mutate `m_tracks`) is bounded: the callback runs
         // AFTER cancelTracking has already erased our `surface` entry,
         // so any new entry the callback inserts is its own to manage.
-        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
-            if (auto prevOnComplete = std::move(it->second.onComplete)) {
-                auto cb = std::move(prevOnComplete);
-                d->cancelTrackingFor(surface, rootItem);
-                cb();
-            } else {
-                d->cancelTrackingFor(surface, rootItem);
-            }
-        } else {
-            d->cancelTrackingFor(surface, rootItem);
-        }
+        // Supersede, do not salvage. An in-flight track for this same
+        // (surface, item) belongs to an operation THIS call replaces, so its
+        // onComplete is dropped — exactly what the enabled path does, where
+        // runLeg's cancelTrackingFor drops it and legCompleted never fires on
+        // cancellation. See the contract note on setEnabled.
+        d->cancelTrackingFor(surface, rootItem);
         if (rootItem) {
             rootItem->setOpacity(0.0);
             rootItem->setScale(1.0);
@@ -411,17 +401,12 @@ void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* roo
             qCWarning(lcSurfaceAnimator)
                 << "beginShow on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
         }
-        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
-            if (auto prevOnComplete = std::move(it->second.onComplete)) {
-                auto cb = std::move(prevOnComplete);
-                d->cancelTrackingFor(surface, rootItem);
-                cb();
-            } else {
-                d->cancelTrackingFor(surface, rootItem);
-            }
-        } else {
-            d->cancelTrackingFor(surface, rootItem);
-        }
+        // Supersede, do not salvage. An in-flight track for this same
+        // (surface, item) belongs to an operation THIS call replaces, so its
+        // onComplete is dropped — exactly what the enabled path does, where
+        // runLeg's cancelTrackingFor drops it and legCompleted never fires on
+        // cancellation. See the contract note on setEnabled.
+        d->cancelTrackingFor(surface, rootItem);
         if (rootItem) {
             rootItem->setOpacity(1.0);
             rootItem->setScale(1.0);
@@ -458,17 +443,12 @@ void SurfaceAnimator::beginHide(PhosphorLayer::Surface* surface, QQuickItem* roo
             qCWarning(lcSurfaceAnimator)
                 << "beginHide on null rootItem with gate off; surface visibility unchanged but onComplete will fire";
         }
-        if (const auto it = d->m_tracks.find(Private::TrackKey{surface, rootItem}); it != d->m_tracks.end()) {
-            if (auto prevOnComplete = std::move(it->second.onComplete)) {
-                auto cb = std::move(prevOnComplete);
-                d->cancelTrackingFor(surface, rootItem);
-                cb();
-            } else {
-                d->cancelTrackingFor(surface, rootItem);
-            }
-        } else {
-            d->cancelTrackingFor(surface, rootItem);
-        }
+        // Supersede, do not salvage. An in-flight track for this same
+        // (surface, item) belongs to an operation THIS call replaces, so its
+        // onComplete is dropped — exactly what the enabled path does, where
+        // runLeg's cancelTrackingFor drops it and legCompleted never fires on
+        // cancellation. See the contract note on setEnabled.
+        d->cancelTrackingFor(surface, rootItem);
         if (rootItem) {
             rootItem->setOpacity(0.0);
             rootItem->setScale(1.0);
@@ -498,20 +478,34 @@ void SurfaceAnimator::setEnabled(bool enabled)
     d->m_enabled = enabled;
     // Gate semantics are "next dispatch", not "kill in progress" — the
     // toggle itself does not touch any tracks. A track that is currently
-    // mid-leg will continue to its natural `legCompleted` (firing its
-    // stored onComplete normally) ONLY if no subsequent
-    // `beginShow` / `beginHide` arrives in the meantime. If a new
-    // dispatch does arrive while the gate is off, that dispatch
-    // short-circuits via the gate-off branch in beginShow/beginHide,
-    // which calls `cancelTracking` on the in-flight track. Per the
-    // cancellation contract documented on `cancelTracking`,
-    // legCompleted does not fire on cancellation, so the in-flight
-    // track's onComplete would be dropped — the gate-off branch
-    // therefore salvages that callback and dispatches it synchronously
-    // (after cancelTracking has already erased the entry) before
-    // running the new caller's onComplete, so callers are not stranded
-    // when their in-flight animation is preempted by a gate-off
-    // dispatch.
+    // mid-leg continues to its natural `legCompleted`, firing its stored
+    // onComplete normally, if no subsequent `beginShow` / `beginHide`
+    // arrives in the meantime. Nothing is stranded by the flip itself.
+    //
+    // If a new dispatch DOES arrive while the gate is off, it short-circuits
+    // via the gate-off branch in beginShow/beginHide, which cancels the
+    // in-flight track and DROPS its onComplete. That is deliberate, and it is
+    // the same thing the enabled path does: runLeg cancels the previous track
+    // too, and per the cancellation contract legCompleted never fires on
+    // cancellation. A superseded operation's completion must not run, because
+    // by the time it would it no longer describes the state of anything.
+    //
+    // The gate-off branch used to SALVAGE that callback and invoke it
+    // synchronously instead, to avoid stranding a caller whose animation was
+    // preempted. That was wrong in a way the enabled path never was: the
+    // salvaged callback ran from inside the superseding dispatch, AFTER that
+    // dispatch had written its own state, so a hide-completion could blank a
+    // slot the show one line above had just made visible — for the OSD, the
+    // snap-assist and layout-picker slots, the cheatsheet, the zone selector
+    // and the overlay alike. It also made the completion contract depend on a
+    // global flag, which is the sort of thing that only shows up on the one
+    // machine with animations turned off. Dropping in both paths makes the
+    // contract uniform: a completion fires when its own leg finishes, or not
+    // at all.
+    //
+    // Consumers are already built for this — the enabled path has always
+    // dropped, so every hide-completion here is written to be skippable (the
+    // superseding show re-establishes whatever the hide would have torn down).
     //
     // Parity with kwin-effect: `WindowAnimator::setEnabled` (see
     // kwin-effect/windowanimator.cpp) is also a pure flag flip; it does

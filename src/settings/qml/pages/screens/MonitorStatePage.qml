@@ -567,28 +567,46 @@ SettingsFlickable {
                 return settingsController.scrollingStripVerticalForScreen(target);
             }
 
-            // What the strip preview says when it has no tiles to draw.
-            // Empty means there ARE tiles and the zone preview renders.
-            //
-            // Three distinct causes reach this well, and the sketch that used
-            // to fill it drew one confident picture for all three. They are
-            // separated here because they call for different actions from the
-            // user: wait, apply the staged mode, or start the daemon.
-            readonly property string scrollingEmptyCaption: {
+            /// WHICH empty-strip state is in force: "" (the strip has
+            /// windows), "daemon", "staged" or "empty". The sketch that used to
+            /// fill this well drew one picture for all three causes, which call
+            /// for different actions: wait, apply the staged mode, or start the
+            /// daemon. This is the ONE ladder: the
+            /// caption is derived from it, so the words and the state cannot
+            /// drift, and a surface needing other wording branches on this key
+            /// rather than nesting one translated sentence inside another.
+            /// The daemon test comes FIRST, ahead of the zone count: nothing
+            /// clears scrollingStripZones when the daemon dies, so testing the
+            /// count first left a strip populated at that moment rendering its
+            /// last snapshot as live. A mode staged here but not applied
+            /// (screenState.mode is what the daemon runs) means no strip yet.
+            readonly property string scrollingEmptyReason: {
+                if (!settingsController.daemonRunning)
+                    return "daemon";
+
                 if (stateView.scrollingStripZones.length > 0)
                     return "";
 
-                if (!settingsController.daemonRunning)
-                    return i18nc("scrolling strip preview, the daemon is not running", "PlasmaZones is not running");
-
-                // localMode is what the page STAGES, screenState.mode is what
-                // the daemon actually runs. Scrolling picked here but not yet
-                // applied means the strip does not exist yet, which is not the
-                // same as an empty one.
                 if ((stateView.screenState ? (stateView.screenState.mode || 0) : 0) !== 2)
-                    return i18nc("scrolling strip preview, the mode is staged but not applied yet", "Apply to start scrolling on this screen");
+                    return "staged";
 
-                return i18nc("scrolling strip preview, the screen is scrolling but no windows are on the strip", "No windows on the strip yet");
+                return "empty";
+            }
+
+            /// The words for that state. The "empty" context is kept verbatim
+            /// in step with the daemon's copy (daemon/osd.cpp) so the catalog
+            /// carries ONE entry for it.
+            readonly property string scrollingEmptyCaption: {
+                switch (stateView.scrollingEmptyReason) {
+                case "daemon":
+                    return i18nc("scrolling strip preview, the daemon is not running", "PlasmaZones is not running");
+                case "staged":
+                    return i18nc("scrolling strip preview, the mode is staged but not applied yet", "Apply to start scrolling on this screen");
+                case "empty":
+                    return i18nc("scrolling strip preview, empty strip", "No windows on the strip yet");
+                default:
+                    return "";
+                }
             }
 
             // Fetch the live strip for the current selection. The daemon's
@@ -1073,7 +1091,10 @@ SettingsFlickable {
                 // translators maintaining four near-identical paragraphs.
                 // Each half is a complete sentence on its own.
                 text: {
-                    const strip = stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
+                    // Same caption predicate the well and its accessible name
+                    // use: the numbering sentence describes tiles being drawn,
+                    // so it must not survive a caption replacing them.
+                    const strip = stateView.scrollingEmptyCaption === "" ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
                     // The DAEMON's four states, not the dropdown's three. The
                     // note describes what the screen is doing now, so it
                     // keeps reading the applied value until Save, the same

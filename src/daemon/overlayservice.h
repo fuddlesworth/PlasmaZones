@@ -444,7 +444,13 @@ public:
     /// scrollingTemplatePreviewZones projection). Always captioned as a
     /// template; @p locked renders the lock badge (the locked-preview twin
     /// of showLockedLayoutOsd).
-    void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+    ///
+    /// @p verticalAxis draws the edge ticks along the strip's own direction,
+    /// the same way the live strip card does. It carries NO default on
+    /// purpose: this is a screen-bound host, the caller has already resolved
+    /// the axis to lay the bands, and a default would let a future call site
+    /// silently ship bands and ticks that disagree.
+    void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones, bool verticalAxis,
                                   const QString& screenId = QString(), bool locked = false);
     /// The live scrolling-strip card. Its own entry point rather than the
     /// string overload below, because it is the one layout OSD that must
@@ -455,7 +461,9 @@ public:
     /// @p verticalAxis draws the edge ticks along the strip's own direction.
     /// @p emptyCaption is used only when @p zones is empty, and must be
     /// non-empty in that case — an arrow over a blank well says nothing about
-    /// why the strip is blank.
+    /// why the strip is blank. That precondition is ENFORCED, not merely
+    /// documented: an empty-zones call with no caption renders nothing and
+    /// logs, rather than shipping a card that looks like it failed to load.
     void showScrollingStripOsd(const QString& name, const QVariantList& zones, bool verticalAxis,
                                const QString& emptyCaption, const QString& screenId = QString());
     /// The card always wears the failure glyph "dialog-cancel". Both callers

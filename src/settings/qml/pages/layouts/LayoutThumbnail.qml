@@ -178,11 +178,12 @@ Item {
         globalAutoAssign: root.globalAutoAssign
         previewWidth: root.previewBoxWidth
         previewHeight: root.previewBoxHeight
-        // Same feature configuration as the popup cards. The three pixel
-        // literals are deliberate overrides of LayoutCard's own defaults
-        // (2 / 2 / 10): the settings thumbnail draws a denser grid than a
-        // popup card, so the gaps are halved and the zone floor lowered.
-        // Hosts that need a different floor set minZoneSize on the thumbnail.
+        // Same feature configuration as the popup cards. The two pixel
+        // literals are deliberate overrides of LayoutCard's own gap defaults
+        // (2 / 2): the settings thumbnail draws a denser grid than a popup
+        // card, so the gaps are halved. The zone floor is forwarded rather
+        // than overridden here — see the minZoneSize property, which defaults
+        // below LayoutCard's own and is raised again by the scrolling host.
         showCardBackground: true
         zonePadding: 1
         edgeGap: 1

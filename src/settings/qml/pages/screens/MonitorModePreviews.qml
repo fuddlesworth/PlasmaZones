@@ -265,6 +265,31 @@ ColumnLayout {
         // than a generic "placeholder" phrase. The caption is the whole
         // message (no windows yet, not applied, daemon down), so a screen
         // reader that dropped it would lose the one thing the card says.
-        Accessible.name: previews.view.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", scrollingPreview.scrollingWindowCount) : i18nc("accessible name of the scrolling strip preview when the strip is empty; %1 is the reason", "Scrolling strip preview, %1", previews.view.scrollingEmptyCaption)
+        //
+        // Keyed on the REASON, not on the zone count and not on the caption
+        // text. Two things are going on here.
+        //
+        // Not the count: the well switches on the caption, and the two part
+        // company the moment a caption fires with tiles still in the array (a
+        // daemon that died holding a populated strip). Announcing "with 4
+        // windows" over a card drawing "PlasmaZones is not running" is worse
+        // than either.
+        //
+        // Not the caption text either: composing one translated sentence into
+        // another gives translators a fused clause whose inner half they
+        // cannot inflect or reorder. Each state gets a whole sentence instead,
+        // chosen off the same branch the caption came from.
+        Accessible.name: {
+            switch (previews.view.scrollingEmptyReason) {
+            case "daemon":
+                return i18nc("accessible name of the scrolling strip preview", "Scrolling strip preview, PlasmaZones is not running");
+            case "staged":
+                return i18nc("accessible name of the scrolling strip preview", "Scrolling strip preview, apply to start scrolling on this screen");
+            case "empty":
+                return i18nc("accessible name of the scrolling strip preview", "Scrolling strip preview, no windows on the strip yet");
+            default:
+                return i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", scrollingPreview.scrollingWindowCount);
+            }
+        }
     }
 }

@@ -132,9 +132,11 @@ struct LayoutOsdContentParams
     QString zoneNumberDisplay = QStringLiteral("all");
     int masterCount = 1;
     /// Strip axis ticks on the preview: "none" (every layout card), or
-    /// "horizontal" / "vertical" for a scrolling one. A chevron on each edge
-    /// the strip continues past, so a strip card says which way its columns
-    /// run whether or not it currently holds any.
+    /// "horizontal" / "vertical" for a scrolling one. A populated card draws a
+    /// chevron on each edge the strip continues past; an empty one hands the
+    /// same axis to the empty state's arrow instead, since the two would
+    /// otherwise double up in one well. Either way the card says which way its
+    /// columns run.
     QString stripAxisHint = QStringLiteral("none");
     /// Non-empty replaces the zone preview with the shared StripEmptyState:
     /// the axis arrow plus THIS caption. The caller supplies the wording

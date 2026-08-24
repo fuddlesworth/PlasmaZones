@@ -651,8 +651,8 @@
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="140"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="136"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="588"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="149"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="620"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="296"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
@@ -661,7 +661,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="176"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="62"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="227"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="906"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
         <source>Scrolling</source>
         <comment>tiling mode name</comment>
         <translation>Прокрутка</translation>
@@ -1340,57 +1340,58 @@
         <translation>Идентификатор раскладки для редактирования</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="124"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="126"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="606"/>
         <source>No windows on the strip yet</source>
         <comment>scrolling strip preview, empty strip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="132"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="145"/>
         <source>This screen could not be measured</source>
         <comment>scrolling strip preview, screen geometry lookup failed</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="332"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="364"/>
         <source>Layout Locked</source>
         <translation>Раскладка заблокирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="346"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="378"/>
         <source>Layout Unlocked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="422"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="454"/>
         <source>Disabled on this monitor</source>
         <translation>Отключено на этом экране</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="433"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="465"/>
         <source>Desktop %1</source>
         <translation>Рабочий стол %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="435"/>
-        <location filename="../src/daemon/daemon/osd.cpp" line="446"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="467"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="478"/>
         <source>Disabled on %1</source>
         <translation>Отключено на %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="444"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="476"/>
         <source>Disabled on this activity</source>
         <translation>Отключено в этой комнате</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="474"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="506"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="580"/>
         <source>No layout assigned</source>
         <translation>Раскладка не назначена</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="641"/>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="328"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="673"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
         <translation type="unfinished"></translation>
@@ -1406,7 +1407,7 @@
         <translation>Служба раскладок не инициализирована</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="305"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="337"/>
         <source>Layout: %1</source>
         <translation>Раскладка: %1</translation>
     </message>
@@ -1547,7 +1548,7 @@
         <translation>Имя целевого экрана</translation>
     </message>
     <message>
-        <location filename="../src/daemon/daemon/osd.cpp" line="707"/>
+        <location filename="../src/daemon/daemon/osd.cpp" line="739"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="294"/>
         <source>Tiling: %1</source>
         <translation>Мозаичное размещение: %1</translation>
@@ -2223,7 +2224,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="45"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="249"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="936"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="954"/>
         <source>Snapping layout</source>
         <translation>Раскладка прилипания</translation>
     </message>
@@ -2231,7 +2232,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="48"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="287"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="49"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="982"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1000"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/AlgorithmPreviewCard.qml.cpp" line="156"/>
         <source>Tiling algorithm</source>
         <translation>Алгоритм мозаичного размещения</translation>
@@ -4450,7 +4451,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="265"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1031"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1049"/>
         <source>Scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
@@ -13751,7 +13752,7 @@
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="395"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="288"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="602"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="457"/>
         <source>%n zone</source>
         <translation>
             <numerusform>%n зона</numerusform>
@@ -15984,7 +15985,7 @@
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="395"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="602"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="457"/>
         <source>%n width</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -16253,82 +16254,82 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="304"/>
         <source>Default scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="310"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="307"/>
         <source>Default autotile algorithm</source>
         <translation>Алгоритм автомозаики по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="312"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="309"/>
         <source>Default layout</source>
         <translation>Раскладка по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="334"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="331"/>
         <source>Built-in template. Editing stores your own copy.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="337"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="334"/>
         <source>Bundled algorithm</source>
         <translation>Встроенный алгоритм</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="340"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="337"/>
         <source>System layout (read-only)</source>
         <translation>Системная раскладка (только для чтения)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="343"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="340"/>
         <source>Edited copy of a built-in template. Deleting it brings the built-in one back.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="345"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="342"/>
         <source>Modified system layout</source>
         <translation>Изменённая системная раскладка</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="371"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="368"/>
         <source>This layout is restricted to specific screens, desktops, or activities</source>
         <translation>Эта раскладка ограничена определёнными экранами, рабочими столами или комнатами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="405"/>
         <source>Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.</source>
         <translation>Автоназначение принудительно включено для всех раскладок глобальным параметром (Прилипание → Поведение → Обработка окон). Отключите его, чтобы управлять этой раскладкой отдельно.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="411"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="408"/>
         <source>Auto-assign is on, so new windows fill empty zones. Click to disable.</source>
         <translation>Автоназначение включено, поэтому новые окна заполняют пустые зоны. Нажмите, чтобы отключить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="410"/>
         <source>Click to auto-assign new windows to empty zones</source>
         <translation>Нажмите, чтобы автоматически назначать новые окна в пустые зоны</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="426"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="423"/>
         <source>Auto-assign layout</source>
         <translation>Автоназначение раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="439"/>
         <source>Toggle layout visibility</source>
         <translation>Переключить видимость раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="444"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="441"/>
         <source>Hidden from zone selector. Click to show.</source>
         <translation>Скрыто из выбора зоны. Нажмите, чтобы показать.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="444"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="441"/>
         <source>Visible in zone selector. Click to hide.</source>
         <translation>Видно в выборе зоны. Нажмите, чтобы скрыть.</translation>
     </message>
@@ -17574,7 +17575,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="673"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="896"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="914"/>
         <source>Placement mode</source>
         <translation>Режим размещения</translation>
     </message>
@@ -18277,8 +18278,26 @@
         <comment>accessible name of the tiling preview when no algorithm name is known</comment>
         <translation>Предпросмотр алгоритма мозаичного размещения</translation>
     </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="285"/>
+        <source>Scrolling strip preview, PlasmaZones is not running</source>
+        <comment>accessible name of the scrolling strip preview</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="287"/>
+        <source>Scrolling strip preview, apply to start scrolling on this screen</source>
+        <comment>accessible name of the scrolling strip preview</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="289"/>
+        <source>Scrolling strip preview, no windows on the strip yet</source>
+        <comment>accessible name of the scrolling strip preview</comment>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="268"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="291"/>
         <source>Scrolling strip preview with %n window</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -18287,93 +18306,81 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorModePreviews.qml.cpp" line="268"/>
-        <source>Scrolling strip preview, %1</source>
-        <comment>accessible name of the scrolling strip preview when the strip is empty; %1 is the reason</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1090"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1111"/>
         <source>This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1092"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1113"/>
         <source>This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="967"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="985"/>
         <source>This monitor uses %1, which is not in your layout list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1017"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1035"/>
         <source>This monitor uses %1, which is not in your algorithm list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="906"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
         <source>Snapping</source>
         <comment>tiling mode name</comment>
         <translation>Прилипание</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="582"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="602"/>
         <source>PlasmaZones is not running</source>
         <comment>scrolling strip preview, the daemon is not running</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="589"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="604"/>
         <source>Apply to start scrolling on this screen</source>
         <comment>scrolling strip preview, the mode is staged but not applied yet</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="591"/>
-        <source>No windows on the strip yet</source>
-        <comment>scrolling strip preview, the screen is scrolling but no windows are on the strip</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1076"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1076"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1097"/>
         <source>Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1094"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1115"/>
         <source>This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1103"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1124"/>
         <source>Pick another template to replace it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1105"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1126"/>
         <source>This screen has no template of its own, so it follows the default template from Scrolling → Templates.</source>
         <oldsource>This screen has no template of its own, so it follows the default template from the Layouts page.</oldsource>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1122"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
         <source>Every starting column is in use, so further columns open at the template&apos;s own width and display.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1122"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="1143"/>
         <source>This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="906"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/MonitorStatePage.qml.cpp" line="924"/>
         <source>Tiling</source>
         <comment>tiling mode name</comment>
         <translation>Мозаичное размещение</translation>
@@ -20513,12 +20520,18 @@
         <translation>Не назначено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="329"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="165"/>
+        <source>%1, %2</source>
+        <comment>accessible name of the scrolling strip OSD when the strip is empty; %1 is the card name, %2 the reason</comment>
+        <translation type="unfinished">%1, %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="356"/>
         <source>%1 (Locked)</source>
         <translation>%1 (заблокировано)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="355"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="382"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="781"/>
         <source>Dismiss notification</source>
         <translation>Закрыть уведомление</translation>

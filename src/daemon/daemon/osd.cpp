@@ -39,7 +39,6 @@
 #include "phosphor_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
-#include <functional>
 #include <utility>
 
 namespace PlasmaZones {
@@ -121,12 +120,26 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
     QString emptyCaption;
     if (zones.isEmpty()) {
         if (tiles.isEmpty()) {
+            // Context kept verbatim in step with the settings page's copy of
+            // this sentence (MonitorStatePage.qml), so the merged catalog
+            // carries ONE entry for the two surfaces.
             emptyCaption = PhosphorI18n::tr("No windows on the strip yet", "scrolling strip preview, empty strip");
         } else {
             // Tiles but no screen geometry to place them in. The card shows
             // the empty state rather than drawing rects it cannot normalize,
             // and both the caption and this warning name the screen lookup
             // rather than blaming the strip, which is populated.
+            //
+            // This arm is defence in depth, not a case seen in normal use.
+            // resolveScreenGeometry falls back through resolveTargetScreen to
+            // the primary screen, so reaching here needs a QScreen that
+            // resolves non-null while reporting a degenerate 0x0 geometry (a
+            // hot-plug or teardown transient). When NO screen resolves at all,
+            // OverlayService::showScrollingStripOsd bails in
+            // prepareLayoutOsdWindow before any card renders and this caption
+            // is never seen. Keep the arm: it is the only thing standing
+            // between that transient and a card with neither zones nor a
+            // caption, which showScrollingStripOsd refuses outright.
             qCWarning(lcDaemon) << "Strip preview OSD: no geometry for screen=" << screenId << "tiles=" << tiles.size()
                                 << "— showing the empty state";
             emptyCaption = PhosphorI18n::tr("This screen could not be measured",
@@ -141,16 +154,22 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
 
 } // namespace
 
-void Daemon::reapScrollingOsdSettleTimers(const QString& screenId)
+void Daemon::reapScrollingOsdSettleTimersWhere(const std::function<bool(const QString&)>& pred)
 {
     const auto settleTimers = findChildren<QTimer*>(
         QRegularExpression(QLatin1Char('^') + QRegularExpression::escape(QString(kScrollingSettlePrefix))),
         Qt::FindDirectChildrenOnly);
+    // Required, not optional: an empty predicate here would mean "reap every
+    // timer", the most destructive reading of a caller mistake. Both call
+    // sites always pass a live one.
+    Q_ASSERT(pred);
+    if (!pred) {
+        qCWarning(lcDaemon) << "reapScrollingOsdSettleTimersWhere called with no predicate; reaping nothing";
+        return;
+    }
     for (QTimer* settle : settleTimers) {
         const QString timerScreenId = screenIdFromSettleTimerName(settle->objectName());
-        // samePhysical, not equality: a removed output takes every virtual
-        // sub-screen of it with it, and each of those has its own timer.
-        if (!screenId.isEmpty() && !PhosphorIdentity::VirtualScreenId::samePhysical(timerScreenId, screenId)) {
+        if (!pred(timerScreenId)) {
             continue;
         }
         settle->stop();
@@ -160,6 +179,21 @@ void Daemon::reapScrollingOsdSettleTimers(const QString& screenId)
         settle->setObjectName(QString());
         settle->deleteLater();
     }
+}
+
+void Daemon::reapScrollingOsdSettleTimers(const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        reapScrollingOsdSettleTimersWhere([](const QString&) {
+            return true;
+        });
+        return;
+    }
+    // samePhysical, not equality: a removed output takes every virtual
+    // sub-screen of it with it, and each of those has its own timer.
+    reapScrollingOsdSettleTimersWhere([&screenId](const QString& timerScreenId) {
+        return PhosphorIdentity::VirtualScreenId::samePhysical(timerScreenId, screenId);
+    });
 }
 
 void Daemon::showOverlay()
@@ -659,8 +693,8 @@ void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& te
     // way the engine will actually lay the columns. stripIsVerticalForScreen
     // owns the downcast that reaching a scrolling-only accessor off the base
     // engine pointer needs; an absent engine answers horizontal, the historical
-    // depiction. Resolved eagerly here, unlike the strip card's lazy form: this
-    // card ALWAYS draws from the axis, there is no live-tiles arm to skip it.
+    // depiction. The same value feeds the card's edge ticks below, so the bands
+    // and the ticks can never disagree about which way this strip runs.
     const bool verticalAxis = stripIsVerticalForScreen(screenId);
     const PhosphorLayout::LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ, verticalAxis);
     QVariantList zones;
@@ -682,7 +716,7 @@ void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& te
         zoneMap[QLatin1String("useCustomColors")] = false;
         zones.append(zoneMap);
     }
-    m_overlayService->showScrollingTemplateOsd(templ.id.toString(), templ.name, zones, screenId, locked);
+    m_overlayService->showScrollingTemplateOsd(templ.id.toString(), templ.name, zones, verticalAxis, screenId, locked);
 }
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)

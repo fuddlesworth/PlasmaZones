@@ -223,7 +223,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
 }
 
 void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
-                                              const QString& screenId, bool locked)
+                                              bool verticalAxis, const QString& screenId, bool locked)
 {
     // The native-template twin of showLayoutOsdImpl: no Layout* backs a
     // ScrollingTemplate, so the caller supplies the id, name and the
@@ -268,11 +268,16 @@ void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& 
     // use (see the autotile rationale in the string overload below).
     p.aspectRatioClass =
         PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    // Same axis the caller laid the bands along, so this card carries the edge
+    // ticks the picker's template cards do. Without it the same template is
+    // chevroned in the picker and bare here.
+    p.stripAxisHint = verticalAxis ? QStringLiteral("vertical") : QStringLiteral("horizontal");
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
     finishOsdShow(window, surface, osdSlot, screenGeom);
-    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId;
+    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId
+                      << "vertical=" << verticalAxis;
 }
 
 void OverlayService::showScrollingStripOsd(const QString& name, const QVariantList& zones, bool verticalAxis,
@@ -282,6 +287,16 @@ void OverlayService::showScrollingStripOsd(const QString& name, const QVariantLi
     // state worth showing, and the card shows it as an axis arrow plus the
     // caller's caption. What would be wrong is showing it as an invented
     // three-column sketch, which is what this path used to do.
+    //
+    // What IS refused is empty zones with no caption: the QML gates the empty
+    // state on the caption, so that pair renders bare edge ticks over a blank
+    // well — the "failed to load" picture the empty state exists to replace.
+    // Enforcing it here rather than trusting the doc comment, because the
+    // renderer has no way to invent the reason the strip is blank.
+    if (zones.isEmpty() && emptyCaption.isEmpty()) {
+        qCWarning(lcOverlay) << "Refusing strip OSD with no zones and no caption: screen=" << screenId;
+        return;
+    }
     const auto prep = prepareLayoutOsdWindow(screenId);
     if (!prep) {
         return;

@@ -28,6 +28,13 @@ Item {
     id: root
 
     // Layout data
+    /// Declared but never read here. It exists so the C++ push of "layoutId"
+    /// (OverlayService::pushLayoutOsdContent) lands on a declared property
+    /// instead of silently creating a dynamic one — the failure mode that
+    /// once left this card's strip properties unwired at an intermediate hop.
+    /// Delete it only together with that write and the osdSlot declaration and
+    /// forwarding in PassiveOverlayShell.qml; removing one end alone either
+    /// resurrects the dynamic-property trap or breaks the chain.
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
@@ -89,7 +96,9 @@ Item {
     // `osd.hide` profile JSONs; tune the JSONs to adjust the
     // appear/disappear feel rather than re-introducing per-window duration
     // overrides here.
-    readonly property int displayDuration: 1500
+    // A zone preview is recognised at a glance; an empty-state caption has to
+    // be READ. Same card, two different tasks, so the empty state gets longer.
+    readonly property int displayDuration: root.stripEmptyCaption !== "" ? 2500 : 1500
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -142,7 +151,18 @@ Item {
     // the layout name with its Locked / Column template decorations — not
     // just "an OSD appeared". Mirrors NavigationOsdContent's root.
     Accessible.role: Accessible.StaticText
-    Accessible.name: nameLabel.text
+    // The caption is folded in rather than left to the StripEmptyState label,
+    // which is Accessible.ignored: on an empty-strip card the caption IS the
+    // message, and a name of just the layout name would announce the card
+    // while dropping the only thing it says.
+    //
+    // A bare "%1, %2" join, unlike the Monitors page, which branches on the
+    // reason and writes whole sentences. The difference is that both halves
+    // here are already independently translated strings and the format adds no
+    // grammar of its own, so a translator can reorder them freely. The card
+    // also has only the caption TEXT to work with — the daemon pushes the
+    // sentence, not which branch produced it.
+    Accessible.name: root.stripEmptyCaption !== "" ? i18nc("accessible name of the scrolling strip OSD when the strip is empty; %1 is the card name, %2 the reason", "%1, %2", nameLabel.text, root.stripEmptyCaption) : nameLabel.text
 
     // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
     // why the latch is needed (timer-fire and click both race to dismiss).
@@ -206,6 +226,9 @@ Item {
                 visible: root.stripEmptyCaption === ""
                 zones: root.zones
                 stripAxisHint: root.stripAxisHint
+                // The card's own text colour, not theme text: the daemon
+                // pushes a colour here and the ticks belong to this card.
+                stripAxisHintColor: root.textColor
                 highlightColor: root.highlightColor
                 inactiveColor: root.inactiveColor
                 borderColor: root.borderColor
@@ -243,6 +266,10 @@ Item {
                 visible: root.stripEmptyCaption !== ""
                 verticalAxis: root.stripAxisHint === "vertical"
                 caption: root.stripEmptyCaption
+                // The daemon-pushed card colour, matching the name label
+                // below and the sibling host in LayoutCard. Left to its own
+                // theme default the arrow drifted off the card's palette.
+                contentColor: root.textColor
             }
         }
 

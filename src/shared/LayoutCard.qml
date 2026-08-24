@@ -269,7 +269,11 @@ Item {
         // placeholder rather than as content.
         Kirigami.Icon {
             anchors.centerIn: previewBackground
-            visible: root.placeholderIcon !== ""
+            // The caption wins the well. The two are documented as mutually
+            // exclusive on stripEmptyCaption above; enforcing it here means a
+            // host that set both stacks nothing, rather than drawing the icon
+            // through the empty state's arrow.
+            visible: root.placeholderIcon !== "" && root.stripEmptyCaption === ""
             source: root.placeholderIcon
             width: Math.round(Math.min(previewBackground.width, previewBackground.height) * 0.4)
             height: width
@@ -361,6 +365,7 @@ Item {
             showMasterDot: root.showMasterDot
             masterCount: root.masterCount
             stripAxisHint: root.stripAxisHint
+            stripAxisHintColor: root.textColor
             animationDuration: root.animationDuration
         }
 
@@ -368,6 +373,9 @@ Item {
         StripEmptyState {
             anchors.fill: previewBackground
             anchors.margins: root.showCardBackground ? Kirigami.Units.smallSpacing : 0
+            // Safe to clip only because the component drops its arrow rather
+            // than truncating the caption on a well too short for both.
+            clip: true
             visible: root.stripEmptyCaption !== ""
             verticalAxis: root.stripAxisHint === "vertical"
             caption: root.stripEmptyCaption
