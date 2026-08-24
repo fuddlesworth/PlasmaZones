@@ -258,10 +258,10 @@ void SnapAssistThumbnailCapture::rearmDmabufPath()
     }
     // Daemon-restart recovery: transient D-Bus errors during a restart must
     // not leave the session latched onto the pixel path when the env gate has
-    // not been turned off. Genuine capability gaps (missing EGL extensions, importer refusal)
-    // simply re-trip the fallback within the next show. Called only from the
-    // daemon-ready transition — NOT from the cache-trim reset, which fires
-    // repeatedly in a healthy session.
+    // not been turned off. Genuine capability gaps (missing EGL extensions,
+    // importer refusal) simply re-trip the fallback within the next show.
+    // Called only from the daemon-ready transition — NOT from the cache-trim
+    // reset, which fires repeatedly in a healthy session.
     if (!m_dmabufEnabled) {
         qCInfo(lcSnapAssistCapture) << "re-arming dma-buf thumbnail path after daemon-ready transition";
     }
@@ -911,7 +911,8 @@ SnapAssistThumbnailCapture::DmabufExport SnapAssistThumbnailCapture::exportTextu
     // BEFORE calling any of them. With libepoxy a missing entry point resolves
     // to a stub that abort()s the process rather than returning an error, so
     // without these guards a driver lacking dma-buf export or native-fence sync
-    // would CRASH the compositor the first time the env-gated path runs —
+    // would CRASH the compositor the first time this path runs — which, since
+    // the dma-buf transport became the default, is every session —
     // instead of returning {ok=false} and taking the raw-pixel fallback the
     // comments below rely on. EGL_KHR_gl_texture_2D_image is what admits the
     // EGL_GL_TEXTURE_2D_KHR target passed to eglCreateImageKHR below; without

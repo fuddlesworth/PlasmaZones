@@ -41,22 +41,28 @@ namespace PlasmaZones {
  * the earlier @c OffscreenQuickScene + @c WindowThumbnail QML approach is no
  * longer available; the direct GLFramebuffer render is its replacement.
  *
- * Captures run sequentially, one render+readback at a time, mirroring the
- * throttling the daemon's previous ScreenShot2 path needed (concurrent
- * CaptureWindow calls could starve KWin's screenshot queue). Each completed
- * image is posted back to the daemon via
+ * Two transports carry the result to the daemon.
+ *
+ * The DEFAULT is the zero-copy GPU path: the rendered FBO texture is
+ * exported as a single-plane dma-buf and the fd shipped via
+ * @c org.plasmazones.Overlay.setWindowThumbnailDmabuf, so the pixels never
+ * cross the session bus. Captures on this path run as one batch per show,
+ * paying the settle delay and the GL-context window once for every queued
+ * candidate. Setting @c PLASMAZONES_DMABUF_THUMBNAILS=0 pins the session to
+ * raw pixels outright.
+ *
+ * The FALLBACK is the raw-pixel path, taken automatically whenever the
+ * dma-buf one cannot carry the frame — the driver lacks the required EGL
+ * extensions, or the daemon repeatedly rejects the import
+ * (@ref onDmabufRejected) — so a preview appears on every driver and RHI
+ * backend. Here captures run sequentially, one render+readback at a time,
+ * mirroring the throttling the daemon's previous ScreenShot2 path needed
+ * (concurrent CaptureWindow calls could starve KWin's screenshot queue), and
+ * each completed image is posted via
  * @c org.plasmazones.Overlay.setSnapAssistThumbnail as raw ARGB32
  * (non-premultiplied) bytes plus dimensions — no PNG encode, no base64. The
  * daemon validates the buffer shape and copies the bytes into a QImage that
  * lands in its bounded LRU cache.
- *
- * The default transport is the zero-copy GPU path: the rendered FBO texture
- * is exported as a single-plane dma-buf and the fd shipped via
- * @c setWindowThumbnailDmabuf instead of the raw bytes. It degrades to the
- * raw-pixel path automatically when the driver lacks the required EGL
- * extensions or the daemon repeatedly rejects the import (@ref onDmabufRejected),
- * so a preview appears on every driver and RHI backend. Setting
- * @c PLASMAZONES_DMABUF_THUMBNAILS=0 pins the session to raw pixels outright.
  */
 class SnapAssistThumbnailCapture : public QObject
 {
@@ -108,7 +114,7 @@ public:
     void resetRecentlyPosted();
 
     /**
-     * @brief Restore the env-gated dma-buf path after a daemon-ready transition.
+     * @brief Restore the dma-buf path after a daemon-ready transition.
      *
      * A daemon restart turns in-flight dma-buf posts into transport errors;
      * historically those latched the session onto the raw-pixel path with no

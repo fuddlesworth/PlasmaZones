@@ -263,6 +263,60 @@ private Q_SLOTS:
         QCOMPARE(Service::MinPeerApiVersion, 14);
     }
 
+    // ── Environment switches ─────────────────────────────────────────────
+
+    /// The two switch rules differ ONLY on the unset case; every set spelling
+    /// must read identically through both, or "=0" would stop meaning "off"
+    /// the moment a switch moved from one twin to the other.
+    void testEnvSwitchRules()
+    {
+        const char* const name = "PLASMAZONES_TEST_ENV_SWITCH";
+        qunsetenv(name);
+        QCOMPARE(Service::envSwitchEnabled(name), false);
+        QCOMPARE(Service::envSwitchEnabledByDefault(name), true);
+
+        // "=0" is the one opt-out spelling, under both rules.
+        for (const char* const off : {"0", " 0 "}) {
+            qputenv(name, off);
+            QCOMPARE(Service::envSwitchEnabled(name), false);
+            QCOMPARE(Service::envSwitchEnabledByDefault(name), false);
+        }
+
+        // Every other set value is an opt-in, including the documented
+        // presence-style spellings and the empty string.
+        for (const char* const on : {"1", "true", "yes", ""}) {
+            qputenv(name, on);
+            QCOMPARE(Service::envSwitchEnabled(name), true);
+            QCOMPARE(Service::envSwitchEnabledByDefault(name), true);
+        }
+        qunsetenv(name);
+    }
+
+    /// The dma-buf thumbnail transport is the DEFAULT: unset enables it, and
+    /// PLASMAZONES_DMABUF_THUMBNAILS=0 is the only kill switch. Pinned here
+    /// because both processes read this one accessor, and flipping it back to
+    /// opt-in by accident would silently drop every session onto the
+    /// raw-pixel fallback.
+    void testDmabufThumbnailGateDefaultsOn()
+    {
+        const char* const name = "PLASMAZONES_DMABUF_THUMBNAILS";
+        const bool wasSet = qEnvironmentVariableIsSet(name);
+        const QByteArray previous = qgetenv(name);
+
+        qunsetenv(name);
+        QVERIFY(Service::snapAssistDmabufThumbnailsEnabled());
+        qputenv(name, "0");
+        QVERIFY(!Service::snapAssistDmabufThumbnailsEnabled());
+        qputenv(name, "1");
+        QVERIFY(Service::snapAssistDmabufThumbnailsEnabled());
+
+        if (wasSet) {
+            qputenv(name, previous);
+        } else {
+            qunsetenv(name);
+        }
+    }
+
     // SnapAssistCandidate round-trip is covered by test_compositor_common.
 
     // ── WindowType enum ──────────────────────────────────────────────────

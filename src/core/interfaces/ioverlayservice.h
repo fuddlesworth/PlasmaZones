@@ -261,16 +261,22 @@ public:
     virtual bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                         const QByteArray& pixels) = 0;
 
-    /// Deliver a thumbnail as an imported DMA-BUF (zero-copy GPU path), the
-    /// alternative to the raw-ARGB32 @ref setSnapAssistThumbnail above. @p desc
-    /// carries a borrowed single-plane dma-buf fd plus its DRM
-    /// format/modifier/stride; the fd is valid only for the duration of this
-    /// call. The implementation imports it into a GPU texture for display.
+    /// Deliver a thumbnail as an imported DMA-BUF (zero-copy GPU path). This
+    /// is the DEFAULT transport; the raw-ARGB32 @ref setSnapAssistThumbnail
+    /// above is its fallback. @p desc carries a borrowed single-plane dma-buf
+    /// fd plus its DRM format/modifier/stride; the fd is valid only for the
+    /// duration of this call. The implementation imports it into a GPU
+    /// texture for display.
     ///
-    /// @return true iff the implementation imported and stored the thumbnail.
-    ///         False when the dma-buf path is unavailable (experimental gate
-    ///         off, driver/RHI backend unsupported, or import failed) — the
-    ///         caller MUST then fall back to @ref setSnapAssistThumbnail so a
+    /// @return true iff the implementation accepted and stored the
+    ///         descriptor. The GPU import itself may be deferred (the
+    ///         daemon imports lazily on its render thread, after the
+    ///         render-completion fence signals), so true means "accepted,
+    ///         will display", not "already imported". False when the
+    ///         dma-buf path is unavailable (kill switch
+    ///         PLASMAZONES_DMABUF_THUMBNAILS=0, driver/RHI backend
+    ///         unsupported, or the descriptor was rejected) — the caller
+    ///         MUST then fall back to @ref setSnapAssistThumbnail so a
     ///         preview still appears.
     virtual bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) = 0;
 

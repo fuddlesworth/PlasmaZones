@@ -411,12 +411,16 @@ inline int snapAssistThumbnailBoxPx(int zoneMinAxisLogicalPx, int candidateCount
     return std::clamp(int(std::ceil(devicePx)), SnapAssistMinIconLogicalPx, SnapAssistThumbnailMaxDimension);
 }
 
-// One rule for every boolean environment switch in this header: set to any
-// value other than "0" enables, "0" or unset disables. Value-checked rather
-// than presence-checked so an explicit opt-out is honoured, and not parsed as
-// an integer so the presence-style spellings the switches have always been
+// The default-OFF rule for a boolean environment switch: set to any value
+// other than "0" enables, "0" or unset disables. Value-checked rather than
+// presence-checked so an explicit opt-out is honoured, and not parsed as an
+// integer so the presence-style spellings the switches have always been
 // documented with ("=1", "=true", "=yes") keep working. "=0" is the only
 // opt-out; anything else set is an opt-in.
+//
+// Switches in this header pick one of two rules: this one, or the default-ON
+// envSwitchEnabledByDefault below. The "=0" spelling disables under both, so
+// a kill switch reads the same to a user whichever twin backs it.
 inline bool envSwitchEnabled(const char* name)
 {
     if (!qEnvironmentVariableIsSet(name)) {
