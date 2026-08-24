@@ -149,6 +149,8 @@ private Q_SLOTS:
     void focusNeverModePinsEnteredEdge();
     void focusAlwaysModeCenters();
     void focusOnOverflowMode();
+    void focusOnOverflowMeasuresAgainstTheTargetNeighbour();
+    void focusOnOverflowSpanExcludesViewportEdgePadding();
     void alwaysCenterSingleColumn();
     void minimizeKeepsSlotAndRestores();
     void fullyMinimizedColumnCollapses();
@@ -335,6 +337,98 @@ void TestScrollStripCore::focusOnOverflowMode()
     r = wide.relayout(params);
     const QRect b = rectOf(r, QStringLiteral("b"));
     QCOMPARE(Ax::mainPos(b), (Ax::mainLen(params.workArea) - 700) / 2);
+}
+
+void TestScrollStripCore::focusOnOverflowMeasuresAgainstTheTargetNeighbour()
+{
+    // niri parity for OnOverflow's source column: the overflow test measures
+    // the target against the column that ends up NEXT TO IT, not against the
+    // one focus came from. The two are the same for an adjacent step (which is
+    // all focusOnOverflowMode above covers, and why this divergence stayed
+    // invisible), so it takes a jump of more than one column to tell them
+    // apart. Both rows below are built so the prevIdx reading fits — leaving
+    // the target pinned at the entering edge — while the neighbour reading
+    // overflows and centers.
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
+    const int viewMain = Ax::mainLen(params.workArea);
+
+    auto build = [&params](ScrollStrip& strip, const QList<int>& widths) {
+        int n = 0;
+        for (const int w : widths) {
+            const QString id = QStringLiteral("c%1").arg(n++);
+            QVERIFY(strip.insertWindow(id, ColumnWidth::makeFixed(w), ColumnDisplay::Normal, params));
+        }
+    };
+
+    {
+        // Forward jump (source is the LEAD neighbour). Focus lands on c3,
+        // whose lead neighbour c2 is wide enough that the pair overflows.
+        // Read against the far-off c0 instead, the pair is 300 + 300 and fits.
+        ScrollStrip strip;
+        build(strip, {300, 300, 1000, 300, 300, 300});
+        QVERIFY(strip.focusColumn(0, params));
+        QVERIFY(strip.focusColumn(3, params));
+
+        const QRect r = rectOf(strip.relayout(params), QStringLiteral("c3"));
+        QCOMPARE(Ax::mainLen(r), 300);
+        QCOMPARE(Ax::mainPos(r), (viewMain - 300) / 2);
+    }
+    {
+        // Backward jump (source is the TRAIL neighbour, niri's min(idx + 1)
+        // arm). Same shape mirrored: c2's trail neighbour c3 is the wide one.
+        ScrollStrip strip;
+        build(strip, {300, 300, 300, 1000, 300, 300});
+        // The last insert already left focus on c5, which is the jump's
+        // origin — asking for it again is a no-op, not a failure.
+        QCOMPARE(strip.activeColumnIndex(), 5);
+        QVERIFY(strip.focusColumn(2, params));
+
+        const QRect r = rectOf(strip.relayout(params), QStringLiteral("c2"));
+        QCOMPARE(Ax::mainLen(r), 300);
+        QCOMPARE(Ax::mainPos(r), (viewMain - 300) / 2);
+    }
+}
+
+void TestScrollStripCore::focusOnOverflowSpanExcludesViewportEdgePadding()
+{
+    // The THRESHOLD itself, which the neighbour case above cannot pin: both
+    // of its rows clear the boundary by hundreds of pixels, so an overflow
+    // test carrying a spurious constant term still centers them and still
+    // looks right. niri adds `gaps * 2` to its span because its working_area
+    // still holds the padding it keeps between the outermost column and the
+    // viewport. Ours does not — the outer gaps come off params.workArea long
+    // before the strip sees it, and columns lay out flush inside what is
+    // left — so viewMain is exactly the room the pair has and the span is
+    // compared raw. Carrying niri's term across would center a pair that
+    // fits by up to two gaps, which is what this case rejects.
+    auto params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
+    const int viewMain = Ax::mainLen(params.workArea);
+    QCOMPARE(viewMain, 1200);
+    QCOMPARE(params.gap, 10);
+
+    {
+        // 595 + 10 + 595 = exactly 1200. The pair fills the viewport to the
+        // pixel, so it FITS and the fit arm leaves it flush at the lead edge.
+        ScrollStrip strip;
+        QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(595), ColumnDisplay::Normal, params));
+        QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(595), ColumnDisplay::Normal, params));
+        const ResolvedStrip r = strip.relayout(params);
+        QCOMPARE(r.viewOffset, 0);
+        // Spelled out rather than derived, and deliberately NOT the centered
+        // position (1200 - 595) / 2 = 302 the two-gap form would produce.
+        QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("b"))), 605);
+    }
+    {
+        // Fifteen pixels over: 600 + 10 + 605 = 1215. Now it centers, so the
+        // case above is a boundary rather than a strip that never overflows.
+        ScrollStrip strip;
+        QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(600), ColumnDisplay::Normal, params));
+        QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(605), ColumnDisplay::Normal, params));
+        const QRect b = rectOf(strip.relayout(params), QStringLiteral("b"));
+        QCOMPARE(Ax::mainPos(b), (viewMain - 605) / 2);
+    }
 }
 
 void TestScrollStripCore::alwaysCenterSingleColumn()

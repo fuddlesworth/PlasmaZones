@@ -169,9 +169,10 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
     }
     // prevIdx was captured BEFORE the insert shifted the columns at and past
     // insertAt (m_preMaximizeColumnIdx is adjusted for the same reason just
-    // above). Left stale, the OnOverflow arm of the reanchor reads the wrong
-    // column's width as prevW — or, for a First/LeftOfActive insert, reads
-    // the column that just arrived and degrades OnOverflow to Never.
+    // above). Left stale, it can sit on the wrong SIDE of the new active
+    // index, which flips the neighbour the OnOverflow arm measures against —
+    // or, for a First/LeftOfActive insert, name the column that just arrived,
+    // so prevIdx == active and OnOverflow degrades to Never.
     int shiftedPrevIdx = prevIdx;
     if (shiftedPrevIdx >= insertAt) {
         ++shiftedPrevIdx;
@@ -339,8 +340,9 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // Index fixups: the active column keeps identity when it survived.
     if (columnClosed) {
         // prevIdx is consumed by reanchorAfterFocusChange AFTER the removal
-        // shifted indices — adjust it too, or OnOverflow reads a DIFFERENT
-        // column's width as prevW and the entering-edge test can invert.
+        // shifted indices — adjust it too, or it names a DIFFERENT column,
+        // which can put it on the wrong side of the active index and invert
+        // both the entering-edge test and OnOverflow's neighbour pick.
         if (prevIdx > colIdx) {
             --prevIdx;
         } else if (prevIdx == colIdx) {
@@ -568,7 +570,7 @@ bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
     }
     m_activeColumnIdx = target;
     // prevIdx = -1: the move shifted indices, so the saved index names a
-    // DIFFERENT column now (the OnOverflow prevW hazard removeWindowInternal
+    // DIFFERENT column now (the stale-prevIdx hazard removeWindowInternal
     // documents) — and a move does not change WHICH window is focused, so
     // no entering-edge/overflow test should fire; keep the view stationary.
     reanchorAfterFocusChange(-1, oldViewOffset, params);
@@ -796,8 +798,8 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
     m_activeColumnIdx = destIdx;
     // The previously-active column ceased to exist and later indices
     // shifted, so prevIdx no longer names it — passing it through would
-    // make the OnOverflow test read a DIFFERENT column's width as prevW
-    // (same hazard removeWindowInternal documents).
+    // point the OnOverflow test at a DIFFERENT column (same hazard
+    // removeWindowInternal documents).
     reanchorAfterFocusChange(-1, oldViewOffset, params);
     return true;
 }

@@ -3,6 +3,8 @@
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
+#include "scrollengine/scrollenginelogging.h"
+
 #include <QtGlobal>
 
 namespace PhosphorScrollEngine {
@@ -269,14 +271,60 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
 
     if (!center && params.centerFocusedColumn == CenterFocusedColumn::OnOverflow && prevIdx >= 0
         && prevIdx < m_columns.size() && prevIdx != m_activeColumnIdx) {
-        const int prevMain = columnExtentPx(m_columns.at(prevIdx), params);
-        if (colMain + params.gap + prevMain > viewMain) {
-            center = true;
+        // niri parity (compute_new_view_offset_for_column, the OnOverflow arm:
+        // "Always take the left or right neighbor of the target as the
+        // source"). The overflow test measures the target against the column
+        // that will sit NEXT TO IT on screen, never against the column focus
+        // happened to come from. Those are the same column for an adjacent
+        // step and different for every jump of more than one — focusFirstColumn
+        // and focusLastColumn, focusWindow onto a distant column, or focus
+        // following a window that moved. Measuring against a far-off prevIdx
+        // reads a width that has nothing to do with the resulting view, which
+        // let a jump land flush against the entering edge in exactly the cases
+        // niri centers.
+        //
+        // Zero-extent (fully minimized) columns hold no strip position, so
+        // they cannot be the neighbour that crowds the target; walk past them
+        // to the first column that actually occupies space, the same skip
+        // columnStripPos and stripExtentPx apply. niri has no such state and
+        // so no opinion here. When that side holds no such column the target
+        // has the viewport to itself and the fit arm is right, which is also
+        // what niri does when it is handed no source at all.
+        const int dir = prevIdx > m_activeColumnIdx ? 1 : -1;
+        int sourceIdx = m_activeColumnIdx + dir;
+        while (sourceIdx >= 0 && sourceIdx < m_columns.size() && columnExtentPx(m_columns.at(sourceIdx), params) <= 0) {
+            sourceIdx += dir;
+        }
+        if (sourceIdx >= 0 && sourceIdx < m_columns.size()) {
+            const int sourceMain = columnExtentPx(m_columns.at(sourceIdx), params);
+            const int sourcePos = columnStripPos(sourceIdx, params);
+            // Source's leading edge to the target's trailing one, or the
+            // mirror when the source is trailward, expressed through strip
+            // positions exactly as niri's total_width is.
+            //
+            // WITHOUT niri's `+ gaps * 2`, deliberately. That term is the
+            // edge padding niri keeps between the outermost column and the
+            // viewport: its working_area still contains that padding, so it
+            // has to be added to the span before the two are comparable. Ours
+            // is already gone — engine_query subtracts the outer gaps from
+            // params.workArea, and both relayout (first column flush at
+            // mainLow) and the fit arm below (pinning to viewMain - colMain)
+            // lay columns edge to edge inside what is left. viewMain IS the
+            // room the pair has, so adding the term back would compare the
+            // padding twice and center a pair that fits by up to two gaps.
+            const int span = sourcePos < activeMainPos ? activeMainPos - sourcePos + colMain
+                                                       : sourcePos - activeMainPos + sourceMain;
+            if (span > viewMain) {
+                center = true;
+            }
         }
     }
 
     if (center) {
         m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
+        qCDebug(lcScrollEngine) << "reanchorAfterFocusChange: prevIdx" << prevIdx << "active" << m_activeColumnIdx
+                                << "oldViewOffset" << oldViewOffset << "policy" << int(params.centerFocusedColumn)
+                                << "verdict centered anchor" << m_viewAnchor;
         return;
     }
 
@@ -297,6 +345,9 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
         pos = viewMain - colMain;
     }
     m_viewAnchor = clampedAnchor(pos, params);
+    qCDebug(lcScrollEngine) << "reanchorAfterFocusChange: prevIdx" << prevIdx << "active" << m_activeColumnIdx
+                            << "oldViewOffset" << oldViewOffset << "policy" << int(params.centerFocusedColumn)
+                            << "verdict fit pos" << pos << "anchor" << m_viewAnchor;
 }
 
 void ScrollStrip::restoreViewAnchor(int anchor, const ScrollLayoutParams& params)
