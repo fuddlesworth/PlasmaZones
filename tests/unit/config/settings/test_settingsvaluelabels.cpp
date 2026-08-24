@@ -39,6 +39,31 @@ class TestSettingsValueLabels : public QObject
 private:
     /// (group, key, token) triples that carry a label, as one joined string per
     /// entry so the two directions can be compared as sets.
+    /// Numeric keys that legitimately carry no unit: bare counts, indices and
+    /// ratios where a suffix would read as noise rather than as information.
+    /// Anything NOT listed here has to have a descriptor, so a new numeric key
+    /// with a real unit cannot ship rendering as a bare number.
+    static const QSet<QString>& unitlessNumericKeys()
+    {
+        static const QSet<QString> kSet{
+            // Bare counts: "3" reads correctly, "3 columns" would be the view's
+            // job to phrase, not the unit table's.
+            QStringLiteral("Snapping.ZoneSelector/GridColumns"),
+            QStringLiteral("Snapping.ZoneSelector/MaxRows"),
+            QStringLiteral("Tiling.Algorithm/MasterCount"),
+            QStringLiteral("Tiling.Algorithm/MaxWindows"),
+            QStringLiteral("Shaders.Audio/Bars"),
+            // Font weights are a CSS scale (400 regular, 700 bold), not a
+            // quantity of anything.
+            QStringLiteral("Snapping.Zones.Labels/FontWeight"),
+            QStringLiteral("Scrolling.TabIndicator/FontWeight"),
+            // A unitless 0-1 strength scalar. Not a percentage: it is not
+            // stored as one and the UI does not present it as one.
+            QStringLiteral("Shaders.Audio/NoiseReduction"),
+        };
+        return kSet;
+    }
+
     static QSet<QString> labelledTriples()
     {
         QSet<QString> out;
@@ -102,6 +127,45 @@ private Q_SLOTS:
         // Guard the guard: an empty label table subtracts to an empty orphan
         // set and would pass while checking nothing.
         QVERIFY2(!labelled.isEmpty(), "no labels found — the walk is broken, not clean");
+    }
+
+    /// Every numeric key either carries a descriptor or is declared unitless.
+    ///
+    /// The two slots above walk enum CHOICES, and the orphan slot walks
+    /// descriptors -> schema, which catches a stale row. Nothing walked
+    /// schema -> descriptors for numeric keys, so a new Int/Double key with a
+    /// real unit could ship with no descriptor and stay green: the profile diff
+    /// then renders it as a bare number. That is exactly how the four trigger
+    /// release graces shipped unitless. This is the missing direction.
+    void everyNumericKeyIsDescribedOrDeclaredUnitless()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QStringList undescribed;
+        int checked = 0;
+        for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
+            for (const PhosphorConfig::KeyDef& def : git.value()) {
+                if (def.expectedType != QMetaType::Int && def.expectedType != QMetaType::Double) {
+                    continue;
+                }
+                if (!def.choices.isEmpty()) {
+                    continue; // An enum stored as an int: the choice slots own it.
+                }
+                const QString qualified = git.key() + QLatin1Char('/') + def.key;
+                if (unitlessNumericKeys().contains(qualified)) {
+                    continue;
+                }
+                ++checked;
+                const ValueDescriptor d = SettingsValueLabels::descriptorFor(git.key(), def.key);
+                if (d.kind == ValueKind::Plain && d.unit.isEmpty()) {
+                    undescribed.append(qualified);
+                }
+            }
+        }
+        undescribed.sort();
+        QVERIFY2(undescribed.isEmpty(),
+                 qPrintable(QStringLiteral("numeric keys with no descriptor and not declared unitless: %1")
+                                .arg(undescribed.join(QLatin1String(", ")))));
+        QVERIFY2(checked > 0, "no numeric keys found in the schema — the walk is broken, not clean");
     }
 
     /// A declared value must be one its own key actually accepts. The validator

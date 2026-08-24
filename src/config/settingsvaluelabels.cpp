@@ -288,6 +288,23 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()), number(ms));
         t.insert(pairKey(CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()), number(QStringLiteral("s")));
 
+        // ── Gaps, all six in pixels. The group is flat, so the inner gap and
+        // the four per-edge outer gaps sit beside the uniform outer one. ────
+        for (const QString& key : {CD::innerGapKey(), CD::outerGapKey(), CD::outerGapTopKey(), CD::outerGapBottomKey(),
+                                   CD::outerGapLeftKey(), CD::outerGapRightKey()}) {
+            t.insert(pairKey(CD::gapsGroup(), key), number(px));
+        }
+
+        // ── Performance scalars. The two zone-size floors are pixels and the
+        // poll interval is milliseconds, as their key names say. ────────────
+        t.insert(pairKey(CD::performanceGroup(), CD::minimumZoneSizePxKey()), number(px));
+        t.insert(pairKey(CD::performanceGroup(), CD::minimumZoneDisplaySizePxKey()), number(px));
+        t.insert(pairKey(CD::performanceGroup(), CD::pollIntervalMsKey()), number(ms));
+
+        // ── Editor grid snapping interval, in pixels on the editor canvas. ──
+        t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalXKey()), number(px));
+        t.insert(pairKey(CD::editorSnappingGroup(), CD::intervalYKey()), number(px));
+
         // ── Trigger release grace, one per family with a hold mode. Zero is
         // the off switch here, same as the window-size filters below. ───────
         for (const QString& group : {CD::snappingBehaviorGroup(), CD::snappingBehaviorZoneSpanGroup(),
@@ -322,8 +339,10 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         // The step percents are stored as whole percents already, so they take
         // the unit without a scale, unlike the 0.0-1.0 ratios above.
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultWindowHeightValueKey()), number(px));
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthValueKey()), number(px));
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()), number(pct));
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()), number(pct));
+        t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::viewScrollStepPercentKey()), number(pct));
         // Edge auto-scroll: a band width in pixels, a delay in milliseconds
         // and a speed in pixels per second. The speed gets its own unit
         // rather than borrowing px, which would render 1500 as a distance.
