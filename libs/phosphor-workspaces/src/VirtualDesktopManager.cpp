@@ -543,7 +543,13 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(uint count)
 
     clampScreenDesktopsToCount();
 
-    Q_EMIT desktopCountChanged(newCount);
+    // Report the live member, not the signal argument, for the same reason the
+    // clamp above reads it: refreshFromKWin() may have re-read a different
+    // count from KWin's property, and that is the authoritative one. Emitting
+    // `newCount` here would announce a value this object no longer holds, so a
+    // consumer's cached count would disagree with desktopCount(). Matches the
+    // emit in applyDesktopListReply, which already sends m_desktopCount.
+    Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
 int VirtualDesktopManager::desktopCount() const
