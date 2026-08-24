@@ -14,28 +14,21 @@ on:
       tag:
         description: 'Tag to release (e.g. v3.0.0). Must already exist.'
         required: true
+      pkgrel:
+        description: 'Package revision (Arch pkgrel / RPM Release / deb revision). Bump for a rebuild-only republish of an already-released tag, e.g. after a KWin or Qt bump breaks the installed binaries. Leave at 1 for a normal release.'
+        required: false
+        default: '1'
 
-# Default scope is read-only. Only the `release` job needs write, and it opts
-# in via its own permissions block. The AUR publish needs no GitHub token at
-# all: it pushes over SSH with the AUR_SSH_PRIVATE_KEY secret.
+# Default scope is read-only. Only the `release` job and the AUR publish
+# need writes — they opt in via per-job permissions blocks.
 permissions:
   contents: read
 
-# Two tag pushes (or a re-run of the same tag dispatch) must not race the
-# delete-and-recreate dance in the `release` job. Keyed on the tag being
-# released rather than github.ref, because on workflow_dispatch github.ref is
-# the branch the run was dispatched FROM, so a dispatch and a push of the same
-# tag would otherwise never serialise against each other.
-#
-# github.ref_name, not github.ref: ref_name is the BARE tag ("v3.4.0") on a tag
-# push, which is the spelling the dispatch input asks for, so the two sides
-# produce the same group string. github.ref would yield "refs/tags/v3.4.0" and
-# silently fail to match a bare input. Residual edge, accepted: an operator who
-# types the input as "refs/tags/v3.4.0" (which the version job below tolerates)
-# lands in a different group again. Expressions here have no string-strip
-# function to normalise that, and the bare form is what the input documents.
+# Two tag pushes (or a re-run of the same tag dispatch) must not race
+# the delete-and-recreate dance in the `release` job. Serialising per
+# ref keeps multiple in-flight releases out of each other's way.
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -46,8 +39,10 @@ jobs:
     name: Extract Version
     runs-on: ubuntu-latest
     outputs:
+      ref: ${{ steps.version.outputs.ref }}
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      pkgrel: ${{ steps.version.outputs.pkgrel }}
     steps:
       - name: Extract version from tag
         id: version
@@ -57,6 +52,7 @@ jobs:
         # GitHub Actions script-injection hardening pattern.
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_PKGREL: ${{ github.event.inputs.pkgrel }}
         run: |
           set -euo pipefail
           # On push the ref is refs/tags/v<x>; on manual dispatch we
@@ -91,9 +87,61 @@ jobs:
           if [[ "$VERSION" =~ -(alpha|beta|rc)(\.?[0-9]+)?$ ]]; then
               IS_PRE=true
           fi
+          # Package revision: Arch pkgrel, RPM Release, deb revision. A tag
+          # push always means a fresh version, so it starts at 1; only a
+          # manual dispatch can raise it, and that is the rebuild-only path
+          # — same source, same tag, new packages.
+          #
+          # What forces it is a dependency ABI moving under an installed
+          # build. KWin is the routine one: the effect plugin's IID embeds
+          # KWin's exact upstream version, and KWin refuses to load an
+          # effect whose IID does not match, so the overlay goes missing on
+          # every KWin bump until a rebuild. Qt is the sharp one: the
+          # layer-shell QPA plugin compiles against Qt private headers whose
+          # class layouts carry no ABI guarantee, so a qt6 patch bump can
+          # leave the daemon reading members at stale offsets and crashing.
+          #
+          # Digits only, for the same script-injection reason the tag is
+          # gated above.
+          PKGREL="${INPUT_PKGREL:-1}"
+          if [[ ! "$PKGREL" =~ ^[0-9]+$ ]]; then
+              echo "Error: PKGREL '$PKGREL' is not a positive integer" >&2
+              exit 1
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=$IS_PRE" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION (prerelease=$IS_PRE)"
+          echo "pkgrel=$PKGREL" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION (prerelease=$IS_PRE, pkgrel=$PKGREL)"
+
+      # A rebuild-only republish reuses a tag that already shipped. If that
+      # tag's release is immutable the assets cannot be replaced, and — the
+      # part that actually bites — GitHub keeps the tag reserved even after
+      # the release is deleted, so nothing can be published under it ever
+      # again. Refuse here, before six package builds run and before the
+      # release job's create path gets anywhere near the existing release.
+      - name: Refuse a rebuild against an immutable release
+        if: steps.version.outputs.pkgrel != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! RELEASE_JSON="$(gh release view "v$VERSION" --json isImmutable 2>/dev/null)"; then
+              echo "No existing release for v$VERSION — nothing to conflict with." >&2
+              exit 0
+          fi
+          if [[ "$(jq -r '.isImmutable' <<<"$RELEASE_JSON")" == "true" ]]; then
+              {
+                  echo "Error: the release for v$VERSION is immutable, so its assets cannot be"
+                  echo "replaced and the tag cannot be reused for a new release."
+                  echo ""
+                  echo "A rebuild-only republish is not possible for this tag. Cut a new version"
+                  echo "tag instead; the source AUR package still rebuilds from the tag archive,"
+                  echo "but every prebuilt channel needs a new release to publish under."
+              } >&2
+              exit 1
+          fi
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Build Debian Package (KDE Neon - ships Plasma/KF6 6.7+)
@@ -115,7 +163,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -128,7 +176,6 @@ jobs:
             libkf6config-dev libkf6configwidgets-dev \
             qt6-wayland-private-dev \
             libkf6kcmutils-dev \
-            libkf6colorscheme-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev \
             qt6-wayland-dev plasma-activities-dev
@@ -137,7 +184,33 @@ jobs:
             || apt-get install -y --no-install-recommends kf6-kirigami-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
-        run: bash packaging/generate-changelog.sh debian
+        # Force bash for the same reason the build step below does: the KDE
+        # Neon container's default shell resolves to dash, which has neither
+        # `set -o pipefail` nor `[[ ]]`.
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
+        run: |
+          set -euo pipefail
+          # The third argument is the package revision, but do not rely on the
+          # generator honouring it. Checkouts are pinned to the release tag, so
+          # this runs THAT TAG'S copy of the script while the workflow itself
+          # comes from the dispatched branch. Rebuilding a tag published before
+          # the revision argument existed silently drops it and emits -1.
+          bash packaging/generate-changelog.sh debian "" "$PKGREL"
+          # So stamp the revision here, where the workflow is authoritative.
+          # Line 1 is the newest entry; its only `-<digits>)` is the revision.
+          sed -i "1s/-[0-9]\{1,\})/-$PKGREL)/" packaging/debian/changelog
+          # Never ship a package whose version is not the one asked for: the
+          # deb version comes wholly from this file, so a silent mismatch here
+          # is a package apt will not offer as an upgrade.
+          GOT="$(sed -n '1s/^plasmazones (\(.*\)).*/\1/p' packaging/debian/changelog)"
+          if [[ "$GOT" != "$VERSION-$PKGREL" ]]; then
+              echo "Error: debian/changelog version is '$GOT', expected '$VERSION-$PKGREL'" >&2
+              exit 1
+          fi
+          echo "Debian version: $GOT"
 
       - name: Build Debian package
         # Force bash: this step uses `set -o pipefail` and `compgen`, both
@@ -191,7 +264,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -203,7 +276,6 @@ jobs:
             kf6-kconfig-devel kf6-kconfigwidgets-devel \
             kf6-kirigami-devel \
             kf6-kcmutils-devel \
-            kf6-kcolorscheme-devel \
             kf6-kglobalaccel-devel \
             qt6-qtwayland-devel \
             plasma-activities-devel
@@ -214,10 +286,27 @@ jobs:
       # Template the version FIRST so the source tarball baked into the
       # SRPM carries the matching spec rather than the 0.0.0 placeholder.
       - name: Generate RPM changelog and set version from CHANGELOG.md
+        # See the Debian step: the version assertion below uses `[[ ]]`, which
+        # dash does not have, and a container's default shell may resolve to it.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
+          # Release must move for a rebuild-only republish, otherwise dnf and
+          # zypper see the same NEVR and offer nothing. Same revision the deb
+          # changelog and Arch pkgrel use.
+          sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm "" "$PKGREL"
+          # Assert the stamp landed. Same reasoning as the Debian step: the
+          # checked-out generator comes from the release tag and may predate
+          # the revision argument, so the workflow's own sed above is what
+          # actually decides the NEVR.
+          GOT="$(sed -n 's/^Release:[[:space:]]*//p' packaging/rpm/plasmazones.spec)"
+          if [[ "$GOT" != "$PKGREL%{?dist}" ]]; then
+              echo "Error: spec Release is '$GOT', expected '$PKGREL%{?dist}'" >&2
+              exit 1
+          fi
 
       - name: Create source tarball
         run: |
@@ -304,7 +393,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         # Reuse the install-with-retry shape from the prerequisites step.
@@ -332,7 +421,6 @@ jobs:
             'cmake(KF6Config)' 'cmake(KF6ConfigWidgets)' \
             'cmake(KF6Kirigami)' \
             'cmake(KF6KCMUtils)' \
-            'cmake(KF6ColorScheme)' \
             'cmake(KF6GlobalAccel)' \
             'cmake(KF6WindowSystem)' \
             kwin6-devel wayland-devel vulkan-devel 'cmake(Qt6WaylandClient)' 'cmake(Qt6WaylandClientPrivate)' 'cmake(PlasmaActivities)' \
@@ -342,10 +430,27 @@ jobs:
         run: rpmdev-setuptree
 
       - name: Generate RPM changelog and set version from CHANGELOG.md
+        # See the Debian step: the version assertion below uses `[[ ]]`, which
+        # dash does not have, and a container's default shell may resolve to it.
+        shell: bash
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
+          # Release must move for a rebuild-only republish, otherwise dnf and
+          # zypper see the same NEVR and offer nothing. Same revision the deb
+          # changelog and Arch pkgrel use.
+          sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm "" "$PKGREL"
+          # Assert the stamp landed. Same reasoning as the Debian step: the
+          # checked-out generator comes from the release tag and may predate
+          # the revision argument, so the workflow's own sed above is what
+          # actually decides the NEVR.
+          GOT="$(sed -n 's/^Release:[[:space:]]*//p' packaging/rpm/plasmazones.spec)"
+          if [[ "$GOT" != "$PKGREL%{?dist}" ]]; then
+              echo "Error: spec Release is '$GOT', expected '$PKGREL%{?dist}'" >&2
+              exit 1
+          fi
 
       - name: Create source tarball
         run: |
@@ -397,7 +502,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -406,7 +511,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             kwin wayland vulkan-headers vulkan-icd-loader libepoxy libdrm \
             kconfig kconfigwidgets \
-            kcmutils kglobalaccel kcolorscheme \
+            kcmutils kglobalaccel \
             qt6-wayland plasma-activities
 
       - name: Configure
@@ -487,7 +592,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install build dependencies
         run: |
@@ -496,7 +601,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             kwin \
             kconfig kconfigwidgets \
-            kcmutils kglobalaccel kcolorscheme \
+            kcmutils kglobalaccel \
             qt6-wayland plasma-activities \
             vulkan-headers vulkan-icd-loader
 
@@ -514,8 +619,8 @@ jobs:
           # CI Build - uses local source
           pkgname=plasmazones
           pkgver=${{ needs.version.outputs.version }}
-          pkgrel=1
-          pkgdesc="Window snapping, tiling and scrolling for KDE Plasma"
+          pkgrel=${{ needs.version.outputs.pkgrel }}
+          pkgdesc="Window tiling and autotiling for KDE Plasma"
           arch=('x86_64')
           url="https://github.com/fuddlesworth/PlasmaZones"
           license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
@@ -526,12 +631,11 @@ jobs:
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
-              'kcmutils' 'kglobalaccel' 'kcolorscheme' 'qt6-wayland'
+              'kcmutils' 'kglobalaccel' 'qt6-wayland'
               'kwin>=6.7.0'
           )
-          makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland' 'vulkan-headers' 'vulkan-icd-loader')
-          optdepends=('plasma-activities: activity-based layouts'
-                      'hwdata: readable GPU names in the rendering device picker')
+          makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
+          optdepends=('plasma-activities: activity-based layouts')
           source=()
           sha256sums=()
           install=plasmazones.install
@@ -556,16 +660,6 @@ jobs:
                   "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
               install -Dm755 packaging/arch/plasmazones-refresh-sycoca \
                   "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
-
-              # License files, matching packaging/arch/PKGBUILD. The license=()
-              # array above declares GPL-3.0-or-later and LGPL-2.1-or-later, so
-              # both files have to ship under /usr/share/licenses. Without them
-              # this package claimed two licences and carried neither, and the
-              # namcap run below cannot catch it because it is `|| true`.
-              install -Dm644 LICENSE \
-                  "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-              install -Dm644 COPYING.LESSER \
-                  "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
           }
           PKGBUILD_EOF
 
@@ -604,7 +698,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install Nix
         # SHA-pinned to match ci.yml; bump together when verifying a new release.
@@ -642,7 +736,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
           fetch-depth: 0
 
       - name: Download all artifacts
@@ -734,16 +828,6 @@ jobs:
             echo '```'
           } > release_notes.md
 
-      - name: Delete existing release if present
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          VERSION="v${{ needs.version.outputs.version }}"
-          if gh release view "$VERSION" &>/dev/null; then
-            echo "Release $VERSION already exists — deleting so we can recreate with assets"
-            gh release delete "$VERSION" --yes
-          fi
-
       - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -773,11 +857,28 @@ jobs:
           else
               RELEASE_FLAGS+=(--latest)
           fi
-          gh release create "$VERSION" \
-            --title "PlasmaZones $VERSION" \
-            --notes-file release_notes.md \
-            "${RELEASE_FLAGS[@]}" \
-            "${ASSETS[@]}"
+          # Update in place when the release already exists, and NEVER delete
+          # it. Deleting is not a safe way to "recreate with assets": on a repo
+          # with immutable releases the delete succeeds, the recreate then fails
+          # with "tag_name was used by an immutable release", and the tag is
+          # burned permanently — the release is gone and nothing can replace it.
+          # Every prebuilt channel that resolves a release-download URL breaks
+          # at that point. Editing and clobbering assets fails harmlessly
+          # instead, leaving the published release intact.
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+              echo "Release $VERSION exists — updating in place"
+              gh release edit "$VERSION" \
+                --title "PlasmaZones $VERSION" \
+                --notes-file release_notes.md \
+                "${RELEASE_FLAGS[@]}"
+              gh release upload "$VERSION" --clobber "${ASSETS[@]}"
+          else
+              gh release create "$VERSION" \
+                --title "PlasmaZones $VERSION" \
+                --notes-file release_notes.md \
+                "${RELEASE_FLAGS[@]}" \
+                "${ASSETS[@]}"
+          fi
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Publish to AUR (Arch User Repository)
@@ -795,7 +896,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Download generic tarball artifact
         uses: actions/download-artifact@v8
@@ -840,6 +941,7 @@ jobs:
       - name: Clone and update AUR repository (plasmazones-bin)
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
           SHA256: ${{ steps.hash.outputs.sha256 }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones-bin.git /tmp/aur-bin
@@ -854,7 +956,7 @@ jobs:
           # rewrite as the source PKGBUILD (below) so future additional
           # `source=` entries don't silently leave a stale second hash.
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
           awk -v sum="$SHA256" '
             # Single-line form: sha256sums=(\047hash\047) — replace inline.
             /^sha256sums=\(.*\)$/ {
@@ -897,7 +999,11 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update to $VERSION"
+            if [[ "$PKGREL" == "1" ]]; then
+              git commit -m "Update to $VERSION"
+            else
+              git commit -m "Rebuild $VERSION (pkgrel $PKGREL)"
+            fi
             git push
             echo "✅ Published plasmazones-bin $VERSION to AUR"
           fi
@@ -905,6 +1011,7 @@ jobs:
       - name: Clone and update AUR repository (plasmazones - source)
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          PKGREL: ${{ needs.version.outputs.pkgrel }}
         run: |
           git clone ssh://aur@aur.archlinux.org/plasmazones.git /tmp/aur-src
           cd /tmp/aur-src
@@ -916,7 +1023,7 @@ jobs:
 
           # Update version
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=${{ needs.version.outputs.pkgrel }}/" PKGBUILD
 
           # Calculate and update source tarball hash. Anchor inside the
           # sha256sums=(...) block via awk so future additional hashes
@@ -977,7 +1084,11 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update to $VERSION"
+            if [[ "$PKGREL" == "1" ]]; then
+              git commit -m "Update to $VERSION"
+            else
+              git commit -m "Rebuild $VERSION (pkgrel $PKGREL)"
+            fi
             git push
             echo "✅ Published plasmazones $VERSION to AUR"
           fi
@@ -1026,7 +1137,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.version.outputs.ref }}
 
       - name: Install osc (OBS command-line client)
         run: |
@@ -1048,33 +1159,41 @@ jobs:
           # which hangs the runner. The file is chmod 600 and lives only
           # on the ephemeral CI VM; GitHub masks the secret values in logs.
           mkdir -p ~/.config/osc
-          # Quoted heredoc delimiter: the static block must NOT be expanded.
-          # An unquoted EOF here would run the shell's expansions over the
-          # credential lines, so a password containing a backtick or $( would
-          # execute as a command on the runner with the OBS token in scope, and
-          # one containing $ or \ would be silently corrupted into an
-          # authentication failure. The two secret lines are appended with
-          # printf instead, which does not re-expand its arguments.
-          cat > ~/.config/osc/oscrc << 'EOF'
+          cat > ~/.config/osc/oscrc << EOF
           [general]
           apiurl = https://api.opensuse.org
 
           [https://api.opensuse.org]
           credentials_mgr_class = osc.credentials.PlaintextConfigFileCredentialsManager
+          user = $OBS_USERNAME
+          pass = $OBS_PASSWORD
           EOF
-          printf 'user = %s\npass = %s\n' "$OBS_USERNAME" "$OBS_PASSWORD" >> ~/.config/osc/oscrc
           chmod 600 ~/.config/osc/oscrc
 
       - name: Stamp version and changelog into spec
         run: |
           set -euo pipefail
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # OBS builds from the committed spec, so it must carry the real
           # version (download_files resolves Source0's %{version}) and the
           # release changelog — not the 0.0.0 placeholder. Same templating
           # as the build-rpm-opensuse job above.
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          bash packaging/generate-changelog.sh rpm
+          # Release must move for a rebuild-only republish, otherwise dnf and
+          # zypper see the same NEVR and offer nothing. Same revision the deb
+          # changelog and Arch pkgrel use.
+          sed -i "s/^Release:.*/Release:        $PKGREL%{?dist}/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm "" "$PKGREL"
+          # Assert the stamp landed. Same reasoning as the Debian step: the
+          # checked-out generator comes from the release tag and may predate
+          # the revision argument, so the workflow's own sed above is what
+          # actually decides the NEVR.
+          GOT="$(sed -n 's/^Release:[[:space:]]*//p' packaging/rpm/plasmazones.spec)"
+          if [[ "$GOT" != "$PKGREL%{?dist}" ]]; then
+              echo "Error: spec Release is '$GOT', expected '$PKGREL%{?dist}'" >&2
+              exit 1
+          fi
 
       - name: Commit package to OBS
         env:
@@ -1082,6 +1201,7 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.version.outputs.version }}"
+          PKGREL="${{ needs.version.outputs.pkgrel }}"
           # Check out the existing OBS package working copy — the project
           # and package must already exist (see the setup notes above).
           osc checkout "$OBS_PROJECT" plasmazones
@@ -1100,7 +1220,11 @@ jobs:
           # empty result and silently mistaken for "no changes".
           STATUS="$(osc status)"
           if [[ -n "$STATUS" ]]; then
-              osc commit -m "Update to $VERSION"
+              if [[ "$PKGREL" == "1" ]]; then
+                  osc commit -m "Update to $VERSION"
+              else
+                  osc commit -m "Rebuild $VERSION (release $PKGREL)"
+              fi
               echo "✅ Committed plasmazones $VERSION to $OBS_PROJECT — OBS will rebuild"
           else
               echo "No changes to commit"

@@ -130,6 +130,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Static decorated windows stay pixel-sharp while an undecorated window animates**: playing any window animation used to switch vertex snapping off for every decorated window, so on a fractionally scaled display the ones sitting still were softly resampled for the animation's duration. Only an animation on a decorated window relaxes snapping now, so moving an undecorated window leaves the rest of the desktop crisp and saves the full-screen resampling work on integrated graphics ([#872](https://github.com/fuddlesworth/PlasmaZones/pull/872)).
 - **Surface packs can declare that they leave the window's interior alone**: every decorated window told KWin it was translucent, so windows fully hidden behind it kept being composited, such as a video playing behind a maximized window. A surface pack whose drawing stays in the transparent margin around the window can now declare `"interiorOpaque": true` in its metadata, and a window whose whole chain declares it is no longer marked translucent. A pack that draws outside the window's own rectangle is still presented as an enlarged quad, which the compositor also excludes from occlusion culling, so a pack has to keep its drawing inside the window's rectangle to get the culling back. Border packs genuinely thin the window's own corner and edge pixels, so they correctly keep the translucent marking ([#872](https://github.com/fuddlesworth/PlasmaZones/pull/872)).
 
+## [3.3.9] - 2026-08-20
+
+### Fixed
+
+- **The daemon crashed on startup after the Qt 6.11.2 update**: window tiling stopped working entirely, and the daemon restarted and crashed in a loop rather than coming up. PlasmaZones reads part of Qt's internal Wayland state directly, and the update moved that state, so the daemon read from the wrong place and crashed on whatever happened to be there. This release is built against the new Qt. Anyone who installed from a distribution package needs the rebuilt package from their distribution, not just a restart ([#936](https://github.com/fuddlesworth/PlasmaZones/discussions/936)).
+
 ## [3.3.8] - 2026-08-15
 
 ### Added
