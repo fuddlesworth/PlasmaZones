@@ -48,7 +48,11 @@ RowLayout {
     SpinBox {
         id: spinBox
 
-        Accessible.name: root.accessibleName
+        // Fold the unit into the spoken name. The unit is a sibling Label, so
+        // a screen reader parked on the spin box would otherwise announce a
+        // bare number with no idea whether it is pixels, milliseconds or a
+        // count.
+        Accessible.name: root.accessibleName.length > 0 && root.unitText.length > 0 ? root.accessibleName + " " + root.unitText : root.accessibleName
         from: root.from
         to: root.to
         stepSize: root.stepSize

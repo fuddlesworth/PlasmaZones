@@ -85,6 +85,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_lastLoggedActivationActive = false;
+    // A pending grace replay must not fire into the next drag (or into no
+    // drag at all); the timestamps themselves are re-seeded by beginDrag.
+    stopGraceExpiry();
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
@@ -399,164 +402,6 @@ void WindowDragAdaptor::clearOverlayForTriggerRelease()
     // NOTE: m_overlayShown intentionally left true — the window is still alive.
 }
 
-void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
-{
-    QScreen* screen = nullptr;
-    QString screenId;
-    auto* layout = prepareHandlerContext(x, y, screen, screenId);
-    if (!layout) {
-        return;
-    }
-
-    // Clear stale multi-zone state from proximity mode when transitioning to paint-to-span
-    if (m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
-        m_currentAdjacentZoneIds.clear();
-        m_isMultiZoneMode = false;
-        m_currentMultiZoneGeometry = QRect();
-    }
-
-    // Find zone at cursor position using layout's smallest-area heuristic
-    // (zone geometry already recalculated to absolute coords by prepareHandlerContext)
-    PhosphorZones::Zone* foundZone = layout->zoneAtPoint(QPointF(x, y));
-
-    // Accumulate painted zones (never remove during a paint drag)
-    if (foundZone) {
-        m_paintedZoneIds.insert(foundZone->id());
-    }
-
-    // Build zone list from painted zones, then expand using same raycast algorithm as editor
-    if (!m_paintedZoneIds.isEmpty()) {
-        QVector<PhosphorZones::Zone*> paintedZones;
-        for (auto* zone : layout->zones()) {
-            if (m_paintedZoneIds.contains(zone->id())) {
-                paintedZones.append(zone);
-            }
-        }
-
-        if (!paintedZones.isEmpty()) {
-            // Use same raycasting/intersection algorithm as detectMultiZone and editor:
-            // expand to include all zones that intersect the bounding rect of painted zones
-            m_zoneDetector->setLayout(layout);
-            QVector<PhosphorZones::Zone*> zonesToSnap = m_zoneDetector->expandPaintedZonesToRect(paintedZones);
-
-            if (zonesToSnap.isEmpty()) {
-                return;
-            }
-
-            QRectF combinedGeom = computeCombinedZoneGeometry(zonesToSnap, screen, layout, screenId);
-
-            // Update multi-zone state from expanded zones (what we actually snap to)
-            QVector<QUuid> zoneIds;
-            zoneIds.reserve(zonesToSnap.size());
-            for (auto* zone : zonesToSnap) {
-                zoneIds.append(zone->id());
-            }
-
-            m_currentZoneId = zonesToSnap.first()->id().toString();
-            // The screen the geometry below is absolute on. This is the
-            // co-key of handleMultiZoneModifier's change gate: leaving it
-            // stale lets a later same-zone-id tick on another screen skip
-            // the refresh and keep this screen's absolute rect.
-            m_currentZoneScreenId = screenId;
-            m_currentAdjacentZoneIds = zoneIds;
-            m_isMultiZoneMode = (zonesToSnap.size() > 1);
-            m_currentMultiZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
-            if (zonesToSnap.size() == 1) {
-                m_currentZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
-            }
-
-            // Highlight expanded zones (raycasted) so user sees what they are actually snapping to
-            m_zoneDetector->highlightZones(zonesToSnap);
-            m_overlayService->highlightZones(zoneIdsToStringList(zoneIds));
-        }
-    }
-}
-
-void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
-{
-    QScreen* screen = nullptr;
-    QString screenId;
-    auto* layout = prepareHandlerContext(x, y, screen, screenId);
-    if (!layout) {
-        return;
-    }
-
-    m_zoneDetector->setLayout(layout);
-
-    // Convert cursor position to screen-relative coordinates for detection
-    QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
-
-    // Call detectMultiZone instead of detectZone
-    PhosphorZones::ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
-
-    if (result.isMultiZone && result.primaryZone) {
-        // Multi-zone detected
-        QString primaryZoneId = result.primaryZone->id().toString();
-        QVector<QUuid> newAdjacentZoneIds;
-
-        // Collect zone IDs from adjacent zones
-        newAdjacentZoneIds.append(result.primaryZone->id());
-        for (PhosphorZones::Zone* zone : result.adjacentZones) {
-            if (zone && zone->id() != result.primaryZone->id()) {
-                newAdjacentZoneIds.append(zone->id());
-            }
-        }
-
-        // Only update if zone selection changed. screenId is part of the key:
-        // the same zone UUID on a different monitor is a different rect, and
-        // without it a crossing between two screens sharing a layout skips the
-        // update and strands the previous screen's geometry.
-        if (primaryZoneId != m_currentZoneId || screenId != m_currentZoneScreenId
-            || newAdjacentZoneIds != m_currentAdjacentZoneIds) {
-            m_currentZoneId = primaryZoneId;
-            m_currentZoneScreenId = screenId;
-            m_currentAdjacentZoneIds = newAdjacentZoneIds;
-            m_isMultiZoneMode = true;
-
-            // Build de-duplicated zone list for geometry and highlighting
-            QVector<PhosphorZones::Zone*> zonesToHighlight;
-            zonesToHighlight.append(result.primaryZone);
-            for (PhosphorZones::Zone* zone : result.adjacentZones) {
-                if (zone && zone != result.primaryZone) {
-                    zonesToHighlight.append(zone);
-                }
-            }
-
-            m_currentMultiZoneGeometry =
-                GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout, screenId));
-            m_zoneDetector->highlightZones(zonesToHighlight);
-            m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
-        }
-    } else if (result.primaryZone) {
-        // Single zone detected (fallback from multi-zone detection)
-        QString zoneId = result.primaryZone->id().toString();
-        if (zoneId != m_currentZoneId || screenId != m_currentZoneScreenId || m_isMultiZoneMode) {
-            m_currentZoneId = zoneId;
-            m_currentZoneScreenId = screenId;
-            m_currentAdjacentZoneIds.clear();
-            m_isMultiZoneMode = false;
-            m_zoneDetector->highlightZone(result.primaryZone);
-            m_overlayService->highlightZone(zoneId);
-
-            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(
-                m_screenManager, result.primaryZone, screen, screenId, layout, m_settings, m_layoutManager);
-            m_currentMultiZoneGeometry = QRect();
-        }
-    } else {
-        // No zone detected
-        if (!m_currentZoneId.isEmpty() || m_isMultiZoneMode) {
-            m_currentZoneId.clear();
-            m_currentZoneScreenId.clear();
-            m_currentAdjacentZoneIds.clear();
-            m_isMultiZoneMode = false;
-            m_currentZoneGeometry = QRect();
-            m_currentMultiZoneGeometry = QRect();
-            m_zoneDetector->clearHighlights();
-            m_overlayService->clearHighlight();
-        }
-    }
-}
-
 void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
     if (windowId != m_draggedWindowId) {
@@ -572,6 +417,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // Fallback: try Qt query (may not work on Wayland without focus)
         mods = QGuiApplication::queryKeyboardModifiers();
     }
+
+    // Kept for the grace-expiry replay (see armGraceExpiry), which re-runs this
+    // tick's inputs once the grace has run out. Records the RESOLVED modifiers:
+    // a mouse-button-only trigger arrives as 0, and replaying that raw 0 would
+    // re-run the fallback above at EXPIRY time, reading a later tick's keyboard.
+    m_lastTickCursorX = cursorX;
+    m_lastTickCursorY = cursorY;
+    m_lastTickModifiers = static_cast<int>(mods);
+    m_lastTickMouseButtons = mouseButtons;
+    // beginDrag starts the clock before any tick can arrive; the guard only
+    // keeps a tick on an unstarted clock (nothing legitimate) from reading
+    // an undefined elapsed value.
+    const qint64 nowMs = m_dragClock.isValid() ? m_dragClock.elapsed() : 0;
 
     // Always-active bit: derived per-tick from the activation cache so the
     // bypass path (autotile-only, never goes through dragStarted) can't carry
@@ -589,7 +447,57 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // would never show. The non-sentinel entries serve double duty: they
     // activate the overlay when always-active is off, and deactivate it
     // (hold or toggle) when always-active is on (#249).
-    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+    const bool rawTriggerHeld =
+        anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+
+    // Hold-mode release grace: a mouse-button trigger lifts a few
+    // milliseconds before the drop when the same hand releases both, and
+    // that release tick used to clear the zone state the drop reads. Keep
+    // the trigger reading as held for the configured grace after its last
+    // physically-held tick. Plain hold mode only: toggle mode has no release
+    // to extend, and the always-active inversion (#249) makes the trigger a
+    // deactivate-while-held, where a grace would prolong the suppression the
+    // user just ended. Off in those modes the resolver still tracks the
+    // last-held stamp (grace 0) so a later mode read starts from fresh data.
+    // Also gated on being on the snap path: elsewhere prepareHandlerContext
+    // returns null, so arming would schedule a replay whose only work is to
+    // walk back out through that gate. The policy is re-latched per screen
+    // crossing, not snapshotted at beginDrag. Drag re-insert, the arm that
+    // does matter on engine screens, is scoped by its own engine lookup.
+    const bool onSnapPath = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::None;
+    const bool activationHoldMode = m_settings && onSnapPath && !m_settings->toggleActivation() && !alwaysActiveOnDrag;
+    const HoldGraceDecision activationGrace = resolveHoldGrace(
+        rawTriggerHeld, nowMs, m_activationLastHeldMs, activationHoldMode ? m_settings->dragActivationGraceMs() : 0);
+    m_activationLastHeldMs = activationGrace.nextLastHeldMs;
+    const bool triggerHeld = activationGrace.held;
+    if (triggerHeld && !rawTriggerHeld) {
+        armGraceExpiry(activationGrace.remainingMs);
+    }
+
+    // Zone span trigger, resolved once here for both the drag-insert
+    // keep-alive arm and the main span read below, with the same hold-mode
+    // grace. The sentinel is excluded for the reason given at the main read.
+    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
+    // Gated on zoneSpanEnabled() as well as the mode: with the feature off the
+    // sole consumer below skips the span read entirely, so arming a grace there
+    // would schedule a whole replay tick that cannot change any outcome.
+    const bool zoneSpanHoldMode = m_settings && m_settings->zoneSpanEnabled() && !m_settings->zoneSpanToggleMode();
+    const HoldGraceDecision zoneSpanGrace = resolveHoldGrace(rawZoneSpanHeld, nowMs, m_zoneSpanLastHeldMs,
+                                                             zoneSpanHoldMode ? m_settings->zoneSpanGraceMs() : 0);
+    m_zoneSpanLastHeldMs = zoneSpanGrace.nextLastHeldMs;
+    const bool zoneSpanHeld = zoneSpanGrace.held;
+    if (zoneSpanHeld && !rawZoneSpanHeld) {
+        armGraceExpiry(zoneSpanGrace.remainingMs);
+    }
+
+    // Snap assist stamp. Only the stamp is maintained here: the value is read
+    // once at the drop (see drop.cpp), so there is no tick to keep alive and
+    // nothing to arm an expiry replay for. Fed unconditionally because the list
+    // has no toggle mode, so the grace always applies when one is configured.
+    m_snapAssistLastHeldMs =
+        resolveHoldGrace(anyTriggerHeld(m_cachedSnapAssistTriggers, mods, mouseButtons), nowMs, m_snapAssistLastHeldMs,
+                         /*graceMs=*/0)
+            .nextLastHeldMs;
 
     // ── Drag-insert preview (runs even when m_snapCancelled) ────────────────
     // This block is intentionally ABOVE the snap-cancelled early return because
@@ -627,13 +535,31 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         bool insertHeld;
         const bool toggleMode = insertEngine
             && (onScrollingScreen ? m_settings->scrollingDragInsertToggle() : m_settings->autotileDragInsertToggle());
+        // Hold-mode release grace, the drag-insert twin of the activation
+        // grace above, on the grace setting of the engine owning the cursor
+        // screen. Off any engine screen the stamp is dropped rather than
+        // kept: rawInsertHeld is false there by construction, and a return
+        // to an engine screen inside the window must not read as held
+        // without a physical press (the leave already cancelled the preview).
+        if (!insertEngine) {
+            m_dragInsertLastHeldMs = -1;
+        }
+        const int insertGraceMs = (insertEngine && !toggleMode)
+            ? (onScrollingScreen ? m_settings->scrollingDragInsertGraceMs() : m_settings->autotileDragInsertGraceMs())
+            : 0;
+        const HoldGraceDecision insertGrace =
+            resolveHoldGrace(rawInsertHeld, nowMs, m_dragInsertLastHeldMs, insertGraceMs);
+        m_dragInsertLastHeldMs = insertGrace.nextLastHeldMs;
+        if (insertGrace.held && !rawInsertHeld) {
+            armGraceExpiry(insertGrace.remainingMs);
+        }
         if (toggleMode) {
             if (rawInsertHeld && !m_prevDragInsertHeld) {
                 m_dragInsertToggled = !m_dragInsertToggled;
             }
             insertHeld = m_dragInsertToggled;
         } else {
-            insertHeld = rawInsertHeld;
+            insertHeld = insertGrace.held;
         }
         // The shared rising-edge latch follows the raw state on EVERY
         // engine-screen tick, not only in toggle mode: the toggle SETTING is
@@ -854,10 +780,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                                             m_prevTriggerHeld, m_activationToggled);
                 m_prevTriggerHeld = actKeepAlive.nextPrevTriggerHeld;
                 m_activationToggled = actKeepAlive.nextActivationToggled;
-                const bool rawSpanKeepAlive =
-                    anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
                 const ActivationDecision spanKeepAlive =
-                    resolveActivationActive(rawSpanKeepAlive, m_settings->zoneSpanToggleMode(),
+                    resolveActivationActive(zoneSpanHeld, m_settings->zoneSpanToggleMode(),
                                             /*alwaysActiveOnDrag=*/false, m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
                 m_prevZoneSpanTriggerHeld = spanKeepAlive.nextPrevTriggerHeld;
                 m_zoneSpanToggled = spanKeepAlive.nextActivationToggled;
@@ -888,7 +812,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     if (m_snapCancelled) {
         // Allow retriggering the overlay after Escape: the user must release the
         // activation trigger and then press it again (a full release→press cycle).
-        if (!triggerHeld) {
+        //
+        // Reads rawTriggerHeld, NOT the graced triggerHeld: this gesture is a
+        // deliberate physical release-then-press, which is the very thing the
+        // grace papers over. Gated on the graced value, a cycle faster than the
+        // grace never latches and the drag stays cancelled for good.
+        if (!rawTriggerHeld) {
             m_triggerReleasedAfterCancel = true;
         } else if (m_triggerReleasedAfterCancel) {
             // Trigger released and re-pressed: clear cancel, resume zone snapping.
@@ -928,7 +857,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     if (activationActive != m_lastLoggedActivationActive) {
         qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
                              << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
-                             << "triggerHeld=" << triggerHeld << "alwaysActive=" << alwaysActiveOnDrag
+                             << "triggerHeld=" << triggerHeld << "rawHeld=" << rawTriggerHeld
+                             << "alwaysActive=" << alwaysActiveOnDrag
                              << "toggleActivation=" << m_settings->toggleActivation();
         m_lastLoggedActivationActive = activationActive;
     }
@@ -963,9 +893,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // for the whole drag. The latch is evaluated every tick (not just when
     // the overlay is active) so a release→press while the overlay is off is
     // still seen on the next active tick.
-    const bool rawZoneSpanHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons, /*excludeSentinel=*/true);
     const ActivationDecision zoneSpanDecision =
-        resolveActivationActive(rawZoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
+        resolveActivationActive(zoneSpanHeld, m_settings->zoneSpanToggleMode(), /*alwaysActiveOnDrag=*/false,
                                 m_prevZoneSpanTriggerHeld, m_zoneSpanToggled);
     m_prevZoneSpanTriggerHeld = zoneSpanDecision.nextPrevTriggerHeld;
     m_zoneSpanToggled = zoneSpanDecision.nextActivationToggled;

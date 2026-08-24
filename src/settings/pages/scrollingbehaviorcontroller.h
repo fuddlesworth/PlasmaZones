@@ -19,11 +19,11 @@ class ISettings;
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.scrollingBehaviorPage.scrollingDragInsertTriggers`
 /// etc. The drag re-insert list also carries a derived
-/// `alwaysReinsertIntoStrip` boolean (the AlwaysActive sentinel stored
-/// inside the list); the two wheel lists cannot carry that sentinel at all,
-/// because canonicalWheelTriggerList drops it. Trigger-list conversion lives
-/// in `PlasmaZones::TriggerUtils`, shared with the snapping and tiling
-/// controllers.
+/// `alwaysReinsertIntoStrip` boolean (the AlwaysActive sentinel stored inside
+/// the list) and the shared trigger release-grace bounds; the two wheel lists
+/// cannot carry that sentinel at all, because canonicalWheelTriggerList drops
+/// it. Trigger-list conversion lives in `PlasmaZones::TriggerUtils`, shared
+/// with the snapping and tiling controllers.
 ///
 /// Dirty tracking: all three underlying properties ARE Q_PROPERTY on
 /// Settings, so SettingsController's meta-object loop already wires their
@@ -57,6 +57,8 @@ class ScrollingBehaviorController : public PhosphorControl::PageController
     /// matcher exists to prevent between two DIFFERENT chords. Derived here
     /// rather than in QML so the comparison lives beside the lists it reads.
     Q_PROPERTY(bool wheelTriggersCollide READ wheelTriggersCollide NOTIFY wheelTriggersCollideChanged)
+    Q_PROPERTY(int triggerGraceMsMin READ triggerGraceMsMin CONSTANT)
+    Q_PROPERTY(int triggerGraceMsMax READ triggerGraceMsMax CONSTANT)
 
 public:
     explicit ScrollingBehaviorController(ISettings& settings, QObject* parent = nullptr);
@@ -75,6 +77,8 @@ public:
     bool alwaysReinsertIntoStrip() const;
     QVariantList scrollingDragInsertTriggers() const;
     QVariantList defaultScrollingDragInsertTriggers() const;
+    int triggerGraceMsMin() const;
+    int triggerGraceMsMax() const;
 
     QVariantList scrollingWheelFocusTriggers() const;
     QVariantList defaultScrollingWheelFocusTriggers() const;

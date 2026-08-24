@@ -147,7 +147,12 @@ void SettingsAdaptor::initializeRegistry()
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        m_settings->setter(v.toInt());                                                                                 \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
@@ -158,6 +163,12 @@ void SettingsAdaptor::initializeRegistry()
 // and rejecting would break sloppy-but-harmless callers for no gain. The
 // labelFontSizeScale custom setter shows the stricter pattern where a key
 // wants it.
+//
+// A value of the wrong TYPE is a different matter and is refused. D-Bus is a
+// system boundary, and an unparseable payload has no nearest legal value to
+// clamp to: QVariant::toInt() would hand the setter a silent 0 and the call
+// would report success, which is indistinguishable from the caller deliberately
+// writing 0.
 #define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -256,6 +267,7 @@ void SettingsAdaptor::initializeRegistry()
     m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+    REGISTER_INT_SETTING("dragActivationGraceMs", dragActivationGraceMs, setDragActivationGraceMs)
 
     // Display settings
     REGISTER_BOOL_SETTING("showZonesOnAllMonitors", showZonesOnAllMonitors, setShowZonesOnAllMonitors)

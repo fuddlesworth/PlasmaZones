@@ -53,7 +53,12 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        m_settings->setter(v.toInt());                                                                                 \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
@@ -249,6 +254,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
     m_schemas[QStringLiteral("scrollingWheelViewTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
+    REGISTER_INT_SETTING("scrollingDragInsertGraceMs", scrollingDragInsertGraceMs, setScrollingDragInsertGraceMs)
 
     // The template priority order (IOrderingSettings) — the scrolling member
     // of the ordering family. The snapping and tiling orders are not on the

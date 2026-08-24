@@ -135,6 +135,11 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
         {CD::lockedScreensKey(), CD::autotileLockedScreens(), QMetaType::QString, {}, canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
+        {CD::releaseGraceMsKey(),
+         CD::autotileDragInsertGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 
     // Tiling.Gaps keeps only the tiling-specific SmartGaps toggle. The shared

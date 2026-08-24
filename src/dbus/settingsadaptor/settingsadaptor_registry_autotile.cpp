@@ -44,6 +44,21 @@ void SettingsAdaptor::initializeRegistryAutotile()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
 
+#define REGISTER_INT_SETTING(name, getter, setter)                                                                     \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
+
 #define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -100,6 +115,7 @@ void SettingsAdaptor::initializeRegistryAutotile()
     m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
+    REGISTER_INT_SETTING("autotileDragInsertGraceMs", autotileDragInsertGraceMs, setAutotileDragInsertGraceMs)
     REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,
                           setAutotileRestoreFloatedWindowsOnLogin)
     // Effect-only consumer (reconcileRuleWindowLayer): keep autotile-floated
@@ -204,6 +220,7 @@ void SettingsAdaptor::initializeRegistryAutotile()
 
 // Clean up macros (local scope; unity-batch hygiene)
 #undef REGISTER_BOOL_SETTING
+#undef REGISTER_INT_SETTING
 #undef REGISTER_CONCRETE_BOOL
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE

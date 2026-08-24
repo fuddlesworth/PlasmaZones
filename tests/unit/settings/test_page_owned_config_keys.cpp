@@ -70,8 +70,15 @@ const QSet<QString>& deliberatelyUnowned()
         // context menu attributes the write to scrolling-columns — the owner
         // of the rest of the Scrolling group — through an external-edit
         // envelope, and the key moved into that page's manifest with it.
-        // The set is empty today; it stays so a future genuinely-unowned key
-        // has a place to be declared rather than failing the sweep.
+        // Tiling.Behavior/LockedScreens is runtime state, not a preference.
+        // It records which screens the user has locked, is written only
+        // through the D-Bus setter (settingsadaptor_registry.cpp's
+        // "lockedScreens") and through setContextLocked, and no settings page
+        // renders it. Giving it a page owner would be actively wrong: a Reset
+        // on that page would silently unlock every screen the user had
+        // locked. Surfaced when the release-grace work brought
+        // Tiling.Behavior under this sweep for the first time.
+        qualify(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey()),
     };
     return kSet;
 }
@@ -184,11 +191,18 @@ private Q_SLOTS:
         // (BlurScaleMultiplier) landed: all four are owned by the
         // window-appearance page today, and sweeping the group keeps a future
         // fifth key from shipping ownerless the way Rendering.Gpu did.
+        // Snapping.Behavior, Snapping.Behavior.ZoneSpan and Tiling.Behavior
+        // joined with the trigger release graces: those three arms were the
+        // only ones of the four outside this sweep, so deleting any of their
+        // ownership entries would have dropped the key out of per-page dirty
+        // tracking, Reset and Discard with nothing failing.
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
               ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
               ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
-              ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup()}) {
+              ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup(),
+              ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
+              ConfigDefaults::tilingBehaviorGroup()}) {
             const auto it = schema.groups.constFind(group);
             if (it == schema.groups.constEnd()) {
                 // Collect-then-assert, like the rest of this file: an abort

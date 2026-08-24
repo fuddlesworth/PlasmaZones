@@ -271,6 +271,15 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     m_dragInsertTickLogged = false;
     m_lastLoggedRawInsertHeld = false;
     m_dragReorderAbandoned = false;
+    // Release-grace clock and timestamps, per drag for the same bypass-path
+    // reason as the latches above: a previous drag's last-held stamp must
+    // not read as a live grace on this drag's first tick.
+    m_dragClock.start();
+    m_activationLastHeldMs = -1;
+    m_dragInsertLastHeldMs = -1;
+    m_zoneSpanLastHeldMs = -1;
+    m_snapAssistLastHeldMs = -1;
+    stopGraceExpiry();
     // Zone span toggle latch (#563), same rationale and seed contract as the
     // autotile drag-insert latch above: reset on every beginDrag so it covers
     // both the bypass path (dragStarted never runs) and the snap path. Prev is
@@ -306,6 +315,7 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_cachedScrollingDragInsertTriggers = parseTriggers(m_settings->scrollingDragInsertTriggers());
         m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
         m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
+        m_cachedSnapAssistTriggers = parseTriggers(m_settings->snapAssistTriggers());
     }
 
     // Per-window drop-indicator colours, resolved from THIS window's rules and

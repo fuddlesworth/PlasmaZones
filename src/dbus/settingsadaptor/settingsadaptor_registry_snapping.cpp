@@ -61,7 +61,12 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        m_settings->setter(v.toInt());                                                                                 \
+        bool ok = false;                                                                                               \
+        const int parsed = v.toInt(&ok);                                                                               \
+        if (!ok) {                                                                                                     \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
@@ -118,6 +123,7 @@ void SettingsAdaptor::initializeRegistrySnapping()
     m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("zoneSpanToggleMode", zoneSpanToggleMode, setZoneSpanToggleMode)
+    REGISTER_INT_SETTING("zoneSpanGraceMs", zoneSpanGraceMs, setZoneSpanGraceMs)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Zone settings. The shared inner/outer gaps have NO SETTERS here: they are
@@ -182,6 +188,7 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return true;
     };
     m_schemas[QStringLiteral("snapAssistTriggers")] = QStringLiteral("maplist");
+    REGISTER_INT_SETTING("snapAssistGraceMs", snapAssistGraceMs, setSnapAssistGraceMs)
 
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)

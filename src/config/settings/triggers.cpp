@@ -39,8 +39,12 @@ P_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
 P_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
+P_STORE_GET(int, dragActivationGraceMs, snappingBehaviorGroup, releaseGraceMsKey, int)
+P_STORE_SET_INT(setDragActivationGraceMs, snappingBehaviorGroup, releaseGraceMsKey, dragActivationGraceMsChanged)
 P_STORE_GET(bool, zoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, zoneSpanToggleModeChanged)
+P_STORE_GET(int, zoneSpanGraceMs, snappingBehaviorZoneSpanGroup, releaseGraceMsKey, int)
+P_STORE_SET_INT(setZoneSpanGraceMs, snappingBehaviorZoneSpanGroup, releaseGraceMsKey, zoneSpanGraceMsChanged)
 
 // Shared helper for the "plain" trigger-list setters (activation,
 // snap-assist, autotile-insert, and scrolling-insert plus the two wheel
@@ -354,6 +358,9 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
                      &Settings::snapAssistTriggersChanged);
 }
 
+P_STORE_GET(int, snapAssistGraceMs, snappingBehaviorSnapAssistGroup, releaseGraceMsKey, int)
+P_STORE_SET_INT(setSnapAssistGraceMs, snappingBehaviorSnapAssistGroup, releaseGraceMsKey, snapAssistGraceMsChanged)
+
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
 // Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle.
 // defaultAutotileAlgorithm is stored as-is with no registry lookup in this
@@ -458,6 +465,8 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 
 P_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, autotileDragInsertToggleChanged)
+P_STORE_GET(int, autotileDragInsertGraceMs, tilingBehaviorGroup, releaseGraceMsKey, int)
+P_STORE_SET_INT(setAutotileDragInsertGraceMs, tilingBehaviorGroup, releaseGraceMsKey, autotileDragInsertGraceMsChanged)
 
 // ── Numbered quick-layout + snap-to-zone shortcut dispatchers ───────────────
 

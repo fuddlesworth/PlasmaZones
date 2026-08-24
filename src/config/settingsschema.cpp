@@ -887,13 +887,18 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
-    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // Snapping.Behavior owns FIVE scalar keys directly — Triggers,
+    // ToggleActivation, ReleaseGraceMs, FocusNewWindows and FocusFollowsMouse — while the
     // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
+        {CD::releaseGraceMsKey(),
+         CD::dragActivationGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
         {CD::focusNewWindowsKey(), CD::snappingFocusNewWindows(), QMetaType::Bool},
         {CD::focusFollowsMouseKey(), CD::snappingFocusFollowsMouse(), QMetaType::Bool},
     };
@@ -933,6 +938,11 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(DragModifier::CtrlMeta), "ctrlMeta"_L1}})},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
+        {CD::releaseGraceMsKey(),
+         CD::zoneSpanGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 }
 
@@ -970,6 +980,11 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
         {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
         {CD::triggersKey(), CD::snapAssistTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
+        {CD::releaseGraceMsKey(),
+         CD::snapAssistGraceMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerGraceMsMin(), CD::triggerGraceMsMax())},
     };
 }
 

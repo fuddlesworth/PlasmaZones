@@ -278,6 +278,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // discarding pending changes includes a pending toggle.
              {CD::snappingGroup(), CD::enabledKey()},
              {CD::snappingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::snappingBehaviorGroup(), CD::releaseGraceMsKey()},
              // The trigger LIST belongs to whichever page shows its picker, which is the
              // page that owns the matching toggle. All four lists were missing from this
              // manifest, so per-page Reset and Discard walked straight past them and left a
@@ -285,6 +286,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorGroup(), CD::triggersKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::enabledKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::toggleActivationKey()},
+             {CD::snappingBehaviorZoneSpanGroup(), CD::releaseGraceMsKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::triggersKey()},
              // Legacy modifier is rewritten by every triggers edit
              // (setZoneSpanTriggers syncs it from the first non-zero trigger),
@@ -348,6 +350,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorSnapAssistGroup(), CD::featureEnabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::enabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::triggersKey()},
+             {CD::snappingBehaviorSnapAssistGroup(), CD::releaseGraceMsKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::keepOnResolutionChangeKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::moveNewToLastZoneKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::autoAssignAllLayoutsKey()},
@@ -376,6 +379,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // snapping-overlay-behavior entry documents.
              {CD::tilingGroup(), CD::enabledKey()},
              {CD::tilingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::tilingBehaviorGroup(), CD::releaseGraceMsKey()},
              {CD::tilingBehaviorGroup(), CD::triggersKey()},
              {CD::tilingBehaviorGroup(), CD::insertPositionKey()},
              {CD::tilingBehaviorGroup(), CD::respectMinimumSizeKey()},
@@ -514,6 +518,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // Drag re-insert triggers (the Triggers card on this page).
              {CD::scrollingBehaviorGroup(), CD::triggersKey()},
              {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::scrollingBehaviorGroup(), CD::releaseGraceMsKey()},
              // Scrolling.Behavior.DragScroll — the Edge auto-scroll card,
              // between the two for the same reason: it runs only during that
              // drag, and the drop indicator is what follows it.
