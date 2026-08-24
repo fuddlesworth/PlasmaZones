@@ -7,16 +7,22 @@
 // with. Two daemon producers push strip zones — the layout-OSD preview card
 // (daemon/osd.cpp) and the navigation-OSD zone-number provider wired in
 // daemon/init_engines.cpp — and both derive from the SAME visibleTiles walk.
-// They used to hold their number space, their id namespacing and the
-// empty-strip sketch in step by comment alone; here they share one
-// definition of each.
+// They used to hold their number space and their id namespacing in step by
+// comment alone; here they share one definition of each.
+//
+// There is deliberately NO empty-strip builder here any more. A strip with no
+// visible tile used to be drawn as a three-column sketch with its outer two
+// clipped at the screen edges, mirrored by a hand-kept twin in the settings
+// app. Drawn by the zone renderer in the zone fills, it read as three real
+// windows on a strip that held none. The empty case is now the shared
+// StripEmptyState component (an axis arrow and a caption naming the actual
+// cause), so a caller with no tiles renders that instead of asking for zones.
 
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
 #include <QLatin1String>
 #include <QRect>
-#include <QRectF>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -27,58 +33,6 @@
 namespace PlasmaZones::StripZones {
 
 using VisibleTile = PhosphorScrollEngine::ScrollEngine::VisibleTile;
-
-/// Representative endless strip for a scrolling screen whose strip has no
-/// visible tile: a full column with a clipped column at each edge, which
-/// reads as a window onto a longer strip. Kept in step with
-/// MonitorStatePage's scrollingFallbackZones, so the Monitors page and the
-/// OSD card draw the same shape for the same empty strip.
-///
-/// @p verticalAxis transposes the sketch for a screen whose strip runs
-/// vertically: the same three bands, stacked instead of in a row. Drawing the
-/// horizontal sketch there depicts a strip direction that screen never adopts,
-/// which is worse than no sketch at all — the whole point of the shape is to
-/// say which way the columns will run.
-inline QVector<QRectF> sketchRects(bool verticalAxis)
-{
-    if (verticalAxis) {
-        return {QRectF(0.0, 0.0, 1.0, 0.1), QRectF(0.0, 0.115, 1.0, 0.5), QRectF(0.0, 0.63, 1.0, 0.37)};
-    }
-    return {QRectF(0.0, 0.0, 0.1, 1.0), QRectF(0.115, 0.0, 0.5, 1.0), QRectF(0.63, 0.0, 0.37, 1.0)};
-}
-
-/// The zone maps the layout-OSD renderer consumes for the sketch.
-///
-/// No zoneNumber key: the sketch stands for "a strip, currently with nothing
-/// in it", so its shapes are not tiles and nothing on screen is addressable.
-/// A labelled 1/2/3 would offer digit targets that do not exist. Callers pass
-/// zoneNumberDisplay "none" alongside, and omitting the key keeps the data
-/// honest rather than relying on that display flag to hide it.
-///
-/// The ids run 1-based, matching the live path below (which takes them off
-/// VisibleTile::zoneNumber), so "strip:<screen>:1" names the first band in
-/// both namespaces instead of two different rects.
-inline QVariantList sketchZoneMaps(const QString& screenId, bool verticalAxis)
-{
-    const QVector<QRectF> rects = sketchRects(verticalAxis);
-    QVariantList zones;
-    zones.reserve(rects.size());
-    for (int i = 0; i < rects.size(); ++i) {
-        const QRectF& r = rects.at(i);
-        QVariantMap relGeo;
-        relGeo[QLatin1String("x")] = r.x();
-        relGeo[QLatin1String("y")] = r.y();
-        relGeo[QLatin1String("width")] = r.width();
-        relGeo[QLatin1String("height")] = r.height();
-        QVariantMap zoneMap;
-        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-        zoneMap[QLatin1String("id")] = QStringLiteral("strip:%1:%2").arg(screenId).arg(i + 1);
-        zoneMap[QLatin1String("name")] = QString();
-        zoneMap[QLatin1String("useCustomColors")] = false;
-        zones.append(zoneMap);
-    }
-    return zones;
-}
 
 /// The zone maps the layout-OSD renderer consumes for a LIVE strip.
 ///

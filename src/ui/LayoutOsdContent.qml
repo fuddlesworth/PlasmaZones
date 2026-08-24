@@ -28,6 +28,13 @@ Item {
     id: root
 
     // Layout data
+    /// Declared but never read here. It exists so the C++ push of "layoutId"
+    /// (OverlayService::pushLayoutOsdContent) lands on a declared property
+    /// instead of silently creating a dynamic one — the failure mode that
+    /// once left this card's strip properties unwired at an intermediate hop.
+    /// Delete it only together with that write and the osdSlot declaration and
+    /// forwarding in PassiveOverlayShell.qml; removing one end alone either
+    /// resurrects the dynamic-property trap or breaks the chain.
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
@@ -48,6 +55,16 @@ Item {
     property int masterCount: 1
     property bool producesOverlappingZones: false
     property string zoneNumberDisplay: "all"
+    /// Strip axis ticks: "none" (every layout card) or "horizontal" /
+    /// "vertical" for the scrolling strip card. Pushed by
+    /// OverlayService::pushLayoutOsdContent on EVERY show, so a strip card
+    /// cannot leave its ticks on the next layout card.
+    property string stripAxisHint: "none"
+    /// Non-empty replaces the zone preview with the empty state: the axis
+    /// arrow plus this caption. Only the strip card ever sets it, and only
+    /// when the strip has nothing to draw. The caption is the gate rather
+    /// than a separate flag, so the two cannot disagree.
+    property string stripEmptyCaption: ""
     // Screen info for aspect ratio (bounded to prevent layout issues).
     // Clamped symmetrically about 1:1 — the lower bound is the inverse of
     // the upper. A 0.5 floor reported a rotated 21:9 (about 0.43) as 1:2,
@@ -79,7 +96,9 @@ Item {
     // `osd.hide` profile JSONs; tune the JSONs to adjust the
     // appear/disappear feel rather than re-introducing per-window duration
     // overrides here.
-    readonly property int displayDuration: 1500
+    // A zone preview is recognised at a glance; an empty-state caption has to
+    // be READ. Same card, two different tasks, so the empty state gets longer.
+    readonly property int displayDuration: root.stripEmptyCaption !== "" ? 2500 : 1500
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -132,7 +151,18 @@ Item {
     // the layout name with its Locked / Column template decorations — not
     // just "an OSD appeared". Mirrors NavigationOsdContent's root.
     Accessible.role: Accessible.StaticText
-    Accessible.name: nameLabel.text
+    // The caption is folded in rather than left to the StripEmptyState label,
+    // which is Accessible.ignored: on an empty-strip card the caption IS the
+    // message, and a name of just the layout name would announce the card
+    // while dropping the only thing it says.
+    //
+    // A bare "%1, %2" join, unlike the Monitors page, which branches on the
+    // reason and writes whole sentences. The difference is that both halves
+    // here are already independently translated strings and the format adds no
+    // grammar of its own, so a translator can reorder them freely. The card
+    // also has only the caption TEXT to work with — the daemon pushes the
+    // sentence, not which branch produced it.
+    Accessible.name: root.stripEmptyCaption !== "" ? i18nc("accessible name of the scrolling strip OSD when the strip is empty; %1 is the card name, %2 the reason", "%1, %2", nameLabel.text, root.stripEmptyCaption) : nameLabel.text
 
     // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
     // why the latch is needed (timer-fire and click both race to dismiss).
@@ -190,7 +220,15 @@ Item {
 
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing
+                // Hidden rather than fed an empty list: an empty ZonePreview
+                // still draws its own axis ticks, which would double up with
+                // the empty state's arrow sitting in the same well.
+                visible: root.stripEmptyCaption === ""
                 zones: root.zones
+                stripAxisHint: root.stripAxisHint
+                // The card's own text colour, not theme text: the daemon
+                // pushes a colour here and the ticks belong to this card.
+                stripAxisHintColor: root.textColor
                 highlightColor: root.highlightColor
                 inactiveColor: root.inactiveColor
                 borderColor: root.borderColor
@@ -218,6 +256,20 @@ Item {
                 masterCount: root.masterCount
                 fontStrikeout: root.fontStrikeout
                 animationDuration: Kirigami.Units.shortDuration
+            }
+
+            // The empty strip. Not a variant of the zone preview: it draws no
+            // zones at all, because there are none, and says why in words.
+            QFZCommon.StripEmptyState {
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.smallSpacing
+                visible: root.stripEmptyCaption !== ""
+                verticalAxis: root.stripAxisHint === "vertical"
+                caption: root.stripEmptyCaption
+                // The daemon-pushed card colour, matching the name label
+                // below and the sibling host in LayoutCard. Left to its own
+                // theme default the arrow drifted off the card's palette.
+                contentColor: root.textColor
             }
         }
 

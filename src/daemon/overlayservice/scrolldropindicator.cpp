@@ -141,11 +141,22 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         if (m_scrollDropIndicatorHidePending.contains(screenId)) {
             return;
         }
-        // Generation-guard the animated hide: with animations DISABLED,
-        // SurfaceAnimator salvages a superseded
-        // onComplete and fires it synchronously from inside a later beginShow,
-        // i.e. after that path has already written loaded=true and
-        // setVisible(true), which this callback would otherwise clobber.
+        // Generation-guard the animated hide. Defence in depth: no currently
+        // reachable path fires it stale, and it is kept rather than removed
+        // because the teardown below is destructive and the cost is one
+        // integer compare.
+        //
+        // Stated honestly because two earlier versions of this comment each
+        // asserted a mechanism that does not hold. The two candidates, and why
+        // neither reaches:
+        //   - hideSlot's benign no-op returns DO run this completion
+        //     synchronously, but they run it inside the hideSlot call below,
+        //     so it cannot land after a later show.
+        //   - a superseded animation completion never runs at all:
+        //     SurfaceAnimator drops it on both the enabled and the gate-off
+        //     path (see the contract note on SurfaceAnimator::setEnabled).
+        // The re-entry guard above and the hideWasInFlight handshake in the
+        // show path are what actually carry the correctness here.
         const quint64 hideGeneration = ++m_scrollDropIndicatorHideGuard[screenId];
         m_scrollDropIndicatorHidePending.insert(screenId);
         m_shellHost->hideSlot(screenId, PhosphorSlotKeys::ScrollDropIndicator(), [this, screenId, hideGeneration]() {

@@ -178,14 +178,20 @@ ColumnLayout {
         }
     }
 
-    // Strip preview (scrolling): the live strip when the screen is
-    // scrolling right now, else a representative endless-strip
-    // sketch (clipped columns at both edges suggest continuation).
+    // Strip preview (scrolling): the live strip when the screen has one, else
+    // the same card with the empty state in its well. ONE card either way, so
+    // the name row and category badge keep naming the template in force even
+    // while nothing is on the strip.
     LayoutThumbnail {
         id: scrollingPreview
 
         Layout.alignment: Qt.AlignHCenter
         visible: previews.view.isScrolling
+        // Edge ticks along the screen's resolved strip axis, so a populated
+        // card still says which way the strip continues past the box. The
+        // empty state reads the same axis for its arrow.
+        stripAxisHint: previews.view.stripVertical ? "vertical" : "horizontal"
+        stripEmptyCaption: previews.view.scrollingEmptyCaption
         // No onVisibleChanged re-read here: the live timer's
         // triggeredOnStart covers the same visibility and mode
         // transitions (its running binding includes both), and two
@@ -220,12 +226,15 @@ ColumnLayout {
                 // does not have.
                 "displayName": previews.view.scrollingTemplateName.length > 0 ? previews.view.scrollingTemplateName : i18nc("tiling mode name", "Scrolling"),
                 "category": 1,
-                // The sketch is unnumbered, matching the daemon's OSD
-                // card: its shapes stand for "a strip", not tiles, so
-                // a labelled 1/2/3 would offer digit targets that do
-                // not exist. A real strip labels every tile.
-                "zoneNumberDisplay": previews.view.scrollingStripZones.length > 0 ? "all" : "none",
-                "zones": previews.view.scrollingStripZones.length > 0 ? previews.view.scrollingStripZones : previews.view.scrollingFallbackZones
+                // Unconditionally "all": every tile in this list is a real
+                // window and a real digit target. The old "none" arm existed
+                // for the placeholder sketch, whose three shapes stood for a
+                // strip rather than for tiles and so had to be kept
+                // unlabelled. Nothing draws zones for an empty strip now (the
+                // card renders StripEmptyState in its well instead), so there
+                // is no shape left that a number would misdescribe.
+                "zoneNumberDisplay": "all",
+                "zones": previews.view.scrollingStripZones
             })
         isSelected: true
         globalAutoAssign: previews.page._layoutBridge.autoAssignAllLayouts
@@ -252,6 +261,35 @@ ColumnLayout {
                 total += Math.max(1, zone.tabCount || 0);
             return total;
         }
-        Accessible.name: previews.view.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", scrollingPreview.scrollingWindowCount) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
+        // An empty strip announces the SAME caption the well draws, rather
+        // than a generic "placeholder" phrase. The caption is the whole
+        // message (no windows yet, not applied, daemon down), so a screen
+        // reader that dropped it would lose the one thing the card says.
+        //
+        // Keyed on the REASON, not on the zone count and not on the caption
+        // text. Two things are going on here.
+        //
+        // Not the count: the well switches on the caption, and the two part
+        // company the moment a caption fires with tiles still in the array (a
+        // daemon that died holding a populated strip). Announcing "with 4
+        // windows" over a card drawing "PlasmaZones is not running" is worse
+        // than either.
+        //
+        // Not the caption text either: composing one translated sentence into
+        // another gives translators a fused clause whose inner half they
+        // cannot inflect or reorder. Each state gets a whole sentence instead,
+        // chosen off the same branch the caption came from.
+        Accessible.name: {
+            switch (previews.view.scrollingEmptyReason) {
+            case "daemon":
+                return i18nc("accessible name of the scrolling strip preview", "Scrolling strip preview, PlasmaZones is not running");
+            case "staged":
+                return i18nc("accessible name of the scrolling strip preview", "Scrolling strip preview, apply to start scrolling on this screen");
+            case "empty":
+                return i18nc("accessible name of the scrolling strip preview", "Scrolling strip preview, no windows on the strip yet");
+            default:
+                return i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", scrollingPreview.scrollingWindowCount);
+            }
+        }
     }
 }

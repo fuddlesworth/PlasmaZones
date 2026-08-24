@@ -552,6 +552,26 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     }
 }
 
+/// Deliberately NOT liveness-gated, unlike the three providers wired in
+/// init_engines.cpp (the cards provider, the overlay axis provider and the
+/// UnifiedLayoutController one), which all guard on isActiveOnScreen.
+///
+/// Those are PUBLIC entry points that any screen can be asked about, so a
+/// screen the engine does not own must answer "no vertical strip" rather than
+/// the axis the engine WOULD resolve from its shape. This one is private, and
+/// no caller of it can be asked about a screen that is not already scrolling
+/// or about to be:
+///
+///  - The OSD callers announce a card for a screen they are in the middle of
+///    putting into scrolling mode. showScrollingTemplateOsd is the clear case:
+///    it fires on apply, and the engine may not have adopted the screen yet, so
+///    a liveness gate would answer horizontal for a vertical strip at exactly
+///    the moment the card exists to depict it. The value also lays that card's
+///    bands, so gating would desynchronise bands from ticks rather than merely
+///    suppress them.
+///  - updateScrollingScreens builds the KWin effect's verticalAxisScreens list
+///    from a loop that already iterates only scrolling screens, so a gate there
+///    would be redundant rather than protective.
 bool Daemon::stripIsVerticalForScreen(const QString& screenId) const
 {
     const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());

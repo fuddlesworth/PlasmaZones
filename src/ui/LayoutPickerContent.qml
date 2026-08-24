@@ -70,6 +70,10 @@ Item {
     // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
     // Forwarded into LayoutCard so the category badge shows effective state.
     property bool globalAutoAssign: false
+    /// Which way this screen's scrolling strip runs, pushed by the daemon
+    /// (which resolves the per-monitor StripAxis override this process cannot
+    /// see). Read only by the template cards' edge ticks.
+    property bool stripAxisVertical: false
     // Screen info for aspect ratio. Symmetric clamp about 1:1, matching
     // LayoutOsdContent: a 0.5 floor drew a rotated 21:9 (about 0.43) as a
     // 1:2 box no window on that screen has.
@@ -515,6 +519,21 @@ Item {
                 showMasterDot: layoutCard.layoutData.isAutotile === true && layoutCard.layoutData.supportsMasterCount === true
                 producesOverlappingZones: layoutCard.layoutData.producesOverlappingZones === true
                 zoneNumberDisplay: layoutCard.layoutData.zoneNumberDisplay || "all"
+                // Ticks on a scrolling-template card only. Category 2 is
+                // ScrollingTemplate, the same discriminator CategoryBadge
+                // keys its own template arm on. The no-template row is a
+                // template-family card with no columns, and it draws the
+                // placeholder icon above rather than a preview, so it is
+                // excluded here too.
+                stripAxisHint: {
+                    if (layoutCard.layoutData.id === root.noTemplateId)
+                        return "none";
+
+                    if (layoutCard.layoutData.category !== 2 && layoutCard.layoutData.isScrollingTemplate !== true)
+                        return "none";
+
+                    return root.stripAxisVertical ? "vertical" : "horizontal";
+                }
                 previewWidth: root.previewWidth
                 previewHeight: root.previewHeight
                 // Layout picker features

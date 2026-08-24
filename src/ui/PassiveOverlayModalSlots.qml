@@ -147,6 +147,10 @@ Item {
         // in PassiveOverlayShell.qml).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 2
         property bool globalAutoAssign: false
+        // Which way this SCREEN's scrolling strip runs. Only the template
+        // cards read it (LayoutPickerContent gates on the card's category);
+        // every other card draws no ticks.
+        property bool stripAxisVertical: false
         property bool locked: false
         property color backgroundColor: Kirigami.Theme.backgroundColor
         property color textColor: Kirigami.Theme.textColor
@@ -228,6 +232,7 @@ Item {
                 layouts: layoutPickerSlot.layouts
                 activeLayoutId: layoutPickerSlot.activeLayoutId
                 globalAutoAssign: layoutPickerSlot.globalAutoAssign
+                stripAxisVertical: layoutPickerSlot.stripAxisVertical
                 screenAspectRatio: layoutPickerSlot.screenAspectRatio
                 backgroundColor: layoutPickerSlot.backgroundColor
                 textColor: layoutPickerSlot.textColor
