@@ -411,12 +411,16 @@ inline int snapAssistThumbnailBoxPx(int zoneMinAxisLogicalPx, int candidateCount
     return std::clamp(int(std::ceil(devicePx)), SnapAssistMinIconLogicalPx, SnapAssistThumbnailMaxDimension);
 }
 
-// One rule for every boolean environment switch in this header: set to any
-// value other than "0" enables, "0" or unset disables. Value-checked rather
-// than presence-checked so an explicit opt-out is honoured, and not parsed as
-// an integer so the presence-style spellings the switches have always been
+// The default-OFF rule for a boolean environment switch: set to any value
+// other than "0" enables, "0" or unset disables. Value-checked rather than
+// presence-checked so an explicit opt-out is honoured, and not parsed as an
+// integer so the presence-style spellings the switches have always been
 // documented with ("=1", "=true", "=yes") keep working. "=0" is the only
 // opt-out; anything else set is an opt-in.
+//
+// Switches in this header pick one of two rules: this one, or the default-ON
+// envSwitchEnabledByDefault below. The "=0" spelling disables under both, so
+// a kill switch reads the same to a user whichever twin backs it.
 inline bool envSwitchEnabled(const char* name)
 {
     if (!qEnvironmentVariableIsSet(name)) {
@@ -425,15 +429,37 @@ inline bool envSwitchEnabled(const char* name)
     return qgetenv(name).trimmed() != "0";
 }
 
-// Single accessor for the experimental zero-copy thumbnail gate. Read in
-// FOUR places with different lifetimes (the effect's capture ctor, the
-// daemon's D-Bus slot, the daemon's Vulkan device-extension wiring, and the
-// effect's daemon-ready re-arm); routing every read through one helper keeps
-// the spelling and the read discipline from drifting apart. The env var is
-// process-constant, so callers may cache the result freely.
+// The opt-out twin of envSwitchEnabled, for a switch that defaults to on:
+// unset enables, and "0" is the only spelling that disables. Any other value
+// is read as an explicit opt-in and left enabled, so the documented "=1" /
+// "=true" spellings keep meaning what they say.
+inline bool envSwitchEnabledByDefault(const char* name)
+{
+    if (!qEnvironmentVariableIsSet(name)) {
+        return true;
+    }
+    return qgetenv(name).trimmed() != "0";
+}
+
+// Single accessor for the zero-copy thumbnail gate. Read in FOUR places with
+// different lifetimes (the effect's capture ctor, the daemon's D-Bus slot,
+// the daemon's Vulkan device-extension wiring, and the effect's daemon-ready
+// re-arm); routing every read through one helper keeps the spelling and the
+// read discipline from drifting apart. The env var is process-constant, so
+// callers may cache the result freely.
+//
+// Default-on: the dma-buf path is the normal transport, and
+// PLASMAZONES_DMABUF_THUMBNAILS=0 is the kill switch for a driver or session
+// where it misbehaves. The raw-pixel path stays in place as the automatic
+// fallback for every case the gate cannot predict — a software or otherwise
+// unsupported RHI backend in the daemon, a cross-GPU import the driver
+// refuses, a missing EGL/Vulkan extension, or a format/modifier combination
+// the importer rejects. Both processes read the same variable, and the two
+// sides do NOT have to agree: the daemon refusing the import simply routes
+// the effect back to pixels.
 inline bool snapAssistDmabufThumbnailsEnabled()
 {
-    return envSwitchEnabled("PLASMAZONES_DMABUF_THUMBNAILS");
+    return envSwitchEnabledByDefault("PLASMAZONES_DMABUF_THUMBNAILS");
 }
 
 // Diagnostic switch for the snap-assist thumbnail pipeline. When set, both
