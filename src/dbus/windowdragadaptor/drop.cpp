@@ -554,18 +554,31 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const bool actuallySnapped = shouldApplyGeometry && !restoreSizeOnlyOut;
     const bool snapAssistFeatureOn = m_settings && m_settings->snapAssistFeatureEnabled();
     const bool snapAssistBySetting = snapAssistFeatureOn && m_settings->snapAssistEnabled();
-    const QVariantList snapAssistTriggers = snapAssistFeatureOn ? m_settings->snapAssistTriggers() : QVariantList();
+    // Same pre-parsed cache dragMoved stamps from, not a fresh
+    // m_settings->snapAssistTriggers() read. Both sides of the grace have to
+    // agree on the list, and re-reading here would also allocate a QVariantList
+    // on the drop path for a list beginDrag already parsed.
+    const bool snapAssistTriggersConfigured = snapAssistFeatureOn && !m_cachedSnapAssistTriggers.isEmpty();
+    // Modifiers resolved the way dragMoved resolves them. A keyboard trigger
+    // arrives as 0 on the wire, and casting that raw would read every keyboard
+    // snap-assist trigger as not-held at the drop.
+    Qt::KeyboardModifiers dropMods;
+    if (modifiers != 0) {
+        dropMods = static_cast<Qt::KeyboardModifiers>(modifiers);
+    } else {
+        dropMods = QGuiApplication::queryKeyboardModifiers();
+    }
     // Release grace, same contract as the three drag-tick arms but read HERE,
     // at the drop. This is the arm most exposed to the race the grace exists
     // for: the other three are sampled on a motion tick, while this one is
     // sampled at the instant the button comes up, which is exactly when a
     // trigger held by the same hand has already lifted. The stamp is fed per
     // tick in dragMoved; rawHeld is the state captured at release.
-    const bool rawSnapAssistHeld = !snapAssistTriggers.isEmpty()
-        && anyTriggerHeld(snapAssistTriggers, static_cast<Qt::KeyboardModifiers>(modifiers), mouseButtons);
+    const bool rawSnapAssistHeld =
+        snapAssistTriggersConfigured && anyTriggerHeld(m_cachedSnapAssistTriggers, dropMods, mouseButtons);
     const int snapAssistGraceMs = m_settings ? m_settings->snapAssistGraceMs() : 0;
     const qint64 dropNowMs = m_dragClock.isValid() ? m_dragClock.elapsed() : 0;
-    const bool snapAssistByTrigger = !snapAssistTriggers.isEmpty()
+    const bool snapAssistByTrigger = snapAssistTriggersConfigured
         && resolveHoldGrace(rawSnapAssistHeld, dropNowMs, m_snapAssistLastHeldMs, snapAssistGraceMs).held;
     const bool requestSnapAssist = actuallySnapped && snapAssistFeatureOn
         && (snapAssistBySetting || snapAssistByTrigger) && releaseScreen && m_layoutManager && m_windowTracking;
