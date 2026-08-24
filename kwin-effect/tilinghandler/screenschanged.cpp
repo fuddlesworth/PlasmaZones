@@ -525,7 +525,14 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
     // setScrollingScreens, which is where that invalidation normally lives.
     // Without this, a screen marked scrolling before it joined the union kept
     // every `Mode == "scrolling"` rule memoised as non-matching.
+    // The union itself is a discriminator input too: keepFloatingAboveDefault
+    // reads isManagedScreen to tell a tiling screen from a snapping one, so a
+    // snapping<->tiling flip must re-reconcile the window layer after the
+    // assignment (the sweeps the demote/untrack passes above run see the OLD
+    // set). Hence the gate below keys on any managed-set change, not only on
+    // the scrolling intersection moving.
     const QSet<QString> scrollingBefore = scrollingScreenIntersection();
+    const bool managedChanged = m_managedScreens != newScreens;
     m_managedScreens = newScreens;
     // The deferred half of the windowed-fullscreen release: membership was
     // forgotten in the passes above; only now that m_managedScreens holds
@@ -564,7 +571,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // land in a different virtual screen than the tiled rect.
         m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
     }
-    if (scrollingScreenIntersection() != scrollingBefore) {
+    if (managedChanged || scrollingScreenIntersection() != scrollingBefore) {
         m_effect->invalidateAllRuleCaches();
         m_effect->scheduleBorderSweep();
         // Same Mode-flip repaint bookend setScrollingScreens takes: a

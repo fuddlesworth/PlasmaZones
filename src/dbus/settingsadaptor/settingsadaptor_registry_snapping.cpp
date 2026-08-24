@@ -66,16 +66,6 @@ void SettingsAdaptor::initializeRegistrySnapping()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
-#define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
-    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
-        return concrete->getter();                                                                                     \
-    };                                                                                                                 \
-    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        concrete->setter(v.toBool());                                                                                  \
-        return true;                                                                                                   \
-    };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
-
 #define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -157,6 +147,10 @@ void SettingsAdaptor::initializeRegistrySnapping()
     REGISTER_BOOL_SETTING("restoreWindowsToZonesOnLogin", restoreWindowsToZonesOnLogin, setRestoreWindowsToZonesOnLogin)
     REGISTER_BOOL_SETTING("snappingRestoreFloatedWindowsOnLogin", snappingRestoreFloatedWindowsOnLogin,
                           setSnappingRestoreFloatedWindowsOnLogin)
+    // Effect-only consumer (reconcileRuleWindowLayer): keep snap-floated
+    // windows stacked above the zones. Through the interface like its restore
+    // twin, so a non-Settings backend keeps the key.
+    REGISTER_BOOL_SETTING("snappingKeepFloatingAbove", snappingKeepFloatingAbove, setSnappingKeepFloatingAbove)
     REGISTER_BOOL_SETTING("snapUnfloatFallbackToZone", snapUnfloatFallbackToZone, setSnapUnfloatFallbackToZone)
     REGISTER_BOOL_SETTING("autoAssignAllLayouts", autoAssignAllLayouts, setAutoAssignAllLayouts)
     REGISTER_BOOL_SETTING("suppressDefaultLayoutAssignment", suppressDefaultLayoutAssignment,
@@ -248,9 +242,6 @@ void SettingsAdaptor::initializeRegistrySnapping()
 
     // Snapping shortcuts (concrete Settings only)
     if (concrete) {
-        // Effect-only consumer (reconcileRuleWindowLayer): keep snap-floated
-        // windows stacked above the zones. Concrete because no daemon reader exists.
-        REGISTER_CONCRETE_BOOL("snappingKeepFloatingAbove", snappingKeepFloatingAbove, setSnappingKeepFloatingAbove)
         // Snap to zone by number shortcuts
         REGISTER_CONCRETE_STRING("snapToZone1Shortcut", snapToZone1Shortcut, setSnapToZone1Shortcut)
         REGISTER_CONCRETE_STRING("snapToZone2Shortcut", snapToZone2Shortcut, setSnapToZone2Shortcut)

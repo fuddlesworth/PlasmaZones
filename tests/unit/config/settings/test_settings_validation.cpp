@@ -21,6 +21,8 @@
  *     "#AARRGGBB" or the empty follow-the-system sentinel; the legacy
  *     "accent" token snaps to the sentinel.
  *  8. Decorations.Performance -- absent-group defaults and reset() round-trip.
+ *  9. Per-mode keep-floating-above -- three independent bool slots: defaults,
+ *     change-gated signals, and save/reload round trips in both directions.
  */
 
 #include <QTest>
@@ -734,8 +736,10 @@ private Q_SLOTS:
     // Per-mode keep-floating-above: three independent slots (one per engine,
     // the float-is-per-mode invariant), each defaulting off, each round-
     // tripping through its own group, and each emitting its own signal only
-    // on a real change. Presence after a default-equal write is deliberately
-    // NOT asserted (sparse persistence deletes default-equal keys).
+    // on a real change (every arm re-sets the same value and expects no second
+    // emit). Presence after a default-equal write is deliberately NOT asserted
+    // (sparse persistence deletes default-equal keys); the snapping arm instead
+    // pins that a false written over a persisted true survives that deletion.
     // =========================================================================
 
     void testKeepFloatingAbove_defaultsOffPerMode()
@@ -762,12 +766,23 @@ private Q_SLOTS:
             QCOMPARE(spy.count(), 1);
             QVERIFY(!settings.autotileKeepFloatingAbove());
             QVERIFY(!settings.scrollingKeepFloatingAbove());
-            settings.save();
+            QVERIFY(settings.save());
         }
-        Settings reloaded;
-        QVERIFY(reloaded.snappingKeepFloatingAbove());
-        QVERIFY(!reloaded.autotileKeepFloatingAbove());
-        QVERIFY(!reloaded.scrollingKeepFloatingAbove());
+        {
+            Settings reloaded;
+            QVERIFY(reloaded.snappingKeepFloatingAbove());
+            QVERIFY(!reloaded.autotileKeepFloatingAbove());
+            QVERIFY(!reloaded.scrollingKeepFloatingAbove());
+            // Writing the default back over a persisted true: the change is
+            // announced, and sparse persistence dropping the now-default-equal
+            // key must read back as false, not as the stale true.
+            QSignalSpy spy(&reloaded, &Settings::snappingKeepFloatingAboveChanged);
+            reloaded.setSnappingKeepFloatingAbove(false);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(reloaded.save());
+        }
+        Settings back;
+        QVERIFY(!back.snappingKeepFloatingAbove());
     }
 
     void testKeepFloatingAbove_autotileRoundTripsIndependently()
@@ -778,9 +793,11 @@ private Q_SLOTS:
             QSignalSpy spy(&settings, &Settings::autotileKeepFloatingAboveChanged);
             settings.setAutotileKeepFloatingAbove(true);
             QCOMPARE(spy.count(), 1);
+            settings.setAutotileKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
             QVERIFY(!settings.snappingKeepFloatingAbove());
             QVERIFY(!settings.scrollingKeepFloatingAbove());
-            settings.save();
+            QVERIFY(settings.save());
         }
         Settings reloaded;
         QVERIFY(reloaded.autotileKeepFloatingAbove());
@@ -796,9 +813,11 @@ private Q_SLOTS:
             QSignalSpy spy(&settings, &Settings::scrollingKeepFloatingAboveChanged);
             settings.setScrollingKeepFloatingAbove(true);
             QCOMPARE(spy.count(), 1);
+            settings.setScrollingKeepFloatingAbove(true);
+            QCOMPARE(spy.count(), 1);
             QVERIFY(!settings.snappingKeepFloatingAbove());
             QVERIFY(!settings.autotileKeepFloatingAbove());
-            settings.save();
+            QVERIFY(settings.save());
         }
         Settings reloaded;
         QVERIFY(reloaded.scrollingKeepFloatingAbove());

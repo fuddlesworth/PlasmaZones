@@ -1563,6 +1563,46 @@ public:
         Q_EMIT scrollingRestoreFloatedWindowsOnLoginChanged();
         Q_EMIT settingsChanged();
     }
+    // The keep-floating-above trio mirrors the restore-floated trio above:
+    // the snap/autotile pair is pure virtual on IWindowBehaviorSettings, the
+    // scrolling one is a defaulted ISettings getter overridden here for the
+    // same reason as its restore sibling.
+    bool snappingKeepFloatingAbove() const override
+    {
+        return m_snappingKeepFloatingAbove;
+    }
+    void setSnappingKeepFloatingAbove(bool value) override
+    {
+        if (m_snappingKeepFloatingAbove == value)
+            return;
+        m_snappingKeepFloatingAbove = value;
+        Q_EMIT snappingKeepFloatingAboveChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool autotileKeepFloatingAbove() const override
+    {
+        return m_autotileKeepFloatingAbove;
+    }
+    void setAutotileKeepFloatingAbove(bool value) override
+    {
+        if (m_autotileKeepFloatingAbove == value)
+            return;
+        m_autotileKeepFloatingAbove = value;
+        Q_EMIT autotileKeepFloatingAboveChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingKeepFloatingAbove() const override
+    {
+        return m_scrollingKeepFloatingAbove;
+    }
+    void setScrollingKeepFloatingAbove(bool value) override
+    {
+        if (m_scrollingKeepFloatingAbove == value)
+            return;
+        m_scrollingKeepFloatingAbove = value;
+        Q_EMIT scrollingKeepFloatingAboveChanged();
+        Q_EMIT settingsChanged();
+    }
     // The scrolling tab-indicator family: all twelve pairs are DEFAULTED
     // virtuals on ISettings that answer frozen constants, which makes any
     // consumer predicate untestable through an unoverridden stub — the same
@@ -2808,6 +2848,9 @@ private:
     bool m_snappingRestoreFloatedWindowsOnLogin = ConfigDefaults::snappingRestoreFloatedWindowsOnLogin();
     bool m_autotileRestoreFloatedWindowsOnLogin = ConfigDefaults::autotileRestoreFloatedWindowsOnLogin();
     bool m_scrollingRestoreFloatedWindowsOnLogin = ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin();
+    bool m_snappingKeepFloatingAbove = ConfigDefaults::snappingKeepFloatingAbove();
+    bool m_autotileKeepFloatingAbove = ConfigDefaults::autotileKeepFloatingAbove();
+    bool m_scrollingKeepFloatingAbove = ConfigDefaults::scrollingKeepFloatingAbove();
     bool m_scrollingTabIndicatorEnabled = ConfigDefaults::scrollingTabIndicatorEnabled();
     int m_scrollingTabIndicatorStyle = ConfigDefaults::scrollingTabIndicatorStyle();
     int m_scrollingTabIndicatorGapsBetweenTabs = ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs();

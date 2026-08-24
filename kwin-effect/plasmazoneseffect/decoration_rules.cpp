@@ -3,7 +3,8 @@
 
 // Window-RULE reconcilers: the rule actions that change a window's own KWin state
 // rather than its decoration chain — a hidden title bar (SetHideTitleBar) and the
-// keep-above / keep-below stacking layer (SetWindowLayer).
+// keep-above / keep-below stacking layer (SetWindowLayer, with the per-mode
+// keep-floating-above config default filling the slot no rule owns).
 //
 // Split out of decorations.cpp, which owns the decoration chain (resolve, apply,
 // tear down). These share that file's per-window rule-resolution entry points but

@@ -116,12 +116,13 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
-    // Config-backed window-decoration appearance default. Each key updates one
-    // slot of m_windowAppearanceDefault; a change re-sweeps every window so the
-    // default border / hidden title bar reapplies live (mirroring the accent /
-    // inactive colour loaders above). Re-fetched on every settingsChanged, so a
-    // Window Appearance page edit takes effect without a relog. Guarded on an
-    // actual value change to avoid a redundant full border rebuild per fetch.
+    // Config-backed window appearance default. Each key updates one slot of
+    // m_windowAppearanceDefault; a change re-sweeps every window so the default
+    // border / hidden title bar / opacity tint / keep-floating-above layer
+    // reapplies live (mirroring the accent / inactive colour loaders above).
+    // Re-fetched on every settingsChanged, so a Window Appearance page edit
+    // takes effect without a relog. Guarded on an actual value change to avoid
+    // a redundant full border rebuild per fetch.
     // Decorations.Performance. An animated pack repaints every window carrying it
     // on every vsync, which holds the GPU in its top performance state whatever
     // the per-frame cost is, so these gate WHEN the chain animates. Flipping
@@ -816,10 +817,13 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
-    // Window border / title-bar appearance is pushed as unified config defaults
-    // (the window-appearance loaders above). Each slot is resolved as that config
-    // default, scope-gated, with per-window rule overrides layered on top inside
-    // updateWindowDecoration / reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance).
+    // Window border / title-bar / opacity-tint appearance is pushed as unified
+    // config defaults (the window-appearance loaders above). Each slot is
+    // resolved as that config default, scope-gated, with per-window rule
+    // overrides layered on top inside updateWindowDecoration /
+    // reconcileRuleHiddenTitleBar (resolveEffectiveWindowAppearance). The
+    // keep-floating-above bools ride the same loader block but fill the window
+    // LAYER slot inside reconcileRuleWindowLayer instead.
 
     // Per-surface decoration profile tree (Stage 2a): the SSOT for each surface's
     // USER shader-pack chain (e.g. glow) plus each pack's parameter overrides,

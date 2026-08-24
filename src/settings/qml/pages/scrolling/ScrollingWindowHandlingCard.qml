@@ -98,7 +98,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Keep floating windows above")
             searchAnchor: "scrollingKeepFloatingAbove"
-            description: i18n("Stack windows you float above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.")
+            description: i18n("Keep the windows you float stacked above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.")
 
             SettingsSwitch {
                 checked: appSettings.scrollingKeepFloatingAbove

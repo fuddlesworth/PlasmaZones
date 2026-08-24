@@ -617,7 +617,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("restoreUnsnappedWindowsPosition"),
                PhosphorI18n::tr("Restore unsnapped windows to their previous position"),
                {PhosphorI18n::tr("floated"), PhosphorI18n::tr("position")});
-    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("snappingKeepFloatingAbove"),
+    addSetting(search, QStringLiteral("snapping-window-behavior"), QStringLiteral("keepFloatingAbove"),
                PhosphorI18n::tr("Keep floating windows above"),
                {PhosphorI18n::tr("float"), PhosphorI18n::tr("above"), PhosphorI18n::tr("stacking"),
                 PhosphorI18n::tr("layer")});
@@ -917,7 +917,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("restoreUntiledWindowsPosition"),
                PhosphorI18n::tr("Restore untiled windows to their previous position"),
                {PhosphorI18n::tr("floated"), PhosphorI18n::tr("position")});
-    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("autotileKeepFloatingAbove"),
+    addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("keepFloatingAbove"),
                PhosphorI18n::tr("Keep floating windows above"),
                {PhosphorI18n::tr("float"), PhosphorI18n::tr("above"), PhosphorI18n::tr("stacking"),
                 PhosphorI18n::tr("layer")});

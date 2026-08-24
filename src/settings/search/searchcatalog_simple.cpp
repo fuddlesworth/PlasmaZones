@@ -98,7 +98,8 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Restore floated windows to their previous position"),
                {PhosphorI18n::tr("restore"), PhosphorI18n::tr("float"), PhosphorI18n::tr("position")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingKeepFloatingAbove"),
-               PhosphorI18n::tr("Keep floating windows above"), {PhosphorI18n::tr("float"), PhosphorI18n::tr("above")});
+               PhosphorI18n::tr("Keep floating windows above"),
+               {PhosphorI18n::tr("float"), PhosphorI18n::tr("above"), PhosphorI18n::tr("layer")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingStickyWindows"),
                PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("sticky"), PhosphorI18n::tr("desktops")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingColumnWidthStep"),
@@ -187,8 +188,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Restore windows to their previous zone"), {PhosphorI18n::tr("restore")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("restoreUnsnappedWindowsPosition"),
                PhosphorI18n::tr("Restore unsnapped windows to their previous position"), {PhosphorI18n::tr("restore")});
-    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("snappingKeepFloatingAbove"),
-               PhosphorI18n::tr("Keep floating windows above"), {PhosphorI18n::tr("float"), PhosphorI18n::tr("above")});
+    addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("keepFloatingAbove"),
+               PhosphorI18n::tr("Keep floating windows above"),
+               {PhosphorI18n::tr("float"), PhosphorI18n::tr("above"), PhosphorI18n::tr("layer")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("unfloatToZoneFallback"),
                PhosphorI18n::tr("Unfloat to a zone when there is no previous zone"), {PhosphorI18n::tr("unfloat")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("stickyWindows"),
@@ -209,8 +211,9 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("gaps"), PhosphorI18n::tr("single window")});
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("restoreUntiledWindowsPosition"),
                PhosphorI18n::tr("Restore untiled windows to their previous position"), {PhosphorI18n::tr("restore")});
-    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("autotileKeepFloatingAbove"),
-               PhosphorI18n::tr("Keep floating windows above"), {PhosphorI18n::tr("float"), PhosphorI18n::tr("above")});
+    addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("keepFloatingAbove"),
+               PhosphorI18n::tr("Keep floating windows above"),
+               {PhosphorI18n::tr("float"), PhosphorI18n::tr("above"), PhosphorI18n::tr("layer")});
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("stickyWindows"),
                PhosphorI18n::tr("Sticky windows"), {PhosphorI18n::tr("all desktops")});
     addSetting(search, QStringLiteral("tiling-simple"), QStringLiteral("dragBehavior"),

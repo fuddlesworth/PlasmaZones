@@ -1051,10 +1051,10 @@ public:
     void setSnappingRestoreFloatedWindowsOnLogin(bool restore) override;
     bool autotileRestoreFloatedWindowsOnLogin() const override;
     void setAutotileRestoreFloatedWindowsOnLogin(bool restore) override;
-    bool snappingKeepFloatingAbove() const;
-    void setSnappingKeepFloatingAbove(bool keep);
-    bool autotileKeepFloatingAbove() const;
-    void setAutotileKeepFloatingAbove(bool keep);
+    bool snappingKeepFloatingAbove() const override;
+    void setSnappingKeepFloatingAbove(bool keep) override;
+    bool autotileKeepFloatingAbove() const override;
+    void setAutotileKeepFloatingAbove(bool keep) override;
     bool snapUnfloatFallbackToZone() const override;
     void setSnapUnfloatFallbackToZone(bool enabled) override;
     bool autoAssignAllLayouts() const override;
@@ -1502,8 +1502,8 @@ public:
     void setScrollingRestoreStripsOnLogin(bool restore);
     bool scrollingRestoreFloatedWindowsOnLogin() const override;
     void setScrollingRestoreFloatedWindowsOnLogin(bool restore) override;
-    bool scrollingKeepFloatingAbove() const;
-    void setScrollingKeepFloatingAbove(bool keep);
+    bool scrollingKeepFloatingAbove() const override;
+    void setScrollingKeepFloatingAbove(bool keep) override;
     int scrollingColumnWidthStepPercent() const;
     void setScrollingColumnWidthStepPercent(int percent);
     int scrollingWindowHeightStepPercent() const;

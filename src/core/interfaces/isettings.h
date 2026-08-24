@@ -338,15 +338,15 @@ public:
         return false;
     }
 
-    // The three defaults below are spelled `true` rather than calling their
-    // ConfigDefaults twins, because this interface header deliberately does
-    // not depend on the config layer. A stub answering the opposite of what
-    // the real Settings would is a silent behaviour split, so each is pinned
-    // from the other side: settings/scrolling.cpp — a TU that sees both —
-    // static_asserts the tab-indicator default, the drop-indicator default
-    // and ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() against the
-    // literals here, and names this comment. Change any of them and fix both
-    // places.
+    // The four defaults below are spelled as literals rather than calling
+    // their ConfigDefaults twins, because this interface header deliberately
+    // does not depend on the config layer. A stub answering the opposite of
+    // what the real Settings would is a silent behaviour split, so each is
+    // pinned from the other side: settings/scrolling.cpp — a TU that sees
+    // both — static_asserts the tab-indicator default, the drop-indicator
+    // default, ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() and
+    // ConfigDefaults::scrollingKeepFloatingAbove() against the literals here,
+    // and names this comment. Change any of them and fix both places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default because two readers reach it through this interface
@@ -565,6 +565,23 @@ public:
     /// setScrollingTabIndicatorEnabled. The snap/autotile twins are pure virtuals
     /// on IWindowBehaviorSettings; this pair carries defaults because its getters do.
     virtual void setScrollingRestoreFloatedWindowsOnLogin(bool /*restore*/)
+    {
+    }
+
+    /// Keep a scroll-floated window stacked above the strip. The scrolling
+    /// twin of IWindowBehaviorSettings' snapping/autotile pair, defaulted like
+    /// its restore sibling above so the D-Bus settings registry can register
+    /// the key through the interface (the KWin effect is its only reader).
+    /// Pinned to ConfigDefaults::scrollingKeepFloatingAbove() by the
+    /// static_assert in settings/scrolling.cpp.
+    virtual bool scrollingKeepFloatingAbove() const
+    {
+        return false;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingRestoreFloatedWindowsOnLogin.
+    virtual void setScrollingKeepFloatingAbove(bool /*keep*/)
     {
     }
 

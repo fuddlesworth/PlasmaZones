@@ -196,11 +196,13 @@ public:
     }
     // Keep a FLOATED window stacked above the windows the mode places. Per-engine
     // like the restore toggle above; snapping delegates to the autotile canonical.
-    static bool autotileKeepFloatingAbove()
+    // constexpr so settings/scrolling.cpp can static_assert the scrolling twin
+    // (which lives in a chain link that cannot reference this leaf) against it.
+    static constexpr bool autotileKeepFloatingAbove()
     {
         return false;
     }
-    static bool snappingKeepFloatingAbove()
+    static constexpr bool snappingKeepFloatingAbove()
     {
         return autotileKeepFloatingAbove();
     }

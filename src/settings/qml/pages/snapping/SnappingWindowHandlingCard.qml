@@ -117,8 +117,8 @@ SettingsCard {
 
         SettingsRow {
             title: i18n("Keep floating windows above")
-            searchAnchor: "snappingKeepFloatingAbove"
-            description: i18n("Stack windows you float above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.")
+            searchAnchor: "keepFloatingAbove"
+            description: i18n("Keep the windows you float stacked above the windows snapped into zones. A rule that sets a window layer takes precedence for the windows it matches.")
 
             SettingsSwitch {
                 checked: appSettings.snappingKeepFloatingAbove

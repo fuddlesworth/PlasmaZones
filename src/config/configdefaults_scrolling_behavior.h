@@ -177,8 +177,10 @@ public:
         return true;
     }
     /// Keep a scroll-floated window stacked above the strip. The scroll twin
-    /// of autotileKeepFloatingAbove, read by the KWin effect only. The literal
-    /// matches the autotile canonical's value for the same reason as above.
+    /// of autotileKeepFloatingAbove, read by the KWin effect only. A literal
+    /// rather than a delegation because the canonical lives in the leaf
+    /// configdefaults.h, which this chain link cannot reference; the parity is
+    /// pinned by a static_assert in settings/scrolling.cpp.
     static constexpr bool scrollingKeepFloatingAbove()
     {
         return false;

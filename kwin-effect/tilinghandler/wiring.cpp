@@ -147,6 +147,12 @@ void TilingHandler::loadSettings()
                 if (queryGeneration != m_screenQueryGeneration) {
                     return;
                 }
+                // Compositor teardown: a D-Bus reply can land after KWin::effects
+                // is gone (the daemon-loss handler documents the same case), and
+                // the stacking-order walk below would deref the null.
+                if (!KWin::effects) {
+                    return;
+                }
                 m_initialScreenQueryPending = false;
                 // A managedScreensChanged signal that landed while this query was
                 // in flight carried a NEWER set and already ran the full per-screen
@@ -173,10 +179,17 @@ void TilingHandler::loadSettings()
                     // Same intersection hazard as slotScreensChanged: this
                     // reply and the scrollingScreens reply race, so whichever
                     // lands second changes the Mode discriminator without
-                    // going through setScrollingScreens' invalidation.
+                    // going through setScrollingScreens' invalidation. The
+                    // union itself is a discriminator input as well
+                    // (keepFloatingAboveDefault reads isManagedScreen), and
+                    // this reply races the float re-seed too: a float resolved
+                    // before it landed read every screen as snapping. So the
+                    // gate keys on any managed-set change, as slotScreensChanged's
+                    // does.
                     const QSet<QString> scrollingBefore = scrollingScreenIntersection();
+                    const bool managedChanged = m_managedScreens != published;
                     m_managedScreens = published;
-                    if (scrollingScreenIntersection() != scrollingBefore) {
+                    if (managedChanged || scrollingScreenIntersection() != scrollingBefore) {
                         m_effect->invalidateAllRuleCaches();
                         m_effect->scheduleBorderSweep();
                         // The Mode-flip repaint bookend setScrollingScreens
@@ -186,7 +199,8 @@ void TilingHandler::loadSettings()
                         // leaves an undamaged window at its last-painted alpha.
                         // The border sweep above does not cover it — it rebuilds
                         // decorations, not the per-frame alpha of windows that
-                        // have none.
+                        // have none. KWin::effects is non-null here: the reply
+                        // handler returns at its top when the compositor is gone.
                         if (m_effect->m_shaderManager.hasOpacityRules()) {
                             KWin::effects->addRepaintFull();
                         }

@@ -89,8 +89,8 @@ SettingsCard {
 
         SettingsRow {
             title: i18n("Keep floating windows above")
-            searchAnchor: "autotileKeepFloatingAbove"
-            description: i18n("Stack windows you float above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.")
+            searchAnchor: "keepFloatingAbove"
+            description: i18n("Keep the windows you float stacked above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.")
 
             SettingsSwitch {
                 checked: appSettings.autotileKeepFloatingAbove

@@ -1218,9 +1218,13 @@ private:
     QColor m_borderAccentColor;
     QColor m_borderInactiveColor;
 
-    // Config-backed window-decoration appearance default. Window appearance
-    // resolves as: this default (each slot gated by its scope token) filling the
-    // slots the user's per-window rules left unset — rules still win per slot.
+    // Config-backed window appearance default: the decoration slots (border,
+    // title bar, opacity tint) plus the per-mode keep-floating-above bools
+    // that fill the window LAYER slot for a floated window. Window appearance
+    // resolves as: this default (each decoration slot gated by its scope
+    // token, the layer slot by the float state and the screen's mode) filling
+    // the slots the user's per-window rules left unset — rules still win per
+    // slot.
     // Pushed from the daemon over the settings D-Bus wire in loadCachedSettings,
     // re-fetched on every settingsChanged. The three colour strings carry a
     // hex "#AARRGGBB"; a current daemon resolves its empty follow-the-theme
@@ -1234,12 +1238,14 @@ private:
     // WindowAppearanceDefault moved to effect_state.h.
     WindowAppearanceDefault m_windowAppearanceDefault;
 
-    /// True when a config-default border, hidden title bar, or opacity+tint
-    /// layer could apply to some window. Placement-change reconciliation
-    /// (invalidateRuleCacheForStateChange / flushPendingRuleInvalidations) must
-    /// run whenever this is true even with an empty rule set, because a config
-    /// default is scope-gated on placement state (isSnapped / isTiled /
-    /// normal), so a snap/unsnap changes whether it applies.
+    /// True when a config-default border, hidden title bar, opacity+tint
+    /// layer, or keep-floating-above window layer could apply to some window.
+    /// Placement-change reconciliation (invalidateRuleCacheForStateChange /
+    /// flushPendingRuleInvalidations) must run whenever this is true even with
+    /// an empty rule set, because the decoration defaults are scope-gated on
+    /// placement state (isSnapped / isTiled / normal) and the layer default is
+    /// gated on the float state plus the screen's placement mode, so a
+    /// snap/unsnap/float flip changes whether each applies.
     bool hasWindowAppearanceDefault() const
     {
         return m_windowAppearanceDefault.showBorder || m_windowAppearanceDefault.hideTitleBar
@@ -1296,7 +1302,9 @@ private:
     /// unset filled from the config default in m_windowAppearanceDefault, each
     /// default slot gated by its scope token. Rules win per slot. Used by both
     /// the border draw path and the title-bar reconcile so config-backed
-    /// defaults apply even with an empty rule set.
+    /// defaults apply even with an empty rule set. The window-layer slot is
+    /// the exception: it is not a decoration slot, and its config filler is
+    /// keepFloatingAboveDefault, consulted by reconcileRuleWindowLayer.
     ResolvedWindowAppearance resolveEffectiveWindowAppearance(KWin::EffectWindow* w, const QString& windowId) const;
 
     // The window currently in an interactive RESIZE (set at
@@ -2176,10 +2184,14 @@ private:
     /// change made during the hold lands at un-flag time.
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
-    /// Resolve the per-window-rule SetWindowLayer override for @p windowId and
-    /// apply it to KWin's keepAbove/keepBelow pair. First application snapshots
-    /// the window's pre-rule flags into m_ruleWindowLayerSnapshots; a resolve
-    /// with no owning rule restores that snapshot once and forgets the window.
+    /// Resolve the window's stacking layer, the per-window-rule SetWindowLayer
+    /// override first and, when no rule owns the slot, the per-mode
+    /// keep-floating-above config default (keepFloatingAboveDefault), and
+    /// apply it to KWin's keepAbove/keepBelow pair. First application
+    /// snapshots the window's pre-write flags into m_ruleWindowLayerSnapshots;
+    /// a resolve with no owner restores that snapshot once and forgets the
+    /// window. For the default that means a float flip through the
+    /// placement-state flush applies or restores the layer.
     /// Rides a superset of reconcileRuleHiddenTitleBar's triggers
     /// (placement-state flush, rule edits / focus via updateAllDecorations)
     /// plus an eager window-added apply — so a layer rule takes effect before
@@ -2240,7 +2252,8 @@ private:
 
     /// The window's OWN keep-above flag — the app/user-set state, with
     /// written values substituted from the pre-write snapshot while either
-    /// flag owner (a SetWindowLayer rule, or the windowed-fullscreen layer
+    /// flag owner (a SetWindowLayer rule or the keep-floating-above default,
+    /// which share the snapshot map, or the windowed-fullscreen layer
     /// demotion) holds the window's layer; the rule snapshot wins when both
     /// exist, since only it predates the rule's write. Consulted by the
     /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
@@ -2249,8 +2262,9 @@ private:
     bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
 
     /// Substitute the pre-write snapshot's keepAbove/keepBelow pair into
-    /// @p query while either flag owner (a SetWindowLayer rule, or the
-    /// windowed-fullscreen layer demotion) holds @p windowId's layer, so
+    /// @p query while either flag owner (a SetWindowLayer rule or the
+    /// keep-floating-above default, or the windowed-fullscreen layer
+    /// demotion) holds @p windowId's layer, so
     /// neither owner's output feeds back into rule input (rule snapshot
     /// first when both exist). Shared by ruleQuery (the effect's live
     /// evaluation path) and pushWindowMetadata (the daemon's
@@ -2258,17 +2272,18 @@ private:
     /// place. No-op with no snapshots (the no-rules case pays two isEmpty).
     void applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const;
 
-    /// Restore every rule-applied window layer to its snapshotted pre-rule
-    /// flags and clear the snapshot map. Teardown counterpart of
-    /// reconcileRuleWindowLayer, called from the destructor next to
-    /// DecorationManager::restoreAll so an effect unload doesn't strand
-    /// rule-set keepAbove/keepBelow state on live windows.
+    /// Restore every reconcile-applied window layer (rule or keep-floating-
+    /// above default) to its snapshotted pre-write flags and clear the
+    /// snapshot map. Teardown counterpart of reconcileRuleWindowLayer, called
+    /// from the destructor next to DecorationManager::restoreAll so an effect
+    /// unload doesn't strand written keepAbove/keepBelow state on live windows.
     void restoreAllRuleWindowLayers();
 
-    /// Pre-rule keepAbove/keepBelow pair captured the first time a
-    /// SetWindowLayer rule is applied to a window. Deliberately NOT re-captured
-    /// while a rule owns the layer, so the restore returns the window to the
-    /// user's own state, not to an intermediate rule state.
+    /// Pre-write keepAbove/keepBelow pair captured the first time a
+    /// SetWindowLayer rule or the keep-floating-above default is applied to a
+    /// window. Deliberately NOT re-captured while an owner holds the layer, so
+    /// the restore returns the window to the user's own state, not to an
+    /// intermediate written state.
     // WindowLayerSnapshot moved to effect_state.h.
     QHash<QString, WindowLayerSnapshot> m_ruleWindowLayerSnapshots;
 
