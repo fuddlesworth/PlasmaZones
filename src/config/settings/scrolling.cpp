@@ -313,9 +313,30 @@ P_STORE_SET_STRING(setScrollingPresetWindowHeights, scrollingGroup, presetWindow
 P_STORE_GET(QString, defaultScrollingTemplate, scrollingGroup, defaultTemplateKey, QString)
 P_STORE_SET_STRING(setDefaultScrollingTemplate, scrollingGroup, defaultTemplateKey, defaultScrollingTemplateChanged)
 
-// View knobs, on the Scrolling group with the sizing defaults above rather
-// than on Scrolling.Behavior: they describe how the strip is drawn, not how
-// windows are handled.
+// The two scroll-key chords, each on a group of its own
+// (Scrolling.Wheel.Focus and Scrolling.Wheel.View) rather than on
+// Scrolling.Behavior: they describe how a wheel event moves the strip, not
+// how windows are handled once placed.
+QVariantList Settings::scrollingWheelFocusTriggers() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingWheelFocusGroup(), ConfigDefaults::triggersKey()).toList();
+}
+void Settings::setScrollingWheelFocusTriggers(const QVariantList& triggers)
+{
+    writeTriggerList(ConfigDefaults::scrollingWheelFocusGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::scrollingWheelFocusTriggersChanged);
+}
+
+QVariantList Settings::scrollingWheelViewTriggers() const
+{
+    return m_store->readVariant(ConfigDefaults::scrollingWheelViewGroup(), ConfigDefaults::triggersKey()).toList();
+}
+void Settings::setScrollingWheelViewTriggers(const QVariantList& triggers)
+{
+    writeTriggerList(ConfigDefaults::scrollingWheelViewGroup(), ConfigDefaults::triggersKey(), triggers,
+                     &Settings::scrollingWheelViewTriggersChanged);
+}
+
 P_STORE_GET(bool, scrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, bool)
 P_STORE_SET_BOOL(setScrollingWheelFocusEnabled, scrollingGroup, wheelFocusEnabledKey, scrollingWheelFocusEnabledChanged)
 

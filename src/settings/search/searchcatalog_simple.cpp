@@ -140,6 +140,15 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusEnabled"),
                PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse")});
+    // The simple page hosts the SAME ScrollingFocusCard as the advanced one,
+    // so the two scroll-key rows are reachable here too and need their own
+    // anchors: a deep link into this page resolves against this catalog.
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusTriggers"),
+               PhosphorI18n::tr("Scroll key for column focus"),
+               {PhosphorI18n::tr("scroll key"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("modifier")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelViewTriggers"),
+               PhosphorI18n::tr("Scroll key for the view"),
+               {PhosphorI18n::tr("scroll key"), PhosphorI18n::tr("wheel"), PhosphorI18n::tr("modifier")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusInverted"),
                PhosphorI18n::tr("Invert wheel direction"), {PhosphorI18n::tr("invert"), PhosphorI18n::tr("wheel")});
 

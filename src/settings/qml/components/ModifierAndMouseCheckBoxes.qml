@@ -22,8 +22,8 @@ import org.kde.kirigami as Kirigami
  * that binding on the first edit.
  *
  * There used to be a single-value mode behind an `allowMultiple` flag,
- * roughly a third of the file, kept for a caller that never arrived: all five
- * instantiation sites in the tree passed true. Both the mode and the flag are
+ * roughly a third of the file, kept for a caller that never arrived: every
+ * instantiation site in the tree passed true. Both the mode and the flag are
  * gone rather than left as a second untested path through the capture, clear
  * and display logic that no host could reach.
  */
@@ -39,6 +39,12 @@ Item {
     /// What a capture will accept. See the class note.
     property int acceptMode: acceptModeAll
     property bool tooltipEnabled: true
+    /// Names which trigger list this editor edits, folded into the announced
+    /// accessible names. A card may host more than one editor (the Focus and
+    /// view card hosts two), and without this a screen reader announces an
+    /// identical "Remove trigger" / "Reset to defaults" for each of them.
+    /// Empty leaves the plain names, which is right for a card with one.
+    property string accessibleContext: ""
     property var triggers: [] // [{modifier: bitmask, mouseButton: buttonBit}, ...]
     property var defaultTriggers: []
     readonly property int maxTriggers: 4
@@ -180,10 +186,24 @@ Item {
                         implicitHeight: triggerLabel.implicitHeight + Kirigami.Units.smallSpacing
                         // The label lives in a custom contentItem, so the
                         // button has no `text` to derive an accessible name
-                        // from — and every trigger card that hosts this component (all five) disables the tooltip,
-                        // leaving this the chip's only announced affordance.
+                        // from, and every trigger card that hosts this
+                        // component disables the tooltip, leaving this the
+                        // chip's only announced affordance.
                         Accessible.role: Accessible.Button
-                        Accessible.name: i18n("Change trigger %1", triggerLabel.text)
+                        Accessible.name: root.accessibleContext.length > 0 ? i18nc("@action:button %1 is a key chord such as Meta+Shift, %2 names the setting being edited", "Change trigger %1 for %2", triggerLabel.text, root.accessibleContext) : i18n("Change trigger %1", triggerLabel.text)
+                        // QQC2.Control defaults focusPolicy to Qt.NoFocus and
+                        // AbstractButton, unlike Button/ToolButton, gets no
+                        // style override that raises it. Without this the chip
+                        // is announced but unreachable by keyboard: Tab walks
+                        // straight past every chip to the row's tool buttons.
+                        // Space is deliberately NOT handled here: QQC2's
+                        // AbstractButton already turns a Space press into a
+                        // clicked(), and adding an attached handler risks
+                        // firing it twice. Return and Enter it does not
+                        // handle, so those are ours.
+                        focusPolicy: Qt.StrongFocus
+                        Keys.onReturnPressed: clicked()
+                        Keys.onEnterPressed: clicked()
                         onClicked: {
                             root.editingTriggerIndex = triggerRow.index;
                             multiInputCapture.startCapture();
@@ -194,6 +214,16 @@ Item {
 
                         HoverHandler {
                             id: hoverHandler
+                        }
+
+                        // Keyboard focus needs to be visible, not just
+                        // reachable. Transparent until focused so the chip
+                        // keeps its current flat look under the mouse.
+                        background: Rectangle {
+                            color: "transparent"
+                            radius: Kirigami.Units.smallSpacing
+                            border.width: parent.activeFocus ? 1 : 0
+                            border.color: Kirigami.Theme.focusColor
                         }
 
                         contentItem: QQC2.Label {
@@ -207,7 +237,7 @@ Item {
 
                     QQC2.ToolButton {
                         icon.name: "list-remove"
-                        Accessible.name: i18n("Remove trigger")
+                        Accessible.name: root.accessibleContext.length > 0 ? i18nc("@action:button %1 names the setting being edited", "Remove trigger for %1", root.accessibleContext) : i18n("Remove trigger")
                         implicitWidth: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
                         implicitHeight: implicitWidth
                         enabled: root.triggers.length > 1
@@ -255,7 +285,7 @@ Item {
 
                 QQC2.ToolButton {
                     icon.name: "edit-clear"
-                    Accessible.name: i18n("Reset to defaults")
+                    Accessible.name: root.accessibleContext.length > 0 ? i18nc("@action:button %1 names the setting being edited", "Reset %1 to defaults", root.accessibleContext) : i18n("Reset to defaults")
                     visible: !triggersEqual(root.triggers, root.defaultTriggers)
                     onClicked: {
                         var copy = [];

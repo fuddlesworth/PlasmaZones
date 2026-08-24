@@ -3,6 +3,8 @@
 
 #include "plasmazoneseffect.h"
 
+#include "input_filter.h"
+
 #include "handlers/dragtracker.h"
 #include "handlers/snaphandler.h"
 #include "compositor/scrolltabindicatorpainter.h"
@@ -208,6 +210,26 @@ void PlasmaZonesEffect::pointerButton(KWin::PointerButtonEvent* event)
     }
     if (event->state == KWin::PointerButtonState::Released) {
         m_tilingHandler->noteScrollTabRelease(event->position);
+    }
+}
+
+void PlasmaZonesEffect::pointerAxis(KWin::PointerAxisEvent* event)
+{
+    // Only ever reached under the pill interception (see the header), which
+    // is exactly the case ScrollOverhangInputFilter::pointerAxis cannot see:
+    // that filter is ordered below the Effects filter, so an event the
+    // interception claims never reaches it. Route the chord here so wheeling
+    // over a tab pill still moves the strip.
+    if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
+        return;
+    }
+    if (m_tilingHandler->handleWheelChord(event->delta, event->orientation, event->modifiers, event->buttons)
+        && m_overhangInputFilter) {
+        // The client never sees a claimed tick, so end the ScrollFactor
+        // stream exactly as the filter's own chord branch does. Skipping this
+        // would leave a fractional v120 remainder to be applied to the next
+        // tick the client DOES see.
+        m_overhangInputFilter->resetScrollFactorStream();
     }
 }
 

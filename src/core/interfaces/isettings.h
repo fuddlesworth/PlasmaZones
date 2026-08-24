@@ -163,6 +163,16 @@ public:
     virtual int scrollingDragInsertGraceMs() const = 0;
     virtual void setScrollingDragInsertGraceMs(int ms) = 0;
 
+    /// The two scrolling wheel chords. Ordinary trigger lists, with no wheel
+    /// marker of any kind: each entry carries only a modifier and a mouse
+    /// button, and the wheel is implicit in which setting the list came from.
+    /// They are read with anyTriggerHeldExact rather than anyTriggerHeld, so
+    /// an extra held modifier means "not this chord".
+    virtual QVariantList scrollingWheelFocusTriggers() const = 0;
+    virtual void setScrollingWheelFocusTriggers(const QVariantList& triggers) = 0;
+    virtual QVariantList scrollingWheelViewTriggers() const = 0;
+    virtual void setScrollingWheelViewTriggers(const QVariantList& triggers) = 0;
+
     // Per-algorithm autotile settings map. Settings inherits from
     // PhosphorEngine::IAutotileSettings (which also declares these),
     // so the override in Settings covers both bases — the redundant
@@ -1017,6 +1027,8 @@ Q_SIGNALS:
     void scrollingPresetWindowHeightsChanged();
 
     void defaultScrollingTemplateChanged();
+    void scrollingWheelFocusTriggersChanged();
+    void scrollingWheelViewTriggersChanged();
     void scrollingWheelFocusEnabledChanged();
     void scrollingWheelFocusInvertedChanged();
 

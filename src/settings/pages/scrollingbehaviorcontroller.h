@@ -11,23 +11,25 @@ namespace PlasmaZones {
 
 class ISettings;
 
-/// Q_PROPERTY surface for the scrolling drag re-insert triggers (the
-/// Triggers card on the "Scrolling → Window" page) — the scrolling twin of
-/// TilingBehaviorController.
+/// Q_PROPERTY surface for the scrolling trigger lists on the
+/// "Scrolling → Window" page: the drag re-insert triggers (the Triggers
+/// card) and the two wheel chords, or "scroll keys" (the Focus and view
+/// card). The scrolling twin of TilingBehaviorController.
 ///
 /// Exposed as a child Q_PROPERTY on SettingsController; QML reads
 /// `settingsController.scrollingBehaviorPage.scrollingDragInsertTriggers`
-/// etc. Covers the trigger list plus its derived `alwaysReinsertIntoStrip`
-/// boolean (the AlwaysActive sentinel stored inside the list) and the shared
-/// trigger release-grace bounds. Trigger-list
-/// conversion lives in `PlasmaZones::TriggerUtils`, shared with the snapping
-/// and tiling controllers.
+/// etc. The drag re-insert list also carries a derived
+/// `alwaysReinsertIntoStrip` boolean (the AlwaysActive sentinel stored inside
+/// the list) and the shared trigger release-grace bounds; the two wheel lists
+/// cannot carry that sentinel at all, because canonicalWheelTriggerList drops
+/// it. Trigger-list conversion lives in `PlasmaZones::TriggerUtils`, shared
+/// with the snapping and tiling controllers.
 ///
-/// Dirty tracking: the underlying `scrollingDragInsertTriggers` property IS
-/// Q_PROPERTY on Settings, so SettingsController's meta-object loop already
-/// wires the NOTIFY to `onSettingsPropertyChanged()`. This class just
-/// forwards the NOTIFY to QML and caches the derived boolean so it only
-/// fires when it actually flips.
+/// Dirty tracking: all three underlying properties ARE Q_PROPERTY on
+/// Settings, so SettingsController's meta-object loop already wires their
+/// NOTIFY to `onSettingsPropertyChanged()`. This class just forwards those
+/// to QML, and caches the derived boolean so it only fires when it actually
+/// flips.
 class ScrollingBehaviorController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -37,6 +39,24 @@ class ScrollingBehaviorController : public PhosphorControl::PageController
     Q_PROPERTY(QVariantList scrollingDragInsertTriggers READ scrollingDragInsertTriggers WRITE
                    setScrollingDragInsertTriggers NOTIFY scrollingDragInsertTriggersChanged)
     Q_PROPERTY(QVariantList defaultScrollingDragInsertTriggers READ defaultScrollingDragInsertTriggers CONSTANT)
+    // The two wheel chords. No AlwaysActive sentinel lives in either list —
+    // "always" is meaningless for a chord whose whole job is to distinguish
+    // one wheel gesture from a plain one — so these need none of the strip /
+    // merge dance above and are a straight bitmask conversion each way.
+    Q_PROPERTY(QVariantList scrollingWheelFocusTriggers READ scrollingWheelFocusTriggers WRITE
+                   setScrollingWheelFocusTriggers NOTIFY scrollingWheelFocusTriggersChanged)
+    Q_PROPERTY(QVariantList defaultScrollingWheelFocusTriggers READ defaultScrollingWheelFocusTriggers CONSTANT)
+    Q_PROPERTY(QVariantList scrollingWheelViewTriggers READ scrollingWheelViewTriggers WRITE
+                   setScrollingWheelViewTriggers NOTIFY scrollingWheelViewTriggersChanged)
+    Q_PROPERTY(QVariantList defaultScrollingWheelViewTriggers READ defaultScrollingWheelViewTriggers CONSTANT)
+    /// True when the two wheel chord lists share an entry.
+    ///
+    /// Binding the same chord to both is legal and the effect breaks the tie
+    /// deterministically (focus is tested before view), but the view binding
+    /// is then unreachable, which is the same dead-binding shape the exact
+    /// matcher exists to prevent between two DIFFERENT chords. Derived here
+    /// rather than in QML so the comparison lives beside the lists it reads.
+    Q_PROPERTY(bool wheelTriggersCollide READ wheelTriggersCollide NOTIFY wheelTriggersCollideChanged)
     Q_PROPERTY(int triggerGraceMsMin READ triggerGraceMsMin CONSTANT)
     Q_PROPERTY(int triggerGraceMsMax READ triggerGraceMsMax CONSTANT)
 
@@ -60,12 +80,23 @@ public:
     int triggerGraceMsMin() const;
     int triggerGraceMsMax() const;
 
+    QVariantList scrollingWheelFocusTriggers() const;
+    QVariantList defaultScrollingWheelFocusTriggers() const;
+    QVariantList scrollingWheelViewTriggers() const;
+    QVariantList defaultScrollingWheelViewTriggers() const;
+    bool wheelTriggersCollide() const;
+
     void setAlwaysReinsertIntoStrip(bool enabled);
     void setScrollingDragInsertTriggers(const QVariantList& triggers);
+    void setScrollingWheelFocusTriggers(const QVariantList& triggers);
+    void setScrollingWheelViewTriggers(const QVariantList& triggers);
 
 Q_SIGNALS:
     void alwaysReinsertIntoStripChanged();
     void scrollingDragInsertTriggersChanged();
+    void scrollingWheelFocusTriggersChanged();
+    void scrollingWheelViewTriggersChanged();
+    void wheelTriggersCollideChanged();
 
 private:
     ISettings* m_settings = nullptr;
@@ -75,6 +106,8 @@ private:
     /// Cached AlwaysActive-stripped trigger list (master-flag toggles leave
     /// the QML-facing stripped list identical).
     QVariantList m_lastScrollingDragInsertTriggers;
+    /// Cached collision verdict, so the banner only announces a real flip.
+    bool m_lastWheelTriggersCollide = false;
 };
 
 } // namespace PlasmaZones

@@ -2329,6 +2329,32 @@ public:
         Q_EMIT scrollingDragInsertTriggersChanged();
         Q_EMIT settingsChanged();
     }
+    QVariantList scrollingWheelFocusTriggers() const override
+    {
+        return m_scrollingWheelFocusTriggers;
+    }
+    void setScrollingWheelFocusTriggers(const QVariantList& value) override
+    {
+        if (m_scrollingWheelFocusTriggers == value) {
+            return;
+        }
+        m_scrollingWheelFocusTriggers = value;
+        Q_EMIT scrollingWheelFocusTriggersChanged();
+        Q_EMIT settingsChanged();
+    }
+    QVariantList scrollingWheelViewTriggers() const override
+    {
+        return m_scrollingWheelViewTriggers;
+    }
+    void setScrollingWheelViewTriggers(const QVariantList& value) override
+    {
+        if (m_scrollingWheelViewTriggers == value) {
+            return;
+        }
+        m_scrollingWheelViewTriggers = value;
+        Q_EMIT scrollingWheelViewTriggersChanged();
+        Q_EMIT settingsChanged();
+    }
     bool scrollingDragInsertToggle() const override
     {
         return m_scrollingDragInsertToggle;
@@ -2982,6 +3008,8 @@ private:
     QStringList m_lockedScreens = ConfigDefaults::lockedScreens();
     QVariantList m_autotileDragInsertTriggers = ConfigDefaults::autotileDragInsertTriggers();
     QVariantList m_scrollingDragInsertTriggers = ConfigDefaults::scrollingDragInsertTriggers();
+    QVariantList m_scrollingWheelFocusTriggers = ConfigDefaults::scrollingWheelFocusTriggers();
+    QVariantList m_scrollingWheelViewTriggers = ConfigDefaults::scrollingWheelViewTriggers();
     QVariantList m_snapAssistTriggers = ConfigDefaults::snapAssistTriggers();
     QVariantList m_zoneSpanTriggers = ConfigDefaults::zoneSpanTriggers();
     StickyWindowHandling m_autotileStickyWindowHandling =

@@ -671,6 +671,59 @@ private Q_SLOTS:
         const auto* wheelInverted = findKey(schema, group, ConfigDefaults::wheelFocusInvertedKey());
         QVERIFY(wheelInverted);
         QCOMPARE(wheelInverted->defaultValue.toBool(), ConfigDefaults::scrollingWheelFocusInverted());
+        // The two scroll keys live in their own groups, so assert them
+        // against those rather than the Scrolling group the switches use.
+        const auto* wheelFocusTriggers =
+            findKey(schema, ConfigDefaults::scrollingWheelFocusGroup(), ConfigDefaults::triggersKey());
+        QVERIFY(wheelFocusTriggers && wheelFocusTriggers->validator);
+        QCOMPARE(wheelFocusTriggers->defaultValue, ConfigDefaults::scrollingWheelFocusTriggers());
+        const auto* wheelViewTriggers =
+            findKey(schema, ConfigDefaults::scrollingWheelViewGroup(), ConfigDefaults::triggersKey());
+        QVERIFY(wheelViewTriggers && wheelViewTriggers->validator);
+        QCOMPARE(wheelViewTriggers->defaultValue, ConfigDefaults::scrollingWheelViewTriggers());
+        // Both defaults must survive their own validator untouched. A default
+        // the canonicaliser rewrites would never compare equal to what is
+        // stored, and sparse persistence decides what to WRITE by exactly
+        // that comparison — the failure mode is a key that reappears on every
+        // save.
+        QCOMPARE(wheelFocusTriggers->validator(wheelFocusTriggers->defaultValue), wheelFocusTriggers->defaultValue);
+        QCOMPARE(wheelViewTriggers->validator(wheelViewTriggers->defaultValue), wheelViewTriggers->defaultValue);
+        // Both halves of the stock pair are pinned BY VALUE, not just against
+        // their own ConfigDefaults accessor: the invariant is that the two
+        // chords differ by exactly one modifier and so cannot shadow each
+        // other, and a wiring-only check stays green if either default moves.
+        const QVariantMap focusTrigger = wheelFocusTriggers->defaultValue.toList().first().toMap();
+        QCOMPARE(focusTrigger.value(ConfigDefaults::triggerModifierField()).toInt(),
+                 static_cast<int>(DragModifier::Meta));
+        // Meta+Shift is the whole reason DragModifier grew a MetaShift
+        // enumerator: without one the view default canonicalises away to
+        // plain Shift, which is a DIFFERENT chord the user never asked for.
+        const QVariantMap viewTrigger = wheelViewTriggers->defaultValue.toList().first().toMap();
+        QCOMPARE(viewTrigger.value(ConfigDefaults::triggerModifierField()).toInt(),
+                 static_cast<int>(DragModifier::MetaShift));
+
+        // The wheel groups take a STRICTER validator than the drag lists:
+        // AlwaysActive is a drag-only sentinel, and under the exact matcher
+        // these lists are read with it inverts into "match only when nothing
+        // is held", which would swallow every unmodified wheel event over the
+        // strip. Both wheel keys must drop it; the drag list must keep it.
+        QVariantMap sentinel;
+        sentinel[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
+        sentinel[ConfigDefaults::triggerMouseButtonField()] = 0;
+        const QVariantList sentinelList{sentinel};
+        QVERIFY(wheelFocusTriggers->validator(sentinelList).toList().isEmpty());
+        QVERIFY(wheelViewTriggers->validator(sentinelList).toList().isEmpty());
+        const auto* dragInsert =
+            findKey(schema, ConfigDefaults::scrollingBehaviorGroup(), ConfigDefaults::triggersKey());
+        QVERIFY(dragInsert && dragInsert->validator);
+        QCOMPARE(dragInsert->validator(sentinelList).toList().size(), 1);
+        // A real chord still survives the wheel validator untouched, so the
+        // sentinel drop is not a blanket rejection.
+        QVariantMap real;
+        real[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::CtrlMeta);
+        real[ConfigDefaults::triggerMouseButtonField()] = 0;
+        QCOMPARE(wheelFocusTriggers->validator(QVariantList{real}).toList().size(), 1);
+
         const auto* alwaysCenter = findKey(schema, group, ConfigDefaults::alwaysCenterSingleColumnKey());
         QVERIFY(alwaysCenter);
         QCOMPARE(alwaysCenter->defaultValue.toBool(), ConfigDefaults::scrollingAlwaysCenterSingleColumn());
@@ -859,8 +912,11 @@ private Q_SLOTS:
         QSignalSpy familySpy(&settings, &Settings::scrollingTabIndicatorFontFamilyChanged);
         QVERIFY(changedSpy.isValid() && familySpy.isValid());
 
-        // The family is a free string with no validator: the config layer
-        // stores what it is handed and the font LOOKUP happens in the painter.
+        // The family carries only the canonicalising validator pinned above
+        // (trim, whitespace-only to empty, over-cap to empty): no font
+        // NAME is rejected, and the lookup itself happens in the painter.
+        // The value used here needs no canonicalisation, so it reaches
+        // storage verbatim.
         // Spelled as a family that is deliberately not installed anywhere, so
         // the test pins the storage boundary rather than this machine's font
         // database (and so it does not depend on a CI image having fonts).

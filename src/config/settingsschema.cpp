@@ -127,7 +127,8 @@ QVariant canonicalThemeFallbackColor(const QVariant& v)
 /// Namespace scope (declared in settingsschema.h): shared with
 /// settingsschema_scrolling.cpp and settingsschema_tiling.cpp, whose
 /// Scrolling.Behavior and Tiling.Behavior groups carry the drag-insert
-/// trigger lists.
+/// trigger lists. The Scrolling.Wheel.Focus and Scrolling.Wheel.View groups
+/// go through canonicalWheelTriggerList instead, which wraps this one.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -165,8 +166,7 @@ QVariant canonicalTriggerList(const QVariant& v)
         // whose int cast is -1, and `x & ~(-1)` is always 0 — a check that
         // rejects nothing. AllButtons is the real any-valid-button set, and
         // a negative int's sign bit lies outside it, so negatives fail too.
-        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled)
-            || modifier > static_cast<int>(DragModifier::CtrlAltMeta)
+        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled) || modifier > MaxDragModifier
             || (mouseButton & ~static_cast<int>(Qt::AllButtons)) != 0) {
             continue;
         }
@@ -174,6 +174,53 @@ QVariant canonicalTriggerList(const QVariant& v)
         canon[ConfigKeys::triggerModifierField()] = modifier;
         canon[ConfigKeys::triggerMouseButtonField()] = mouseButton;
         out.append(canon);
+    }
+    return QVariant(out);
+}
+
+/// Canonicalize a WHEEL chord list: canonicalTriggerList, then drop any entry
+/// naming DragModifier::AlwaysActive, zero the mouse button on the entries
+/// that remain, and drop any entry left with no modifier at all.
+///
+/// AlwaysActive is a drag-only sentinel and it does not survive the move to
+/// exact matching. modifierMaskFor has no case for it, so it folds to
+/// Qt::NoModifier, and exactModifierMatch then reads the entry as "match
+/// only when NO chord modifier is held" — the exact inverse of the "match
+/// whatever is held" the drag readers give it. Left in a wheel list it does
+/// not mean "always": it silently claims every unmodified wheel event over a
+/// strip screen and turns it into a column step, with the app underneath
+/// getting nothing.
+///
+/// Dropped here rather than in canonicalTriggerList, which the drag lists
+/// share and which must keep storing the sentinel (TriggerUtils builds it
+/// deliberately for the always-active drag case).
+QVariant canonicalWheelTriggerList(const QVariant& v)
+{
+    const QVariantList canon = canonicalTriggerList(v).toList();
+    QVariantList out;
+    out.reserve(canon.size());
+    for (const QVariant& entry : canon) {
+        const QVariantMap src = entry.toMap();
+        const int modifier = src.value(ConfigKeys::triggerModifierField(), 0).toInt();
+        if (modifier == static_cast<int>(DragModifier::AlwaysActive)) {
+            continue;
+        }
+        // A wheel chord is modifiers only, so the mouse button is dropped
+        // rather than stored. The exact matcher compares buttons as a SUBSET
+        // even though it compares modifiers exactly, which means a
+        // modifier-only chord shadows the same modifier plus a button and the
+        // longer binding could never be reached. The settings rows offer
+        // modifiers only for that reason; enforcing it here too is what makes
+        // it an invariant rather than a UI convention, and it also cleans up a
+        // button left behind by a config written before the rows were
+        // narrowed. An entry that was ONLY a button has nothing left and goes.
+        if (modifier == static_cast<int>(DragModifier::Disabled)) {
+            continue;
+        }
+        QVariantMap canonEntry;
+        canonEntry[ConfigKeys::triggerModifierField()] = modifier;
+        canonEntry[ConfigKeys::triggerMouseButtonField()] = 0;
+        out.append(canonEntry);
     }
     return QVariant(out);
 }
@@ -863,7 +910,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
          {},
          // DragModifier int values are contiguous but not ordered — each is a
          // discrete named modifier combo. clampInt on an unknown value would
-         // reinterpret e.g. 99 as the highest valid enum (CtrlAltMeta),
+         // reinterpret e.g. 99 as the highest valid enum (CtrlMeta),
          // silently giving the user a much stricter capture rule than they
          // asked for. Snap-to-default (Disabled = 0) instead so upgrade-
          // mismatches or hand-edited configs fall back to "off" rather than
@@ -873,7 +920,8 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      static_cast<int>(DragModifier::Meta), static_cast<int>(DragModifier::CtrlAlt),
                      static_cast<int>(DragModifier::CtrlShift), static_cast<int>(DragModifier::AltShift),
                      static_cast<int>(DragModifier::AlwaysActive), static_cast<int>(DragModifier::AltMeta),
-                     static_cast<int>(DragModifier::CtrlAltMeta)},
+                     static_cast<int>(DragModifier::CtrlAltMeta), static_cast<int>(DragModifier::MetaShift),
+                     static_cast<int>(DragModifier::CtrlMeta)},
                     static_cast<int>(DragModifier::Disabled)),
          intChoices({{static_cast<int>(DragModifier::Disabled), "disabled"_L1},
                      {static_cast<int>(DragModifier::Shift), "shift"_L1},
@@ -885,7 +933,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
                      {static_cast<int>(DragModifier::AltShift), "altShift"_L1},
                      {static_cast<int>(DragModifier::AlwaysActive), "alwaysActive"_L1},
                      {static_cast<int>(DragModifier::AltMeta), "altMeta"_L1},
-                     {static_cast<int>(DragModifier::CtrlAltMeta), "ctrlAltMeta"_L1}})},
+                     {static_cast<int>(DragModifier::CtrlAltMeta), "ctrlAltMeta"_L1},
+                     {static_cast<int>(DragModifier::MetaShift), "metaShift"_L1},
+                     {static_cast<int>(DragModifier::CtrlMeta), "ctrlMeta"_L1}})},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::zoneSpanToggleMode(), QMetaType::Bool},
         {CD::releaseGraceMsKey(),

@@ -217,12 +217,22 @@ public:
     /// tracking and releases the interception the moment the pointer leaves
     /// the pill; a left press activates the tab; the matching release ends
     /// the press hold. KWin consumes EVERY pointer event for the effect
-    /// while the interception is held, so a wheel tick or a right/middle
-    /// press over a pill reaches nothing — accepted, there is no effect-side
-    /// way to forward them. With no pill under the pointer the interception
-    /// is not held and these are never called.
+    /// while the interception is held, so a right or middle press over a
+    /// pill reaches nothing — accepted, there is no effect-side way to
+    /// forward those. With no pill under the pointer the interception is not
+    /// held and these are never called.
+    ///
+    /// A wheel tick is the one exception, and it has to be. The Effects
+    /// filter sits BELOW KWin's global-shortcut filter, so while the strip's
+    /// wheel chords were compositor axis shortcuts they still fired over a
+    /// pill. Now that they are matched in ScrollOverhangInputFilter (which is
+    /// lower still, at Popup weight) the interception would eat them, and the
+    /// pills sit directly over the strip the chord exists to scroll.
+    /// pointerAxis therefore routes the chord itself while the interception
+    /// is held.
     void pointerMotion(KWin::PointerMotionEvent* event) override;
     void pointerButton(KWin::PointerButtonEvent* event) override;
+    void pointerAxis(KWin::PointerAxisEvent* event) override;
 
 protected:
     // OffscreenEffect hook: deform the redirected window's quad list.

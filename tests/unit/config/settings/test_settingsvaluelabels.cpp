@@ -300,6 +300,36 @@ private Q_SLOTS:
         QVERIFY2(!described.isEmpty(), "no described keys — the walk is broken, not clean");
     }
 
+    /// The reverse direction of the walk above, which is the one that was
+    /// unguarded: every trigger-list key the SCHEMA declares must have a
+    /// Trigger descriptor. The descriptor table names trigger-bearing GROUPS
+    /// by hand, so a feature that puts its list in a new group of its own
+    /// (the scroll keys did) is registered nowhere and renders as a raw
+    /// maplist in the profile diff. Nothing failed when that happened,
+    /// because the described-to-schema walk only catches the opposite error.
+    void everySchemaTriggerKeyDescribesAsTrigger()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QStringList undescribed;
+        int checked = 0;
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            for (const auto& entry : it.value()) {
+                if (entry.key != ConfigDefaults::triggersKey()) {
+                    continue;
+                }
+                ++checked;
+                if (SettingsValueLabels::descriptorFor(it.key(), entry.key).kind != ValueKind::Trigger) {
+                    undescribed.append(it.key() + QLatin1Char('/') + entry.key);
+                }
+            }
+        }
+        undescribed.sort();
+        QVERIFY2(undescribed.isEmpty(),
+                 qPrintable(QStringLiteral("schema trigger keys with no Trigger descriptor: %1")
+                                .arg(undescribed.join(QLatin1String(", ")))));
+        QVERIFY2(checked > 0, "no trigger keys found in the schema — the walk is broken, not clean");
+    }
+
     /// A key displayed as a percentage must actually persist a 0.0-1.0 ratio.
     /// Scaling a key that already stores 0-100 would render "8000%", and the
     /// only signal that the scale is wrong is the number a user sees.

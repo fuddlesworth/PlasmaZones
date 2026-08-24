@@ -39,6 +39,11 @@ PLASMAZONES_EXPORT const PhosphorConfig::Schema& cachedSettingsSchema();
 /// domains (Tiling.Behavior and Scrolling.Behavior).
 QVariant canonicalTriggerList(const QVariant& v);
 
+/// canonicalTriggerList plus a drop of the AlwaysActive sentinel, for the
+/// wheel chord lists that are read with exact matching. See the definition
+/// for why the sentinel cannot travel that path.
+QVariant canonicalWheelTriggerList(const QVariant& v);
+
 /// Canonicalize a theme-fallback colour: keep EMPTY (the "follow the colour
 /// scheme" sentinel) and any string QColor can parse, and drop anything else
 /// back to empty. The D-Bus boundary already refuses an unparseable colour,

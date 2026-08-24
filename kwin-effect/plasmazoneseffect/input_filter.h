@@ -88,6 +88,17 @@ public:
     bool touchUp(KWin::TouchUpEvent* event) override;
     bool touchCancel() override;
 
+    /// Forget the window the v120 residues belong to and zero them. Called on
+    /// every axis tick that does not scale (no rule, no target, consumed
+    /// overhang) so one window's fractional remainder can never be applied to
+    /// the next stream the filter does scale.
+    ///
+    /// Public because this filter is not the only place an axis event can be
+    /// claimed. While the scroll-tab pill holds a mouse interception, KWin
+    /// routes the event to PlasmaZonesEffect::pointerAxis instead and this
+    /// filter never runs, so the effect has to end the stream on our behalf.
+    void resetScrollFactorStream();
+
 private:
     /// The straddler whose clipped-away overhang covers @p pos, or null when
     /// the event should pass through untouched (fast path: no scrolling
@@ -107,15 +118,11 @@ private:
     /// is the intended reading of the action: "this app's scroll moves this
     /// much per notch" applies wherever that app's scroll is consumed,
     /// including its own title bar. Filters ABOVE this one (global shortcuts,
-    /// interactive move/resize, the Meta+wheel strip binding) are ordered
-    /// earlier and always see the raw delta.
+    /// interactive move/resize) are ordered earlier and always see the raw
+    /// delta. The strip's own wheel chords are matched in pointerAxis BEFORE
+    /// this runs and return early, so a chord-driven strip move is never
+    /// scaled by the underlying app's rule either.
     void applyScrollFactor(KWin::PointerAxisEvent* event);
-
-    /// Forget the window the v120 residues belong to and zero them. Called on
-    /// every axis tick that does not scale (no rule, no target, consumed
-    /// overhang) so one window's fractional remainder can never be applied to
-    /// the next stream the filter does scale.
-    void resetScrollFactorStream();
 
     PlasmaZonesEffect* m_effect;
     /// Fractional deltaV120 remainder carried between ticks so a factor

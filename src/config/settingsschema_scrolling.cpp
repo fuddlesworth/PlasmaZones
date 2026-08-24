@@ -277,6 +277,28 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
         {CD::wheelFocusInvertedKey(), CD::scrollingWheelFocusInverted(), QMetaType::Bool},
     };
 
+    // ─── Scrolling wheel chords (Scrolling.Wheel.Focus / .View) ──────────
+    // The two "scroll keys": hold this chord and turn the wheel to move
+    // column focus along the strip, or to pan the view without moving focus.
+    // Ordinary trigger lists: same generic Triggers leaf as every other
+    // trigger-bearing node, so the settings editor, the profile diff and the
+    // config file all speak one vocabulary. Nothing marks these as
+    // wheel-driven, because the wheel is implicit in which GROUP the list
+    // sits in, the same way the drag lists leave the drag implicit.
+    //
+    // The validator is the one thing that differs. canonicalWheelTriggerList
+    // drops the AlwaysActive sentinel, which means "match whatever is held"
+    // to the subset-matching drag readers but folds to "match only when
+    // NOTHING is held" under the exact matcher these lists are read with, and
+    // it strips the mouse button, since a wheel chord is modifiers only. See
+    // canonicalWheelTriggerList for the whole argument.
+    schema.groups[CD::scrollingWheelFocusGroup()] = {
+        {CD::triggersKey(), CD::scrollingWheelFocusTriggers(), QMetaType::QVariantList, {}, canonicalWheelTriggerList},
+    };
+    schema.groups[CD::scrollingWheelViewGroup()] = {
+        {CD::triggersKey(), CD::scrollingWheelViewTriggers(), QMetaType::QVariantList, {}, canonicalWheelTriggerList},
+    };
+
     // ─── Scrolling tab indicator (Scrolling.TabIndicator) ────────────────
     // The indicator drawn alongside a tabbed column. The two enums get
     // validIntOr closed sets built from the SAME ConfigDefaults enumerators

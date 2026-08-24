@@ -69,7 +69,7 @@ private Q_SLOTS:
         // Activation. Enum-valued settings derive their bounds from the enum
         // (not magic literals) so the tripwire tracks the enum if it grows.
         QVERIFY(ConfigDefaults::zoneSpanModifier() >= static_cast<int>(DragModifier::Disabled));
-        QVERIFY(ConfigDefaults::zoneSpanModifier() <= static_cast<int>(DragModifier::CtrlAltMeta));
+        QVERIFY(ConfigDefaults::zoneSpanModifier() <= MaxDragModifier);
 
         // One pair only. The other three grace accessors currently DELEGATE to
         // this one, so repeating the range check for them asserts nothing that

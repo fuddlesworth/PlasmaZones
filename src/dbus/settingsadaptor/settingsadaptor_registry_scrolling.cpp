@@ -223,6 +223,36 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // advisory JSON for external clients; nothing in-repo parses it.
     m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("maplist");
 
+    // The two wheel chords ("scroll keys"). ISettings level, NOT the concrete
+    // block below: both are pure virtuals on ISettings, so registering them
+    // behind the concrete cast would lose them entirely on a non-Settings
+    // backend while the getters would still have compiled fine.
+    m_getters[QStringLiteral("scrollingWheelFocusTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollingWheelFocusTriggers());
+    };
+    // Same refuse-don't-coerce posture as scrollingDragInsertTriggers above,
+    // for the same reason: toList() on a non-list yields an empty list, which
+    // here would clear the scroll key while reporting success.
+    m_setters[QStringLiteral("scrollingWheelFocusTriggers")] = [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::QVariantList) {
+            return false;
+        }
+        m_settings->setScrollingWheelFocusTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingWheelFocusTriggers")] = QStringLiteral("maplist");
+    m_getters[QStringLiteral("scrollingWheelViewTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->scrollingWheelViewTriggers());
+    };
+    m_setters[QStringLiteral("scrollingWheelViewTriggers")] = [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::QVariantList) {
+            return false;
+        }
+        m_settings->setScrollingWheelViewTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingWheelViewTriggers")] = QStringLiteral("maplist");
+
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
     REGISTER_INT_SETTING("scrollingDragInsertGraceMs", scrollingDragInsertGraceMs, setScrollingDragInsertGraceMs)
 

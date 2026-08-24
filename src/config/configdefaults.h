@@ -129,6 +129,24 @@ public:
     // keys). Declared here beside the trigger family rather than in
     // configdefaults_scrolling.h because makeSingleTriggerList lives on the
     // derived class and the base header cannot call it.
+    /// The scrolling wheel chords ("scroll keys"). Meta turns the wheel into
+    /// column focus, Meta+Shift into a view pan — one modifier step apart for
+    /// one step of difference in meaning. Both were hardcoded in the KWin
+    /// effect before they became settings, and these preserve what shipped.
+    ///
+    /// Ordinary trigger lists, with no wheel marker of any kind: the wheel is
+    /// implicit in WHICH setting this is, exactly as the drag lists leave the
+    /// drag implicit. That is also why the trigger editor shows "Meta" here
+    /// rather than "Meta + Wheel".
+    static QVariantList scrollingWheelFocusTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Meta));
+    }
+    static QVariantList scrollingWheelViewTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::MetaShift));
+    }
+
     static QVariantList scrollingDragInsertTriggers()
     {
         return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));

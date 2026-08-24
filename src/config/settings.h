@@ -430,9 +430,16 @@ public:
     // The template an unassigned screen resolves to, empty for none.
     Q_PROPERTY(QString defaultScrollingTemplate READ defaultScrollingTemplate WRITE setDefaultScrollingTemplate NOTIFY
                    defaultScrollingTemplateChanged)
-    // Input knobs on the plain Scrolling group beside the sizing defaults above,
-    // not on Scrolling.Behavior: they say how a wheel event over the strip moves
-    // the focus, not how the strip behaves once a window is placed.
+    // The two scroll-key chords, each on a group of its own
+    // (Scrolling.Wheel.Focus and Scrolling.Wheel.View) rather than on
+    // Scrolling.Behavior: they say how a wheel event over the strip moves the
+    // focus or the view, not how the strip behaves once a window is placed.
+    Q_PROPERTY(QVariantList scrollingWheelFocusTriggers READ scrollingWheelFocusTriggers WRITE
+                   setScrollingWheelFocusTriggers NOTIFY scrollingWheelFocusTriggersChanged)
+    Q_PROPERTY(QVariantList scrollingWheelViewTriggers READ scrollingWheelViewTriggers WRITE
+                   setScrollingWheelViewTriggers NOTIFY scrollingWheelViewTriggersChanged)
+    // The enable and invert toggles below ARE on the plain Scrolling group,
+    // beside the sizing defaults above.
     Q_PROPERTY(bool scrollingWheelFocusEnabled READ scrollingWheelFocusEnabled WRITE setScrollingWheelFocusEnabled
                    NOTIFY scrollingWheelFocusEnabledChanged)
     Q_PROPERTY(bool scrollingWheelFocusInverted READ scrollingWheelFocusInverted WRITE setScrollingWheelFocusInverted
@@ -1452,6 +1459,10 @@ public:
     void setScrollingDropIndicatorBorderRadius(int px) override;
     QString defaultScrollingTemplate() const;
     void setDefaultScrollingTemplate(const QString& templateId);
+    QVariantList scrollingWheelFocusTriggers() const override;
+    void setScrollingWheelFocusTriggers(const QVariantList& triggers) override;
+    QVariantList scrollingWheelViewTriggers() const override;
+    void setScrollingWheelViewTriggers(const QVariantList& triggers) override;
     bool scrollingWheelFocusEnabled() const;
     void setScrollingWheelFocusEnabled(bool enabled);
     bool scrollingWheelFocusInverted() const;
@@ -2147,8 +2158,9 @@ private:
     /// passed into @ref writeTriggerList.
     using TriggerListSignalFn = void (Settings::*)();
 
-    /// Shared trigger-list setter used by the four "plain" setters
-    /// (activation, snap-assist, autotile-insert, scrolling-insert). Caps at
+    /// Shared trigger-list setter used by the "plain" setters (activation,
+    /// snap-assist, autotile-insert, scrolling-insert, and the two wheel
+    /// chords). Caps at
     /// @c MaxTriggersPerAction, round-trips through the schema's validator,
     /// and only emits @p specificSignal + @c settingsChanged on a real change.
     /// @c setZoneSpanTriggers does its own dance because it also synchronises
