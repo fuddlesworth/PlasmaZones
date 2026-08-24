@@ -557,6 +557,21 @@ private:
     /// tile is dropped from the relayout entirely). Shortcut-rate path, not
     /// per-frame — both height verbs call it once per press.
     int activeTileCrossPx(const ScrollLayoutParams& params) const;
+    /// Make tile @p tileIdx of TABBED column @p c the column's sole height
+    /// owner, by clearing every other tab's intent back to Auto. niri's
+    /// convert_heights_to_auto, applied to the one case that needs it here:
+    /// tabbedColumnCrossPx resolves the column from the ONE non-Auto tab, so
+    /// without this a second tab carrying an old intent would decide the
+    /// column's extent depending on which tab happened to be focused.
+    ///
+    /// No-op unless @p c is tabbed AND @p incoming is non-Auto: a write of
+    /// Auto claims nothing, and wiping the siblings for it would discard a
+    /// height the user set on another tab. Answers whether any sibling
+    /// actually changed, which is a layout change in its own right even when
+    /// the target tile's own intent is untouched. Auto siblings keep their
+    /// WEIGHT: it does nothing while tabbed and is what the stack branch
+    /// distributes by once the column is untabbed.
+    static bool claimTabbedHeightOwnership(Column& c, int tileIdx, const WindowHeight& incoming);
 
     // scrollstrip_structure.cpp
     void removeColumnAt(int columnIndex);

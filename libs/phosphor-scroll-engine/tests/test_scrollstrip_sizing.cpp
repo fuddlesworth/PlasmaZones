@@ -52,6 +52,8 @@ private Q_SLOTS:
     void heightPresetCycleResizesATabbedColumn();
     void heightAdjustMeasuresATabbedColumnInColumnSpace();
     void heightAdjustFloorsATabbedColumnAtTheTallestTabsMinimum();
+    void switchingTabsDoesNotResizeATabbedColumn();
+    void aHeightPressTakesTabbedOwnershipFromTheOtherTab();
     void heightGrowLeavesTheColumnTilingItsBudget();
     void widthPresetCycleWrapsByExtentNotByPosition();
 };
@@ -230,6 +232,73 @@ void TestScrollStripSizing::heightAdjustFloorsATabbedColumnAtTheTallestTabsMinim
     // Seated, not alternating.
     QVERIFY(!strip.adjustActiveWindowHeight(-25.0, params));
     QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), clientMin);
+}
+
+// A tabbed column's extent comes from its ONE non-Auto tab, never from the
+// tab that happens to be focused, so cycling tabs cannot change the column's
+// shape. Reading the shown tab instead made a plain tab switch resize the
+// column, which also breaks the compositor's tab-switch cross-fade: that
+// animation is built on the arriving tab occupying the rect the outgoing one
+// just vacated.
+void TestScrollStripSizing::switchingTabsDoesNotResizeATabbedColumn()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // Resize while "b" is the shown tab. "a" keeps its Auto height, which is
+    // exactly the state that used to make the switch below jump.
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const int resized = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+    QVERIFY(resized < Ax::crossLen(ScrollTestUtils::defaultScreenRect()));
+
+    // Switch to "a" — a focus move and nothing else.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QCOMPARE(strip.activeColumn()->tiles.at(strip.activeColumn()->activeTileIdx).windowId, QStringLiteral("a"));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a"))), resized);
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), resized);
+
+    // And back, so the invariant is not one-way.
+    QVERIFY(strip.focusAdjacentTile(1));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), resized);
+}
+
+// The write half of that invariant: a height press claims ownership, clearing
+// every other tab back to Auto (niri's convert_heights_to_auto). Without the
+// claim two tabs would hold intents at once and the resolver would answer with
+// whichever it met first, which is a layout that depends on tile order.
+void TestScrollStripSizing::aHeightPressTakesTabbedOwnershipFromTheOtherTab()
+{
+    ScrollLayoutParams params = defaultParams();
+
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.toggleActiveColumnTabbed());
+
+    // "b" takes the column down first.
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const int bHeight = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b")));
+
+    // Now "a" resizes. It is the EARLIER tile, so before the claim it would
+    // have won the resolver's scan on tile order rather than on intent.
+    QVERIFY(strip.focusAdjacentTile(-1));
+    QVERIFY(strip.adjustActiveWindowHeight(-25.0, params));
+    const int aHeight = Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("a")));
+    QVERIFY2(aHeight < bHeight, "the second press must keep shrinking from where the first left the column");
+
+    // One owner, and it is the tab that was pressed.
+    const Column* col = strip.activeColumn();
+    QVERIFY(col);
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("b"))).height.kind, WindowHeight::Auto);
+    QCOMPARE(col->tiles.at(col->indexOfWindow(QStringLiteral("a"))).height.kind, WindowHeight::Fixed);
+
+    // So switching back to "b" still shows the column "a" set.
+    QVERIFY(strip.focusAdjacentTile(1));
+    QCOMPARE(Ax::crossLen(rectOf(strip.relayout(params), QStringLiteral("b"))), aHeight);
 }
 
 // The grow side's budget invariant. Deliberately NOT an exact ceiling

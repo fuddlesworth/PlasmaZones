@@ -82,37 +82,54 @@ int ScrollStrip::tabbedColumnCrossPx(const Column& c, const ScrollLayoutParams& 
     if (c.tiles.isEmpty()) {
         return fullCross;
     }
-    // The SHOWN tab decides, which is the tile the height verbs write: the
-    // hidden tabs share its rect, so reading any other intent would size the
-    // column around a window nobody is looking at.
-    int activeTi = qBound(0, c.activeTileIdx, c.tiles.size() - 1);
-    if (c.tiles.at(activeTi).minimized) {
-        for (int ti = 0; ti < c.tiles.size(); ++ti) {
-            if (!c.tiles.at(ti).minimized) {
-                activeTi = ti;
-                break;
-            }
+    // The column's ONE non-Auto tab decides, NOT the tab on show. niri's rule
+    // verbatim (scrolling.rs: "All tiles have the same height, equal to the
+    // height of the only fixed tile (if any)"), and the reason is that the
+    // alternative is unstable: reading the SHOWN tab makes the column's extent
+    // a function of which tab is focused, so a plain tab switch resizes the
+    // column. That is both a shape change nobody asked for and a broken
+    // premise for the compositor's tab-switch cross-fade, which is built on
+    // the arriving tab occupying the rect the outgoing one just vacated
+    // (kwin-effect/tilinghandler/tiling.cpp).
+    //
+    // The height verbs keep at most one tab non-Auto
+    // (claimTabbedHeightOwnership), so "the first" IS "the only" in practice.
+    // Scanning rather than trusting that is what keeps a strip restored from
+    // disk, or written through the rule and handoff seams, resolve to one
+    // deterministic answer instead of a focus-dependent one. Minimized tabs
+    // are skipped: they are dropped from the layout entirely, so a height they
+    // carry must not size a column they do not appear in.
+    const WindowHeight* owner = nullptr;
+    for (const Tile& tile : c.tiles) {
+        if (!tile.minimized && tile.height.kind != WindowHeight::Auto) {
+            owner = &tile.height;
+            break;
         }
     }
-    const WindowHeight& height = c.tiles.at(activeTi).height;
+    // No owner: every tab is Auto, which means the whole work area — what
+    // every tabbed column was pinned at before the intent was read here at
+    // all.
     int px = fullCross;
-    switch (height.kind) {
-    case WindowHeight::Fixed:
-        px = qBound(1, height.fixedPx, fullCross);
-        break;
-    case WindowHeight::Preset:
-        // Resolved through the same snap-at-resolve path the stack branch
-        // takes, so a template swap reflows a tabbed column the way it
-        // reflows a stacked one.
-        px = qMin(fullCross,
-                  proportionalPx(nearestPresetValue(params.presetWindowHeights, height.presetFraction), fullCross,
-                                 params.gap));
-        break;
-    case WindowHeight::Auto:
-        // The whole work area, which is what every tabbed column was pinned
-        // at before the intent was read here at all.
-        px = fullCross;
-        break;
+    if (owner) {
+        switch (owner->kind) {
+        case WindowHeight::Fixed:
+            px = qBound(1, owner->fixedPx, fullCross);
+            break;
+        case WindowHeight::Preset:
+            // Resolved through the same snap-at-resolve path the stack branch
+            // takes, so a template swap reflows a tabbed column the way it
+            // reflows a stacked one.
+            px = qMin(fullCross,
+                      proportionalPx(nearestPresetValue(params.presetWindowHeights, owner->presetFraction), fullCross,
+                                     params.gap));
+            break;
+        case WindowHeight::Auto:
+            // Unreachable: the scan above only ever takes a non-Auto tab.
+            // Kept as a labelled arm with no default, so a new WindowHeight
+            // kind is a compiler warning here rather than silently resolving
+            // to the work area.
+            break;
+        }
     }
     if (params.respectMinimumSize) {
         // Every visible tab is committed at this column's content rect, the
