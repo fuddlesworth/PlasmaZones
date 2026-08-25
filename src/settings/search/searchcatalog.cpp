@@ -907,6 +907,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"),
                {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocusFollowsMouseMaxScroll"),
+               PhosphorI18n::tr("Limit how far the strip scrolls"),
+               {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover"),
+                PhosphorI18n::tr("scroll"), PhosphorI18n::tr("limit")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("wheelFocusEnabled"),
                PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("scroll")});

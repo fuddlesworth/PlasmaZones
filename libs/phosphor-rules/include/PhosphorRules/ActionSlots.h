@@ -153,6 +153,12 @@ inline constexpr QLatin1StringView ScrollSmartGaps{"scroll-smart-gaps"};
 /// Effect-consumed, unlike its five neighbours: the daemon resolves it per
 /// screen and pushes the resolved set to the compositor.
 inline constexpr QLatin1StringView ScrollFocusFollowsMouse{"scroll-focus-follows-mouse"};
+/// Effect-consumed like the toggle it caps, but through a different channel:
+/// the daemon asks the engine which windows are further than this from the
+/// current view and pushes THAT set to the compositor, because the answer
+/// depends on the strip's layout and the compositor cannot ask per pointer
+/// event.
+inline constexpr QLatin1StringView ScrollFocusFollowsMouseMaxScroll{"scroll-focus-follows-mouse-max-scroll"};
 inline constexpr QLatin1StringView ScrollStickyWindowHandling{"scroll-sticky-window-handling"};
 inline constexpr QLatin1StringView ScrollStripAxis{"scroll-strip-axis"};
 // Per-context tab-indicator slots, one per property so independent context

@@ -128,6 +128,29 @@ public:
     {
         return false;
     }
+    /// The furthest focus-follows-mouse may scroll the strip to bring the
+    /// window under the pointer into view, as a percent of the viewport's
+    /// extent along the strip (niri's `max-scroll-amount`). Above the cap the
+    /// pointer is ignored and focus stays put, which keeps a graze along a
+    /// column that is mostly off screen from yanking the whole strip.
+    ///
+    /// 100 is the "no cap" default and the top of the range, not an arbitrary
+    /// ceiling: the window under the pointer is by definition at least partly
+    /// on screen, so the centering policy never has to move the view a full
+    /// viewport to bring it in. 0 is the other end, meaning focus only follows
+    /// the pointer onto windows already fully in view.
+    static constexpr int scrollingFocusFollowsMouseMaxScroll()
+    {
+        return 100;
+    }
+    static constexpr int scrollingFocusFollowsMouseMaxScrollMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingFocusFollowsMouseMaxScrollMax()
+    {
+        return 100;
+    }
     /// StickyWindowHandling wire values, the shared PhosphorEngine enum's
     /// spelling (0 = treat as normal, 1 = restore only, 2 = ignore all).
     /// Named for the same reason as the CenterFocusedColumn values in configdefaults_scrolling.h;

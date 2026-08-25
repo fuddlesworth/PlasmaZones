@@ -105,6 +105,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // Effect-consumed rather than engine-consumed (the daemon pushes the
     // resolved set to the compositor), but structurally a context bool.
     ActionType::SetScrollFocusFollowsMouse,
+    // The cap on the toggle above, effect-consumed the same way but through
+    // the engine: a context PERCENT rather than a bool.
+    ActionType::SetScrollFocusFollowsMouseMaxScroll,
     // Tab indicator — context-domain. The geometry half is layered onto the
     // scrolling engine's per-screen map and the paint half onto the overlay,
     // but both resolve in the same context pass as the scroll params above.
@@ -857,6 +860,7 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetScrollStickyWindowHandling, QJsonValue(QStringLiteral("ignoreAll")));
         rejectsStray(ActionType::SetScrollStripAxis, QJsonValue(QStringLiteral("vertical")));
         rejectsStray(ActionType::SetScrollFocusFollowsMouse, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollFocusFollowsMouseMaxScroll, QJsonValue(0.5));
         rejectsStray(ActionType::OpenColumnWidth, QJsonValue(0.5));
         rejectsStray(ActionType::OpenWindowHeight, QJsonValue(0.5));
         rejectsStray(ActionType::OpenTabbed, QJsonValue(true));

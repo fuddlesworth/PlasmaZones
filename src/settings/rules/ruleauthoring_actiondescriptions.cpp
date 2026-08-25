@@ -353,6 +353,12 @@ QString actionDescription(const QString& type)
             "click. Covers scrolling screens only, so snapping and tiling screens keep following "
             "the global setting.");
     }
+    if (type == ActionType::SetScrollFocusFollowsMouseMaxScroll) {
+        return PhosphorI18n::tr(
+            "Caps how far the strip may scroll when the pointer picks up a column that is partly "
+            "off screen on the matched context. Past the cap the pointer is ignored and focus "
+            "stays put. At 100 percent nothing is ever refused.");
+    }
     if (type == ActionType::SetScrollStickyWindowHandling) {
         return PhosphorI18n::tr(
             "Chooses how the matched context treats windows shown on all desktops. Anything other "

@@ -167,6 +167,11 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // membership.
     QStringList ffmScreens;
     QStringList cropScreens;
+    // Rebuilt from scratch by this walk rather than updated in place: a screen
+    // that left scrolling, or whose rule stopped capping, must lose its entry,
+    // and clearing on the way in is what makes the empty hash mean what
+    // publishScrollFocusScrollBlocks reads it as.
+    m_scrollFfmMaxScrollPercent.clear();
     for (const QString& screenId : scrollingScreens) {
         QVariantMap overrides = m_settings->getPerScreenScrollingSettings(screenId);
         if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -245,6 +250,21 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         }
         if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
             cropScreens.append(screenId);
+        }
+        // The CAP on focus-follows-mouse, resolved the same `rule ?? config`
+        // way but not publishable as membership: which windows it refuses
+        // depends on the strip's layout and the view, so only the percent is
+        // resolved here and publishScrollFocusScrollBlocks turns it into a
+        // window list, again on every relayout. The rule slot carries a
+        // fraction and the config key a percent, each the convention of its
+        // own layer, so the rule arm is scaled here at the one place both are
+        // in hand. Stored only when it genuinely caps: 100 is the no-cap
+        // default and an absent entry is what the fast path tests for.
+        const int maxScrollPercent = params.focusFollowsMouseMaxScroll
+            ? qRound(*params.focusFollowsMouseMaxScroll * 100.0)
+            : m_settings->scrollingFocusFollowsMouseMaxScroll();
+        if (maxScrollPercent < 100) {
+            m_scrollFfmMaxScrollPercent.insert(screenId, maxScrollPercent);
         }
         // Taken from the ENGINE, never re-derived here. The engine owns the
         // work area that Auto resolves against, and a second aspect-ratio
@@ -500,8 +520,12 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // second time here would be dead work claiming the same ownership. Screens
     // that LEFT scrolling are absent by construction (the walk only visits the
     // current set), so the departing-screen cleanup below has nothing to undo.
+    m_scrollFfmScreens = ffmScreens;
+    m_scrollCropScreens = cropScreens;
+    m_scrollVerticalAxisScreens = verticalAxisScreens;
     if (m_scrollingAdaptor) {
-        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens);
+        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens,
+                                                     scrollFocusScrollBlockedWindows());
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
 
@@ -550,6 +574,44 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_scrollEngine->scheduleRetileForScreen(screenId);
         }
     }
+}
+
+QStringList Daemon::scrollFocusScrollBlockedWindows() const
+{
+    // The fast path, and the one that runs on every relayout with the shipped
+    // defaults: no screen caps, so nothing is refused and the engine is never
+    // asked.
+    if (m_scrollFfmMaxScrollPercent.isEmpty() || !m_scrollEngine) {
+        return {};
+    }
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    if (!scroll) {
+        return {};
+    }
+    QStringList blocked;
+    for (auto it = m_scrollFfmMaxScrollPercent.cbegin(); it != m_scrollFfmMaxScrollPercent.cend(); ++it) {
+        blocked += scroll->windowsBeyondFocusScrollLimit(it.key(), it.value());
+    }
+    return blocked;
+}
+
+void Daemon::publishScrollFocusScrollBlocks()
+{
+    // The emptiness test twice over: once here so a layout change on an
+    // uncapped desktop costs nothing at all, and once inside the gatherer for
+    // the callers that reach it another way. Without this the push below would
+    // still be a no-op (the adaptor compares before emitting), but it would
+    // build and canonicalize four lists to discover that.
+    if (!m_scrollingAdaptor || m_scrollFfmMaxScrollPercent.isEmpty()) {
+        return;
+    }
+    // The three screen lists are replayed from the cache rather than
+    // re-resolved: they answer settings and rules, which this path cannot have
+    // changed, and re-walking every context rule per relayout is exactly the
+    // cost this function exists to avoid. The adaptor's emit-on-change gate
+    // then makes a push whose block list is also unchanged free.
+    m_scrollingAdaptor->setScrollEffectBehaviour(m_scrollFfmScreens, m_scrollCropScreens, m_scrollVerticalAxisScreens,
+                                                 scrollFocusScrollBlockedWindows());
 }
 
 /// Deliberately NOT liveness-gated, unlike the three providers wired in

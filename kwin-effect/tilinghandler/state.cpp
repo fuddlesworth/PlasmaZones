@@ -199,9 +199,17 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // PhosphorProtocol, so the lookup and its diagnostic label cannot drift.
     using PhosphorProtocol::Service::ScrollBehaviourKey::CropStraddlers;
     using PhosphorProtocol::Service::ScrollBehaviourKey::FocusFollowsMouse;
+    using PhosphorProtocol::Service::ScrollBehaviourKey::FocusScrollBlockedWindows;
     using PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
     const QSet<QString> ffm = toSet(behaviour.value(FocusFollowsMouse), FocusFollowsMouse).value_or(QSet<QString>());
     const QSet<QString> crop = toSet(behaviour.value(CropStraddlers), CropStraddlers).value_or(QSet<QString>());
+    // WINDOW ids, not screen ids, and the one list here whose empty reading is
+    // "refuse nothing" — so it falls to empty on a malformed value like the
+    // two behaviour toggles rather than keeping its membership like the axis.
+    // A cap that fails open lets focus follow the pointer as it did before the
+    // setting existed; a cap that fails closed would freeze focus.
+    const QSet<QString> focusScrollBlocked =
+        toSet(behaviour.value(FocusScrollBlockedWindows), FocusScrollBlockedWindows).value_or(QSet<QString>());
     // Membership: a screen IN the list runs its strip vertically. An ABSENT
     // key reads as an empty set, which means horizontal everywhere — that is
     // what the daemon publishes on a session with no vertical strip.
@@ -227,6 +235,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // global setting there.
     m_scrollEffectBehaviourSeeded = true;
     m_scrollFocusFollowsMouseScreens = ffm;
+    m_scrollFocusScrollBlockedWindows = focusScrollBlocked;
     // One of the five ffmOffEverywhere sites: this write is what can
     // take the LAST focus-follows-mouse screen away while both globals were
     // already off, and handleCursorMoved's bail (the latch's only other
@@ -294,6 +303,9 @@ void TilingHandler::clearScrollEffectBehaviourForTeardown()
 {
     m_scrollEffectBehaviourSeeded = false;
     m_scrollFocusFollowsMouseScreens.clear();
+    // Cleared with the set it caps: a block list outliving the session that
+    // published it would refuse focus for windows whose strip is gone.
+    m_scrollFocusScrollBlockedWindows.clear();
     if (ffmOffEverywhere()) {
         // Same latch reasoning as the apply above — the dead session's set was
         // the last thing keeping FFM alive anywhere, and its anchor names a

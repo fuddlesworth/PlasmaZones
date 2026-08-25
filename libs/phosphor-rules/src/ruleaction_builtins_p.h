@@ -157,6 +157,11 @@ inline constexpr double kMinColumnWidthRatio = MinColumnWidthRatio;
 inline constexpr double kMaxColumnWidthRatio = MaxColumnWidthRatio;
 inline constexpr double kMinColumnWidthPercent = kMinColumnWidthRatio * 100.0;
 inline constexpr double kMaxColumnWidthPercent = kMaxColumnWidthRatio * 100.0;
+// Focus-follows-mouse scroll cap, aliased and derived the same way.
+inline constexpr double kMinFfmMaxScrollRatio = MinFocusFollowsMouseMaxScrollRatio;
+inline constexpr double kMaxFfmMaxScrollRatio = MaxFocusFollowsMouseMaxScrollRatio;
+inline constexpr double kMinFfmMaxScrollPercent = kMinFfmMaxScrollRatio * 100.0;
+inline constexpr double kMaxFfmMaxScrollPercent = kMaxFfmMaxScrollRatio * 100.0;
 // ScrollFactor multiplier bounds. Aliased from the installed RuleAction.h
 // constants (the kMinColumnWidthRatio pattern) so the descriptor validator and
 // the KWin-effect consumer re-validation check the same numbers. The wire

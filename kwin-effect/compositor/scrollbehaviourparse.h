@@ -32,9 +32,13 @@ namespace PlasmaZones::ScrollBehaviourParse {
 ///    optional, plus a warning line in @p warnings — the caller decides per
 ///    key whether empty or keep-current is the safe fallback (the axis keeps
 ///    its membership; the two behaviour toggles fall to empty).
-///  - VALID: the de-duplicated set, with empty screen ids dropped (each adds
+///  - VALID: the de-duplicated set, with empty ids dropped (each adds
 ///    a warning — no window resolves to one, and they only defeat the
 ///    caller's change gate).
+///
+/// The map's one WINDOW-id list (focusScrollBlockedWindows) parses through
+/// here too: the shape and every failure mode are identical, and only the
+/// warning text would have differed.
 ///
 /// An `as` value arrives either already demarshalled (the property Get path)
 /// or still wrapped in a QDBusVariant (a signal delivered without a
@@ -64,7 +68,7 @@ inline std::optional<QSet<QString>> parseScreenIdList(const QVariant& raw, QLati
     out.reserve(list.size());
     for (const QString& screenId : list) {
         if (screenId.isEmpty()) {
-            warnings.append(QStringLiteral("scrollEffectBehaviour: dropping empty screen id from %1").arg(key));
+            warnings.append(QStringLiteral("scrollEffectBehaviour: dropping empty id from %1").arg(key));
             continue;
         }
         out.insert(screenId);

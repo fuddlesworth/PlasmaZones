@@ -583,6 +583,10 @@ P_STORE_GET(bool, scrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollo
 P_STORE_SET_BOOL(setScrollingFocusFollowsMouse, scrollingBehaviorGroup, focusFollowsMouseKey,
                  scrollingFocusFollowsMouseChanged)
 
+P_STORE_GET(int, scrollingFocusFollowsMouseMaxScroll, scrollingBehaviorGroup, focusFollowsMouseMaxScrollKey, int)
+P_STORE_SET_INT(setScrollingFocusFollowsMouseMaxScroll, scrollingBehaviorGroup, focusFollowsMouseMaxScrollKey,
+                scrollingFocusFollowsMouseMaxScrollChanged)
+
 P_STORE_GET(int, scrollingStickyWindowHandling, scrollingBehaviorGroup, stickyWindowHandlingKey, int)
 P_STORE_SET_INT(setScrollingStickyWindowHandling, scrollingBehaviorGroup, stickyWindowHandlingKey,
                 scrollingStickyWindowHandlingChanged)

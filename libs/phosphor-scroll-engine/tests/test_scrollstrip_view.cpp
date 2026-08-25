@@ -56,6 +56,8 @@ private Q_SLOTS:
     void expandRefusesForAStraddlingActiveColumn();
     void expandMaximizesUnderACenteringPolicy();
     void resetToDefaultsClearsThePreMaximizeSlot();
+    void predictedFocusScrollMatchesTheScrollAFocusActuallyCosts();
+    void predictedFocusScrollIsZeroForTheColumnAlreadyFocused();
 };
 
 void TestScrollStripView::scrollViewByDetachesTheViewFromTheCenteringPolicy()
@@ -822,6 +824,75 @@ void TestScrollStripView::expandMaximizesUnderACenteringPolicy()
     QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeProportion(1.0));
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     QCOMPARE(strip.columns().at(1).width, ColumnWidth::makeFixed(300));
+}
+
+void TestScrollStripView::predictedFocusScrollMatchesTheScrollAFocusActuallyCosts()
+{
+    // The whole contract of the focus-follows-mouse scroll cap: the prediction
+    // must be the same number the focus would actually produce. It is not a
+    // second estimate of the policy — it runs the policy — so this test is
+    // what proves the shared helper stayed shared. A drift here is invisible
+    // in use: the cap would simply refuse the wrong windows.
+    //
+    // All three centering policies, because each takes a different arm and the
+    // fit arm is the only one a naive "how far off screen is it" guess would
+    // ever agree with.
+    for (const CenterFocusedColumn policy :
+         {CenterFocusedColumn::Never, CenterFocusedColumn::Always, CenterFocusedColumn::OnOverflow}) {
+        ScrollLayoutParams params = defaultParams();
+        params.centerFocusedColumn = policy;
+        const ColumnWidth wide = ColumnWidth::makeProportion(0.55);
+        // Built fresh per target, because measuring the real cost means
+        // actually focusing, and that leaves the view somewhere else.
+        const auto build = [&](ScrollStrip& s) {
+            QVERIFY(s.insertWindow(QStringLiteral("a"), wide, ColumnDisplay::Normal, params));
+            QVERIFY(s.insertWindow(QStringLiteral("b"), wide, ColumnDisplay::Normal, params));
+            QVERIFY(s.insertWindow(QStringLiteral("c"), wide, ColumnDisplay::Normal, params));
+            QVERIFY(s.insertWindow(QStringLiteral("d"), wide, ColumnDisplay::Normal, params));
+            QVERIFY(s.focusColumn(0, params));
+        };
+        for (int target = 0; target < 4; ++target) {
+            ScrollStrip strip;
+            build(strip);
+            const int before = strip.relayout(params).viewOffset;
+            const int predicted = strip.predictedFocusScrollPx(target, params);
+            if (target == 0) {
+                // The column build() left focused. focusColumn refuses a
+                // no-op, so there is no motion to measure — and the
+                // prediction for it must be exactly that.
+                QCOMPARE(predicted, 0);
+                continue;
+            }
+            QVERIFY(strip.focusColumn(target, params));
+            const int actual = qAbs(strip.relayout(params).viewOffset - before);
+            QCOMPARE(predicted, actual);
+        }
+    }
+}
+
+void TestScrollStripView::predictedFocusScrollIsZeroForTheColumnAlreadyFocused()
+{
+    // Zero is the fail-open answer, and three separate inputs must give it: the
+    // active column (focusing it moves nothing), an index off either end of the
+    // strip, and a degenerate work area. A caller uses this to REFUSE a focus,
+    // so a question it cannot answer must never come back as a refusal.
+    ScrollLayoutParams params = defaultParams();
+    params.centerFocusedColumn = CenterFocusedColumn::Always;
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    // The second insert already focused column 1; move away and back so the
+    // fixture states the focus rather than inheriting it.
+    QVERIFY(strip.focusColumn(0, params));
+    QVERIFY(strip.focusColumn(1, params));
+
+    QCOMPARE(strip.predictedFocusScrollPx(1, params), 0);
+    QCOMPARE(strip.predictedFocusScrollPx(-1, params), 0);
+    QCOMPARE(strip.predictedFocusScrollPx(2, params), 0);
+
+    ScrollLayoutParams degenerate = params;
+    degenerate.workArea = QRect();
+    QCOMPARE(strip.predictedFocusScrollPx(0, degenerate), 0);
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripView)

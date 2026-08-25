@@ -295,7 +295,12 @@ int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParam
 
 int ScrollStrip::clampedAnchor(int anchor, const ScrollLayoutParams& params) const
 {
-    if (m_activeColumnIdx < 0) {
+    return clampedAnchorFor(m_activeColumnIdx, anchor, params);
+}
+
+int ScrollStrip::clampedAnchorFor(int columnIndex, int anchor, const ScrollLayoutParams& params) const
+{
+    if (columnIndex < 0 || columnIndex >= m_columns.size()) {
         return 0;
     }
     // Degenerate work area (unknown/removed screen, or outer gaps wider than
@@ -315,7 +320,7 @@ int ScrollStrip::clampedAnchor(int anchor, const ScrollLayoutParams& params) con
     }
     const int viewMain = mainExtent(params);
     const int stripMain = stripExtentPx(params);
-    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+    const int activeMainPos = columnStripPos(columnIndex, params);
     // anchor = activeMainPos - viewOffset; viewOffset must stay within
     // [0, max(0, stripMain - viewMain)].
     const int maxViewOffset = qMax(0, stripMain - viewMain);
@@ -351,14 +356,31 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     if (mainExtent(params) <= 0) {
         return;
     }
+    m_viewAnchor = focusAnchorFor(m_activeColumnIdx, prevIdx, oldViewOffset, params);
+    qCDebug(lcScrollEngine) << "reanchorAfterFocusChange: prevIdx" << prevIdx << "active" << m_activeColumnIdx
+                            << "oldViewOffset" << oldViewOffset << "policy" << int(params.centerFocusedColumn)
+                            << "verdict anchor" << m_viewAnchor;
+}
+
+int ScrollStrip::focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, const ScrollLayoutParams& params) const
+{
+    if (targetIdx < 0 || targetIdx >= m_columns.size()) {
+        return 0;
+    }
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there): every arm below would answer 0, and the callers write that
+    // answer over a PERSISTED anchor.
+    if (mainExtent(params) <= 0) {
+        return m_viewAnchor;
+    }
     const int viewMain = mainExtent(params);
-    const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
-    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+    const int colMain = columnExtentPx(m_columns.at(targetIdx), params);
+    const int activeMainPos = columnStripPos(targetIdx, params);
 
     bool center = isCenteringActiveColumn(params);
 
     if (!center && params.centerFocusedColumn == CenterFocusedColumn::OnOverflow && prevIdx >= 0
-        && prevIdx < m_columns.size() && prevIdx != m_activeColumnIdx) {
+        && prevIdx < m_columns.size() && prevIdx != targetIdx) {
         // niri parity (compute_new_view_offset_for_column, the OnOverflow arm:
         // "Always take the left or right neighbor of the target as the
         // source"). The overflow test measures the target against the column
@@ -378,8 +400,8 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
         // so no opinion here. When that side holds no such column the target
         // has the viewport to itself and the fit arm is right, which is also
         // what niri does when it is handed no source at all.
-        const int dir = prevIdx > m_activeColumnIdx ? 1 : -1;
-        int sourceIdx = m_activeColumnIdx + dir;
+        const int dir = prevIdx > targetIdx ? 1 : -1;
+        int sourceIdx = targetIdx + dir;
         while (sourceIdx >= 0 && sourceIdx < m_columns.size() && columnExtentPx(m_columns.at(sourceIdx), params) <= 0) {
             sourceIdx += dir;
         }
@@ -409,11 +431,7 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     }
 
     if (center) {
-        m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
-        qCDebug(lcScrollEngine) << "reanchorAfterFocusChange: prevIdx" << prevIdx << "active" << m_activeColumnIdx
-                                << "oldViewOffset" << oldViewOffset << "policy" << int(params.centerFocusedColumn)
-                                << "verdict centered anchor" << m_viewAnchor;
-        return;
+        return centeredAnchorFor(targetIdx, params);
     }
 
     // CenterFocusedColumn::Never — scroll the minimum amount that makes the
@@ -426,16 +444,35 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
         // as a branch because the cap lives in another function and a future
         // width kind that opted out of it would land here needing the
         // entering-edge pin.
-        pos = (prevIdx >= 0 && m_activeColumnIdx < prevIdx) ? viewMain - colMain : 0;
+        pos = (prevIdx >= 0 && targetIdx < prevIdx) ? viewMain - colMain : 0;
     } else if (pos < 0) {
         pos = 0;
     } else if (pos + colMain > viewMain) {
         pos = viewMain - colMain;
     }
-    m_viewAnchor = clampedAnchor(pos, params);
-    qCDebug(lcScrollEngine) << "reanchorAfterFocusChange: prevIdx" << prevIdx << "active" << m_activeColumnIdx
-                            << "oldViewOffset" << oldViewOffset << "policy" << int(params.centerFocusedColumn)
-                            << "verdict fit pos" << pos << "anchor" << m_viewAnchor;
+    return clampedAnchorFor(targetIdx, pos, params);
+}
+
+int ScrollStrip::predictedFocusScrollPx(int columnIndex, const ScrollLayoutParams& params) const
+{
+    // Every bail answers 0, which reads as "focusing this costs no scroll" and
+    // so can never trip a cap. That is the fail-open direction on purpose: a
+    // caller asking the question is deciding whether to REFUSE a focus, and a
+    // question we cannot answer must not become a refusal.
+    if (columnIndex < 0 || columnIndex >= m_columns.size() || m_activeColumnIdx < 0
+        || columnIndex == m_activeColumnIdx) {
+        return 0;
+    }
+    if (mainExtent(params) <= 0) {
+        return 0;
+    }
+    const int oldViewOffset = viewOffsetFor(params);
+    const int anchor = focusAnchorFor(columnIndex, m_activeColumnIdx, oldViewOffset, params);
+    // The anchor is stored relative to the column it belongs to, so the view
+    // offset it implies is that column's strip position minus it — the same
+    // derivation viewOffsetFor makes for the active column.
+    const int newViewOffset = columnStripPos(columnIndex, params) - anchor;
+    return qAbs(newViewOffset - oldViewOffset);
 }
 
 void ScrollStrip::restoreViewAnchor(int anchor, const ScrollLayoutParams& params)

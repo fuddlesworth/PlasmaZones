@@ -688,6 +688,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                                    PhosphorI18n::tr("Open at height"), PhosphorI18n::tr("Open at height (invalid)"),
                                    PhosphorI18n::tr("Open at height: %1%"));
         }
+        if (action.type == ActionType::SetScrollFocusFollowsMouseMaxScroll) {
+            return fractionSummary(
+                raw, PhosphorRules::MinFocusFollowsMouseMaxScrollRatio,
+                PhosphorRules::MaxFocusFollowsMouseMaxScrollRatio, PhosphorI18n::tr("Focus scroll limit"),
+                PhosphorI18n::tr("Focus scroll limit (invalid)"), PhosphorI18n::tr("Focus scroll limit: %1%"));
+        }
         if (action.type == ActionType::SetScrollInsertPosition) {
             const QString token = raw.toString();
             const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);

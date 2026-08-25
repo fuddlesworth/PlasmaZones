@@ -474,6 +474,8 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     readBool(PWR::ActionSlot::ScrollFocusNewWindows, params.focusNewWindows);
     readBool(PWR::ActionSlot::ScrollSmartGaps, params.smartGaps);
     readBool(PWR::ActionSlot::ScrollFocusFollowsMouse, params.focusFollowsMouse);
+    readFraction(PWR::ActionSlot::ScrollFocusFollowsMouseMaxScroll, params.focusFollowsMouseMaxScroll,
+                 PWR::MinFocusFollowsMouseMaxScrollRatio, PWR::MaxFocusFollowsMouseMaxScrollRatio);
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollStickyWindowHandling))) {
         // Wire token → the StickyWindowHandling int the config store holds
         // (treatAsNormal 0 / restoreOnly 1 / ignoreAll 2).

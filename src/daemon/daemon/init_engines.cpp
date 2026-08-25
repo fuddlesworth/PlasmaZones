@@ -1278,6 +1278,15 @@ void Daemon::initEnginesAndWiring()
             }
             Q_EMIT m_tilingAdaptor->tilingChanged(screenId);
         });
+    // Which windows the focus-follows-mouse scroll cap refuses is a fact about
+    // the strip's layout and where the view sits, so it is re-derived here
+    // rather than only when settings or rules change. Unconditional, unlike
+    // the tilingChanged relay above: the handler's own first line returns when
+    // no screen caps at all, which is the shipped default, so an auto-scroll
+    // tick costs a hash-emptiness test rather than a bus broadcast.
+    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString&) {
+        publishScrollFocusScrollBlocks();
+    });
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, m_tilingAdaptor,
             &TilingAdaptor::relayWindowFloatingChanged);
     // The scroll engine manages its float STATE itself, but only the daemon can

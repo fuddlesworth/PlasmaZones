@@ -1264,6 +1264,12 @@ private:
     /// bring-up before the daemon's first reply looks like.
     QSet<QString> m_scrollFocusFollowsMouseScreens;
     QSet<QString> m_scrollCropStraddlerScreens;
+    /// WINDOW ids the focus-follows-mouse scroll cap refuses on a scrolling
+    /// screen (the daemon resolves the cap against the live strip and
+    /// publishes the answer, because this side cannot run the strip's
+    /// centering maths per pointer event). Empty means nothing is refused,
+    /// which is both the no-cap default and the fail-open direction.
+    QSet<QString> m_scrollFocusScrollBlockedWindows;
     /// Scrolling screens whose strip runs VERTICALLY. Membership, so an absent
     /// key or an empty list means horizontal everywhere — which is exactly
     /// what a session with no vertical strip publishes. It is NOT a

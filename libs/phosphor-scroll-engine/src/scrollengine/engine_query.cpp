@@ -319,6 +319,43 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
     return out;
 }
 
+QStringList ScrollEngine::windowsBeyondFocusScrollLimit(const QString& screenId, int maxScrollPercent) const
+{
+    // "No cap" short-circuits before any work: this runs on every relayout of
+    // every scrolling screen, and the default setting is exactly this case.
+    if (maxScrollPercent >= 100) {
+        return {};
+    }
+    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
+    if (!state || state->strip().isEmpty()) {
+        return {};
+    }
+    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    if (!params.workArea.isValid()) {
+        return {};
+    }
+    // The cap is a share of the viewport's extent ALONG the strip, so it
+    // reads the same on a horizontal and a vertical strip and on a monitor of
+    // any size. A negative percent is clamped to 0 rather than rejected: 0 is
+    // a meaningful setting ("only focus what needs no scrolling at all") and
+    // it is the nearest honest reading of a value below it.
+    const QRect& area = params.workArea;
+    const int viewMain = params.axis.isVertical() ? area.height() : area.width();
+    const int maxPx = qMax(0, viewMain) * qMax(0, maxScrollPercent) / 100;
+    const ScrollStrip& strip = state->strip();
+    QStringList blocked;
+    for (const QString& windowId : strip.windowsInOrder()) {
+        const int column = strip.columnOfWindow(windowId);
+        if (column < 0) {
+            continue;
+        }
+        if (strip.predictedFocusScrollPx(column, params) > maxPx) {
+            blocked.append(windowId);
+        }
+    }
+    return blocked;
+}
+
 QVector<QRect> ScrollEngine::visibleTileRects(const QString& screenId) const
 {
     QVector<QRect> out;

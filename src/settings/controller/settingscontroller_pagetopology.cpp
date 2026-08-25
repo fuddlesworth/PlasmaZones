@@ -507,6 +507,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingBehaviorGroup(), CD::insertPositionKey()},
              {CD::scrollingBehaviorGroup(), CD::focusNewWindowsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseKey()},
+             {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()},
              {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},
              {CD::scrollingBehaviorGroup(), CD::respectMinimumSizeKey()},
              {CD::scrollingBehaviorGroup(), CD::restoreOnLoginKey()},

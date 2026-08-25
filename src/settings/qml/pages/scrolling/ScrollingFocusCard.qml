@@ -109,10 +109,37 @@ SettingsCard {
             description: i18n("Moving the mouse pointer over a window gives it focus.")
 
             SettingsSwitch {
+                id: focusFollowsMouseSwitch
+
                 checked: appSettings.scrollingFocusFollowsMouse
                 accessibleName: i18n("Focus follows mouse pointer")
                 onToggled: function (newValue) {
                     appSettings.scrollingFocusFollowsMouse = newValue;
+                }
+            }
+        }
+
+        // Dependent row: it hugs the switch that gates it, with no separator
+        // between them, and stays visible while disabled so a deep link can
+        // still reveal its anchor. Same caveat as the scroll-key rows below.
+        SettingsRow {
+            title: i18n("Limit how far the strip scrolls")
+            searchAnchor: "scrollingFocusFollowsMouseMaxScroll"
+            description: i18n("Picking up a column that is partly off screen scrolls the strip to bring it in. Above this share of the screen the pointer is ignored and focus stays put. At 100% nothing is ignored.")
+            enabled: focusFollowsMouseSwitch.checked
+            visible: true
+
+            SettingsSlider {
+                accessibleName: i18n("Limit how far the strip scrolls")
+                from: 0
+                to: 100
+                stepSize: 1
+                value: appSettings.scrollingFocusFollowsMouseMaxScroll
+                formatValue: function (v) {
+                    return Math.round(v) + "%";
+                }
+                onMoved: function (newValue) {
+                    appSettings.scrollingFocusFollowsMouseMaxScroll = Math.round(newValue);
                 }
             }
         }

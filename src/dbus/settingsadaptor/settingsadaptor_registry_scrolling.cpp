@@ -672,6 +672,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
         m_schemas[QStringLiteral("scrollingInsertPosition")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingFocusNewWindows", scrollingFocusNewWindows, setScrollingFocusNewWindows)
         REGISTER_CONCRETE_BOOL("scrollingFocusFollowsMouse", scrollingFocusFollowsMouse, setScrollingFocusFollowsMouse)
+        REGISTER_CONCRETE_INT("scrollingFocusFollowsMouseMaxScroll", scrollingFocusFollowsMouseMaxScroll,
+                              setScrollingFocusFollowsMouseMaxScroll)
         // scrollingStickyWindowHandling: enum (0=TreatAsNormal, 1=RestoreOnly, 2=IgnoreAll)
         m_getters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete]() {
             return concrete->scrollingStickyWindowHandling();

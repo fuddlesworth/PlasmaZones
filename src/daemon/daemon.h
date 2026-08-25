@@ -532,6 +532,18 @@ private:
     /// crop-straddlers and vertical-axis screen lists to the Scrolling
     /// adaptor as one behaviour map.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
+    /// Re-push the scrolling behaviour map with a freshly computed
+    /// focus-follows-mouse block list, keeping the three screen lists
+    /// updateScrollingScreens resolved. Runs on every strip layout change,
+    /// because which windows sit further than the cap from the current view
+    /// is a fact about the layout and the view, not about the settings; the
+    /// per-screen caps it reads are cached by that pass. Returns
+    /// IMMEDIATELY when no scrolling screen caps its scrolling at all, which
+    /// is the default, so the per-relayout cost is a hash-emptiness test.
+    void publishScrollFocusScrollBlocks();
+    /// The windows every capped scrolling screen refuses to focus-follow onto
+    /// right now, gathered across screens. Empty whenever no screen caps.
+    QStringList scrollFocusScrollBlockedWindows() const;
     /// Shared capture phase: store leaving-scrolling screens' column order
     /// into m_lastEngineOrders BEFORE either engine seeds (see
     /// updateEngineScreens' capture-all → seed-all ordering).
@@ -1420,6 +1432,20 @@ private:
     // engine's order into the other. Keyed by TilingStateKey (not plain
     // screen name) so cross-desktop toggles don't overwrite each other.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
+
+    // The scrolling behaviour map's three screen lists as last resolved by
+    // updateScrollingScreens, kept so publishScrollFocusScrollBlocks can
+    // re-push the map on a layout change without re-walking every context
+    // rule. The fourth list (the blocked windows) is deliberately NOT cached:
+    // recomputing it is the whole point of that function.
+    QStringList m_scrollFfmScreens;
+    QStringList m_scrollCropScreens;
+    QStringList m_scrollVerticalAxisScreens;
+    /// Per scrolling screen, the resolved focus-follows-mouse scroll cap as a
+    /// percent of the viewport's extent along the strip (`rule ?? config`).
+    /// Screens at 100 (no cap) are ABSENT rather than stored, so an empty hash
+    /// is the "nothing to compute" fast path.
+    QHash<QString, int> m_scrollFfmMaxScrollPercent;
 
     /// One screen's last-applied assignment state: the resolved assignment
     /// id. (A resolved templateId used to ride along "for the KCM apply's

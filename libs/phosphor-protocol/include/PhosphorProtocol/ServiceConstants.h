@@ -152,7 +152,8 @@ inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 /// scrollEffectBehaviourChanged): three already-resolved screen-id lists, the
 /// per-context focus-follows-mouse and crop-straddlers rule slots and the
 /// vertical-axis MEMBERSHIP (a screen in the list runs its strip vertically;
-/// absence means horizontal). The daemon's ScrollingAdaptor produces the map
+/// absence means horizontal), plus one list of WINDOW ids rather than screen
+/// ids, naming the windows the focus-follows-mouse scroll cap refuses. The daemon's ScrollingAdaptor produces the map
 /// and the effect's TilingHandler reads it; one home for the spellings, on
 /// ScrollTabKey's terms, so a rename is a compile error on both sides rather
 /// than a lookup that silently misses its diagnostic label. The XML DocString
@@ -161,6 +162,13 @@ namespace ScrollBehaviourKey {
 inline constexpr QLatin1String FocusFollowsMouse("focusFollowsMouse");
 inline constexpr QLatin1String CropStraddlers("cropStraddlers");
 inline constexpr QLatin1String VerticalAxis("verticalAxis");
+/// WINDOW ids, not screen ids: the windows focus-follows-mouse must refuse
+/// because activating one would scroll the strip further than the
+/// per-context cap allows (niri's `max-scroll-amount`). The daemon resolves
+/// the cap and asks the engine which windows exceed it, so the compositor
+/// answers with a set lookup on a path that runs per pointer event. An
+/// absent key, like an absent window, means nothing is refused.
+inline constexpr QLatin1String FocusScrollBlockedWindows("focusScrollBlockedWindows");
 }
 
 /// Tab keys on the STRIP PREVIEW payload — the per-tile description of the

@@ -261,6 +261,20 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         if (m_effect->getWindowScreenId(w) != screenId) {
             return;
         }
+        // The focus-follows-mouse scroll cap, niri's max-scroll-amount: the
+        // daemon has already asked the strip how far focusing each window
+        // would move the view and named the ones past this screen's cap, so
+        // the answer here is a set lookup on a per-pointer-event path.
+        //
+        // A plain return, like the occluder bails above rather than a
+        // `continue`: the window under the cursor is still the window under
+        // the cursor, and looking THROUGH a refused one to focus a tiled
+        // window behind it would scroll the strip by the very amount the cap
+        // just refused.
+        if (!m_scrollFocusScrollBlockedWindows.isEmpty() && isScrollingScreen(screenId)
+            && m_scrollFocusScrollBlockedWindows.contains(m_effect->getWindowId(w))) {
+            return;
+        }
         KWin::effects->activateWindow(w);
         return;
     }

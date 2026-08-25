@@ -514,6 +514,19 @@ public:
     /// context), or -1 — the landing-slot reference a swap counterpart uses
     /// via HandoffContext.insertIndex.
     int columnIndexForWindow(const QString& screenId, const QString& windowId) const;
+    /// The windows on @p screenId that focus-follows-mouse must REFUSE to
+    /// focus under a cap of @p maxScrollPercent percent of the viewport's
+    /// extent along the strip — niri's `focus-follows-mouse
+    /// max-scroll-amount`. A window is named when activating it would move
+    /// the view further than the cap allows.
+    ///
+    /// The daemon publishes the answer to the KWin effect, which owns
+    /// focus-follows-mouse and cannot ask this question per pointer event.
+    /// 100 or more is "no cap" and answers empty without walking the strip:
+    /// a window under the pointer is by definition at least partly on
+    /// screen, so the policy can never need to scroll a full viewport to
+    /// bring it in.
+    QStringList windowsBeyondFocusScrollLimit(const QString& screenId, int maxScrollPercent) const;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Drag-insert (trigger-held window drag re-inserts into the strip)

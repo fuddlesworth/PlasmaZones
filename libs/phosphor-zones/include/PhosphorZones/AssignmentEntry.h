@@ -510,6 +510,12 @@ struct ContextScrollingParams
     /// resolved per-screen verdict into a set and pushes it to the KWin
     /// effect, which owns focus-follows-mouse entirely.
     std::optional<bool> focusFollowsMouse;
+    /// The cap on the toggle above, as a FRACTION of the viewport's extent
+    /// along the strip (niri's `max-scroll-amount`); 1.0 is no cap. Reaches
+    /// the compositor by a channel of its own: the daemon hands the percent
+    /// to the engine, which names the windows too far from the current view,
+    /// and that window set is what the effect receives.
+    std::optional<double> focusFollowsMouseMaxScroll;
     /// StickyWindowHandling ints (treatAsNormal 0 / restoreOnly 1 /
     /// ignoreAll 2); the resolver maps the wire token to the int the config
     /// store uses, matching centerFocusedColumn's treatment.
@@ -594,7 +600,7 @@ struct ContextScrollingParams
     bool hasBehaviourOverrides() const
     {
         return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
-            || stickyWindowHandling || focusFollowsMouse;
+            || stickyWindowHandling || focusFollowsMouse || focusFollowsMouseMaxScroll;
     }
 
     bool isEmpty() const

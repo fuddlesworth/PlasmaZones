@@ -785,6 +785,11 @@ private Q_SLOTS:
         const auto* ffm = findKey(schema, group, ConfigDefaults::focusFollowsMouseKey());
         QVERIFY(ffm);
         QCOMPARE(ffm->defaultValue.toBool(), ConfigDefaults::scrollingFocusFollowsMouse());
+        const auto* ffmCap = findKey(schema, group, ConfigDefaults::focusFollowsMouseMaxScrollKey());
+        QVERIFY(ffmCap && ffmCap->validator);
+        QCOMPARE(ffmCap->defaultValue.toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
+        QCOMPARE(ffmCap->validator(-5).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
+        QCOMPARE(ffmCap->validator(999).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
         const auto* respectMin = findKey(schema, group, ConfigDefaults::respectMinimumSizeKey());
         QVERIFY(respectMin);
         QCOMPARE(respectMin->defaultValue.toBool(), ConfigDefaults::scrollingRespectMinimumSize());

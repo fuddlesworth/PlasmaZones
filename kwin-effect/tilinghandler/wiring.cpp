@@ -371,7 +371,8 @@ void TilingHandler::fetchScrollEffectBehaviour()
                     // leg — so bring-up is the one place it can be confirmed.
                     qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
                                      << "crop=" << m_scrollCropStraddlerScreens
-                                     << "verticalAxis=" << m_scrollVerticalAxisScreens;
+                                     << "verticalAxis=" << m_scrollVerticalAxisScreens
+                                     << "focusScrollBlocked=" << m_scrollFocusScrollBlockedWindows;
                 } else {
                     qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
                     if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {

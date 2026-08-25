@@ -100,8 +100,12 @@ public:
     /// the historical layout — so a compositor that predates the axis reads
     /// the whole desktop as horizontal, which is what it would have drawn
     /// anyway.
+    /// @p focusScrollBlockedWindows are WINDOW ids, not screen ids: the
+    /// windows focus-follows-mouse must refuse because activating one would
+    /// scroll the strip past the per-context cap. Empty means nothing is
+    /// refused, which is what a cap of 100 percent resolves to.
     void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens,
-                                  const QStringList& verticalAxisScreens);
+                                  const QStringList& verticalAxisScreens, const QStringList& focusScrollBlockedWindows);
 
     /// Wire keys of the @ref scrollEffectBehaviour map. The spellings live in
     /// PhosphorProtocol::Service::ScrollBehaviourKey, shared with the KWin
@@ -124,6 +128,13 @@ public:
     static QString verticalAxisKey()
     {
         return PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
+    }
+    /// The one list of WINDOW ids on this map (see the setter's parameter
+    /// doc). It rides here rather than on a channel of its own because it
+    /// changes with the same per-screen pass that resolves its siblings.
+    static QString focusScrollBlockedWindowsKey()
+    {
+        return PhosphorProtocol::Service::ScrollBehaviourKey::FocusScrollBlockedWindows;
     }
 
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
