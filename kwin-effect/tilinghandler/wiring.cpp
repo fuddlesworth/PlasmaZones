@@ -318,11 +318,13 @@ void TilingHandler::fetchScrollingScreens()
             });
 }
 
-// The three scrolling behaviours the compositor owns, published by the daemon
-// as ALREADY-RESOLVED screen-id lists (rule ?? config decided daemon-side):
-// focus-follows-mouse, straddler crop, and the vertical-strip axis.
+// The four scrolling behaviours the compositor owns, published by the daemon
+// ALREADY RESOLVED (rule ?? config decided daemon-side): three screen-id
+// lists, being focus-follows-mouse, straddler crop and the vertical-strip
+// axis, and one WINDOW-id list naming what the focus-follows-mouse scroll
+// cap refuses.
 // Bring-up fetch with the same bounded retry as the scrolling-screens query
-// above; a failed Get leaves all three sets empty, which reads as "off
+// above; a failed Get leaves all four sets empty, which reads as "off
 // everywhere" — the historical behaviour before any of them was per-screen,
 // and the safe direction at bring-up: focus-follows-mouse stays quiet, no
 // column is cropped, and every strip runs horizontally until the daemon

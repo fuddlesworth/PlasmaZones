@@ -292,7 +292,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Focus follows the mouse");
     }
     if (type == ActionType::SetScrollFocusFollowsMouseMaxScroll) {
-        return PhosphorI18n::tr("Limit how far focus follows the mouse");
+        return PhosphorI18n::tr("Limit how far the strip scrolls");
     }
     if (type == ActionType::SetScrollStickyWindowHandling) {
         return PhosphorI18n::tr("Set sticky window handling");

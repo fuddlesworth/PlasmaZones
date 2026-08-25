@@ -580,13 +580,15 @@ public:
     {
         ++m_scrollingScreensGeneration;
         m_scrollingScreens.clear();
-        // The per-screen behaviour sets belong to the same dead session, and
-        // ALL THREE outlive the screen set they are keyed by if they are not
-        // cleared here: a stale crop entry keeps forcing composition
-        // session-wide, a stale focus-follows-mouse entry answers for a
-        // screen the new daemon may not run the scrolling engine on at all,
-        // and a stale vertical-axis entry answers Vertical for a screen the
-        // new daemon may lay out horizontally.
+        // The behaviour sets belong to the same dead session, and all FOUR
+        // outlive it if they are not cleared here: a stale crop entry keeps
+        // forcing composition session-wide, a stale focus-follows-mouse
+        // entry answers for a screen the new daemon may not run the
+        // scrolling engine on at all, a stale vertical-axis entry answers
+        // Vertical for a screen the new daemon may lay out horizontally,
+        // and the scroll-cap block list — the one set keyed by window
+        // rather than by screen — would keep refusing focus for windows
+        // whose strip no longer exists.
         clearScrollEffectBehaviourForTeardown();
         // The wheel chords need no teardown of their own. They are matched
         // per event against the (now empty) scrolling-screen set rather than
@@ -594,8 +596,10 @@ public:
         // matching and every axis event passes straight through.
     }
 
-    /// Drop the dead session's resolved scroll-behaviour map (all three
-    /// per-screen sets plus the seeded flag). Shared by the serviceUnregistered teardown
+    /// Drop the dead session's resolved scroll-behaviour map (the three
+    /// per-screen sets, the per-window scroll-cap block list, and the
+    /// seeded flag), and bump the write generation so a reply still in
+    /// flight from that session cannot repopulate any of them. Shared by the serviceUnregistered teardown
     /// (via clearScrollingScreensForTeardown) and by drainDeadSessionState,
     /// which repeats it at bring-up so the new session starts from a map it
     /// published rather than one the teardown happened to leave.
@@ -1143,7 +1147,7 @@ private:
     /// @p overPill (see noteScrollTabPress).
     void setScrollTabHoverCursor(bool overPill);
     /// Shared apply for the fetch reply and the live signal: replaces all
-    /// three sets from the wire map. Repaints when the CROP set moved (it is
+    /// four sets from the wire map. Repaints when the CROP set moved (it is
     /// painted state the compositor will not otherwise revisit) and,
     /// defensively, when the AXIS set moved, which signals a re-resolved
     /// layout rather than stale pixels of its own. Focus-follows-mouse is

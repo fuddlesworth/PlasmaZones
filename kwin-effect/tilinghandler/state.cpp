@@ -3,9 +3,11 @@
 
 // Per-session screen and behaviour state for TilingHandler: which screens the
 // daemon manages, which of those run the scrolling engine, the active layout
-// per screen, the daemon-resolved per-screen scroll behaviours (focus-follows-
-// mouse, straddler crop, strip axis), the focus-follows-mouse and wheel-focus
-// settings, and the wheel shortcut registration those settings drive.
+// per screen, the daemon-resolved scroll behaviours (the focus-follows-mouse,
+// straddler-crop and strip-axis screen sets, plus the per-WINDOW set naming
+// what the focus-follows-mouse scroll cap refuses), the focus-follows-mouse
+// and wheel-focus settings, and the wheel shortcut registration those settings
+// drive.
 //
 // What unites this file is that every member here is published BY the daemon
 // and consumed by the effect, so all of it is per-session and all of it is
@@ -169,20 +171,20 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // straight replace is correct even if a previous signal was missed.
     //
     // Boundary validation, mirroring slotActiveLayoutsChanged: this map
-    // crosses D-Bus from another process, and every half of it decides
+    // crosses D-Bus from another process, and every key of it decides
     // compositor behaviour (focus stealing, forced composition, which way the
     // strip slides). An a{sv} value arrives
     // either already demarshalled (the property Get path, which qdbus_cast
     // unwraps) or still wrapped in a QDBusVariant (a signal delivered without
     // a registered argument type) — unwrap one level before the type test, or
-    // every live update silently clears all three sets. Empty screen ids are
+    // every live update silently clears all four sets. Empty screen ids are
     // dropped: no window resolves to one, and they only defeat the change
     // gate below. A wire regression is warned about rather than being
     // indistinguishable from a legitimately-off session.
     //
-    // The return is OPTIONAL so the three keys can take different directions
+    // The return is OPTIONAL so the four keys can take different directions
     // on a MALFORMED value (as opposed to an absent one, which is a legitimate
-    // publish and reads as an empty set for all three). Empty is the safe
+    // publish and reads as an empty set for all four). Empty is the safe
     // direction for focus-follows-mouse and crop — both are behaviours that
     // simply stay off — but it is the WRONG direction for the axis, where it
     // silently re-lays every vertical strip horizontally on the next tile
@@ -193,7 +195,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // silent, which is why the contract must not rest on this file alone.
     QStringList parseWarnings;
     const auto toSet = [&parseWarnings](const QVariant& raw, QLatin1StringView key) {
-        return ScrollBehaviourParse::parseScreenIdList(raw, key, parseWarnings);
+        return ScrollBehaviourParse::parseIdList(raw, key, parseWarnings);
     };
     // One spelling per key, shared with the daemon's producer through
     // PhosphorProtocol, so the lookup and its diagnostic label cannot drift.

@@ -14,7 +14,7 @@
 #include <QDBusVariant>
 #include <QTest>
 
-using PlasmaZones::ScrollBehaviourParse::parseScreenIdList;
+using PlasmaZones::ScrollBehaviourParse::parseIdList;
 
 class TestScrollBehaviourParse : public QObject
 {
@@ -26,7 +26,7 @@ private Q_SLOTS:
     void absentReadsAsEngagedEmpty()
     {
         QStringList warnings;
-        const auto result = parseScreenIdList(QVariant(), QLatin1String("verticalAxis"), warnings);
+        const auto result = parseIdList(QVariant(), QLatin1String("verticalAxis"), warnings);
         QVERIFY(result.has_value());
         QVERIFY(result->isEmpty());
         QVERIFY(warnings.isEmpty());
@@ -39,7 +39,7 @@ private Q_SLOTS:
     void malformedDisengagesWithAWarning()
     {
         QStringList warnings;
-        const auto result = parseScreenIdList(QVariant(42), QLatin1String("verticalAxis"), warnings);
+        const auto result = parseIdList(QVariant(42), QLatin1String("verticalAxis"), warnings);
         QVERIFY(!result.has_value());
         QCOMPARE(warnings.size(), 1);
         QVERIFY(warnings.first().contains(QLatin1String("verticalAxis")));
@@ -51,12 +51,12 @@ private Q_SLOTS:
     {
         QStringList warnings;
         const QStringList screens{QStringLiteral("S1"), QStringLiteral("S2"), QStringLiteral("S1")};
-        const auto direct = parseScreenIdList(QVariant(screens), QLatin1String("cropStraddlers"), warnings);
+        const auto direct = parseIdList(QVariant(screens), QLatin1String("cropStraddlers"), warnings);
         QVERIFY(direct.has_value());
         QCOMPARE(*direct, (QSet<QString>{QStringLiteral("S1"), QStringLiteral("S2")}));
 
-        const auto wrapped = parseScreenIdList(QVariant::fromValue(QDBusVariant(QVariant(screens))),
-                                               QLatin1String("cropStraddlers"), warnings);
+        const auto wrapped = parseIdList(QVariant::fromValue(QDBusVariant(QVariant(screens))),
+                                         QLatin1String("cropStraddlers"), warnings);
         QVERIFY(wrapped.has_value());
         QCOMPARE(*wrapped, *direct);
         QVERIFY(warnings.isEmpty());
@@ -68,11 +68,42 @@ private Q_SLOTS:
     {
         QStringList warnings;
         const QStringList screens{QStringLiteral("S1"), QString(), QStringLiteral("S2")};
-        const auto result = parseScreenIdList(QVariant(screens), QLatin1String("focusFollowsMouse"), warnings);
+        const auto result = parseIdList(QVariant(screens), QLatin1String("focusFollowsMouse"), warnings);
         QVERIFY(result.has_value());
         QCOMPARE(*result, (QSet<QString>{QStringLiteral("S1"), QStringLiteral("S2")}));
         QCOMPARE(warnings.size(), 1);
         QVERIFY(warnings.first().contains(QLatin1String("focusFollowsMouse")));
+    }
+
+    /// The scroll-cap block list is the one key holding WINDOW ids rather than
+    /// screen ids, and it parses through the same path — which is the point of
+    /// the parser not naming either. Pinned because its fail direction is the
+    /// opposite of the axis key's: absent or malformed must read as "refuse
+    /// nothing", since the caller turns membership into a REFUSED focus and a
+    /// wire hiccup that refused everything would look like focus-follows-mouse
+    /// being broken rather than off.
+    void focusScrollBlockedWindowsParsesAndFailsOpen()
+    {
+        QStringList warnings;
+        const QLatin1String key("focusScrollBlockedWindows");
+
+        const auto absent = parseIdList(QVariant(), key, warnings);
+        QVERIFY(absent.has_value());
+        QVERIFY(absent->isEmpty());
+        QVERIFY(warnings.isEmpty());
+
+        const QStringList windows{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")};
+        const auto parsed = parseIdList(QVariant(windows), key, warnings);
+        QVERIFY(parsed.has_value());
+        QCOMPARE(*parsed, (QSet<QString>{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")}));
+        QVERIFY(warnings.isEmpty());
+
+        // Malformed disengages, and the CALLER's value_or supplies the empty
+        // set — so both unreadable directions end at "refuse nothing".
+        const auto malformed = parseIdList(QVariant(42), key, warnings);
+        QVERIFY(!malformed.has_value());
+        QVERIFY(malformed.value_or(QSet<QString>()).isEmpty());
+        QCOMPARE(warnings.size(), 1);
     }
 };
 

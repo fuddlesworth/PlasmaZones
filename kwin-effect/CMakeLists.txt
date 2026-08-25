@@ -153,6 +153,7 @@ set(plasmazones_effect_SRCS
     compositor/compositorclock.cpp
     compositor/compositorclock.h
     compositor/deferredwindowcommits.h
+    compositor/scrollbehaviourparse.h
     # virtualscreenid moved to libs/phosphor-identity (PhosphorIdentity::VirtualScreenId).
     # Consumers include <PhosphorIdentity/VirtualScreenId.h> directly; reachable
     # transitively via PhosphorCompositor::PhosphorCompositor's PhosphorIdentity link.

@@ -169,15 +169,17 @@ inline constexpr double MaxColumnWidthRatio = 1.0;
 
 /// Bounds for the focus-follows-mouse scroll cap, niri's
 /// `max-scroll-amount`, as a FRACTION of the viewport's extent along the
-/// strip. Installed here for the same lockstep reason as the pair above: the
-/// descriptor validator and the zones-layer context resolver both check
-/// against these.
+/// strip. Installed here for the same lockstep reason as the pair above,
+/// though the readers differ: the zones-layer context resolver checks the
+/// pair, while the descriptor validator checks only the CEILING, because
+/// `hasNumberInRange` carries its own zero floor and the minimum here simply
+/// restates it. The rules-model label renderer reads the pair too.
 ///
-/// The ceiling is 1.0 and it means "no cap", not an arbitrary limit: the
-/// window under the pointer is by definition at least partly on screen, so
-/// bringing it in never costs a full viewport of scroll. The floor is a real
-/// setting rather than a disabled one, meaning focus only follows the pointer
-/// onto windows already fully in view.
+/// The ceiling is 1.0 and it means "no cap" as a SENTINEL rather than as a
+/// measured limit — see ScrollEngine::windowsBeyondFocusScrollLimit, where a
+/// recentring step can genuinely cost more than one viewport. The floor is a
+/// real setting rather than a disabled one, meaning focus only follows the
+/// pointer onto windows already fully in view.
 inline constexpr double MinFocusFollowsMouseMaxScrollRatio = 0.0;
 inline constexpr double MaxFocusFollowsMouseMaxScrollRatio = 1.0;
 

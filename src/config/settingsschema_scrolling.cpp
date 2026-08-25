@@ -28,6 +28,7 @@ using SchemaValidators::canonicalFontFamily;
 using SchemaValidators::canonicalProportionList;
 using SchemaValidators::clampDouble;
 using SchemaValidators::clampInt;
+using SchemaValidators::clampIntOrDefault;
 using SchemaValidators::validIntOr;
 
 // The config-space enum vocabulary in ConfigDefaults and the engine's own
@@ -451,7 +452,13 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          CD::scrollingFocusFollowsMouseMaxScroll(),
          QMetaType::Int,
          {},
-         clampInt(CD::scrollingFocusFollowsMouseMaxScrollMin(), CD::scrollingFocusFollowsMouseMaxScrollMax())},
+         // clampIntOrDefault, not clampInt: this key's minimum is 0, and 0 is
+         // the most RESTRICTIVE setting (focus follows the pointer only onto
+         // columns already fully in view). A corrupt entry read through
+         // QVariant::toInt() answers 0, so a plain clamp would turn unreadable
+         // config into the strictest possible behaviour instead of the default.
+         clampIntOrDefault(CD::scrollingFocusFollowsMouseMaxScrollMin(), CD::scrollingFocusFollowsMouseMaxScrollMax(),
+                           CD::scrollingFocusFollowsMouseMaxScroll())},
         {CD::stickyWindowHandlingKey(),
          CD::scrollingStickyWindowHandling(),
          QMetaType::Int,

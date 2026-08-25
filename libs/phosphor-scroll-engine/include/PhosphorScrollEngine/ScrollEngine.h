@@ -522,10 +522,22 @@ public:
     ///
     /// The daemon publishes the answer to the KWin effect, which owns
     /// focus-follows-mouse and cannot ask this question per pointer event.
-    /// 100 or more is "no cap" and answers empty without walking the strip:
-    /// a window under the pointer is by definition at least partly on
-    /// screen, so the policy can never need to scroll a full viewport to
-    /// bring it in.
+    ///
+    /// 100 or more is the "no cap" SENTINEL and answers empty without
+    /// walking the strip, which is the shipped default and so the case worth
+    /// short-circuiting. Read it as the sentinel it is rather than as a
+    /// geometric claim: under CenterFocusedColumn::Always a step from a
+    /// viewport-wide column to a narrow one costs more than one viewport
+    /// (the recentring pays half of each column plus the gap), so a cap of
+    /// exactly 100 is NOT equivalent to measuring against the viewport.
+    /// Nothing depends on the two agreeing, but a future reader should not
+    /// infer that they do.
+    ///
+    /// Callers refuse on the answer, so every question this cannot answer —
+    /// an unknown screen, an empty strip, a degenerate work area — comes
+    /// back empty. Fully minimized columns are skipped rather than measured:
+    /// they hold no strip extent, so the centering arms would answer about
+    /// nothing, and their tiles are not focus targets under a pointer.
     QStringList windowsBeyondFocusScrollLimit(const QString& screenId, int maxScrollPercent) const;
 
     // ═══════════════════════════════════════════════════════════════════════

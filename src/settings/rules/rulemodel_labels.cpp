@@ -691,8 +691,8 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (action.type == ActionType::SetScrollFocusFollowsMouseMaxScroll) {
             return fractionSummary(
                 raw, PhosphorRules::MinFocusFollowsMouseMaxScrollRatio,
-                PhosphorRules::MaxFocusFollowsMouseMaxScrollRatio, PhosphorI18n::tr("Focus scroll limit"),
-                PhosphorI18n::tr("Focus scroll limit (invalid)"), PhosphorI18n::tr("Focus scroll limit: %1%"));
+                PhosphorRules::MaxFocusFollowsMouseMaxScrollRatio, PhosphorI18n::tr("Strip scroll limit"),
+                PhosphorI18n::tr("Strip scroll limit (invalid)"), PhosphorI18n::tr("Strip scroll limit: %1%"));
         }
         if (action.type == ActionType::SetScrollInsertPosition) {
             const QString token = raw.toString();

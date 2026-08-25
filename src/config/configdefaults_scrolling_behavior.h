@@ -320,6 +320,17 @@ static_assert(ConfigDefaultsScrollingBehavior::scrollingViewScrollStepPercent()
                   && ConfigDefaultsScrollingBehavior::scrollingViewScrollStepPercent()
                       <= ConfigDefaultsScrollingBehavior::scrollingStepPercentMax(),
               "ConfigDefaults::scrollingViewScrollStepPercent() outside the declared [min, max] range");
+// The focus-follows-mouse scroll cap. Worth stating why it needs its own
+// guard even though its default EQUALS its maximum: that equality is exactly
+// what makes every other check degenerate. The schema clamp, and the schema
+// test's validator rows, all compare 100 against 100 today, so lowering the
+// maximum alone would leave the default outside its own range with nothing in
+// the tree objecting — the schema would simply snap every read down.
+static_assert(ConfigDefaultsScrollingBehavior::scrollingFocusFollowsMouseMaxScroll()
+                      >= ConfigDefaultsScrollingBehavior::scrollingFocusFollowsMouseMaxScrollMin()
+                  && ConfigDefaultsScrollingBehavior::scrollingFocusFollowsMouseMaxScroll()
+                      <= ConfigDefaultsScrollingBehavior::scrollingFocusFollowsMouseMaxScrollMax(),
+              "ConfigDefaults::scrollingFocusFollowsMouseMaxScroll() outside the declared [min, max] range");
 // Edge auto-scroll, same guard as every other ranged default here. Without
 // these a retuned default outside its own declared range would not fail the
 // build; it would be silently snapped by the schema's clamp on first read.

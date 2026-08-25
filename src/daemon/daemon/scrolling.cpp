@@ -515,7 +515,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         }
     }
 
-    // Publish the three effect-owned lists in ONE push, after the walk. They
+    // Publish the effect-owned lists in ONE push, after the walk. They
     // leave here UNSORTED and are canonicalized at the ADAPTOR boundary: the
     // walk iterates a QSet, whose order is hash order and is not stable across
     // insertions, so the same membership could be built in two different orders

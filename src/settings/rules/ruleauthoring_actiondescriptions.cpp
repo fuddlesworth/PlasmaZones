@@ -355,9 +355,9 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetScrollFocusFollowsMouseMaxScroll) {
         return PhosphorI18n::tr(
-            "Caps how far the strip may scroll when the pointer picks up a column that is partly "
-            "off screen on the matched context. Past the cap the pointer is ignored and focus "
-            "stays put. At 100 percent nothing is ever refused.");
+            "Caps how far the strip may scroll on the matched context when the pointer moves "
+            "onto a column that is partly off screen. Past the cap the pointer is ignored and "
+            "focus stays put. At 100% nothing is ignored.");
     }
     if (type == ActionType::SetScrollStickyWindowHandling) {
         return PhosphorI18n::tr(

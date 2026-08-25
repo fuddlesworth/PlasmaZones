@@ -6,7 +6,7 @@
 // The scrollEffectBehaviour value parser, extracted from
 // TilingHandler::applyScrollEffectBehaviour so its three-way contract is unit
 // testable (tests/unit/compositor-common/test_scroll_behaviour_parse.cpp):
-// the map crosses D-Bus from another process, and every half of it decides
+// the map crosses D-Bus from another process, and every key of it decides
 // compositor behaviour, so the parse failing SILENTLY on screen is exactly
 // what the tests exist to prevent. Header-only plain Qt types, no KWin — the
 // test_strip_motion_sampler shape.
@@ -22,7 +22,9 @@
 
 namespace PlasmaZones::ScrollBehaviourParse {
 
-/// One screen-id list out of the scrollEffectBehaviour map.
+/// One id list out of the scrollEffectBehaviour map. Three of the four are
+/// screen-id lists; the fourth names windows. The parse is identical for
+/// both, which is why this names neither.
 ///
 /// The three-way contract, load-bearing at the caller:
 ///  - ABSENT (invalid QVariant): a legitimate publish with that key
@@ -46,7 +48,7 @@ namespace PlasmaZones::ScrollBehaviourParse {
 /// A container Qt's demarshaller did not special-case arrives as a raw
 /// QDBusArgument, which converts to NOTHING and would read as "off
 /// everywhere" — it is demarshalled explicitly instead.
-inline std::optional<QSet<QString>> parseScreenIdList(const QVariant& raw, QLatin1StringView key, QStringList& warnings)
+inline std::optional<QSet<QString>> parseIdList(const QVariant& raw, QLatin1StringView key, QStringList& warnings)
 {
     QVariant v = raw;
     if (v.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
@@ -66,12 +68,12 @@ inline std::optional<QSet<QString>> parseScreenIdList(const QVariant& raw, QLati
     }
     const QStringList list = v.toStringList();
     out.reserve(list.size());
-    for (const QString& screenId : list) {
-        if (screenId.isEmpty()) {
+    for (const QString& id : list) {
+        if (id.isEmpty()) {
             warnings.append(QStringLiteral("scrollEffectBehaviour: dropping empty id from %1").arg(key));
             continue;
         }
-        out.insert(screenId);
+        out.insert(id);
     }
     return out;
 }

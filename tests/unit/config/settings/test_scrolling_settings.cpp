@@ -790,6 +790,16 @@ private Q_SLOTS:
         QCOMPARE(ffmCap->defaultValue.toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
         QCOMPARE(ffmCap->validator(-5).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
         QCOMPARE(ffmCap->validator(999).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
+        // A value that does not convert falls back to the DEFAULT, not to the
+        // minimum. This key is the reason clampIntOrDefault exists: its minimum
+        // is 0 and 0 is the most restrictive setting, so the plain clamp — which
+        // reads an unconvertible QVariant as 0 and then keeps it — would turn a
+        // corrupt config entry into "focus barely follows the pointer at all".
+        QCOMPARE(ffmCap->validator(QStringLiteral("abc")).toInt(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
+        QCOMPARE(ffmCap->validator(QVariant()).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
+        // A numeric STRING still converts, so it clamps rather than falling back.
+        QCOMPARE(ffmCap->validator(QStringLiteral("40")).toInt(), 40);
         const auto* respectMin = findKey(schema, group, ConfigDefaults::respectMinimumSizeKey());
         QVERIFY(respectMin);
         QCOMPARE(respectMin->defaultValue.toBool(), ConfigDefaults::scrollingRespectMinimumSize());

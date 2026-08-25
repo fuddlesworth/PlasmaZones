@@ -51,6 +51,23 @@ inline auto clampInt(int minVal, int maxVal)
     };
 }
 
+/// Range clamp for numeric int keys whose MINIMUM is a meaningful setting
+/// rather than a floor nobody chooses. clampInt is fine when the minimum is
+/// inert, because QVariant::toInt() answers 0 for a value it cannot convert
+/// and 0 then clamps up to the minimum — the user gets the tamest setting.
+/// Where the minimum is itself the most restrictive choice, that same path
+/// turns a corrupt or hand-mangled config entry into the strictest possible
+/// behaviour, which is the opposite of what an unreadable value should mean.
+/// So a value that does not convert falls back to @p defaultVal instead.
+inline auto clampIntOrDefault(int minVal, int maxVal, int defaultVal)
+{
+    return [minVal, maxVal, defaultVal](const QVariant& v) -> QVariant {
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        return ok ? qBound(minVal, raw, maxVal) : defaultVal;
+    };
+}
+
 /// Snap-to-default enum validator: accept a value only if it appears in the
 /// explicit valid set, otherwise return @p fallback. Used for enums where
 /// qBound would silently reinterpret out-of-range values as the nearest

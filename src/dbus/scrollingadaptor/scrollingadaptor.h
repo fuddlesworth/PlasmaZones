@@ -64,9 +64,13 @@ public:
     /// union has already dropped.
     QStringList scrollingScreens() const;
 
-    /// The three scrolling facts the COMPOSITOR owns, as already-resolved
-    /// screen-id lists: `{"focusFollowsMouse": [...], "cropStraddlers": [...],
-    /// "verticalAxis": [...]}`.
+    /// The four scrolling facts the COMPOSITOR owns, already resolved:
+    /// `{"focusFollowsMouse": [...], "cropStraddlers": [...],
+    /// "verticalAxis": [...], "focusScrollBlockedWindows": [...]}`. The
+    /// first three are screen-id lists. The fourth is the odd one out and
+    /// holds WINDOW ids: the windows the focus-follows-mouse scroll cap
+    /// refuses to focus, which is a fact about where each strip's view
+    /// currently sits and so cannot be expressed as screen membership.
     ///
     /// The first two are per-context rule slots
     /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer
@@ -78,20 +82,23 @@ public:
     /// knowledge: it answers each question with a set lookup and needs no
     /// fallback of its own. A screen absent from a list has that behaviour
     /// OFF (for verticalAxis, a horizontal strip); a screen absent from the
-    /// daemon's scrolling set appears in none of the three.
+    /// daemon's scrolling set appears in none of the three screen lists.
     ///
-    /// One map rather than three list properties so the compositor pays a
+    /// One map rather than four list properties so the compositor pays a
     /// single bring-up query and a single change subscription for what is
     /// really one push.
     QVariantMap scrollEffectBehaviour() const;
 
     /// Replace the published behaviour map and broadcast on a real change.
-    /// Driven by the daemon's per-screen scrolling pass, which resolves all
-    /// three while it is already walking the scrolling screens. Emit-on-change:
+    /// Driven by the daemon's per-screen scrolling pass, which resolves the
+    /// three screen lists while it is already walking the scrolling screens.
+    /// The window list is not resolved in that walk: only its per-screen
+    /// PERCENT is, and the walk over the strip that turns it into window ids
+    /// is re-run on every relayout. Emit-on-change:
     /// the compositor's copy is a plain cache it can re-query, so a redundant
     /// broadcast would only cost a rule-cache invalidation on the other side.
     ///
-    /// All three lists are SORTED and de-duplicated here rather than taken on
+    /// All four lists are SORTED and de-duplicated here rather than taken on
     /// trust. The published contract says sorted, and the change gate is a
     /// list compare, so canonicalizing at the one write site is what makes
     /// both true whatever order the producer walked its screens in.

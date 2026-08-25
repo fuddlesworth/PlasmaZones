@@ -821,8 +821,9 @@ void ActionRegistry::registerBuiltinsAppearance()
                      // limit, and half a viewport is the useful middle.
                      .defaultDisplay = 50.0}},
         .category = QStringLiteral("layoutEngine"),
-        // 36 is the toggle this caps and 37 the strip axis, so the cap takes
-        // the next free slot rather than sitting beside its toggle.
+        // 35 through 37 are taken (sticky handling, the toggle this caps, the
+        // strip axis), so the cap takes the next free slot rather than sitting
+        // beside its toggle.
         .displayOrder = 38,
         .tags = {QString(Tag::LayoutEngine)},
     });

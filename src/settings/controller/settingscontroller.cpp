@@ -136,6 +136,8 @@ QVariantMap SettingsController::scrollingConstants() const
         // see ConfigDefaults.
         {QStringLiteral("stepPercentMin"), ConfigDefaults::scrollingStepPercentMin()},
         {QStringLiteral("stepPercentMax"), ConfigDefaults::scrollingStepPercentMax()},
+        {QStringLiteral("ffmMaxScrollMin"), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin()},
+        {QStringLiteral("ffmMaxScrollMax"), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax()},
         // Preset kind + the schema's stored-index ceiling. The QML spins take
         // the smaller of this and the live list length, so a shrunk list can
         // never leave the spin offering an index the schema would clamp.

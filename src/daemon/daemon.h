@@ -530,7 +530,8 @@ private:
     /// the KWin effect reads to paint the pills; the drop-indicator paint
     /// overrides to the OverlayService; and the focus-follows-mouse,
     /// crop-straddlers and vertical-axis screen lists to the Scrolling
-    /// adaptor as one behaviour map.
+    /// adaptor as one behaviour map, alongside the window list the
+    /// focus-follows-mouse scroll cap refuses.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
     /// Re-push the scrolling behaviour map with a freshly computed
     /// focus-follows-mouse block list, keeping the three screen lists
