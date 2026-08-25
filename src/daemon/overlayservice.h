@@ -1574,6 +1574,20 @@ private:
     void updateZonesForAllWindows();
 
     /**
+     * @brief Re-stamp the already-pushed zones list with the current highlight
+     *        properties on every slot.
+     *
+     * The zones list carries a baked per-zone isHighlighted flag, and both QML
+     * contents OR that flag with the live highlightedZoneId / highlightedZoneIds
+     * properties. Marking the zone data dirty is not enough to keep the two in
+     * step: the dirty flag is only serviced by updateShaderUniforms, which runs
+     * only while a screen renders through a shader pack. This re-stamps in place
+     * (no zone rebuild, no labels-texture work, no shader re-apply) so a highlight
+     * change is complete the moment it is written.
+     */
+    void restampZoneHighlights();
+
+    /**
      * @brief Initialize and show overlay for a given screen or cursor position
      * @param cursorScreen Screen where cursor is located (nullptr = show on all monitors)
      *

@@ -390,6 +390,78 @@ void OverlayService::updateGeometries()
     // updateZonesForAllWindows() is the single authoritative version bump point.
 }
 
+void OverlayService::restampZoneHighlights()
+{
+    // The zones list each slot already holds carries a baked isHighlighted per
+    // zone (overlay_data.cpp stamps it from the ZoneDetector, updateOverlayWindow
+    // re-stamps it through patchZonesWithHighlight), and both QML contents OR
+    // that flag with the live highlightedZoneId / highlightedZoneIds properties.
+    // So a highlight write that only touches the properties leaves the zone that
+    // was highlighted when the list was last pushed lit as well: the overlay
+    // showed the previous zone alongside the one under the cursor, and only the
+    // next full push — refreshFromIdle() on the following activation — cleared
+    // it. Marking m_zoneDataDirty does not close that gap either, because the
+    // flag's only consumer is updateShaderUniforms, whose timer runs solely when
+    // a screen renders through a shader pack; on a plain-rectangle overlay
+    // nothing ever serviced it.
+    //
+    // Re-stamping the list that is already there keeps this off the rebuild
+    // path: no zone geometry recompute, no labels-texture build, no shader
+    // re-apply. A blanked (warm-idled) or never-populated slot holds an empty
+    // list and is skipped, so the idle blank is preserved.
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        if (!it_.value().overlayPhysScreen) {
+            // Dismissed slot - matches highlightZone / highlightZones, whose
+            // property writes skip it too. Re-stamping here would patch the
+            // list from THIS slot's props, which those two never updated, so
+            // the stale highlight would be baked back in rather than cleared.
+            // The next show rebuilds the list from scratch
+            // (updateOverlayWindow) off the props clearHighlight leaves clean,
+            // which is the path that owns a dismissed slot's zone data.
+            continue;
+        }
+        auto* slot = it_.value().mainOverlaySlot();
+        if (!slot) {
+            continue;
+        }
+        const QVariantList current = slot->property(OverlayQmlPropertyNames::Zones.data()).toList();
+        if (current.isEmpty()) {
+            continue;
+        }
+        const QVariantList patched = patchZonesWithHighlight(current, slot);
+        if (patched == current) {
+            // Nothing to re-stamp on this screen. A highlight write reaches
+            // every live slot, but the zone that changed lives on one of them,
+            // so on a multi-monitor setup most screens land here every time.
+            // The write matters: `zones` is a QML `property var` feeding the
+            // Repeater model, so re-pushing an identical list re-evaluates
+            // every ZoneItem's bindings (and the shaderConfig.zones chain) for
+            // no change in output, on the drag path. previewZones and
+            // highlightedCount are derived from this same list and are written
+            // with it, so an unchanged list leaves both already correct.
+            continue;
+        }
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
+        // previewZones mirrors the patched list whenever LayoutPreview mode is
+        // active (updateOverlayWindow writes both from the same value); leaving
+        // it behind would keep the miniature previews on the stale highlight.
+        if (!slot->property("previewZones").toList().isEmpty()) {
+            writeQmlProperty(slot, QStringLiteral("previewZones"), patched);
+        }
+        // highlightedCount gates RenderNodeOverlayContent's cursor-hover
+        // fallback, so it has to track the same list it is derived from.
+        if (slot->property("useShader").toBool()) {
+            int highlightedCount = 0;
+            for (const QVariant& z : patched) {
+                if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+                    ++highlightedCount;
+                }
+            }
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), highlightedCount);
+        }
+    }
+}
+
 void OverlayService::highlightZone(const QString& zoneId)
 {
     // Mark zone data dirty for shader overlay updates - but never while
@@ -411,6 +483,8 @@ void OverlayService::highlightZone(const QString& zoneId)
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         }
     }
+
+    restampZoneHighlights();
 }
 
 void OverlayService::highlightZones(const QStringList& zoneIds)
@@ -434,6 +508,8 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
         }
     }
+
+    restampZoneHighlights();
 }
 
 void OverlayService::clearHighlight()
@@ -456,6 +532,8 @@ void OverlayService::clearHighlight()
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         }
     }
+
+    restampZoneHighlights();
 }
 
 void OverlayService::updateMousePosition(int cursorX, int cursorY)
