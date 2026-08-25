@@ -62,9 +62,25 @@ inline auto clampInt(int minVal, int maxVal)
 inline auto clampIntOrDefault(int minVal, int maxVal, int defaultVal)
 {
     return [minVal, maxVal, defaultVal](const QVariant& v) -> QVariant {
+        // Through toDouble rather than toInt, because toInt's `ok` is not the
+        // guard it looks like: a JSON number too large for an int comes back
+        // WRAPPED, with ok still true, and the wrap is usually negative — so
+        // an absurd entry would clamp to the minimum, which is the strictest
+        // setting and the exact outcome this validator exists to avoid.
+        // Reading the double first makes out-of-range unrepresentable rather
+        // than silently reinterpreted.
         bool ok = false;
-        const int raw = v.toInt(&ok);
-        return ok ? qBound(minVal, raw, maxVal) : defaultVal;
+        const double raw = v.toDouble(&ok);
+        if (!ok || qIsNaN(raw)) {
+            return defaultVal;
+        }
+        if (raw <= static_cast<double>(minVal)) {
+            return minVal;
+        }
+        if (raw >= static_cast<double>(maxVal)) {
+            return maxVal;
+        }
+        return static_cast<int>(qRound(raw));
     };
 }
 

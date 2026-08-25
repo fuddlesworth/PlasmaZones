@@ -15,7 +15,8 @@ import org.kde.kirigami as Kirigami
  * shared components the simple page also hosts, in that order (the Strip
  * direction card carries the per-monitor scope chip on both tiers). The
  * triggers card, ScrollingDragInsertCard, appears only on this advanced leaf
- * (the page's tier, not a card flag), matching the tiling twin. The Edge auto-scroll and Drop indicator cards follow it in that
+ * (the page's tier, not a card flag), matching the tiling twin. The Edge
+ * auto-scroll and Drop indicator cards follow it in that
  * order, because both only act during the drag those triggers arm: the first
  * scrolls the strip while the drag is held at an edge, and the second paints
  * the target it is aiming at.

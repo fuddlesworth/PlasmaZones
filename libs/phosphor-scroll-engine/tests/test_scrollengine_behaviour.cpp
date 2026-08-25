@@ -84,6 +84,7 @@ private Q_SLOTS:
     void retileKeepsClientDecidedWidthsUnlessARulePinsOne();
     void wrongTypedBehaviourOverridesAreRejected();
     void focusScrollLimitNamesTheWindowsPastTheCap();
+    void focusScrollLimitNamesEveryTileOfABlockedColumn();
     void focusScrollLimitFailsOpen();
 
 private:
@@ -495,9 +496,9 @@ void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()
 void TestScrollEngineBehaviour::focusScrollLimitNamesTheWindowsPastTheCap()
 {
     // The daemon publishes this list as membership and the compositor answers
-    // a pointer with one set lookup, so what it names has to be windows, and
-    // it has to name EVERY window of a column past the cap rather than the
-    // column's first tile.
+    // a pointer with one set lookup, so what it names has to be windows. This
+    // covers the sentinel, the clamp and the shape of the answer on
+    // single-tile columns; the multi-tile expansion is the sibling below.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
@@ -536,6 +537,48 @@ void TestScrollEngineBehaviour::focusScrollLimitNamesTheWindowsPastTheCap()
     for (const QString& windowId : half) {
         QVERIFY2(none.contains(windowId), qPrintable(windowId));
     }
+}
+
+void TestScrollEngineBehaviour::focusScrollLimitNamesEveryTileOfABlockedColumn()
+{
+    // The query asks its question per COLUMN, because the cost of focusing a
+    // window is a property of the column it sits in. What that must not do is
+    // answer with the column: the compositor matches the window under the
+    // pointer, so a stacked or tabbed column past the cap has to contribute
+    // EVERY one of its tiles. A per-column walk that forgot to expand would
+    // pass every other assertion in the suite while silently letting the
+    // pointer focus the second tile of a refused column.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.5;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Column 0 is a lone tile, column 1 stacks two: the first two arrivals
+    // take a column each under the default insert, and only then does the
+    // third go INTO the column the second opened.
+    settings->focusNewWindows = true;
+    engine->refreshConfigFromSettings();
+    engine->windowOpened(QStringLiteral("app|solo"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|stackA"), kS1, 0, 0);
+    settings->insertPosition = static_cast<int>(ScrollInsertPosition::IntoActiveColumn);
+    engine->refreshConfigFromSettings();
+    engine->windowOpened(QStringLiteral("app|stackB"), kS1, 0, 0);
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columnCount(), 2);
+
+    // Focus the lone column, so the stacked one is the one that costs a scroll.
+    engine->focusColumnFirst(kS1);
+    QCOMPARE(state->strip().activeColumnIndex(), 0);
+
+    const QStringList blocked = engine->windowsBeyondFocusScrollLimit(kS1, 0);
+    QVERIFY2(blocked.contains(QStringLiteral("app|stackA")), qPrintable(blocked.join(QLatin1Char(','))));
+    QVERIFY2(blocked.contains(QStringLiteral("app|stackB")), qPrintable(blocked.join(QLatin1Char(','))));
+    // The focused column is never refused, however tight the cap.
+    QVERIFY(!blocked.contains(QStringLiteral("app|solo")));
 }
 
 void TestScrollEngineBehaviour::focusScrollLimitFailsOpen()

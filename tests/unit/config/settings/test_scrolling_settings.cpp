@@ -800,6 +800,20 @@ private Q_SLOTS:
         QCOMPARE(ffmCap->validator(QVariant()).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
         // A numeric STRING still converts, so it clamps rather than falling back.
         QCOMPARE(ffmCap->validator(QStringLiteral("40")).toInt(), 40);
+        // The JSON backend hands a number back as a DOUBLE, so those are the
+        // values this validator really sees. Fractions round rather than
+        // truncate, matching what the slider would have written.
+        QCOMPARE(ffmCap->validator(50.0).toInt(), 50);
+        QCOMPARE(ffmCap->validator(50.7).toInt(), 51);
+        // The reason this reads the double rather than the int: QVariant's
+        // int conversion WRAPS an out-of-range number and still reports
+        // success, and the wrap is typically negative, so a plain clamp would
+        // land on the minimum — the most restrictive setting, from the most
+        // obviously garbage input. Both ends must saturate, not wrap.
+        QCOMPARE(ffmCap->validator(1.0e12).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
+        QCOMPARE(ffmCap->validator(-1.0e12).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
+        QCOMPARE(ffmCap->validator(QVariant::fromValue(qlonglong(5000000000))).toInt(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
         const auto* respectMin = findKey(schema, group, ConfigDefaults::respectMinimumSizeKey());
         QVERIFY(respectMin);
         QCOMPARE(respectMin->defaultValue.toBool(), ConfigDefaults::scrollingRespectMinimumSize());
