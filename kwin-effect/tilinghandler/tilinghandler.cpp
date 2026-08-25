@@ -98,7 +98,13 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // monitor while the global setting is off must not be bailed out from
     // here — that bail sat upstream of the per-screen read below and made the
     // rule a one-way switch (off yes, on never).
-    if (ffmOffEverywhere() || m_managedScreens.isEmpty()) {
+    // KWin::effects folded into the entry bail rather than tested at the two
+    // derefs below, which is where every sibling in this file guards it (see
+    // atScrollPark's note: an unguarded deref in compositor code is a session
+    // crash, not a wrong answer). Clearing the latch on the way out is right
+    // for the same reason it is right for the other two arms — there is no
+    // compositor left for a suppressed move to be suppressed against.
+    if (!KWin::effects || ffmOffEverywhere() || m_managedScreens.isEmpty()) {
         m_ffmSuppressPending = false;
         return;
     }

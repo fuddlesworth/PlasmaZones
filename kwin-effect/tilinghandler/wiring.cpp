@@ -310,8 +310,17 @@ void TilingHandler::fetchScrollingScreens()
                     // and nothing has seeded the set.
                     if (m_scrollingScreensFetchRetriesLeft > 0) {
                         --m_scrollingScreensFetchRetriesLeft;
-                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                            fetchScrollingScreens();
+                        // Bail if the generation moved while the retry was
+                        // armed, the same guard the tab fetches carry: a daemon
+                        // loss voids in-flight fetches by bumping it, and a retry
+                        // into the dead service would only re-bump and warn. Worse,
+                        // a retry armed before a restart fires AFTER the new
+                        // session's own dispatch and would discard that fresh
+                        // reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, scrollQueryGeneration] {
+                            if (scrollQueryGeneration == m_scrollingScreensQueryGeneration) {
+                                fetchScrollingScreens();
+                            }
                         });
                     }
                 }
@@ -379,8 +388,17 @@ void TilingHandler::fetchScrollEffectBehaviour()
                     qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
                     if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
                         --m_scrollEffectBehaviourFetchRetriesLeft;
-                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                            fetchScrollEffectBehaviour();
+                        // Bail if the generation moved while the retry was
+                        // armed, the same guard the tab fetches carry: a daemon
+                        // loss voids in-flight fetches by bumping it, and a retry
+                        // into the dead service would only re-bump and warn. Worse,
+                        // a retry armed before a restart fires AFTER the new
+                        // session's own dispatch and would discard that fresh
+                        // reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, queryGeneration] {
+                            if (queryGeneration == m_scrollEffectBehaviourQueryGeneration) {
+                                fetchScrollEffectBehaviour();
+                            }
                         });
                     }
                 }
@@ -442,8 +460,17 @@ void TilingHandler::fetchActiveLayouts()
                                         << reply.error().message();
                     if (m_activeLayoutsFetchRetriesLeft > 0) {
                         --m_activeLayoutsFetchRetriesLeft;
-                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                            fetchActiveLayouts();
+                        // Bail if the generation moved while the retry was
+                        // armed, the same guard the tab fetches carry: a daemon
+                        // loss voids in-flight fetches by bumping it, and a retry
+                        // into the dead service would only re-bump and warn. Worse,
+                        // a retry armed before a restart fires AFTER the new
+                        // session's own dispatch and would discard that fresh
+                        // reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, layoutsQueryGeneration] {
+                            if (layoutsQueryGeneration == m_activeLayoutsQueryGeneration) {
+                                fetchActiveLayouts();
+                            }
                         });
                     }
                 }
