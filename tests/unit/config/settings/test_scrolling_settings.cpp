@@ -798,8 +798,10 @@ private Q_SLOTS:
         QCOMPARE(ffmCap->validator(QStringLiteral("abc")).toInt(),
                  ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
         QCOMPARE(ffmCap->validator(QVariant()).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
-        // A numeric STRING still converts, so it clamps rather than falling back.
+        // A numeric STRING still converts, so it clamps rather than falling back,
+        // and a FRACTIONAL one converts too rather than reading as unparseable.
         QCOMPARE(ffmCap->validator(QStringLiteral("40")).toInt(), 40);
+        QCOMPARE(ffmCap->validator(QStringLiteral("40.7")).toInt(), 41);
         // The JSON backend hands a number back as a DOUBLE, so those are the
         // values this validator really sees. Fractions round rather than
         // truncate, matching what the slider would have written.
