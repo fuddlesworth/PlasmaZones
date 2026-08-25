@@ -578,10 +578,13 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // toggle-off while another context holds overflow on the same screen.
     m_overflow.clearForRemovedScreens(m_autotileScreens);
 
-    // Clear per-screen desktop maps for removed screens — both the sticky-pin
-    // override and the per-output-VD map (#648).
+    // Clear the sticky-pin override for removed screens. The per-output-VD map
+    // (#648) deliberately STAYS: these screens are leaving autotile, not going
+    // away, and their desktop is compositor truth this engine cannot re-derive.
+    // Dropping it fell back to the global desktop, which is set once at startup
+    // — see ScreenContextTracker::releaseScreenOwnership.
     for (const QString& screenId : removed) {
-        m_context.removeScreen(screenId);
+        m_context.releaseScreenOwnership(screenId);
     }
 
     // Drop stashed bags belonging to screens that are no longer connected. They

@@ -170,7 +170,10 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 // (the sibling prune's payload keeps the same contract).
                 releasedScreens.insert(screenId);
             });
-        m_context.removeScreen(screenId);
+        // Ownership only — the per-output desktop STAYS. This screen is
+        // leaving scrolling, not disappearing, and its desktop is compositor
+        // truth this engine cannot re-derive (see releaseScreenOwnership).
+        m_context.releaseScreenOwnership(screenId);
         // Even a STATELESS leaving screen (seed pushed before any window
         // arrived) must drop its per-screen bookkeeping — the state-driven
         // sweep in releaseScreenState never ran for it. The tab-strip clear

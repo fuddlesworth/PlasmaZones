@@ -108,10 +108,34 @@ public:
 
     // ── Bulk per-screen cleanup ──────────────────────────────────────────────
     /// Drop both per-screen maps' entries for a screen leaving the engine's set.
+    ///
+    /// For an OUTPUT that is going away. A screen that merely leaves this
+    /// engine's mode set must use releaseScreenOwnership instead — see its
+    /// doc for why dropping the per-output desktop there is a correctness bug.
     void removeScreen(const QString& screenId)
     {
         m_screenDesktopOverride.remove(screenId);
         m_screenCurrentDesktop.remove(screenId);
+    }
+    /// Drop only the ENGINE-OWNED half for a screen leaving this engine's mode
+    /// set, keeping the per-output desktop.
+    ///
+    /// The sticky pin is this engine's own bookkeeping and is meaningless once
+    /// the engine stops managing the screen. The per-output desktop is not: it
+    /// is compositor truth about which desktop the screen is showing, true
+    /// whoever manages it, and the engine cannot reconstruct it.
+    ///
+    /// Dropping it made screenDesktop() silently fall back to the GLOBAL
+    /// desktop — which the daemon sets exactly once at startup and never
+    /// updates, because every later change arrives through the per-output
+    /// screenDesktopChanged path. So a screen that left an engine's set and
+    /// came back keyed EVERY context to the startup desktop until its next
+    /// per-output change: on the scrolling engine that merged every virtual
+    /// desktop's strip into one, and windows from other desktops rode along in
+    /// its batches.
+    void releaseScreenOwnership(const QString& screenId)
+    {
+        m_screenDesktopOverride.remove(screenId);
     }
     /// Drop entries from both per-screen maps whose SCREEN key matches `pred`
     /// (e.g. an orphaned virtual-screen id that no longer exists).
