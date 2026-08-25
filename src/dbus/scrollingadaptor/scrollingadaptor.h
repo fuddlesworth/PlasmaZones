@@ -48,6 +48,8 @@ class PLASMAZONES_EXPORT ScrollingAdaptor : public QDBusAbstractAdaptor
 
     Q_PROPERTY(QStringList scrollingScreens READ scrollingScreens NOTIFY scrollingScreensChanged)
     Q_PROPERTY(QVariantMap scrollEffectBehaviour READ scrollEffectBehaviour NOTIFY scrollEffectBehaviourChanged)
+    Q_PROPERTY(QStringList scrollFocusScrollBlockedWindows READ scrollFocusScrollBlockedWindows NOTIFY
+                   scrollFocusScrollBlockedWindowsChanged)
 
 public:
     explicit ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent = nullptr);
@@ -64,13 +66,16 @@ public:
     /// union has already dropped.
     QStringList scrollingScreens() const;
 
-    /// The four scrolling facts the COMPOSITOR owns, already resolved:
-    /// `{"focusFollowsMouse": [...], "cropStraddlers": [...],
-    /// "verticalAxis": [...], "focusScrollBlockedWindows": [...]}`. The
-    /// first three are screen-id lists. The fourth is the odd one out and
-    /// holds WINDOW ids: the windows the focus-follows-mouse scroll cap
-    /// refuses to focus, which is a fact about where each strip's view
-    /// currently sits and so cannot be expressed as screen membership.
+    /// The three scrolling facts the COMPOSITOR owns, as already-resolved
+    /// screen-id lists: `{"focusFollowsMouse": [...], "cropStraddlers": [...],
+    /// "verticalAxis": [...]}`.
+    ///
+    /// The focus-follows-mouse scroll cap's blocked-window list is NOT on
+    /// this map; it has its own property (see @ref
+    /// scrollFocusScrollBlockedWindows). These three change when settings or
+    /// rules change, while that one changes on every relayout, and carrying
+    /// both on one property made a strip that merely scrolled re-publish,
+    /// re-parse and re-compare three screen lists that had not moved.
     ///
     /// The first two are per-context rule slots
     /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer
@@ -84,21 +89,18 @@ public:
     /// OFF (for verticalAxis, a horizontal strip); a screen absent from the
     /// daemon's scrolling set appears in none of the three screen lists.
     ///
-    /// One map rather than four list properties so the compositor pays a
+    /// One map rather than three list properties so the compositor pays a
     /// single bring-up query and a single change subscription for what is
     /// really one push.
     QVariantMap scrollEffectBehaviour() const;
 
     /// Replace the published behaviour map and broadcast on a real change.
-    /// Driven by the daemon's per-screen scrolling pass, which resolves the
-    /// three screen lists while it is already walking the scrolling screens.
-    /// The window list is not resolved in that walk: only its per-screen
-    /// PERCENT is, and the walk over the strip that turns it into window ids
-    /// is re-run on every relayout. Emit-on-change:
+    /// Driven by the daemon's per-screen scrolling pass, which resolves all
+    /// three while it is already walking the scrolling screens. Emit-on-change:
     /// the compositor's copy is a plain cache it can re-query, so a redundant
     /// broadcast would only cost a rule-cache invalidation on the other side.
     ///
-    /// All four lists are SORTED and de-duplicated here rather than taken on
+    /// All three lists are SORTED and de-duplicated here rather than taken on
     /// trust. The published contract says sorted, and the change gate is a
     /// list compare, so canonicalizing at the one write site is what makes
     /// both true whatever order the producer walked its screens in.
@@ -107,12 +109,33 @@ public:
     /// the historical layout — so a compositor that predates the axis reads
     /// the whole desktop as horizontal, which is what it would have drawn
     /// anyway.
-    /// @p focusScrollBlockedWindows are WINDOW ids, not screen ids: the
-    /// windows focus-follows-mouse must refuse because activating one would
-    /// scroll the strip past the per-context cap. Empty means nothing is
-    /// refused, which is what a cap of 100 percent resolves to.
     void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens,
-                                  const QStringList& verticalAxisScreens, const QStringList& focusScrollBlockedWindows);
+                                  const QStringList& verticalAxisScreens);
+
+    /// The windows focus-follows-mouse must REFUSE to focus, because
+    /// activating one would scroll the strip further than the per-context
+    /// cap allows (niri's `max-scroll-amount`). WINDOW ids, not screen ids.
+    ///
+    /// Its own property rather than a fourth key on @ref
+    /// scrollEffectBehaviour because it updates on a different clock: which
+    /// windows are past the cap depends on where each strip's view sits, so
+    /// the daemon re-derives it on every relayout, while the behaviour map
+    /// answers settings and rules. Sharing one property made every scroll
+    /// re-publish the three screen lists too, and the effect re-parse them
+    /// to discover they had not moved.
+    ///
+    /// Empty means nothing is refused, which is what the default cap of 100
+    /// percent resolves to, and it is also what an absent property reads as
+    /// on the other side — so both ends of a missed update fail OPEN, with
+    /// focus following the pointer as it did before the setting existed.
+    QStringList scrollFocusScrollBlockedWindows() const;
+
+    /// Replace the blocked-window list and broadcast on a real change.
+    /// Sorted and de-duplicated here for the same two reasons the behaviour
+    /// map's lists are: the published contract says sorted, and the change
+    /// gate below is an order-sensitive list compare, so an unsorted
+    /// producer would re-broadcast the same membership.
+    void setScrollFocusScrollBlockedWindows(const QStringList& windowIds);
 
     /// Wire keys of the @ref scrollEffectBehaviour map. The spellings live in
     /// PhosphorProtocol::Service::ScrollBehaviourKey, shared with the KWin
@@ -136,14 +159,6 @@ public:
     {
         return PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
     }
-    /// The one list of WINDOW ids on this map (see the setter's parameter
-    /// doc). It rides here rather than on a channel of its own because it
-    /// changes with the same per-screen pass that resolves its siblings.
-    static QString focusScrollBlockedWindowsKey()
-    {
-        return PhosphorProtocol::Service::ScrollBehaviourKey::FocusScrollBlockedWindows;
-    }
-
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
     /// contract as the sibling adaptors' clearEngine).
     void clearEngine();
@@ -373,6 +388,13 @@ Q_SIGNALS:
     /// merge a delta against a copy it might have missed an update to.
     void scrollEffectBehaviourChanged(const QVariantMap& behaviour);
 
+    /// The focus-follows-mouse scroll cap's blocked-window list changed.
+    /// Payload is the whole list (see @ref scrollFocusScrollBlockedWindows),
+    /// so a receiver never merges a delta. Separate from
+    /// scrollEffectBehaviourChanged because it fires on every relayout that
+    /// moves the answer, while that one fires on a settings or rule change.
+    void scrollFocusScrollBlockedWindowsChanged(const QStringList& windowIds);
+
     /// @p screenId's strip changed shape: a wake-up for anyone rendering it,
     /// not a payload. A receiver re-reads @ref visibleStripJson if it cares.
     ///
@@ -418,6 +440,7 @@ private:
     /// the property read is a plain copy and the change compare is one
     /// QVariantMap compare rather than two list compares.
     QVariantMap m_scrollEffectBehaviour;
+    QStringList m_scrollFocusScrollBlockedWindows;
 };
 
 } // namespace PlasmaZones

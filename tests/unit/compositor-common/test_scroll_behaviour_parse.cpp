@@ -75,35 +75,22 @@ private Q_SLOTS:
         QVERIFY(warnings.first().contains(QLatin1String("focusFollowsMouse")));
     }
 
-    /// The scroll-cap block list is the one key holding WINDOW ids rather than
-    /// screen ids, and it parses through the same path — which is the point of
-    /// the parser not naming either. Pinned because its fail direction is the
-    /// opposite of the axis key's: absent or malformed must read as "refuse
-    /// nothing", since the caller turns membership into a REFUSED focus and a
-    /// wire hiccup that refused everything would look like focus-follows-mouse
-    /// being broken rather than off.
-    void focusScrollBlockedWindowsParsesAndFailsOpen()
+    /// The parser is id-space agnostic, which is why it is named for neither.
+    /// Nothing on this map carries window ids today — the focus-follows-mouse
+    /// scroll cap's blocked-window list moved to its own property, because it
+    /// updates per relayout while these three answer settings and rules — but
+    /// the three-way contract is a property of the parse, not of what the
+    /// caller happens to feed it, and a list of window ids must go through it
+    /// unchanged if anything ever rides here again.
+    void parsesAnyIdSpaceIdentically()
     {
         QStringList warnings;
-        const QLatin1String key("focusScrollBlockedWindows");
-
-        const auto absent = parseIdList(QVariant(), key, warnings);
-        QVERIFY(absent.has_value());
-        QVERIFY(absent->isEmpty());
-        QVERIFY(warnings.isEmpty());
-
-        const QStringList windows{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")};
-        const auto parsed = parseIdList(QVariant(windows), key, warnings);
+        const QLatin1String key("focusFollowsMouse");
+        const QStringList windowShaped{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")};
+        const auto parsed = parseIdList(QVariant(windowShaped), key, warnings);
         QVERIFY(parsed.has_value());
         QCOMPARE(*parsed, (QSet<QString>{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")}));
         QVERIFY(warnings.isEmpty());
-
-        // Malformed disengages, and the CALLER's value_or supplies the empty
-        // set — so both unreadable directions end at "refuse nothing".
-        const auto malformed = parseIdList(QVariant(42), key, warnings);
-        QVERIFY(!malformed.has_value());
-        QVERIFY(malformed.value_or(QSet<QString>()).isEmpty());
-        QCOMPARE(warnings.size(), 1);
     }
 };
 

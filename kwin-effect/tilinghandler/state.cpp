@@ -177,14 +177,14 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // either already demarshalled (the property Get path, which qdbus_cast
     // unwraps) or still wrapped in a QDBusVariant (a signal delivered without
     // a registered argument type) — unwrap one level before the type test, or
-    // every live update silently clears all four sets. Empty screen ids are
+    // every live update silently clears all three sets. Empty screen ids are
     // dropped: no window resolves to one, and they only defeat the change
     // gate below. A wire regression is warned about rather than being
     // indistinguishable from a legitimately-off session.
     //
-    // The return is OPTIONAL so the four keys can take different directions
+    // The return is OPTIONAL so the three keys can take different directions
     // on a MALFORMED value (as opposed to an absent one, which is a legitimate
-    // publish and reads as an empty set for all four). Empty is the safe
+    // publish and reads as an empty set for all three). Empty is the safe
     // direction for focus-follows-mouse and crop — both are behaviours that
     // simply stay off — but it is the WRONG direction for the axis, where it
     // silently re-lays every vertical strip horizontally on the next tile
@@ -201,17 +201,9 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // PhosphorProtocol, so the lookup and its diagnostic label cannot drift.
     using PhosphorProtocol::Service::ScrollBehaviourKey::CropStraddlers;
     using PhosphorProtocol::Service::ScrollBehaviourKey::FocusFollowsMouse;
-    using PhosphorProtocol::Service::ScrollBehaviourKey::FocusScrollBlockedWindows;
     using PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
     const QSet<QString> ffm = toSet(behaviour.value(FocusFollowsMouse), FocusFollowsMouse).value_or(QSet<QString>());
     const QSet<QString> crop = toSet(behaviour.value(CropStraddlers), CropStraddlers).value_or(QSet<QString>());
-    // WINDOW ids, not screen ids, and the one list here whose empty reading is
-    // "refuse nothing" — so it falls to empty on a malformed value like the
-    // two behaviour toggles rather than keeping its membership like the axis.
-    // A cap that fails open lets focus follow the pointer as it did before the
-    // setting existed; a cap that fails closed would freeze focus.
-    const QSet<QString> focusScrollBlocked =
-        toSet(behaviour.value(FocusScrollBlockedWindows), FocusScrollBlockedWindows).value_or(QSet<QString>());
     // Membership: a screen IN the list runs its strip vertically. An ABSENT
     // key reads as an empty set, which means horizontal everywhere — that is
     // what the daemon publishes on a session with no vertical strip.
@@ -237,7 +229,6 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // global setting there.
     m_scrollEffectBehaviourSeeded = true;
     m_scrollFocusFollowsMouseScreens = ffm;
-    m_scrollFocusScrollBlockedWindows = focusScrollBlocked;
     // One of the five ffmOffEverywhere sites: this write is what can
     // take the LAST focus-follows-mouse screen away while both globals were
     // already off, and handleCursorMoved's bail (the latch's only other
@@ -301,14 +292,53 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     }
 }
 
+void TilingHandler::slotScrollFocusScrollBlockedWindowsChanged(const QStringList& windowIds)
+{
+    applyScrollFocusScrollBlockedWindows(windowIds);
+}
+
+void TilingHandler::applyScrollFocusScrollBlockedWindows(const QStringList& windowIds)
+{
+    // Bumped before the assignment, the applyScrollEffectBehaviour shape: an
+    // identical list is still a real write, and it still proves this state is
+    // newer than any property reply dispatched earlier.
+    ++m_scrollFocusScrollBlockedGeneration;
+    // No parse contract to honour here, unlike the behaviour map: this arrives
+    // as a typed `as` on its own property rather than as one variant of an
+    // a{sv}, so Qt has already refused anything that is not a string list and
+    // an empty list is the only "nothing" this can be. Empty ids are dropped
+    // for the same reason the map's parser drops them — no window resolves to
+    // one, and they would only defeat the change gate below.
+    QSet<QString> next;
+    next.reserve(windowIds.size());
+    for (const QString& id : windowIds) {
+        if (!id.isEmpty()) {
+            next.insert(id);
+        }
+    }
+    if (next == m_scrollFocusScrollBlockedWindows) {
+        return;
+    }
+    m_scrollFocusScrollBlockedWindows = next;
+    // Deliberately no repaint and no latch touch. The set is read once per
+    // pointer event in handleCursorMoved and feeds no painted state, so there
+    // is nothing on screen to invalidate; and unlike the focus-follows-mouse
+    // membership it cannot change whether ANY screen can focus-follow, so
+    // ffmOffEverywhere cannot flip here and the suppression latch stays as it
+    // is.
+}
+
 void TilingHandler::clearScrollEffectBehaviourForTeardown()
 {
     // Bumped for the same reason both sibling teardowns bump theirs: a Get
     // dispatched by the dying session can still land after this clear, and the
-    // fetch reply gates on nothing but these counters. Without the bump the
-    // reply passes both guards and repopulates all four sets from the dead
-    // session, which is exactly what this function exists to prevent.
+    // fetch replies gate on nothing but these counters. Without the bumps a
+    // reply passes its guards and repopulates the sets from the dead session,
+    // which is exactly what this function exists to prevent. Both channels
+    // need one, because the blocked-window list has its own property and so
+    // its own in-flight reply.
     ++m_scrollEffectBehaviourGeneration;
+    ++m_scrollFocusScrollBlockedGeneration;
     m_scrollEffectBehaviourSeeded = false;
     m_scrollFocusFollowsMouseScreens.clear();
     // Cleared with the set it caps: a block list outliving the session that

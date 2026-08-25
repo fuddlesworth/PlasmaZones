@@ -527,12 +527,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // second time here would be dead work claiming the same ownership. Screens
     // that LEFT scrolling are absent by construction (the walk only visits the
     // current set), so the departing-screen cleanup below has nothing to undo.
-    m_scrollFfmScreens = ffmScreens;
-    m_scrollCropScreens = cropScreens;
-    m_scrollVerticalAxisScreens = verticalAxisScreens;
     if (m_scrollingAdaptor) {
-        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens,
-                                                     scrollFocusScrollBlockedWindows());
+        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens);
+        // Pushed alongside, not folded in: the block list rides its own
+        // property because it is re-derived per relayout while these three
+        // answer settings and rules. This pass is the one place both change
+        // together, and it must push the list even when it is EMPTY — that
+        // is how raising a cap back to no-cap clears a membership the
+        // relayout path would otherwise never revisit, since it returns
+        // early once no screen caps.
+        m_scrollingAdaptor->setScrollFocusScrollBlockedWindows(scrollFocusScrollBlockedWindows());
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
 
@@ -612,13 +616,15 @@ void Daemon::publishScrollFocusScrollBlocks()
     if (!m_scrollingAdaptor || m_scrollFfmMaxScrollPercent.isEmpty()) {
         return;
     }
-    // The three screen lists are replayed from the cache rather than
-    // re-resolved: they answer settings and rules, which this path cannot have
-    // changed, and re-walking every context rule per relayout is exactly the
-    // cost this function exists to avoid. The adaptor's emit-on-change gate
-    // then makes a push whose block list is also unchanged free.
-    m_scrollingAdaptor->setScrollEffectBehaviour(m_scrollFfmScreens, m_scrollCropScreens, m_scrollVerticalAxisScreens,
-                                                 scrollFocusScrollBlockedWindows());
+    // Only the block list is pushed. The three screen lists answer settings
+    // and rules, which this path cannot have changed, so they are not touched
+    // at all — that is the whole point of the block list having its own
+    // property. Sharing one made a strip that merely scrolled re-publish all
+    // four lists, and the effect re-parse and re-compare three screen sets
+    // that had not moved, on a path that runs per relayout. The adaptor's
+    // emit-on-change gate then makes a scroll that crosses no window's
+    // threshold a local no-op rather than a bus broadcast.
+    m_scrollingAdaptor->setScrollFocusScrollBlockedWindows(scrollFocusScrollBlockedWindows());
 }
 
 /// Deliberately NOT liveness-gated, unlike the three providers wired in

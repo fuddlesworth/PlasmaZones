@@ -1434,14 +1434,6 @@ private:
     // screen name) so cross-desktop toggles don't overwrite each other.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
 
-    // The scrolling behaviour map's three screen lists as last resolved by
-    // updateScrollingScreens, kept so publishScrollFocusScrollBlocks can
-    // re-push the map on a layout change without re-walking every context
-    // rule. The fourth list (the blocked windows) is deliberately NOT cached:
-    // recomputing it is the whole point of that function.
-    QStringList m_scrollFfmScreens;
-    QStringList m_scrollCropScreens;
-    QStringList m_scrollVerticalAxisScreens;
     /// Per scrolling screen, the resolved focus-follows-mouse scroll cap as a
     /// percent of the viewport's extent along the strip (`rule ?? config`).
     /// Screens at 100 (no cap) are ABSENT rather than stored, so an empty hash

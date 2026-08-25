@@ -22,9 +22,9 @@
 
 namespace PlasmaZones::ScrollBehaviourParse {
 
-/// One id list out of the scrollEffectBehaviour map. Three of the four are
-/// screen-id lists; the fourth names windows. The parse is identical for
-/// both, which is why this names neither.
+/// One id list out of the scrollEffectBehaviour map. All three of them
+/// carry screen ids today, but the parse is id-space agnostic, which is
+/// why this names neither.
 ///
 /// The three-way contract, load-bearing at the caller:
 ///  - ABSENT (invalid QVariant): a legitimate publish with that key
@@ -37,10 +37,6 @@ namespace PlasmaZones::ScrollBehaviourParse {
 ///  - VALID: the de-duplicated set, with empty ids dropped (each adds
 ///    a warning — no window resolves to one, and they only defeat the
 ///    caller's change gate).
-///
-/// The map's one WINDOW-id list (focusScrollBlockedWindows) parses through
-/// here too: the shape and every failure mode are identical, and only the
-/// warning text would have differed.
 ///
 /// An `as` value arrives either already demarshalled (the property Get path)
 /// or still wrapped in a QDBusVariant (a signal delivered without a
