@@ -159,6 +159,7 @@ public:
     {
         return PhosphorProtocol::Service::ScrollBehaviourKey::VerticalAxis;
     }
+
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
     /// contract as the sibling adaptors' clearEngine).
     void clearEngine();
@@ -438,8 +439,11 @@ private:
     QStringList m_lastBroadcastScreens;
     /// Published copy of @ref scrollEffectBehaviour. Held as the built map so
     /// the property read is a plain copy and the change compare is one
-    /// QVariantMap compare rather than two list compares.
+    /// QVariantMap compare rather than three list compares.
     QVariantMap m_scrollEffectBehaviour;
+    /// Published copy of @ref scrollFocusScrollBlockedWindows (the change
+    /// gate's memory, and what makes a re-publish of the same membership a
+    /// local no-op on the per-relayout path).
     QStringList m_scrollFocusScrollBlockedWindows;
 };
 

@@ -695,6 +695,27 @@ private Q_SLOTS:
         QCOMPARE(behaviour.count(), 1);
     }
 
+    // clearEngine drops the ENGINE-derived screen set, because leaving it
+    // populated would contradict every other slot the adaptor then answers.
+    // Both daemon-built values are deliberately left alone: neither getter has
+    // an engine gate, so the last published value stays the honest answer for
+    // as long as the object exists, and clearing them would replace a true
+    // answer with an empty one that reads as "no screen has any of these" and
+    // "the scroll cap refuses nothing".
+    void testClearEngine_keepsTheDaemonBuiltPublishedValues()
+    {
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-1")}, {}, {QStringLiteral("DP-1")});
+        m_adaptor->setScrollFocusScrollBlockedWindows({QStringLiteral("app|a")});
+
+        m_adaptor->clearEngine();
+
+        QVERIFY(m_adaptor->scrollingScreens().isEmpty());
+        QCOMPARE(m_adaptor->scrollFocusScrollBlockedWindows(), QStringList({QStringLiteral("app|a")}));
+        QCOMPARE(m_adaptor->scrollEffectBehaviour().value(ScrollingAdaptor::focusFollowsMouseKey()).toStringList(),
+                 QStringList({QStringLiteral("DP-1")}));
+    }
+
     // Driven over a REAL bus, because the claim is about what reaches the wire
     // rather than about the adaptor's own emissions.
     void testScrollingScreensProperty_doesNotEmitPropertiesChanged()

@@ -87,10 +87,23 @@ private Q_SLOTS:
         QStringList warnings;
         const QLatin1String key("focusFollowsMouse");
         const QStringList windowShaped{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")};
+
+        // All three contract directions, not just the valid one: the claim is
+        // that the id SPACE never enters into it, and a parser that special
+        // cased one of them would still pass a valid-list-only check.
+        const auto absent = parseIdList(QVariant(), key, warnings);
+        QVERIFY(absent.has_value());
+        QVERIFY(absent->isEmpty());
+        QVERIFY(warnings.isEmpty());
+
         const auto parsed = parseIdList(QVariant(windowShaped), key, warnings);
         QVERIFY(parsed.has_value());
         QCOMPARE(*parsed, (QSet<QString>{QStringLiteral("konsole|1"), QStringLiteral("firefox|2")}));
         QVERIFY(warnings.isEmpty());
+
+        const auto malformed = parseIdList(QVariant(42), key, warnings);
+        QVERIFY(!malformed.has_value());
+        QCOMPARE(warnings.size(), 1);
     }
 };
 

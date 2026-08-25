@@ -396,8 +396,7 @@ void TilingHandler::fetchScrollEffectBehaviour()
                     // leg — so bring-up is the one place it can be confirmed.
                     qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
                                      << "crop=" << m_scrollCropStraddlerScreens
-                                     << "verticalAxis=" << m_scrollVerticalAxisScreens
-                                     << "focusScrollBlocked=" << m_scrollFocusScrollBlockedWindows;
+                                     << "verticalAxis=" << m_scrollVerticalAxisScreens;
                 } else {
                     qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
                     if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
@@ -455,6 +454,11 @@ void TilingHandler::fetchScrollFocusScrollBlockedWindows()
                 QDBusPendingReply<QDBusVariant> reply = *w;
                 if (reply.isValid()) {
                     applyScrollFocusScrollBlockedWindows(reply.value().variant().toStringList());
+                    // Logged on its OWN reply rather than beside the behaviour
+                    // map's: the two are separate Gets now, and the map's reply
+                    // lands first, so printing this there would have described
+                    // a set that reply did not load.
+                    qCInfo(lcEffect) << "Loaded focus scroll blocks:" << m_scrollFocusScrollBlockedWindows;
                 } else {
                     qCDebug(lcEffect) << "Focus scroll blocks: query failed, daemon may not be running";
                     if (m_scrollFocusScrollBlockedFetchRetriesLeft > 0) {

@@ -612,7 +612,7 @@ void Daemon::publishScrollFocusScrollBlocks()
     // uncapped desktop costs nothing at all, and once inside the gatherer for
     // the callers that reach it another way. Without this the push below would
     // still be a no-op (the adaptor compares before emitting), but it would
-    // build and canonicalize four lists to discover that.
+    // build and canonicalize the list to discover that.
     if (!m_scrollingAdaptor || m_scrollFfmMaxScrollPercent.isEmpty()) {
         return;
     }

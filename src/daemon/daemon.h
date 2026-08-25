@@ -533,14 +533,18 @@ private:
     /// adaptor as one behaviour map, alongside the window list the
     /// focus-follows-mouse scroll cap refuses.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
-    /// Re-push the scrolling behaviour map with a freshly computed
-    /// focus-follows-mouse block list, keeping the three screen lists
-    /// updateScrollingScreens resolved. Runs on every strip layout change,
-    /// because which windows sit further than the cap from the current view
-    /// is a fact about the layout and the view, not about the settings; the
-    /// per-screen caps it reads are cached by that pass. Returns
-    /// IMMEDIATELY when no scrolling screen caps its scrolling at all, which
-    /// is the default, so the per-relayout cost is a hash-emptiness test.
+    /// Re-push the focus-follows-mouse block list, and ONLY that list: the
+    /// behaviour map beside it is not touched, because this path cannot
+    /// have changed a setting or a rule. That separation is why the list
+    /// has its own property — sharing one made a strip that merely
+    /// scrolled republish three screen lists that had not moved.
+    ///
+    /// Runs on every strip layout change, because which windows sit further
+    /// than the cap from the current view is a fact about the layout and
+    /// the view, not about the settings; the per-screen caps it reads are
+    /// resolved by updateScrollingScreens. Returns IMMEDIATELY when no
+    /// scrolling screen caps its scrolling at all, which is the default, so
+    /// the per-relayout cost is a hash-emptiness test.
     void publishScrollFocusScrollBlocks();
     /// The windows every capped scrolling screen refuses to focus-follow onto
     /// right now, gathered across screens. Empty whenever no screen caps.
