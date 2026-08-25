@@ -1963,9 +1963,76 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             originOverride = QRectF(committedGeo);
                         }
                     }
-                    m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
-                                                  PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
-                                                  visualTargetOverride);
+                    // Park a size-enforcing client with a MOVE, never a resize.
+                    //
+                    // A window is parked by committing it off the union of
+                    // every output, and an edge column straddles by committing
+                    // a rect that hangs past the screen edge. Both land for a
+                    // client which accepts the column size it is handed,
+                    // because the placement is then a plain move. Neither
+                    // lands for a client that
+                    // enforces its own size — Firefox Picture-in-Picture holds
+                    // 16:9 — because such a client answers the configure with a
+                    // different size, and KWin re-places THAT size under its
+                    // keep-on-screen containment. The window is dragged back
+                    // into view, so it cannot be parked or straddle-cropped and
+                    // instead slides around as the strip moves.
+                    //
+                    // Measured, not reasoned: issuing the identical park as a
+                    // pure move at the size the client already holds lands it
+                    // exactly, where the resize form was clamped 1578px away.
+                    //   resize form  (0,2176 1908x2052) -> committed (0,1087 …)
+                    //   move form    (0,2665 1908x1073) -> committed (0,2665 …)
+                    //
+                    // Nothing about the protocol: most Wayland clients here
+                    // take their column and park correctly. The property that
+                    // matters is whether the client imposes a size of its own.
+                    //
+                    // THREE terms, and each one is load-bearing:
+                    //   - a target NOT FULLY on this window's output: a park,
+                    //     or a straddling edge column. Both are placements the
+                    //     containment clamp can bite, and a straddle is where
+                    //     it is most visible — the window slides along the edge
+                    //     instead of being cropped at it. A column fully on
+                    //     screen keeps being offered the column size, so a
+                    //     client still grows into a resized one.
+                    //     (With crop-straddlers OFF the engine clamps a
+                    //     straddler's rect to the screen edge itself, so `geo`
+                    //     arrives fully on-screen and this never engages — the
+                    //     resize-at-the-boundary behaviour that mode asks for
+                    //     is unchanged.)
+                    //   - a size the client did not take. Ordinary quantisation
+                    //     (a terminal's cell grid) satisfies this too, which is
+                    //     why the park term above has to be what narrows it —
+                    //     keying on the size alone stopped Ghostty filling its
+                    //     column.
+                    //   - non-X11 only. The X11 path already pre-applies real
+                    //     size hints in constrainTileGeometry, so its parks
+                    //     land today (PR #906 pixel-verified) and there is
+                    //     nothing here to fix.
+                    //
+                    // Scoped to the strip's own placement call. constrainTile-
+                    // Geometry is shared with every snap and tile placement and
+                    // must not carry this.
+                    QRect placedGeo = geo;
+                    if (!snap.window->isX11Client()) {
+                        const KWin::LogicalOutput* placeOutput = m_effect->outputForScreenId(snap.screenId);
+                        const QRect placeOut = placeOutput ? QRect(placeOutput->geometry()) : QRect();
+                        const QSize committedSize = snap.window->frameGeometry().toRect().size();
+                        if (placeOut.isValid() && !placeOut.contains(geo) && !committedSize.isEmpty()
+                            && committedSize != geo.size()) {
+                            // Centred in the column it stands for, matching
+                            // where the window sits on screen and keeping the
+                            // parked-column paint resolver's centring term
+                            // (ScrollVisualPlacement) true of the parked rect.
+                            placedGeo = QRect(geo.topLeft(), committedSize);
+                            placedGeo.moveLeft(geo.x() + (geo.width() - committedSize.width()) / 2);
+                            placedGeo.moveTop(geo.y() + (geo.height() - committedSize.height()) / 2);
+                        }
+                    }
+                    m_effect->applyWindowGeometry(snap.window, placedGeo, /*allowDuringDrag=*/false,
+                                                  skipScrollAnimation, PhosphorAnimation::ProfilePaths::WindowSnapIn,
+                                                  originOverride, visualTargetOverride);
                 }
             }
 
