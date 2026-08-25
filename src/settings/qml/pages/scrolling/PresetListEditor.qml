@@ -262,21 +262,15 @@ ColumnLayout {
                 // fighting the canonicalizer's number formatting.
                 next.push((addSpin.value / 100).toFixed(3));
                 editor._commitList(next);
-                // Step the spin off the percentage just added. The new card
-                // carries that percentage, so leaving the box on it brings
-                // the collision warning and a greyed Add straight back — the
-                // same dead end the initial seed exists to avoid, one
-                // interaction later, and on every add after it.
-                //
-                // Deferred because `commit` round-trips through the store's
-                // canonicalizer, so `_shownPercents` has not settled inside
-                // this handler yet. Driven from the click and not from
-                // `presets` changing, because that would also fire on Remove
-                // and on writes from elsewhere, moving the box under a user
-                // who has typed a value and not yet added it.
-                Qt.callLater(function () {
-                    addSpin.value = editor._firstFreePercent();
-                });
+                // The box keeps the percentage that was just added. It used
+                // to step itself off that value so Add would not immediately
+                // grey out, but a spin box that moves on its own after a
+                // click is worse than a greyed button: the next Add press
+                // then commits a percentage the user never chose, which is
+                // exactly what a re-add after a Remove looked like. Add
+                // greying with "There is already a preset at this
+                // percentage" is the honest reading of the state, and one
+                // arrow press clears it.
             }
         }
     }
