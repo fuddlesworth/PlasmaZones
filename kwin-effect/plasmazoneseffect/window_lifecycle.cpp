@@ -471,7 +471,6 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowedFullscreenWindows.remove(closingWindowId);
     m_tilingHandler->restoreWindowedFullscreenLayerDemotion(closingWindowId, w->window());
     m_lastReportedMinSize.remove(closingWindowId);
-    m_lastOfferedColumnSize.remove(closingWindowId);
     m_scrollCommandedRects.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped

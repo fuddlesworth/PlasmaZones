@@ -207,39 +207,8 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // KWin's programmatic moveResize does commit without re-enforcing the
     // size hints — bounded, non-compounding, and the right direction: the
     // undershoot qRound produced clipped client content instead.
-    if (!window) {
+    if (!window || !window->isX11Client()) {
         return geometry;
-    }
-    if (!window->isX11Client()) {
-        // Wayland: no size hints to pre-apply, so use what the client has
-        // already committed for this column (see m_lastOfferedColumnSize).
-        //
-        // Load-bearing, not cosmetic. Re-offering the COLUMN size to a client
-        // that will not take it makes every placement a resize, and KWin
-        // re-places a renegotiated size under its keep-on-screen containment —
-        // which silently overrides an off-screen park and drags the window
-        // back into view. Offering the size it already holds makes the
-        // placement a pure MOVE, which has nothing to renegotiate and lands.
-        const QString windowId = getWindowId(window);
-        const QSize offered = geometry.size();
-        const auto lastIt = m_lastOfferedColumnSize.constFind(windowId);
-        const bool sameColumnAsLastOffer = lastIt != m_lastOfferedColumnSize.constEnd() && *lastIt == offered;
-        m_lastOfferedColumnSize.insert(windowId, offered);
-        const QSize committed = window->frameGeometry().toRect().size();
-        // Three exits, all meaning "let the client answer this offer":
-        // the first time we offer this column size (nothing observed yet),
-        // a degenerate commit (mid-unmap), and the ordinary case where the
-        // client took its column exactly — which is every normal window, so
-        // they reach the identical rect they always did.
-        if (!sameColumnAsLastOffer || committed.isEmpty() || committed == offered) {
-            return geometry;
-        }
-        // Centred in the column, matching where KWin itself puts a smaller
-        // commit and where the X11 branch below centres its constrained one.
-        QRect moved(geometry.topLeft(), committed);
-        moved.moveLeft(geometry.x() + (geometry.width() - committed.width()) / 2);
-        moved.moveTop(geometry.y() + (geometry.height() - committed.height()) / 2);
-        return moved;
     }
     KWin::Window* kw = window->window();
     if (!kw) {

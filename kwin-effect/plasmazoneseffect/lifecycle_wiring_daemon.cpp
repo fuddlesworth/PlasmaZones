@@ -304,7 +304,6 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // daemon that no longer holds anything.
         m_scrollCommandedRects.clear();
         m_lastReportedMinSize.clear();
-        m_lastOfferedColumnSize.clear();
         // Same reasoning for the per-screen active-layout map: it is a pure
         // ruleQuery input owned by the dead session, and the
         // invalidateAllRuleCaches below would otherwise re-resolve every

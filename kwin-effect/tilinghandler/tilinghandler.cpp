@@ -1221,7 +1221,6 @@ void TilingHandler::clearPerSessionDaemonState()
     }
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_lastReportedMinSize.clear();
-    m_effect->m_lastOfferedColumnSize.clear();
     // The tab-indicator model, colour verdicts and paint overrides describe
     // the dead session's strips. Without this drain the painter could keep
     // blitting pills for columns the new daemon never laid out: the replay
