@@ -31,7 +31,7 @@ Each monitor runs one mode, chosen per virtual desktop and per activity, so a wi
 Hold **Alt** (or your configured modifier) while dragging a window. The zones light up. Drop the window into one and it resizes to fill that zone.
 
 <p align="center">
-  <img src="docs/media/videos/drag-snap.gif" alt="Drag and Snap" />
+  <img src="docs/media/videos/snapping.gif" alt="Drag and Snap" />
 </p>
 
 Zones are named regions you draw yourself, in a visual editor with drag-to-resize, snap-to-grid, and mirroring. A library of layouts ships built in (grids, BSP, master and stack, fibonacci, plus portrait, ultrawide, and super-ultrawide variants), and after a snap the remaining zones show as thumbnails so the next window is one click away. Zones can span, and keyboard users can skip the drag entirely with `Meta+Ctrl+1` through `Meta+Ctrl+9`.
@@ -40,13 +40,9 @@ Zones are named regions you draw yourself, in a visual editor with drag-to-resiz
 
 ### Tiling
 
-<!-- SHOWCASE GIF PLACEHOLDER — record windows opening one after another and re-tiling, then a
-     couple of algorithm switches. Produce with docs/media/videos/convert.sh and commit as
-     docs/media/videos/tiling.gif, then uncomment:
 <p align="center">
   <img src="docs/media/videos/tiling.gif" alt="Automatic tiling" />
 </p>
--->
 
 Windows place themselves as they open, with no drag and no zones to draw. The bundled algorithms are written in Luau and run in a sandbox, covering the usual master-and-stack, BSP, columns, grid, spiral, and monocle families along with less common ones. Write your own in the same language and the daemon hot-reloads it from disk while you edit.
 
@@ -54,13 +50,9 @@ Windows place themselves as they open, with no drag and no zones to draw. The bu
 
 ### Scrolling
 
-<!-- SHOWCASE GIF PLACEHOLDER — record the strip scrolling as windows open, a column cycling
-     width presets, and a consume into a tabbed column. Produce with
-     docs/media/videos/convert.sh and commit as docs/media/videos/scrolling.gif, then uncomment:
 <p align="center">
   <img src="docs/media/videos/scrolling.gif" alt="Scrolling strip" />
 </p>
--->
 
 Modeled on the [niri](https://github.com/YaLTeR/niri) compositor. Windows form columns on an endless strip and the screen is a window onto it, so opening a window never resizes the ones you already have. The strip slides them aside and scrolls the view instead.
 
