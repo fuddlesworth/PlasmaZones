@@ -265,96 +265,68 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       path resolves live. A stale effect sending an older form would fail
 //       marshalling, so the bridge handshake rejects mismatched peers up front.
 //
-//   v5: the org.plasmazones.Autotile lifecycle surface moved wholesale to
-//       the engine-neutral org.plasmazones.Tiling interface (property
-//       managedScreens, signal managedScreensChanged), with engine-specific
-//       verbs split onto org.plasmazones.Autotile / org.plasmazones.Scrolling.
-//       A v4 effect would pass the handshake and then silently receive
-//       nothing on the renamed surface, so both sides must move together.
-//   v6: TileRequestEntry gained a trailing scrollEdge field, widening the
-//       windowsTileRequested signal from a(siiiissbbs) to a(siiiissbbss).
-//       Qt's signal hooks are signature-matched before demarshalling, so a
-//       v5 effect's slot would simply never fire on the widened payload —
-//       ALL tiling silently dead until logout — which is exactly the
-//       failure mode the handshake exists to surface up front.
-//   v7: TileRequestEntry gained a trailing viewDeltaX field, widening the
-//       windowsTileRequested signal from a(siiiissbbss) to a(siiiissbbssi).
-//       It carries how far a scrolling strip's VIEW slid, so the effect can
-//       spring that once per output and move the strip rigidly instead of
-//       starting an independent per-window spring for each column. Same
-//       signature-matching failure mode as v6: a v6 effect's slot would never
-//       fire on the widened payload, killing all tiling until logout, so the
-//       handshake has to reject the pairing up front.
-//   v8: TileRequestEntry gained visualX / visualY / hasVisualPos, widening
-//       windowsTileRequested from a(siiiissbbssi) to a(siiiissbbssiiib). A
-//       parked scrolling column commits below the union of all outputs but has
-//       to be SEEN travelling while the view slides, so the safe commit and the
-//       paint position are now separate answers. Same signature-matched
-//       failure mode as v6 and v7.
-//   v9: Snap.resolveWindowRestore gained three in-args — isOpenPath,
-//       minWidth, minHeight. The cross-screen tile reclaim hangs off this
-//       slot, and two of its drivers are NOT opens (the unminimize of a
-//       daemon-restart orphan and the pending-restores sweep); without the
-//       flag the daemon could not tell them apart, and unminimizing a window
-//       teleported it across monitors. The min sizes exist because a reclaim
-//       ADOPTS the window into a strip/layout, and the adopting engine
-//       evaluates its oversized/float verdict exactly once from them — the
-//       tiling channel has always carried them, and passing 0,0 here left an
-//       oversized window tiled for the session. Same signature-matched
-//       failure mode as v6-v8: an old effect's four-arg call no longer
-//       matches the widened slot.
-//   v10: TileRequestEntry gained windowedFullscreen (after floating), widening
-//       windowsTileRequested from a(siiiissbbssiiib) to a(siiiissbbbssiiib).
-//       Scrolling windowed fullscreen: the effect flips KWin fullscreen state
-//       on the client while committing the column rect. Mid-struct insertion,
-//       so BOTH the signature and the field order change — same
-//       signature-matched failure mode as v6 through v9.
-//   v11: TileRequestEntry gained a trailing tabFrom field, widening
-//       windowsTileRequested from a(siiiissbbbssiiib) to a(siiiissbbbssiiibs).
-//       It names the tab an arriving tab is replacing in a tabbed column, so
-//       the effect can cross-fade the two rather than hard-cut between two
-//       different windows in one rect. The pair is not recoverable from the
-//       rects, which is why it has to ride the wire. Same signature-matched
-//       failure mode as v6 through v10.
-//   v12: the scrolling strip's axis became per-screen configurable, so
-//       TileRequestEntry::viewDeltaX became viewDelta (a signed scalar along
-//       that screen's own strip axis) and scrollEdge's closed set widened from
-//       {left,right} to {left,right,top,bottom}.
+//   v5: the v3.4 wire. Everything below landed in one unreleased cycle, so it
+//       is a single step away from the v4 that last shipped. Do NOT split it
+//       back into one bump per change: no released peer ever spoke an
+//       intermediate version, and MinPeerApiVersion has always tracked
+//       ApiVersion exactly, so those steps were unobservable outside the
+//       branch. A new change AFTER v5 ships needs v6.
 //
-//       READ THIS BEFORE "SIMPLIFYING" THE BUMP AWAY. Unlike v6 through v11,
-//       THIS CHANGE WIDENS NO SIGNATURE — the field is still an int and the
-//       edge is still a string, so windowsTileRequested stays
-//       a(siiiissbbbssiiibs). Every earlier bump had Qt's signature matching
-//       as a second line of defence, and this one does not. A v11 effect
-//       against a v12 daemon would demarshal PERFECTLY and then misbehave
-//       twice over: it drops every vertical park at its own validationError
-//       (unknown scrollEdge), losing those placements entirely, and it reads a
-//       vertical viewDelta as a horizontal slide, flinging the strip sideways
-//       for the length of every leg. The version handshake is the ONLY thing
-//       rejecting that pairing.
-//   v13: the scrolling tab indicators moved from a daemon-rendered layer
-//       surface into the KWin effect's own paint pass. org.plasmazones.Scrolling
-//       LOST scrollTabSurfaces and scrollTabSurfaceChanged, and
-//       org.plasmazones.Tiling GAINED the required transport
-//       (scrollTabStrips / scrollTabStripsChanged, scrollTabPaintOverrides /
-//       scrollTabPaintOverridesChanged, scrollTabColors /
-//       scrollTabColorsChanged). No existing signature widens, so as with v12
-//       the handshake is the only thing refusing a mismatched pair: a v12
-//       effect against a v13 daemon registers a surface the daemon no longer
-//       knows and never hears a strip, and a v13 effect against a v12 daemon
-//       queries three methods that do not exist — either way the pills are
-//       silently absent rather than wrong.
-//   v14: TileRequestEntry gained a trailing viewImmediate bool, widening
-//       windowsTileRequested from a(siiiissbbbssiiibs) to a(siiiissbbbssiiibsb).
-//       It marks a batch whose view travel is user-driven continuous motion
-//       (the drag edge auto-scroll heartbeat): the effect applies the delta
-//       outright instead of animating it, because a view leg retargeted every
-//       16 ms never progresses on a stateless curve — the painted strip
-//       stalls behind the committed geometry and glides once when the ticks
-//       stop. Same signature-matched failure mode as v6 through v11 (v12 and
-//       v13 widened none).
-inline constexpr int ApiVersion = 14;
-inline constexpr int MinPeerApiVersion = 14;
+//       Interfaces. The org.plasmazones.Autotile lifecycle surface moved
+//       wholesale to the engine-neutral org.plasmazones.Tiling interface
+//       (property managedScreens, signal managedScreensChanged), with
+//       engine-specific verbs split onto org.plasmazones.Autotile /
+//       org.plasmazones.Scrolling. The scrolling tab indicators moved from a
+//       daemon-rendered layer surface into the KWin effect's own paint pass,
+//       so org.plasmazones.Scrolling LOST scrollTabSurfaces and
+//       scrollTabSurfaceChanged and org.plasmazones.Tiling GAINED the
+//       transport that replaces them (scrollTabStrips / scrollTabStripsChanged,
+//       scrollTabPaintOverrides / scrollTabPaintOverridesChanged,
+//       scrollTabColors / scrollTabColorsChanged).
+//
+//       windowsTileRequested. TileRequestEntry widened from a(siiiissbbs) to
+//       a(siiiissbbbssiiibsb). The added fields, in wire order: scrollEdge
+//       (which side of the strip a column departed towards, a closed set of
+//       left / right / top / bottom because a strip's axis is per-screen);
+//       windowedFullscreen, inserted after floating, which has the effect flip
+//       KWin fullscreen state on the client while committing the column rect;
+//       viewDelta, how far the strip's VIEW slid along that screen's own strip
+//       axis, so the effect springs it once per output and moves the strip
+//       rigidly instead of starting an independent per-window spring for each
+//       column; visualX / visualY / hasVisualPos, because a parked column
+//       commits below the union of all outputs but has to be SEEN travelling
+//       while the view slides, so the safe commit and the paint position are
+//       separate answers; tabFrom, naming the tab an arriving tab replaces in a
+//       tabbed column so the effect can cross-fade the two rather than hard-cut
+//       between two windows in one rect; and viewImmediate, marking a batch
+//       whose view travel is user-driven continuous motion (the drag edge
+//       auto-scroll heartbeat) so the effect applies the delta outright instead
+//       of animating it, because a leg retargeted every 16 ms never progresses
+//       on a stateless curve.
+//
+//       Snap.resolveWindowRestore gained three in-args: isOpenPath, minWidth,
+//       minHeight. The cross-screen tile reclaim hangs off this slot and two of
+//       its drivers are NOT opens (the unminimize of a daemon-restart orphan
+//       and the pending-restores sweep); without the flag the daemon could not
+//       tell them apart, and unminimizing a window teleported it across
+//       monitors. The min sizes exist because a reclaim ADOPTS the window into
+//       a strip or layout and the adopting engine evaluates its oversized /
+//       float verdict exactly once from them, so passing 0,0 left an oversized
+//       window tiled for the session.
+//
+//       Why the handshake and not signature matching. Most of the above widens
+//       a signature, and Qt matches signal-hook signatures before demarshalling,
+//       so a v4 effect's slot would simply never fire on the widened payload —
+//       ALL tiling silently dead until logout. But parts of it widen NOTHING:
+//       the interface moves above, and scrollEdge's closed set growing from
+//       {left,right} to {left,right,top,bottom} while viewDelta stayed an int.
+//       A peer mismatched on those demarshals PERFECTLY and then misbehaves,
+//       dropping every vertical park at its own validationError and reading a
+//       vertical view delta as a horizontal slide. The version handshake is the
+//       ONLY thing that refuses such a pairing, which is why both sides must be
+//       built and shipped from the same source.
+inline constexpr int ApiVersion = 5;
+inline constexpr int MinPeerApiVersion = 5;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

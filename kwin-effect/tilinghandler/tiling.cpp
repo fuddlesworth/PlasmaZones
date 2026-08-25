@@ -218,7 +218,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         /// scrolling strip: screen edge to animate from. Four-valued since
-        /// wire v12 — "left"/"right" on a horizontal strip, "top"/"bottom" on
+        /// wire v5 — "left"/"right" on a horizontal strip, "top"/"bottom" on
         /// a vertical one. Empty for a non-scrolling entry.
         QString scrollEdge;
         int viewDelta = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
@@ -810,7 +810,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (s.scrollEdge.isEmpty()) {
                     continue;
                 }
-                // Four-value since wire v12: a vertical strip names "top" and
+                // Four-value since wire v5: a vertical strip names "top" and
                 // "bottom". Testing `!= "left"` folded both of those into
                 // "right", so a vertical batch that fell through to this
                 // fallback ran its cascade in whichever direction the fold
@@ -1660,7 +1660,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (!skipMoveResize) {
                     m_centeredWaylandZones.remove(snap.windowId);
                     // Scrolling strip: scrollEdge names the screen edge this
-                    // column's motion belongs to — one of FOUR since wire v12
+                    // column's motion belongs to — one of FOUR since wire v5
                     // ("left"/"right" on a horizontal strip, "top"/"bottom" on
                     // a vertical one), so nothing here may treat "not left" as
                     // "right". It is NOT recoverable from the geometry — the
@@ -1860,7 +1860,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 atEdge =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                             }
-                            // Four departure edges since v12: "left"/"right"
+                            // Four departure edges since v5: "left"/"right"
                             // on a horizontal strip, "top"/"bottom" on a
                             // vertical one. Folding the two vertical tokens
                             // into an else would anchor them past the RIGHT

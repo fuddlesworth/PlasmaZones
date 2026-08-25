@@ -108,7 +108,7 @@ QString TileRequestEntry::validationError() const
     // on any non-empty value, so an unrecognised string would silently move
     // the window's apparent entry side. Reject it at the unmarshal boundary.
     //
-    // Four values since v12: a strip can run vertically, and a departure is
+    // Four values since v5: a strip can run vertically, and a departure is
     // named by the screen edge the column left through, so the pair widens
     // with the axis (left/right horizontally, top/bottom vertically).
     if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")

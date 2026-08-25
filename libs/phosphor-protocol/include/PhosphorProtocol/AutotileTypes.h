@@ -124,9 +124,8 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// stateless (duration) curve resets its clock and zeroes its velocity
     /// each tick, so the painted strip stalls behind the committed geometry
     /// and then glides once when the ticks stop. Meaningless without a
-    /// non-zero `viewDelta`; false for every discrete scroll. Trailing, like
-    /// every widening since v10, so aggregate-initialized fixtures stay
-    /// aligned.
+    /// non-zero `viewDelta`; false for every discrete scroll. Trailing, so
+    /// aggregate-initialized fixtures stay aligned.
     bool viewImmediate = false;
 
     QRect toRect() const

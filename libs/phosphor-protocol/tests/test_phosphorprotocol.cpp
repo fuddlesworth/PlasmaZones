@@ -125,7 +125,7 @@ private Q_SLOTS:
         e.screenId = QStringLiteral("s");
         e.width = 100;
         e.height = 100;
-        // Four values since v12: the strip's axis is per-screen, and a
+        // Four values since v5: the strip axis is per-screen, and a
         // departure names the SCREEN EDGE the column left through, so the pair
         // widens with the axis.
         e.scrollEdge = QStringLiteral("left");
@@ -236,31 +236,19 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 12 for the per-screen strip axis: viewDeltaX became
-        // viewDelta (a signed scalar along that screen's own axis) and
-        // scrollEdge widened to {left,right,top,bottom}.
+        // One step past the v4 that last shipped. Every wire change of the
+        // v3.4 cycle collapses into v5, because MinPeerApiVersion tracks
+        // ApiVersion exactly and no released peer ever spoke an intermediate
+        // version. See the v5 entry in ServiceConstants.h for what it covers.
         //
-        // UNLIKE v6 THROUGH v11, THIS BUMP WIDENED NO SIGNATURE. Those relied
-        // on Qt's signature matching as a second line of defence — a stale
-        // peer's slot simply never fired. Here a v11 effect would demarshal a
-        // v12 batch perfectly and then drop every vertical park as an invalid
-        // scrollEdge while reading a vertical delta as a horizontal slide. The
-        // handshake is the only thing rejecting that pairing, which is why the
-        // bump must not be "optimized away" as unnecessary later.
-        //
-        // Bumped to 13 when the scrolling tab indicators moved into the KWin
-        // effect: org.plasmazones.Scrolling lost its surface-id API and
-        // org.plasmazones.Tiling gained the strips / paint-override / colour
-        // transport the effect now requires. Again no signature widens, so the
-        // handshake alone refuses a mismatched daemon/effect pair.
-        //
-        // Bumped to 14 alongside the TileRequestEntry viewImmediate widening
-        // (a(siiiissbbbssiiibs) -> a(siiiissbbbssiiibsb)), for the same reason
-        // v6 through v11 were bumped: Qt matches signal-hook signatures before
-        // demarshalling, so a v13 effect's tiling slot would silently never
-        // fire — both sides must move together.
-        QCOMPARE(Service::ApiVersion, 14);
-        QCOMPARE(Service::MinPeerApiVersion, 14);
+        // The bump is NOT redundant with Qt's signature matching. Most of v5
+        // widens windowsTileRequested, where a stale peer's slot simply never
+        // fires, but the interface moves and the scrollEdge / viewDelta axis
+        // change widen no signature at all: such a peer demarshals perfectly
+        // and then misbehaves. The handshake is the only thing refusing it,
+        // which is why this must not be "optimized away" later.
+        QCOMPARE(Service::ApiVersion, 5);
+        QCOMPARE(Service::MinPeerApiVersion, 5);
     }
 
     // ── Environment switches ─────────────────────────────────────────────
