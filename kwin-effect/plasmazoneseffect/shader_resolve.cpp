@@ -19,6 +19,8 @@
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>

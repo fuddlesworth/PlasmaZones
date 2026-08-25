@@ -22,6 +22,7 @@ class CurveRegistry;
 namespace PhosphorRules {
 class RuleEvaluator;
 class ResolvedActions;
+struct Rule;
 }
 
 namespace PlasmaZones {
