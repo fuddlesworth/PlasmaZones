@@ -5527,7 +5527,7 @@
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="257"/>
         <source>Exclude an app from placement</source>
-        <translation>Deixar um aplicativo de fora do posicionamento</translation>
+        <translation>Excluir um aplicativo do posicionamento</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="177"/>
