@@ -1653,7 +1653,7 @@
         <location filename="../src/settings/services/algorithmservice.cpp" line="70"/>
         <source> (Copy)</source>
         <extracomment>Suffix appended to the name of a duplicated algorithm. Keep the leading space.</extracomment>
-        <translation> (Cópia)</translation>
+        <translation> (cópia)</translation>
     </message>
     <message>
         <location filename="../src/settings/services/algorithmservice.cpp" line="329"/>
@@ -2043,7 +2043,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="133"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
-        <translation>Uma janela no modo de rolagem em tela cheia em janela conta como tela cheia aqui.</translation>
+        <translation>Uma janela no modo de rolagem que esteja em tela cheia em janela conta como tela cheia aqui.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="135"/>
@@ -5527,7 +5527,7 @@
         <location filename="../src/settings/rules/ruletemplates.cpp" line="156"/>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="257"/>
         <source>Exclude an app from placement</source>
-        <translation>Excluir um aplicativo do posicionamento</translation>
+        <translation>Deixar um aplicativo de fora do posicionamento</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="177"/>
@@ -7818,7 +7818,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="607"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="63"/>
         <source>Hold to enable</source>
-        <translation>Segurar para habilitar</translation>
+        <translation>Segurar para ativar o seletor</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="612"/>
@@ -14426,7 +14426,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="100"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="254"/>
         <source>Clear shadowing children</source>
-        <translation>Limpar os filhos que se sobrepõem</translation>
+        <translation>Limpar os filhos que se sobrepõem a este</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="131"/>
@@ -14662,7 +14662,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="47"/>
         <source>Exclude transient windows from animations</source>
-        <translation>Excluir as janelas transitórias das animações</translation>
+        <translation>Deixar as janelas transitórias fora das animações</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="68"/>
@@ -14672,7 +14672,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="72"/>
         <source>Exclude notifications and on-screen displays from animations</source>
-        <translation>Excluir as notificações e os avisos na tela das animações</translation>
+        <translation>Deixar as notificações e os avisos na tela fora das animações</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="84"/>
@@ -15318,7 +15318,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="82"/>
         <source>Circular (Circ)</source>
-        <translation>Circular (circ.)</translation>
+        <translation>Circular</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="86"/>
@@ -15794,7 +15794,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="546"/>
         <source>Exclude transient windows from decorations</source>
-        <translation>Excluir as janelas transitórias das decorações</translation>
+        <translation>Deixar as janelas transitórias fora das decorações</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="558"/>
@@ -16896,7 +16896,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="113"/>
         <source>A visual fingerprint of everything this profile resolves to, including what it inherits.</source>
-        <translation>Uma impressão digital visual de tudo o que este perfil resolve, incluindo o que ele herda.</translation>
+        <translation>Uma impressão digital visual de tudo em que este perfil resulta, incluindo o que ele herda.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="138"/>
@@ -21113,7 +21113,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="261"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip. A screen with a layout template of its own takes this from that template instead, and the template&apos;s starting columns each carry their own.</source>
-        <translation>Normal empilha as janelas de uma coluna umas sobre as outras. Em abas mostra uma janela por vez atrás de uma faixa de abas. Uma tela com modelo de layout próprio tira isto desse modelo, e cada coluna inicial do modelo carrega a própria escolha.</translation>
+        <translation>Normal empilha as janelas de uma coluna umas sobre as outras. Em abas mostra uma janela por vez atrás de uma barra de abas. Uma tela com modelo de layout próprio tira isto desse modelo, e cada coluna inicial do modelo carrega a própria escolha.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="280"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation>Arredonda cada aba em formato de pílula. Desligado, vale o raio dos cantos abaixo em vez disso.</translation>
+        <translation>Arredonda cada aba em formato de pílula. Desligado, vale, em vez disso, o raio dos cantos abaixo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
@@ -22459,7 +22459,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation>A largura padrão está definida como uma largura predefinida, então este modelo precisa de pelo menos uma. Sem nenhuma, ele é salvo como uma fração da faixa em vez disso.</translation>
+        <translation>A largura padrão está definida como uma largura predefinida, então este modelo precisa de pelo menos uma. Sem nenhuma, ele é salvo, em vez disso, como uma fração da faixa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
@@ -22485,7 +22485,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="21"/>
         <source>Animations for the surfaces the Plasma shell owns, like the application launcher and the system tray popups. No shader you pick for your own windows reaches them, so every row starts with no shader and picking one is the whole opt-in. Until you pick one, these surfaces animate the way Plasma animates them. &quot;All Shell Surfaces&quot; is the default for both events, and either can override it. Panels have no rows here, because a panel stays on screen for the whole session instead of opening and closing.</source>
-        <translation>Animações das superfícies que pertencem ao shell do Plasma, como o lançador de aplicativos e as janelas da bandeja do sistema. Nenhum shader que você escolher para as suas janelas chega até elas, então cada linha começa sem shader e escolher um já é toda a adesão. Enquanto você não escolher, essas superfícies animam do jeito que o Plasma as anima. O padrão dos dois eventos é &quot;Todas as superfícies do shell&quot;, e qualquer um deles pode substituí-lo. Os painéis não têm linhas aqui, porque um painel fica na tela a sessão inteira em vez de abrir e fechar.</translation>
+        <translation>Animações das superfícies que pertencem ao shell do Plasma, como o lançador de aplicativos e as janelas instantâneas da bandeja do sistema. Nenhum shader que você escolher para as suas janelas chega até elas, então cada linha começa sem shader e escolher um já é toda a adesão. Enquanto você não escolher, essas superfícies animam do jeito que o Plasma as anima. O padrão dos dois eventos é &quot;Todas as superfícies do shell&quot;, e qualquer um deles pode substituí-lo. Os painéis não têm linhas aqui, porque um painel fica na tela a sessão inteira em vez de abrir e fechar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="25"/>
