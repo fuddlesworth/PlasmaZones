@@ -1310,6 +1310,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
                              << "monocle=" << snap.isMonocle << "maximizeMode="
                              << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
+            // Scroll-batch decision inputs, at debug. The animation arm a
+            // strip entry takes is chosen from these four plus the predicted
+            // commit, and none of them were observable — which is a problem
+            // for any window whose real frame diverges from the column rect
+            // (a Wayland client with an aspect or minimum-size constraint
+            // commits centred inside its column, and constrainTileGeometry
+            // predicts nothing for it: it returns early for non-X11).
+            if (!snap.scrollEdge.isEmpty() || snap.hasVisualPos || snap.viewDelta != 0) {
+                qCDebug(lcEffect) << "  scroll entry:" << snap.windowId << "edge=" << snap.scrollEdge
+                                  << "viewDelta=" << snap.viewDelta << "viewImmediate=" << snap.viewImmediate
+                                  << "hasVisualPos=" << snap.hasVisualPos << "visualPos=" << snap.visualPos
+                                  << "| live=" << snap.window->frameGeometry()
+                                  << "predicted=" << m_effect->constrainTileGeometry(snap.window, snap.geometry)
+                                  << "x11=" << snap.window->isX11Client();
+            }
             // A window can only be tile-managed by one screen at a time —
             // markWindowTiled enforces the single-owner sweep itself.
             markWindowTiled(snap.screenId, snap.windowId);
@@ -1560,14 +1575,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // protocol layer explicitly leans on ever sees the value —
                     // and signed overflow is undefined, not a wrapped number
                     // the clamp could then rescue. Widen, clamp, then narrow.
-                    const qint64 rawX = qint64(snap.visualPos.x()) - qint64(snap.geometry.x());
-                    const qint64 rawY = qint64(snap.visualPos.y()) - qint64(snap.geometry.y());
                     constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
-                    const QPoint delta(static_cast<int>(qBound(-kMaxDelta, rawX, kMaxDelta)),
-                                       static_cast<int>(qBound(-kMaxDelta, rawY, kMaxDelta)));
+                    ScrollVisualPlacement placement;
+                    placement.stripPos =
+                        QPoint(static_cast<int>(qBound(-kMaxDelta, qint64(snap.visualPos.x()), kMaxDelta)),
+                               static_cast<int>(qBound(-kMaxDelta, qint64(snap.visualPos.y()), kMaxDelta)));
+                    // The column rect this tile was handed. The resolver reads
+                    // only its size, to centre a differently-sized commit
+                    // within it.
+                    placement.columnSize = snap.geometry.size();
                     const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
-                    visualDeltaChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
-                    m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
+                    visualDeltaChanged =
+                        (vit == m_effect->m_scrollVisualDelta.constEnd() || !(vit.value() == placement));
+                    m_effect->m_scrollVisualDelta.insert(snap.windowId, placement);
                 } else {
                     visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }

@@ -1712,19 +1712,21 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             //
             // Order matches the draw: relocate to the strip position first,
             // then add the view offset. The relocation is ADDITIVE (a
-            // translate by the stored strip-minus-park delta), mirroring the
-            // draw's `data += delta` — an absolute moveTopLeft here discarded
-            // whatever the animator term above contributed, so a parked column
-            // with a live per-window leg sampled its backdrop slice at the
-            // wrong x for the leg's duration.
+            // translate by the resolver's answer), mirroring the draw — an
+            // absolute moveTopLeft here discarded whatever the animator term
+            // above contributed, so a parked column with a live per-window leg
+            // sampled its backdrop slice at the wrong x for the leg's
+            // duration. Resolving against animatedFrame is what keeps the two
+            // in step: the draw resolves against the rect IT uses, so passing
+            // a different rect here would reintroduce the same divergence.
             if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
-                if (const auto visualIt = m_scrollVisualDelta.constFind(windowId);
-                    visualIt != m_scrollVisualDelta.constEnd()) {
-                    // The stored strip-minus-park delta, matching the draw.
-                    animatedFrame.translate(visualIt->x(), visualIt->y());
+                if (m_scrollVisualDelta.contains(windowId)) {
+                    // Resolved against animatedFrame, matching the draw.
+                    const QPoint translation = scrollVisualTranslationFor(windowId, animatedFrame);
+                    animatedFrame.translate(translation.x(), translation.y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
             }
@@ -1829,14 +1831,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // never-parked column would be, which is what lets it be seen
             // travelling past during a scroll rather than blinking out the
             // moment it leaves the viewport.
-            if (!m_scrollVisualDelta.isEmpty()) {
-                const auto vit = m_scrollVisualDelta.constFind(windowId);
-                if (vit != m_scrollVisualDelta.constEnd()) {
-                    // The stored strip-minus-park delta, on top of wherever the
-                    // window is committed — see the member's contract for why
-                    // this is a delta and not an absolute position.
-                    data += QPointF(vit->x(), vit->y());
-                }
+            if (!m_scrollVisualDelta.isEmpty() && m_scrollVisualDelta.contains(windowId)) {
+                // Resolved against the rect being drawn rather than added as a
+                // precomputed delta — see ScrollVisualPlacement for why the
+                // committed position cannot be assumed to sit at the park.
+                const QRectF drawnAt = w->frameGeometry();
+                const QPoint translation = scrollVisualTranslationFor(windowId, drawnAt);
+                data += QPointF(translation.x(), translation.y());
             }
             const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
             if (!viewOffset.isNull()) {

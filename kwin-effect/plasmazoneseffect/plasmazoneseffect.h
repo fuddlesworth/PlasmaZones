@@ -2448,7 +2448,25 @@ private:
     /// "off-viewport" — the predicate exists because the two are not the same
     /// question — and give any NEW commit-half mover its own repaint pairing
     /// rather than inheriting this argument.
-    QHash<QString, QPoint> m_scrollVisualDelta;
+    QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
+
+    /// Where a parked column's tile should be DRAWN, resolved against the rect
+    /// it is actually being painted at.
+    ///
+    /// Returns the translation to add to @p paintRect's top-left. Measured,
+    /// not predicted: the caller hands in the rect the paint path is really
+    /// using (the committed frame, or the animator's rect mid-leg) and this
+    /// answers where that rect has to move to sit at the column's strip
+    /// position, centred by its OWN size.
+    ///
+    /// The centring is what makes it general. A tile whose size matches its
+    /// column resolves to the plain strip-minus-park translation the stored
+    /// delta used to be, so unconstrained windows are unaffected; a tile
+    /// smaller (or larger) than its column is placed centred within it, which
+    /// is where both constrain paths already put it on screen. Crucially the
+    /// answer does not depend on the park having LANDED — see
+    /// ScrollVisualPlacement for the case that forced this.
+    QPoint scrollVisualTranslationFor(const QString& windowId, const QRectF& paintRect) const;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
     /// committed rect stays the column slot, stored here as the value. The

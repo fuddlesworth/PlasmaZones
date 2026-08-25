@@ -535,6 +535,43 @@ struct ShaderTransition
 /// paths). While a `RestoreSuppression` entry exists for a window,
 /// `paintWindow` draws nothing for it — the window is invisible until it
 /// has settled into its destination.
+/// Where a parked scrolling tile really belongs on the strip.
+///
+/// Held instead of a precomputed translation because the translation is only
+/// correct if the park LANDED where it was requested, and that is not
+/// something the effect can assume. A tile is parked by committing it below
+/// the union of every output; for a client whose committed size differs from
+/// the column it was handed, KWin renegotiates the size and then re-applies
+/// its keep-on-screen containment to the new one — so the window stays ON
+/// screen and the park silently fails. Seen live with a Firefox
+/// Picture-in-Picture window (aspect-constrained, Wayland): parked to
+/// `(0,2176 1908x2052)`, committed at `(0,1087 1908x1073)`, its bottom edge
+/// pinned exactly to the screen bottom. A translation derived from the
+/// requested park rect then drew it 1089px off, which culled it from paint
+/// while its real frame still covered half the screen.
+///
+/// X11 does not hit that: the effect constrains the size itself
+/// (constrainTileGeometry) and hands KWin an already-valid rect, so there is
+/// no renegotiation and the park lands. Storing the placement rather than the
+/// translation covers both without depending on which path a window took —
+/// and the resolver reproduces the old translation exactly whenever the
+/// commit did land, which is what preserves PR #906's pixel-verified X11
+/// behaviour.
+struct ScrollVisualPlacement
+{
+    /// The column's top-left ON THE STRIP (the batch's visualPos), in the
+    /// same absolute space the view offset is later added in.
+    QPoint stripPos;
+    /// The column rect this tile was handed. Only the size is read: it is
+    /// what a smaller committed frame is centred within.
+    QSize columnSize;
+
+    bool operator==(const ScrollVisualPlacement& o) const
+    {
+        return stripPos == o.stripPos && columnSize == o.columnSize;
+    }
+};
+
 struct RestoreSuppression
 {
     /// frameGeometry at `windowAdded`. The window is released once its
