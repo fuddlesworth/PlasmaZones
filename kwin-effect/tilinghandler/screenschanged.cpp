@@ -657,7 +657,27 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                         continue;
                     }
                     const QString windowId = m_effect->getWindowId(w);
-                    if (!m_notifiedWindows.contains(windowId)) {
+                    if (m_savedNotifiedForDesktopReturn.contains(windowId)) {
+                        // PARKED, not moved. The park set means exactly "the
+                        // daemon STILL holds this window in this desktop's
+                        // state" (see the resetNotified comment in
+                        // tilinghandler.cpp), and a window that genuinely
+                        // changed desktops was un-parked by
+                        // cleanupAutotileTracking on its way out. So this is a
+                        // RE-TRACK, never a notify: notifyWindowAdded would
+                        // append the window to the arrived-at desktop's state
+                        // a second time, which on scrolling screens leaks the
+                        // other desktop's windows into this strip and destroys
+                        // the column order.
+                        //
+                        // The `added`-keyed re-track loop above does the same
+                        // thing, but `added` is empty on an identical-set
+                        // switch — every desktop assigned the same mode, which
+                        // is the ordinary multi-desktop scrolling setup — so
+                        // this scan is the only pass those windows reach.
+                        m_notifiedWindows.insert(windowId);
+                        m_notifiedWindowScreens[windowId] = screenId;
+                    } else if (!m_notifiedWindows.contains(windowId)) {
                         // Restore preserved pre-autotile geometry so float-restore
                         // returns to the original position, not the tiled frame from
                         // the source desktop. Only apply when the source screen
