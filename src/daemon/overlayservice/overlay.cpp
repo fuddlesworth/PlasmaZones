@@ -410,6 +410,16 @@ void OverlayService::restampZoneHighlights()
     // re-apply. A blanked (warm-idled) or never-populated slot holds an empty
     // list and is skipped, so the idle blank is preserved.
     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        if (!it_.value().overlayPhysScreen) {
+            // Dismissed slot - matches highlightZone / highlightZones, whose
+            // property writes skip it too. Re-stamping here would patch the
+            // list from THIS slot's props, which those two never updated, so
+            // the stale highlight would be baked back in rather than cleared.
+            // The next show rebuilds the list from scratch
+            // (updateOverlayWindow) off the props clearHighlight leaves clean,
+            // which is the path that owns a dismissed slot's zone data.
+            continue;
+        }
         auto* slot = it_.value().mainOverlaySlot();
         if (!slot) {
             continue;
@@ -419,6 +429,18 @@ void OverlayService::restampZoneHighlights()
             continue;
         }
         const QVariantList patched = patchZonesWithHighlight(current, slot);
+        if (patched == current) {
+            // Nothing to re-stamp on this screen. A highlight write reaches
+            // every live slot, but the zone that changed lives on one of them,
+            // so on a multi-monitor setup most screens land here every time.
+            // The write matters: `zones` is a QML `property var` feeding the
+            // Repeater model, so re-pushing an identical list re-evaluates
+            // every ZoneItem's bindings (and the shaderConfig.zones chain) for
+            // no change in output, on the drag path. previewZones and
+            // highlightedCount are derived from this same list and are written
+            // with it, so an unchanged list leaves both already correct.
+            continue;
+        }
         writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
         // previewZones mirrors the patched list whenever LayoutPreview mode is
         // active (updateOverlayWindow writes both from the same value); leaving
