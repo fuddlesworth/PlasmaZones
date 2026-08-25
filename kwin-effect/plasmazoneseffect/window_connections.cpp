@@ -6,6 +6,7 @@
 #include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/RetargetPolicy.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -861,6 +862,43 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
                 if (!safeW) {
                     return;
+                }
+                // Body -1 — retarget a strip animation onto the rect the
+                // client actually committed.
+                //
+                // Only fires for a client that did not take the geometry it
+                // was handed. A programmatic moveResize commits synchronously,
+                // so for an ordinary window frameGeometry() already equals the
+                // animation's target by the time any leg is running and the
+                // isAnimatingToTarget test short-circuits. A client with a
+                // size constraint it enforces itself — an aspect ratio, a
+                // minimum bigger than its column — negotiates asynchronously
+                // and lands somewhere else, usually centred within the rect it
+                // was offered. The leg then drove toward the COLUMN rect while
+                // the commit sat centred inside it, so the window slid to its
+                // column's edge and snapped back on every step scroll.
+                //
+                // Measured, not predicted: constrainTileGeometry can pre-empt
+                // this for X11 (it applies the same constraint KWin will) but
+                // is a pass-through for Wayland, where the negotiated size is
+                // not knowable up front. Retargeting when the commit arrives
+                // needs no prediction and covers both.
+                //
+                // Scoped to strip members: this is the only path that
+                // relocates a window away from its committed rect, so it is
+                // the only one where a divergent commit desynchronises the
+                // leg from where the window will actually be.
+                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())) {
+                    const QRectF committed = safeW->frameGeometry();
+                    if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
+                        // PreservePosition: the leg keeps the pixels it is
+                        // already showing and bends toward the true rect.
+                        // Velocity carried across would re-scale to a
+                        // correction that is a few hundred pixels at most and
+                        // overshoot it.
+                        m_windowAnimator->retargetWithResult(safeW.data(), committed,
+                                                             PhosphorAnimation::RetargetPolicy::PreservePosition);
+                    }
                 }
                 // Body 0 — deferred maximize-morph completion. The maximize
                 // state edge above arms this entry when it fires before the
