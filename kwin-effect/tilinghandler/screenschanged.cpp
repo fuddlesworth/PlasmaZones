@@ -155,6 +155,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // scroll companions go here too rather than being left
             // behind by this early exit.
             m_effect->m_scrollCommandedRects.remove(windowId);
+            m_effect->m_scrollOfferedColumnSize.remove(windowId);
             if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
                 KWin::effects->addRepaintFull();
             }
@@ -187,6 +188,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // session that just ended, and a relocation from a dead strip
         // survives into the next one.
         m_effect->m_scrollCommandedRects.remove(windowId);
+        m_effect->m_scrollOfferedColumnSize.remove(windowId);
         if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
             KWin::effects->addRepaintFull();
         }
@@ -328,6 +330,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
         clearWindowTiledAllScreens(wid);
         m_effect->m_scrollCommandedRects.remove(wid);
+        m_effect->m_scrollOfferedColumnSize.remove(wid);
         anyVisualDeltaDropped = (m_effect->m_scrollVisualDelta.remove(wid) > 0) || anyVisualDeltaDropped;
     }
     if (anyVisualDeltaDropped && KWin::effects) {

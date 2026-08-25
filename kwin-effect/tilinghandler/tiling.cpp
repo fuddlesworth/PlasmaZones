@@ -1656,6 +1656,53 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 }
                 QRect geo = snap.geometry;
 
+                // Size continuity for a strip client that will not take its
+                // column.
+                //
+                // Every placement offering the COLUMN size is a resize, and a
+                // client that enforces its own geometry re-derives a size from
+                // it each time. Its answer is not bit-stable — the same
+                // 1908x2052 column came back as 1908x1073 and then 1911x1074 —
+                // so the window resizes by a few pixels on every scroll step,
+                // and no placement can ever take the pure-move path that
+                // avoids KWin's configure re-anchor (see applyWindowGeometry).
+                //
+                // So stop re-asking. Once a client has answered for a given
+                // column SIZE, offer the size it actually holds, centred in the
+                // column. That is a pure move, which it cannot renegotiate, so
+                // the size stops drifting. The offer only changes when the
+                // COLUMN changes.
+                //
+                // Keyed on the column size, never on position — that is the
+                // whole point. An earlier attempt gated on the target being
+                // off-screen, which made a column scrolling in and out
+                // alternate between two sizes and resize its way across the
+                // strip. Position must not enter, because a column keeps its
+                // size wherever it sits.
+                //
+                // Inert for a window that accepts its column: the sizes match,
+                // so the offer is the column rect unchanged and every branch
+                // below sees exactly what it saw before.
+                if (isScrollingScreen(snap.screenId) && !snap.isMonocle && !snap.isWindowedFullscreen
+                    && snap.window->isWaylandClient()) {
+                    const QSize columnSize = geo.size();
+                    const QSize committedSize = snap.window->frameGeometry().toRect().size();
+                    const auto offeredIt = m_effect->m_scrollOfferedColumnSize.constFind(snap.windowId);
+                    const bool columnUnchanged =
+                        offeredIt != m_effect->m_scrollOfferedColumnSize.constEnd() && *offeredIt == columnSize;
+                    m_effect->m_scrollOfferedColumnSize.insert(snap.windowId, columnSize);
+                    if (columnUnchanged && committedSize.isValid() && committedSize != columnSize) {
+                        // Centred with the same truncation the paint resolver
+                        // uses (scrollVisualTranslationFor), so the drawn and
+                        // committed positions agree to the pixel.
+                        geo = QRect(geo.x() + (columnSize.width() - committedSize.width()) / 2,
+                                    geo.y() + (columnSize.height() - committedSize.height()) / 2, committedSize.width(),
+                                    committedSize.height());
+                        qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
+                                          << "holding=" << committedSize << "offer=" << geo;
+                    }
+                }
+
                 // For Wayland windows being retiled to the same zone, skip the
                 // moveResize if the window was previously centered in this zone.
                 // This prevents flicker where the window jumps from its centered
@@ -2182,6 +2229,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                    m_effect->m_scrollOfferedColumnSize.remove(snap.windowId);
                 } else {
                     m_effect->m_scrollCommandedRects.insert(snap.windowId,
                                                             {snap.window->frameGeometry().toRect(), 0, 0});
@@ -2201,6 +2249,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // reads scrolling for a few ticks while monocle batches are
                 // still in flight.
                 m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                m_effect->m_scrollOfferedColumnSize.remove(snap.windowId);
             }
         },
         onComplete, startedViewLegs || anyTabSwap || !immediateViewScreens.isEmpty());

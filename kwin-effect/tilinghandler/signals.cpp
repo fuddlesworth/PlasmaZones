@@ -484,6 +484,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // indefinitely when the daemon gate is closed. The float exits shed the
     // same pair for the same reason.
     m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollOfferedColumnSize.remove(windowId);
     if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
     }

@@ -150,6 +150,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // user scrolled it. A stale commanded rect only disarms a
                 // counter-assert, which is invisible; a lost relocation is not.
                 m_effect->m_scrollCommandedRects.remove(windowId);
+                m_effect->m_scrollOfferedColumnSize.remove(windowId);
             } else if (m_managedScreens.contains(trueSource)) {
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
@@ -175,6 +176,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // window, so it pairs with damage like every other remover.
                 m_windowedFsClearInFlight.remove(windowId);
                 m_effect->m_scrollCommandedRects.remove(windowId);
+                m_effect->m_scrollOfferedColumnSize.remove(windowId);
                 if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }

@@ -2536,6 +2536,22 @@ private:
     /// drag-time frame), and cleared wholesale on daemon loss and at bring-up
     /// (drainDeadSessionState).
     QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
+    /// Per strip window: the column SIZE its last placement offered.
+    ///
+    /// The discriminator for size continuity (see the strip apply). A genuine
+    /// column change is "this size differs from the one recorded here" — our
+    /// own input, known before the request goes out. Client disagreement is
+    /// "the committed size differs from the column" while this entry is
+    /// unchanged. Keeping them apart is what lets a client that will not take
+    /// its column be offered a stable size without ever freezing one that
+    /// simply has not been asked yet.
+    ///
+    /// Cleaned up on the same paths as m_scrollCommandedRects, which is the
+    /// right sibling: both are strip-scoped, so both must drop on a float
+    /// round trip and a screen change, where m_lastReportedMinSize
+    /// deliberately persists. A settled size surviving either would place the
+    /// window at a stale size on re-entry.
+    QHash<QString, QSize> m_scrollOfferedColumnSize;
 
     /// Per-output-pass state for the compositor-drawn tab indicators (see
     /// paintScrollTabIndicators). Recomputed by prePaintScreen at the top of
