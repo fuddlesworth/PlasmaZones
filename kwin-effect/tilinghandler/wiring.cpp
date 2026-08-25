@@ -311,12 +311,13 @@ void TilingHandler::fetchScrollingScreens()
                     if (m_scrollingScreensFetchRetriesLeft > 0) {
                         --m_scrollingScreensFetchRetriesLeft;
                         // Bail if the generation moved while the retry was
-                        // armed, the same guard the tab fetches carry: a daemon
-                        // loss voids in-flight fetches by bumping it, and a retry
-                        // into the dead service would only re-bump and warn. Worse,
-                        // a retry armed before a restart fires AFTER the new
-                        // session's own dispatch and would discard that fresh
-                        // reply in favour of its own.
+                        // armed. Only a newer DISPATCH moves this counter (unlike
+                        // the two tab fetches, which voidInFlightScrollTabFetches
+                        // also bumps on daemon loss), so the case this catches is a
+                        // retry armed before a daemon restart: the new session's
+                        // loadSettings dispatches its own fetch, and without this
+                        // the stale retry would land afterwards and discard that
+                        // fresh reply in favour of its own.
                         QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, scrollQueryGeneration] {
                             if (scrollQueryGeneration == m_scrollingScreensQueryGeneration) {
                                 fetchScrollingScreens();
@@ -389,12 +390,13 @@ void TilingHandler::fetchScrollEffectBehaviour()
                     if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
                         --m_scrollEffectBehaviourFetchRetriesLeft;
                         // Bail if the generation moved while the retry was
-                        // armed, the same guard the tab fetches carry: a daemon
-                        // loss voids in-flight fetches by bumping it, and a retry
-                        // into the dead service would only re-bump and warn. Worse,
-                        // a retry armed before a restart fires AFTER the new
-                        // session's own dispatch and would discard that fresh
-                        // reply in favour of its own.
+                        // armed. Only a newer DISPATCH moves this counter (unlike
+                        // the two tab fetches, which voidInFlightScrollTabFetches
+                        // also bumps on daemon loss), so the case this catches is a
+                        // retry armed before a daemon restart: the new session's
+                        // loadSettings dispatches its own fetch, and without this
+                        // the stale retry would land afterwards and discard that
+                        // fresh reply in favour of its own.
                         QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, queryGeneration] {
                             if (queryGeneration == m_scrollEffectBehaviourQueryGeneration) {
                                 fetchScrollEffectBehaviour();
@@ -461,12 +463,13 @@ void TilingHandler::fetchActiveLayouts()
                     if (m_activeLayoutsFetchRetriesLeft > 0) {
                         --m_activeLayoutsFetchRetriesLeft;
                         // Bail if the generation moved while the retry was
-                        // armed, the same guard the tab fetches carry: a daemon
-                        // loss voids in-flight fetches by bumping it, and a retry
-                        // into the dead service would only re-bump and warn. Worse,
-                        // a retry armed before a restart fires AFTER the new
-                        // session's own dispatch and would discard that fresh
-                        // reply in favour of its own.
+                        // armed. Only a newer DISPATCH moves this counter (unlike
+                        // the two tab fetches, which voidInFlightScrollTabFetches
+                        // also bumps on daemon loss), so the case this catches is a
+                        // retry armed before a daemon restart: the new session's
+                        // loadSettings dispatches its own fetch, and without this
+                        // the stale retry would land afterwards and discard that
+                        // fresh reply in favour of its own.
                         QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, layoutsQueryGeneration] {
                             if (layoutsQueryGeneration == m_activeLayoutsQueryGeneration) {
                                 fetchActiveLayouts();
