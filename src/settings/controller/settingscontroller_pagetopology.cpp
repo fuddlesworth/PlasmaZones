@@ -501,10 +501,12 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingWheelFocusGroup(), CD::triggersKey()},
              {CD::scrollingWheelViewGroup(), CD::triggersKey()},
              // Scrolling.Behavior — the strip's window-handling and focus
-             // knobs. Smart gaps is deliberately absent: scrolling forwards
-             // the shared Tiling.Gaps/SmartGaps value, whose (group, key)
-             // pair is owned by tiling-behavior.
+             // knobs, smart gaps among them. The gap VALUES are shared and
+             // mode-neutral, but whether a lone column drops them is per-mode
+             // behaviour, so scrolling owns its own (group, key) pair here and
+             // tiling-behavior keeps the Tiling.Gaps one.
              {CD::scrollingBehaviorGroup(), CD::insertPositionKey()},
+             {CD::scrollingBehaviorGroup(), CD::smartGapsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusNewWindowsKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseKey()},
              {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()},

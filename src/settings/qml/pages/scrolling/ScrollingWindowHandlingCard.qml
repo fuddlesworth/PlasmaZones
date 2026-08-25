@@ -14,8 +14,9 @@ import org.kde.kirigami as Kirigami
  * app-wide only like its two siblings; per-context insert position is a
  * rules job (the SetScrollInsertPosition context action).
  *
- * Smart gaps is deliberately absent: scrolling reads the shared
- * Tiling.Gaps/SmartGaps value, so the tiling toggle governs both engines.
+ * Smart gaps lives here rather than being borrowed from tiling: the gap
+ * VALUES are shared and mode-neutral, but whether a single column drops them
+ * is per-mode behaviour, and scrolling keeps its own under Scrolling.
  */
 SettingsCard {
     id: root
@@ -42,6 +43,22 @@ SettingsCard {
                 model: settingsController.valueOptions("Scrolling.Behavior", "InsertPosition")
                 storedValue: appSettings.scrollingInsertPosition
                 onActivated: appSettings.scrollingInsertPosition = currentValue
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
+            title: i18n("Smart gaps")
+            searchAnchor: "scrollingSmartGaps"
+            description: i18n("Remove the outer gaps while the strip holds a single column. Off by default, because a lone column sits at its own width rather than filling the screen.")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingSmartGaps
+                accessibleName: i18n("Smart gaps")
+                onToggled: function (newValue) {
+                    appSettings.scrollingSmartGaps = newValue;
+                }
             }
         }
 

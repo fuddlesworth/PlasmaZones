@@ -131,6 +131,9 @@ P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCente
 P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey,
                  scrollingAlwaysCenterSingleColumnChanged)
 
+P_STORE_GET(bool, scrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, bool)
+P_STORE_SET_BOOL(setScrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, scrollingSmartGapsChanged)
+
 P_STORE_GET(bool, scrollingCropStraddlers, scrollingGroup, cropStraddlersKey, bool)
 P_STORE_SET_BOOL(setScrollingCropStraddlers, scrollingGroup, cropStraddlersKey, scrollingCropStraddlersChanged)
 

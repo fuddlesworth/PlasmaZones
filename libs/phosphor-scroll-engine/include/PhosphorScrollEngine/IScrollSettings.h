@@ -38,8 +38,13 @@ public:
     /// width floor, tile height floor, interactive-resize floor). The
     /// work-area-oversized float escape ignores this and always fires.
     virtual bool scrollingRespectMinimumSize() const = 0;
-    /// Zero the outer gaps when the strip holds a single column (shared
-    /// Tiling.Gaps/SmartGaps value, forwarded like the gaps).
+    /// Zero the outer gaps when the strip holds a single column.
+    ///
+    /// Scrolling's OWN setting, not the tiling one: the gap VALUES above are
+    /// shared and forwarded, but smart gaps is a per-mode behaviour and each
+    /// mode keeps its own. Off by default here — a sole column sits at its
+    /// own width rather than filling the screen, so the tiling rationale for
+    /// stripping the gaps does not carry over.
     virtual bool scrollingSmartGaps() const = 0;
 
     /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).

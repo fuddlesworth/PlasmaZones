@@ -524,6 +524,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
         m_schemas[QStringLiteral("scrollingStripAxis")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
+        REGISTER_CONCRETE_BOOL("scrollingSmartGaps", scrollingSmartGaps, setScrollingSmartGaps)
         REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)
         // Edge auto-scroll during a drag re-insert (Scrolling.Behavior.DragScroll).
         // Concrete-only for the same reason as scrollingStripAxis above: the

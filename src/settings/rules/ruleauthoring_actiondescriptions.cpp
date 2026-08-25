@@ -345,7 +345,7 @@ QString actionDescription(const QString& type)
     if (type == ActionType::SetScrollSmartGaps) {
         return PhosphorI18n::tr(
             "Drops the outer gaps on the matched context while a single column is on the strip, "
-            "so a lone window fills the screen.");
+            "so that column runs to the screen edges.");
     }
     if (type == ActionType::SetScrollFocusFollowsMouse) {
         return PhosphorI18n::tr(

@@ -469,6 +469,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          intChoices({{CD::scrollingStickyTreatAsNormal(), "treatAsNormal"_L1},
                      {CD::scrollingStickyRestoreOnly(), "restoreOnly"_L1},
                      {CD::scrollingStickyIgnoreAll(), "ignoreAll"_L1}})},
+        // Scrolling's OWN smart gaps. Shares the leaf key name with the tiling
+        // twin under Tiling.Gaps; the group disambiguates, per the config-key
+        // convention. Scrolling previously had no home for this and read the
+        // tiling value, which is the mode leak this entry closes.
+        {CD::smartGapsKey(), CD::scrollingSmartGaps(), QMetaType::Bool},
         {CD::respectMinimumSizeKey(), CD::scrollingRespectMinimumSize(), QMetaType::Bool},
         {CD::restoreOnLoginKey(), CD::scrollingRestoreStripsOnLogin(), QMetaType::Bool},
         {CD::restoreFloatedOnLoginKey(), CD::scrollingRestoreFloatedWindowsOnLogin(), QMetaType::Bool},
