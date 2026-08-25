@@ -331,7 +331,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
         <source>Toggle Window Floating</source>
-        <translation>Alternar a janela flutuante</translation>
+        <translation>Alternar a flutuação da janela</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
@@ -987,12 +987,12 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="337"/>
         <source>Splits the focused window out of a shared column toward the start of the strip. A window alone in its column merges into the previous column instead.</source>
-        <translation>Separa a janela focalizada de uma coluna compartilhada em direção ao início da faixa. Uma janela sozinha em sua coluna passa a se juntar à coluna anterior.</translation>
+        <translation>Separa a janela focalizada de uma coluna compartilhada em direção ao início da faixa. Uma janela sozinha em sua coluna, em vez disso, junta-se à coluna anterior.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
         <source>Splits the focused window out of a shared column toward the end of the strip. A window alone in its column merges into the next column instead.</source>
-        <translation>Separa a janela focalizada de uma coluna compartilhada em direção ao fim da faixa. Uma janela sozinha em sua coluna passa a se juntar à próxima coluna.</translation>
+        <translation>Separa a janela focalizada de uma coluna compartilhada em direção ao fim da faixa. Uma janela sozinha em sua coluna, em vez disso, junta-se à próxima coluna.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="389"/>
@@ -1007,7 +1007,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
         <source>Moves focus one column toward the start of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Move o foco uma coluna em direção ao início da faixa e para na borda. O atalho de foco comum segue para o próximo monitor.</translation>
+        <translation>Move o foco uma coluna em direção ao início da faixa e para na borda. O atalho de foco comum, em vez disso, segue para o próximo monitor.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
@@ -1017,7 +1017,7 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Moves focus one column toward the end of the strip and stops at the edge. The regular focus shortcut continues onto the next monitor instead.</source>
-        <translation>Move o foco uma coluna em direção ao fim da faixa e para na borda. O atalho de foco comum segue para o próximo monitor.</translation>
+        <translation>Move o foco uma coluna em direção ao fim da faixa e para na borda. O atalho de foco comum, em vez disso, segue para o próximo monitor.</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
@@ -1213,7 +1213,7 @@
         <location filename="../src/editor/undo/commands/UpdateGapOverrideCommand.cpp" line="17"/>
         <source>Change Zone Padding</source>
         <comment>@action</comment>
-        <translation>Alterar o preenchimento da zona</translation>
+        <translation>Alterar o espaço interno da zona</translation>
     </message>
     <message>
         <location filename="../src/editor/undo/commands/UpdateVisibilityCommand.cpp" line="17"/>
@@ -1653,7 +1653,7 @@
         <location filename="../src/settings/services/algorithmservice.cpp" line="70"/>
         <source> (Copy)</source>
         <extracomment>Suffix appended to the name of a duplicated algorithm. Keep the leading space.</extracomment>
-        <translation> (cópia)</translation>
+        <translation> (Cópia)</translation>
     </message>
     <message>
         <location filename="../src/settings/services/algorithmservice.cpp" line="329"/>
@@ -1916,7 +1916,7 @@
     <message>
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="116"/>
         <source>KZones file does not contain a JSON array or object</source>
-        <translation>O arquivo do KZones não contém um vetor nem um objeto JSON</translation>
+        <translation>O arquivo do KZones não contém um array nem um objeto JSON</translation>
     </message>
     <message>
         <location filename="../src/settings/utils/kzonesimporter.cpp" line="125"/>
@@ -2043,7 +2043,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="133"/>
         <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
-        <translation>Uma janela de rolagem em tela cheia dentro da janela conta como tela cheia aqui.</translation>
+        <translation>Uma janela no modo de rolagem em tela cheia em janela conta como tela cheia aqui.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="135"/>
@@ -2063,7 +2063,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="141"/>
         <source>Whether the window is a transient (a dialog or popup owned by another window).</source>
-        <translation>Se a janela é transitória (um diálogo ou menu instantâneo pertencente a outra janela).</translation>
+        <translation>Se a janela é transitória (um diálogo ou janela instantânea pertencente a outra janela).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="143"/>
@@ -2083,7 +2083,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="149"/>
         <source>Whether the window is set to stay above other windows (always on top).</source>
-        <translation>Se a janela está definida para ficar acima das outras (sempre visível).</translation>
+        <translation>Se a janela está definida para ficar acima das outras (sempre no topo).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="151"/>
@@ -2093,17 +2093,17 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="153"/>
         <source>Whether the window is hidden from the taskbar.</source>
-        <translation>Se a janela fica oculta na barra de tarefas.</translation>
+        <translation>Se a janela fica oculta da barra de tarefas.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="155"/>
         <source>Whether the window is hidden from the pager.</source>
-        <translation>Se a janela fica oculta no paginador.</translation>
+        <translation>Se a janela fica oculta do paginador.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="157"/>
         <source>Whether the window is hidden from the window switcher (Alt+Tab).</source>
-        <translation>Se a janela fica oculta no alternador de janelas (Alt+Tab).</translation>
+        <translation>Se a janela fica oculta do alternador de janelas (Alt+Tab).</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="159"/>
@@ -2251,7 +2251,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="262"/>
         <source>Hide title bars (off = force visible)</source>
-        <translation>Ocultar as barras de título (desligado = forçar visível)</translation>
+        <translation>Ocultar as barras de título (desligado = forçá-las visíveis)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="265"/>
@@ -2415,7 +2415,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="279"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="280"/>
         <source>Autotile</source>
-        <translation>Ladrilhar automaticamente</translation>
+        <translation>Ladrilhamento automático</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="370"/>
@@ -3186,7 +3186,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="702"/>
         <source>Upright tab labels</source>
-        <translation>Rótulos das abas na vertical</translation>
+        <translation>Rótulos das abas sem itálico</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="705"/>
@@ -3518,7 +3518,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="269"/>
         <source>Dock / panel</source>
-        <translation>Doca / painel</translation>
+        <translation>Dock / painel</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="271"/>
@@ -3528,7 +3528,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="272"/>
         <source>Popup</source>
-        <translation>Menu instantâneo</translation>
+        <translation>Janela instantânea</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="273"/>
@@ -4144,7 +4144,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="449"/>
         <source>Consume into focused column</source>
-        <translation>Absorver para a coluna focalizada</translation>
+        <translation>Absorver na coluna focalizada</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="473"/>
@@ -4194,7 +4194,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="727"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
-        <translation>Compara por segmentos de DNS invertido, então “firefox” também corresponde a “org.mozilla.firefox”.</translation>
+        <translation>Corresponde por segmentos de DNS invertido, então “firefox” também corresponde a “org.mozilla.firefox”.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulecontroller.cpp" line="167"/>
@@ -4404,7 +4404,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="355"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="400"/>
         <source>Accent</source>
-        <translation>Cor de destaque</translation>
+        <translation>Destaque</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="584"/>
@@ -4748,7 +4748,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="721"/>
         <source>New columns (invalid)</source>
-        <translation>Novas colunas (inválido)</translation>
+        <translation>Novas colunas (inválidas)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="722"/>
@@ -4849,7 +4849,7 @@
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="926"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="931"/>
         <source>(invalid)</source>
-        <translation>(inválido)</translation>
+        <translation>(valor inválido)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="82"/>
@@ -4864,7 +4864,7 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="563"/>
         <source>%1 (invalid)</source>
-        <translation>%1 (inválido)</translation>
+        <translation>%1 (valor inválido)</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="790"/>
@@ -5453,7 +5453,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="136"/>
         <source>Pick a snapping layout to use on one monitor.</source>
-        <translation>Escolha um layout de encaixe para usar em um monitor.</translation>
+        <translation>Escolhe um layout de encaixe para usar em um monitor.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="137"/>
@@ -5463,7 +5463,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="138"/>
         <source>Pick a tiling algorithm to use on one monitor.</source>
-        <translation>Escolha um algoritmo de ladrilhamento para usar em um monitor.</translation>
+        <translation>Escolhe um algoritmo de ladrilhamento para usar em um monitor.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="140"/>
@@ -5483,7 +5483,7 @@
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="144"/>
         <source>Pick a snapping layout to use on one virtual desktop.</source>
-        <translation>Escolha um layout de encaixe para usar em uma área de trabalho virtual.</translation>
+        <translation>Escolhe um layout de encaixe para usar em uma área de trabalho virtual.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="146"/>
@@ -5724,7 +5724,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1034"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>edge</source>
-        <translation>extremidade</translation>
+        <translation>borda</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="66"/>
@@ -5740,7 +5740,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="130"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="193"/>
         <source>snap</source>
-        <translation>encaixar</translation>
+        <translation>encaixe</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="121"/>
@@ -5770,7 +5770,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="827"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="836"/>
         <source>colour</source>
-        <translation>cores</translation>
+        <translation>cor</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="121"/>
@@ -6425,7 +6425,7 @@
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="529"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="58"/>
         <source>Exclude transient windows</source>
-        <translation>Excluir as janelas transitórias</translation>
+        <translation>Deixar de fora as janelas transitórias</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="377"/>
@@ -7063,7 +7063,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="252"/>
         <source>dock</source>
-        <translation>doca</translation>
+        <translation>dock</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="272"/>
@@ -7818,7 +7818,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="607"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="63"/>
         <source>Hold to enable</source>
-        <translation>Segurar para ativar</translation>
+        <translation>Segurar para habilitar</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="612"/>
@@ -7864,7 +7864,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="55"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="61"/>
         <source>Auto-assign new windows for all layouts</source>
-        <translation>Atribuir automaticamente as janelas novas em todos os layouts</translation>
+        <translation>Atribuir automaticamente as janelas novas para todos os layouts</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="619"/>
@@ -7888,7 +7888,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
         <source>cycle</source>
-        <translation>percorrer</translation>
+        <translation>ciclo</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="700"/>
@@ -8271,7 +8271,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <source>all</source>
-        <translation>tudo</translation>
+        <translation>todas</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
@@ -8567,7 +8567,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="141"/>
         <source>Unfloat to a zone when there is no previous zone</source>
-        <translation>Parar de flutuar em uma zona quando não houver zona anterior</translation>
+        <translation>Encaixar em uma zona ao parar de flutuar, quando não houver zona anterior</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="635"/>
@@ -8746,7 +8746,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="65"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="68"/>
         <source>proportion</source>
-        <translation>fração</translation>
+        <translation>proporção</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="655"/>
@@ -9001,7 +9001,7 @@
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="249"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="62"/>
         <source>Exclude notifications and OSDs</source>
-        <translation>Excluir as notificações e os avisos na tela</translation>
+        <translation>Deixar de fora as notificações e os avisos na tela</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="982"/>
@@ -9538,13 +9538,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="30"/>
         <source>Applet Popup Shown</source>
-        <translation>Janela de miniaplicativo exibida</translation>
+        <translation>Janela instantânea de miniaplicativo exibida</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="94"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsShellPage.qml.cpp" line="35"/>
         <source>Applet Popup Hidden</source>
-        <translation>Janela de miniaplicativo oculta</translation>
+        <translation>Janela instantânea de miniaplicativo oculta</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="134"/>
@@ -9617,7 +9617,7 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="18"/>
         <source>Hover</source>
-        <translation>Sob o cursor</translation>
+        <translation>Passar o cursor</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="106"/>
@@ -9713,13 +9713,13 @@
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="144"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="22"/>
         <source>Snap Into Zone (Fill Preview)</source>
-        <translation>Encaixar na zona (prévia do preenchimento)</translation>
+        <translation>Encaixar na zona (visualização do preenchimento)</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="32"/>
         <source>Snap Resize (Drag Preview)</source>
-        <translation>Redimensionar ao encaixar (prévia do arraste)</translation>
+        <translation>Redimensionar ao encaixar (visualização do arraste)</translation>
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="608"/>
@@ -11740,13 +11740,13 @@
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="167"/>
         <source>Zone Padding</source>
         <comment>@option:check</comment>
-        <translation>Preenchimento da zona</translation>
+        <translation>Espaço interno da zona</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="188"/>
         <source>Zone padding value</source>
         <comment>@label</comment>
-        <translation>Valor do preenchimento da zona</translation>
+        <translation>Valor do espaço interno da zona</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/LayoutSettingsDialog.qml.cpp" line="196"/>
@@ -13352,7 +13352,7 @@
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="225"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="229"/>
         <source>Override modifier</source>
-        <translation>Modificador de substituição</translation>
+        <translation>Modificador de exceção</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="226"/>
@@ -13387,7 +13387,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="58"/>
         <source>GPU that draws the zone overlays and on-screen displays. Automatic lets the graphics driver decide. KWin composites window contents, so those are unaffected.</source>
-        <translation>GPU que desenha as sobreposições de zona e os avisos na tela. Em Automático, o driver gráfico decide. O KWin compõe o conteúdo das janelas, então isso não é afetado.</translation>
+        <translation>GPU que desenha as sobreposições de zona e os avisos na tela. Em Automático, o driver gráfico decide. O KWin compõe o conteúdo das janelas, então ele não é afetado.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="126"/>
@@ -14426,7 +14426,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="100"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationSurfaceCard.qml.cpp" line="254"/>
         <source>Clear shadowing children</source>
-        <translation>Limpar os filhos sobrepostos</translation>
+        <translation>Limpar os filhos que se sobrepõem</translation>
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationEventCardBanners.qml.cpp" line="131"/>
@@ -14946,12 +14946,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="268"/>
         <source>No custom easing presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
-        <translation>Ainda não há suavizações personalizadas. Use &quot;Salvar como predefinição…&quot; no editor de curvas para criar uma.</translation>
+        <translation>Ainda não há predefinições de suavização personalizadas. Use &quot;Salvar como predefinição…&quot; no editor de curvas para criar uma.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="401"/>
         <source>No custom spring presets yet. Use &quot;Save as preset…&quot; in the curve editor to create one.</source>
-        <translation>Ainda não há molas personalizadas. Use &quot;Salvar como predefinição…&quot; no editor de curvas para criar uma.</translation>
+        <translation>Ainda não há predefinições de mola personalizadas. Use &quot;Salvar como predefinição…&quot; no editor de curvas para criar uma.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="252"/>
@@ -14973,7 +14973,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="123"/>
         <source>&quot;%1&quot; will be permanently removed.</source>
-        <translation>&quot;%1&quot; será removido para sempre.</translation>
+        <translation>&quot;%1&quot; será removida para sempre.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="308"/>
@@ -15122,7 +15122,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="150"/>
         <source>Easing preset</source>
-        <translation>Suavização predefinida</translation>
+        <translation>Predefinição de suavização</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="151"/>
@@ -15204,7 +15204,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="316"/>
         <source>Spring preset</source>
-        <translation>Mola predefinida</translation>
+        <translation>Predefinição de mola</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="339"/>
@@ -15318,7 +15318,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="82"/>
         <source>Circular (Circ)</source>
-        <translation>Circular</translation>
+        <translation>Circular (circ.)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurvePresets.qml.cpp" line="86"/>
@@ -15718,7 +15718,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="416"/>
         <source>How strongly the tint color blends over the window, where 0% keeps it untinted</source>
-        <translation>O quanto a cor da tonalidade se mistura sobre a janela, sendo 0% sem nenhuma cor</translation>
+        <translation>O quanto a cor da tonalidade se mistura sobre a janela, sendo que 0% deixa a janela sem tonalidade</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="298"/>
@@ -15825,7 +15825,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="610"/>
         <source>How sharply decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</source>
         <oldsource>How sharp decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.</oldsource>
-        <translation>O quanto os shaders de decoração calculam o desfoque com nitidez, em relação ao que cada pacote escolhe por conta própria. Valores mais baixos pesam menos na placa de vídeo e ficam um pouco mais macios em movimento. Valores mais altos ficam mais nítidos e custam mais.</translation>
+        <translation>Com que nitidez os shaders de decoração calculam o desfoque, em relação ao que cada pacote de shaders escolhe por si. Valores mais baixos pesam menos na placa de vídeo e ficam um pouco mais suaves em movimento. Valores mais altos ficam mais nítidos e custam mais.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="636"/>
@@ -15841,7 +15841,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="688"/>
         <source>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.</source>
         <oldsource>Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.</oldsource>
-        <translation>As outras janelas mantêm a decoração, mas param de se mover. Isso economiza placa de vídeo mais ou menos na proporção de quantas janelas você tem abertas. Os painéis e as janelas de miniaplicativo continuam animando, porque um painel nunca é a janela ativa.</translation>
+        <translation>As outras janelas mantêm a decoração, mas param de se mover. Isso reduz o uso da placa de vídeo mais ou menos na proporção de quantas janelas você tem abertas. Os painéis e as janelas instantâneas de miniaplicativo continuam animando, porque um painel nunca é a janela ativa.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="704"/>
@@ -16056,7 +16056,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="79"/>
         <source>Auto / Manual</source>
-        <translation>Automático / manual</translation>
+        <translation>Automático / Manual</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="79"/>
@@ -16896,7 +16896,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="113"/>
         <source>A visual fingerprint of everything this profile resolves to, including what it inherits.</source>
-        <translation>Uma impressão digital visual de tudo a que este perfil chega, incluindo o que ele herda.</translation>
+        <translation>Uma impressão digital visual de tudo o que este perfil resolve, incluindo o que ele herda.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="138"/>
@@ -17107,7 +17107,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="147"/>
         <source>Save everything as it is now as a new profile. Pick a parent to store only the differences from it.</source>
-        <translation>Salva tudo como está agora em um novo perfil. Escolha um pai para guardar apenas as diferenças em relação a ele.</translation>
+        <translation>Salve tudo como está agora em um novo perfil. Escolha um pai para guardar apenas as diferenças em relação a ele.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="223"/>
@@ -17328,7 +17328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="382"/>
         <source>This action runs during context resolution and cannot match window properties. Remove the window conditions from the rule&apos;s match, or pick a different action.</source>
-        <translation>Esta ação roda durante a resolução do contexto e não consegue comparar propriedades de janela. Remova as condições de janela da correspondência da regra, ou escolha outra ação.</translation>
+        <translation>Esta ação roda durante a resolução do contexto e não consegue corresponder a propriedades de janela. Remova as condições de janela da correspondência da regra, ou escolha outra ação.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionRow.qml.cpp" line="386"/>
@@ -17799,7 +17799,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="270"/>
         <source>Rule priority. Higher rules are evaluated first.</source>
-        <translation>Prioridade da regra. As regras mais altas são avaliadas primeiro.</translation>
+        <translation>Prioridade da regra. As regras de prioridade mais alta são avaliadas primeiro.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="272"/>
@@ -17846,7 +17846,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="110"/>
         <source>Action “%1” is a duplicate. An earlier action of the same type on this rule already sets it, so only one of them takes effect.</source>
-        <translation>A ação “%1” está duplicada. Uma ação anterior do mesmo tipo nesta regra já a define, então só uma delas tem efeito.</translation>
+        <translation>A ação “%1” está duplicada. Uma ação anterior do mesmo tipo nesta regra já define esse valor, então só uma delas tem efeito.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="112"/>
@@ -17857,7 +17857,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="114"/>
         <source>Action “%1” is a context action, but the rule matches window properties, so it never fires.</source>
-        <translation>A ação “%1” é uma ação de contexto, mas a regra compara propriedades de janela, então ela nunca dispara.</translation>
+        <translation>A ação “%1” é uma ação de contexto, mas a regra corresponde a propriedades de janela, então ela nunca dispara.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorStatusBar.qml.cpp" line="117"/>
@@ -17907,8 +17907,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleRow.qml.cpp" line="165"/>
         <source>This rule has %n animation action naming an event that does not belong to a window, so it never runs. Rules match windows.</source>
         <translation>
-            <numerusform>Esta regra tem %n ação de animação que cita um evento que não pertence a uma janela, então ela nunca roda. As regras comparam janelas.</numerusform>
-            <numerusform>Esta regra tem %n ações de animação que citam eventos que não pertencem a uma janela, então elas nunca rodam. As regras comparam janelas.</numerusform>
+            <numerusform>Esta regra tem %n ação de animação que cita um evento que não pertence a uma janela, então ela nunca roda. As regras correspondem a janelas.</numerusform>
+            <numerusform>Esta regra tem %n ações de animação que citam eventos que não pertencem a uma janela, então elas nunca rodam. As regras correspondem a janelas.</numerusform>
         </translation>
     </message>
     <message>
@@ -17998,7 +17998,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="53"/>
         <source>Float, exclude or tweak windows of a specific app.</source>
-        <translation>Faça flutuar, exclua ou ajuste as janelas de um aplicativo específico.</translation>
+        <translation>Faça flutuar, deixe de fora ou ajuste as janelas de um aplicativo específico.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleStartPicker.qml.cpp" line="59"/>
@@ -18102,13 +18102,13 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="554"/>
         <source>Active</source>
         <comment>@option:check filter rules by status</comment>
-        <translation>Ativo</translation>
+        <translation>Ativas</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="558"/>
         <source>Disabled</source>
         <comment>@option:check filter rules by status</comment>
-        <translation>Desativado</translation>
+        <translation>Desativadas</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="566"/>
@@ -19443,7 +19443,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="87"/>
         <source>How long after the trigger is released a drop still counts as holding it. The picker is decided at the moment you let go of the window, which is when a trigger held by the same hand has usually lifted already. Set 0 to turn it off.</source>
-        <translation>Por quanto tempo, depois de soltar o acionador, uma soltura ainda conta como se ele estivesse pressionado. O seletor é decidido no momento em que você larga a janela, que é quando um acionador segurado pela mesma mão normalmente já foi solto. Use 0 para desligar.</translation>
+        <translation>Por quanto tempo, depois de soltar o acionador, uma janela solta ainda conta como se ele estivesse pressionado. O seletor é decidido no momento em que você larga a janela, que é quando um acionador segurado pela mesma mão normalmente já foi solto. Use 0 para desligar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="88"/>
@@ -19765,7 +19765,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="471"/>
         <source>Lays out a lone window itself instead of filling the screen</source>
-        <translation>Posiciona uma janela sozinha por conta própria, em vez de preencher a tela</translation>
+        <translation>Posiciona ele mesmo a janela única, em vez de deixá-la preencher a tela</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="475"/>
@@ -20164,7 +20164,7 @@
     <message>
         <location filename=".qml-stubs/src/shared/CapabilityBadgeRow.qml.cpp" line="96"/>
         <source>Lays out a single window itself instead of filling the screen</source>
-        <translation>Posiciona uma janela sozinha por conta própria, em vez de preencher a tela</translation>
+        <translation>Posiciona ele mesmo a janela única, em vez de deixá-la preencher a tela</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/shared/CapabilityBadgeRow.qml.cpp" line="107"/>
@@ -20583,7 +20583,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="201"/>
         <source>No window to switch to</source>
-        <translation>Nenhuma janela para onde ir</translation>
+        <translation>Nenhuma janela para a qual alternar</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="206"/>
@@ -20866,7 +20866,7 @@
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
         <source>Zone %1 ↔ Zone %2</source>
-        <translation>Zona %1 ↔ zona %2</translation>
+        <translation>Zona %1 ↔ Zona %2</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="483"/>
@@ -21113,7 +21113,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="261"/>
         <source>Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip. A screen with a layout template of its own takes this from that template instead, and the template&apos;s starting columns each carry their own.</source>
-        <translation>Normal empilha as janelas de uma coluna umas sobre as outras. Em abas mostra uma janela por vez atrás de uma tira de abas. Uma tela com modelo de layout próprio tira isto desse modelo, e cada coluna inicial do modelo carrega a própria escolha.</translation>
+        <translation>Normal empilha as janelas de uma coluna umas sobre as outras. Em abas mostra uma janela por vez atrás de uma faixa de abas. Uma tela com modelo de layout próprio tira isto desse modelo, e cada coluna inicial do modelo carrega a própria escolha.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="280"/>
@@ -21277,7 +21277,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="253"/>
         <source>Shrink the windows to fit the indicator. Off, it is drawn beside the column and can overlap a neighbor or run off screen.</source>
-        <translation>Encolhe as janelas para caber o indicador. Desligado, ele é desenhado ao lado da coluna e pode se sobrepor a uma vizinha ou sair da tela.</translation>
+        <translation>Encolhe as janelas para acomodar o indicador. Desligado, ele é desenhado ao lado da coluna e pode se sobrepor a uma vizinha ou sair da tela.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="257"/>
@@ -21287,7 +21287,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="267"/>
         <source>Space between the indicator and the window. A negative gap draws it over the window instead.</source>
-        <translation>Espaço entre o indicador e a janela. Um espaçamento negativo o desenha sobre a janela.</translation>
+        <translation>Espaço entre o indicador e a janela. Um espaçamento negativo, em vez disso, o desenha sobre a janela.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="272"/>
@@ -21328,7 +21328,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="358"/>
         <source>Round each tab to a pill. Off, the corner radius below applies instead.</source>
-        <translation>Arredonda cada aba em formato de pílula. Desligado, vale o raio dos cantos abaixo.</translation>
+        <translation>Arredonda cada aba em formato de pílula. Desligado, vale o raio dos cantos abaixo em vez disso.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="380"/>
@@ -21555,7 +21555,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
-        <translation>Mostra ou oculta os avisos na tela da tela, área de trabalho ou atividade correspondente. Desligado silencia ali os avisos de layout e navegação. Ligado os mostra mesmo com as opções globais desligadas, embora o estilo de exibição Nenhum continue ocultando tudo.</translation>
+        <translation>Mostra ou oculta os avisos na tela para a tela, área de trabalho ou atividade correspondente. Desligado silencia ali os avisos de layout e navegação. Ligado os mostra mesmo com as opções globais desligadas, embora o estilo de exibição Nenhum continue ocultando tudo.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
@@ -21921,7 +21921,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="362"/>
         <source>Chooses which way the matched context&apos;s strip runs, overriding the Strip direction setting and any per-monitor choice. Match the screen shape resolves from the usable area, so the rule can hand a pinned monitor back to that option for one desktop or activity.</source>
         <comment>&apos;Match the screen shape&apos; must stay identical to the option label shown in the picker</comment>
-        <translation>Escolhe em qual sentido corre a faixa do contexto correspondente, substituindo a configuração Direção da faixa e qualquer escolha por monitor. Acompanhar o formato da tela se resolve pela área utilizável, então a regra pode devolver um monitor preso a essa opção em uma área de trabalho ou atividade.</translation>
+        <translation>Escolhe em qual sentido corre a faixa do contexto correspondente, substituindo a configuração Direção da faixa e qualquer escolha por monitor. Acompanhar o formato da tela se resolve pela área utilizável, então a regra pode devolver a essa opção um monitor com direção fixada, em uma área de trabalho ou atividade.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
@@ -21951,7 +21951,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="392"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
-        <translation>Define o espaçamento entre o indicador de abas e a janela no contexto correspondente. Um espaçamento negativo o desenha sobre a janela.</translation>
+        <translation>Define o espaçamento entre o indicador de abas e a janela no contexto correspondente. Um espaçamento negativo, em vez disso, o desenha sobre a janela.</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="397"/>
@@ -22091,7 +22091,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="299"/>
         <source>(invalid)</source>
         <comment>@item an action value the rule runtime rejects</comment>
-        <translation>(inválido)</translation>
+        <translation>(valor inválido)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="302"/>
@@ -22116,7 +22116,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="42"/>
         <source>Animations for scrolling. Strip Scrolled covers the whole strip moving together, and Tab Switched covers a tab replacing another in its column. Each event offers only the shaders that can drive it.</source>
         <oldsource>Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.</oldsource>
-        <translation>Animações da rolagem. Faixa rolada cobre a faixa inteira se movendo junto, e Aba trocada cobre uma aba substituindo outra na coluna dela. Cada evento oferece apenas os shaders capazes de movê-lo.</translation>
+        <translation>Animações da rolagem. Faixa rolada cobre a faixa inteira se movendo junto, e Aba trocada cobre uma aba substituindo outra na coluna dela. Cada evento oferece apenas os shaders capazes de animá-lo.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="100"/>
@@ -22163,7 +22163,7 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
-        <translation>Ao arrastar uma janela em uma tela com rolagem, leve-a até a borda de tela configurada para abrir uma janela mostrando a faixa atual. Solte entre duas colunas para inserir uma coluna nova, sobre uma coluna com abas para acrescentar a janela como aba, ou sobre a metade de cima ou de baixo de uma coluna para empilhá-la ali.</translation>
+        <translation>Ao arrastar uma janela em uma tela com rolagem, leve-a até a borda de tela configurada para abrir uma janela instantânea mostrando a faixa atual. Solte entre duas colunas para inserir uma coluna nova, sobre uma coluna com abas para acrescentar a janela como aba, ou sobre a metade de cima ou de baixo de uma coluna para empilhá-la ali.</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
@@ -22417,7 +22417,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="280"/>
         <source>Stacked</source>
         <comment>@item:inlistbox column display</comment>
-        <translation>Empilhada</translation>
+        <translation>Empilhadas</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="284"/>
@@ -22459,7 +22459,7 @@
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="338"/>
         <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.</source>
         <comment>@info</comment>
-        <translation>A largura padrão está definida como uma largura predefinida, então este modelo precisa de pelo menos uma. Sem nenhuma, ele é salvo como uma fração da faixa.</translation>
+        <translation>A largura padrão está definida como uma largura predefinida, então este modelo precisa de pelo menos uma. Sem nenhuma, ele é salvo como uma fração da faixa em vez disso.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="347"/>
@@ -22503,7 +22503,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationShellPage.qml.cpp" line="35"/>
         <source>Applet Popups</source>
-        <translation>Janelas de miniaplicativo</translation>
+        <translation>Janelas instantâneas de miniaplicativo</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="14"/>
@@ -22549,13 +22549,13 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="61"/>
         <source>Accordion Collapse</source>
         <comment>animation event or section</comment>
-        <translation>Recolher a sanfona</translation>
+        <translation>Recolhimento da sanfona</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="64"/>
         <source>Accordion Expand</source>
         <comment>animation event or section</comment>
-        <translation>Expandir a sanfona</translation>
+        <translation>Expansão da sanfona</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="67"/>
@@ -22567,25 +22567,25 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="70"/>
         <source>Applet Popup</source>
         <comment>animation event or section</comment>
-        <translation>Janela de miniaplicativo</translation>
+        <translation>Janela instantânea de miniaplicativo</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="73"/>
         <source>Badge Hide</source>
         <comment>animation event or section</comment>
-        <translation>Ocultar o selo</translation>
+        <translation>Ocultação do selo</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="76"/>
         <source>Badge Pulse</source>
         <comment>animation event or section</comment>
-        <translation>Pulsar o selo</translation>
+        <translation>Pulsação do selo</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="79"/>
         <source>Badge Show</source>
         <comment>animation event or section</comment>
-        <translation>Mostrar o selo</translation>
+        <translation>Exibição do selo</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="82"/>
@@ -22597,7 +22597,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="85"/>
         <source>Cheatsheet</source>
         <comment>animation event or section</comment>
-        <translation>Resumo</translation>
+        <translation>Resumo de atalhos</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="88"/>
@@ -22675,7 +22675,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="124"/>
         <source>Hover</source>
         <comment>animation event or section</comment>
-        <translation>Sob o cursor</translation>
+        <translation>Passar o cursor</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="127"/>
@@ -22753,7 +22753,7 @@
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="163"/>
         <source>Popup</source>
         <comment>animation event or section</comment>
-        <translation>Menu instantâneo</translation>
+        <translation>Janela instantânea</translation>
     </message>
     <message>
         <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="166"/>
@@ -22980,12 +22980,12 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. Set the animation for this event on the Animations pages instead, where it applies everywhere.</source>
-        <translation>As regras comparam janelas, e este evento não pertence a uma janela, então esta ação nunca roda. Defina a animação deste evento nas páginas de Animações, onde ela vale em todo lugar.</translation>
+        <translation>As regras correspondem a janelas, e este evento não pertence a uma janela, então esta ação nunca roda. Defina a animação deste evento nas páginas de Animações, onde ela vale em todo lugar.</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/InertAnimationEventChip.qml.cpp" line="107"/>
         <source>Rules match windows, and this event does not belong to a window, so this action never runs. This event takes no shader anywhere, so the action can be removed.</source>
-        <translation>As regras comparam janelas, e este evento não pertence a uma janela, então esta ação nunca roda. Este evento não aceita shader em lugar nenhum, então a ação pode ser removida.</translation>
+        <translation>As regras correspondem a janelas, e este evento não pertence a uma janela, então esta ação nunca roda. Este evento não aceita shader em lugar nenhum, então a ação pode ser removida.</translation>
     </message>
 </context>
 </TS>

@@ -50,9 +50,10 @@ Then reconfigure CMake so it picks up the new file.
 
 Plural forms: every `%n` message needs one `<numerusform>` per plural
 category of the target language (2 for German, Dutch or Brazilian
-Portuguese, 3 for Polish or Russian, and so on). Qt Linguist fills in the right number of slots once
-the `<TS>` language is set, so open the file in Linguist after copying it
-rather than editing the numerus blocks by hand.
+Portuguese, 3 for Polish or Russian, and so on). Qt Linguist fills in
+the right number of slots once the `<TS>` language is set, so open the
+file in Linguist after copying it rather than editing the numerus
+blocks by hand.
 
 ## Testing translations
 
