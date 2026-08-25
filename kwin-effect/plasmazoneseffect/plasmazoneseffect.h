@@ -2517,6 +2517,26 @@ private:
     /// on daemon loss AND at bring-up (drainDeadSessionState). NOT dropped by
     /// cleanupAutotileTracking — the re-announce re-seeds it inline.
     QHash<QString, QSize> m_lastReportedMinSize;
+    /// Per non-X11 strip window: the column SIZE the last placement offered it.
+    ///
+    /// The Wayland half of constrainTileGeometry. X11 pre-applies real size
+    /// hints, so KWin gets a rect the client already accepts and a move to an
+    /// off-screen park lands. Wayland has no equivalent to read: a client with
+    /// its own constraint (Firefox Picture-in-Picture holds 16:9) takes the
+    /// configure, commits a DIFFERENT size, and KWin re-places that size —
+    /// applying its keep-on-screen containment, which drags the window back
+    /// into view. The park never lands, so the window cannot be parked or
+    /// straddle-cropped; it just slides around as the strip moves.
+    ///
+    /// What the client will accept is knowable after the first offer, because
+    /// it already told us: its committed size. Remembering the column size
+    /// that produced it is what separates "same column, only the position is
+    /// moving" (re-offer the accepted size, a pure move KWin cannot
+    /// renegotiate) from "the column itself resized" (offer the new column
+    /// size and let the client answer again). Self-correcting either way, and
+    /// inert for a window whose commit already matches its column — which is
+    /// every ordinary one.
+    mutable QHash<QString, QSize> m_lastOfferedColumnSize;
     /// Per scroll-managed X11 window: the rect the last batch commanded, so
     /// an EXTERNAL move can be detected and countered. X11 clients can
     /// reposition themselves through ConfigureRequests KWin honors — a Wine
