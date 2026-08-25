@@ -840,7 +840,38 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // and non-animated paths — keep this one at debug to avoid a
         // duplicate INFO line for the same apply.
         qCDebug(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
-        kwinWindow->moveResize(QRectF(geo));
+        // A placement that changes no SIZE goes through move(), not
+        // moveResize(), and the difference is not cosmetic.
+        //
+        // Both apply the new position immediately, but only move() takes
+        // KWin's MoveResizeMode::Move branch, which additionally CLEARS the
+        // pending-position flag on every configure event still queued for the
+        // client (xdgshellwindow.cpp, moveResizeInternal). moveResize() leaves
+        // those armed, and when the client later acks one, KWin re-anchors the
+        // window through gravity.apply() against the bounds rect snapshotted
+        // when THAT configure was sent — not against what we just asked for.
+        //
+        // Harmless for a client that acks promptly, because the stale bounds
+        // and the fresh request agree. Not harmless for one that renegotiates
+        // over several round-trips: a size-enforcing client (Firefox
+        // Picture-in-Picture holds 16:9) routinely acks a configure we have
+        // already superseded, and the window jumps back to where that older
+        // request would have put it. On a scrolling strip, where a column's
+        // position changes constantly, that reads as the window drifting
+        // around the screen edge instead of being cropped at it.
+        //
+        // Size-equal is the whole gate: a real resize has to keep the
+        // configure path, because the size genuinely needs the client's
+        // agreement.
+        // Integer-aligned, matching the no-op skip above: frameGeometry()
+        // carries qreal precision and a fractional-scale output leaves
+        // sub-pixel residue, so an exact QSizeF equality would miss and send a
+        // size-preserving placement down the configure path anyway.
+        if (geo.size() == kwinWindow->frameGeometry().toRect().size()) {
+            kwinWindow->move(QRectF(geo).topLeft());
+        } else {
+            kwinWindow->moveResize(QRectF(geo));
+        }
 
         repaintSnapRegions(window, trueOldFrame, geo);
     } else {
