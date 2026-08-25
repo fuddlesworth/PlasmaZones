@@ -2129,7 +2129,33 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // apply would close the window entirely; it is left here
                 // because the reactive centring is deliberately re-entrant-
                 // driven and the reordering has not been exercised.
-                if (!snap.isWindowedFullscreen) {
+                if (isScrollingScreen(snap.screenId)) {
+                    // A STRIP entry never takes the reactive centring pass.
+                    //
+                    // That pass is an autotile repair: it re-centres a Wayland
+                    // client whose committed frame is smaller than its zone,
+                    // and then CLAMPS the result fully inside the output
+                    // containing the zone's centre. Both halves are wrong on a
+                    // strip. A strip column is routinely meant to sit off the
+                    // viewport — parked below every output, or straddling a
+                    // screen edge so the effect can crop it — and clamping it
+                    // back on screen is exactly the "window slides around the
+                    // edge instead of being cropped at it" symptom. It also
+                    // reaps the window's animation leg mid-flight and issues
+                    // its own moveResize, so the strip's placement and this
+                    // pass fight each other every frame.
+                    //
+                    // Only ever observable for a client whose commit diverges
+                    // from its column, because the pass no-ops when the frame
+                    // already fills the zone. A window that accepts its column
+                    // — nearly all of them — was never touched, which is why
+                    // this went unnoticed.
+                    //
+                    // Removed rather than merely not written: a window that
+                    // moves from an autotile screen to a scrolling one would
+                    // otherwise keep the entry its autotile placement armed.
+                    m_tileTargetZones.remove(snap.windowId);
+                } else if (!snap.isWindowedFullscreen) {
                     m_tileTargetZones[snap.windowId] = snap.geometry;
                 }
             } else if (!snap.isMonocle && isScrollingScreen(snap.screenId)) {
