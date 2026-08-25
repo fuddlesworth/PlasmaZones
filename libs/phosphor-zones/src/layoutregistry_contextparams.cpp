@@ -250,6 +250,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         QString(PWR::ActionSlot::ScrollFocusNewWindows),
         QString(PWR::ActionSlot::ScrollSmartGaps),
         QString(PWR::ActionSlot::ScrollFocusFollowsMouse),
+        QString(PWR::ActionSlot::ScrollFocusFollowsMouseMaxScroll),
         QString(PWR::ActionSlot::ScrollStickyWindowHandling),
         QString(PWR::ActionSlot::ScrollStripAxis),
     };

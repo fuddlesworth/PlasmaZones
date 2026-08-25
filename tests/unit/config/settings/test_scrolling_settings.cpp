@@ -1153,6 +1153,34 @@ private Q_SLOTS:
         settings.setScrollingViewScrollStepPercent(1000); // clamps to the same max: silent
         QCOMPARE(viewStepSpy.count(), 2);
         QCOMPARE(changedSpy.count(), preViewChanged + 2);
+
+        // The focus-follows-mouse scroll cap. Same clampInt shape as the three
+        // step percents above, with one arm they cannot pin: its minimum is 0
+        // and 0 is a MEANINGFUL value here (focus follows the pointer only onto
+        // columns already fully in view), so the clamp-to-min write has to
+        // announce rather than being indistinguishable from a rejected write.
+        QSignalSpy capSpy(&settings, &Settings::scrollingFocusFollowsMouseMaxScrollChanged);
+        const int preCapChanged = changedSpy.count();
+        settings.setScrollingFocusFollowsMouseMaxScroll(50);
+        QCOMPARE(settings.scrollingFocusFollowsMouseMaxScroll(), 50);
+        QCOMPARE(capSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preCapChanged + 1);
+        settings.setScrollingFocusFollowsMouseMaxScroll(50); // unchanged: silent
+        QCOMPARE(capSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preCapChanged + 1);
+        settings.setScrollingFocusFollowsMouseMaxScroll(999);
+        QCOMPARE(settings.scrollingFocusFollowsMouseMaxScroll(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
+        QCOMPARE(capSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preCapChanged + 2);
+        settings.setScrollingFocusFollowsMouseMaxScroll(200); // clamps to the same max: silent
+        QCOMPARE(capSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preCapChanged + 2);
+        settings.setScrollingFocusFollowsMouseMaxScroll(-5);
+        QCOMPARE(settings.scrollingFocusFollowsMouseMaxScroll(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
+        QCOMPARE(capSpy.count(), 3);
+        QCOMPARE(changedSpy.count(), preCapChanged + 3);
     }
 
     /// Preset lists canonicalize to numeric proportions in (0, 1]: junk and

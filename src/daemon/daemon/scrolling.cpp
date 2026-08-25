@@ -245,7 +245,8 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // m_settings is unguarded here: the function's entry check already
         // returns on a null one, so a second test only read as though the
         // resolve were optional.
-        if (params.focusFollowsMouse.value_or(m_settings->scrollingFocusFollowsMouse())) {
+        const bool focusFollowsMouse = params.focusFollowsMouse.value_or(m_settings->scrollingFocusFollowsMouse());
+        if (focusFollowsMouse) {
             ffmScreens.append(screenId);
         }
         if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
@@ -258,12 +259,18 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // window list, again on every relayout. The rule slot carries a
         // fraction and the config key a percent, each the convention of its
         // own layer, so the rule arm is scaled here at the one place both are
-        // in hand. Stored only when it genuinely caps: 100 is the no-cap
-        // default and an absent entry is what the fast path tests for.
+        // in hand. Stored only when it genuinely caps, and only when there is
+        // a focus-follows-mouse to cap: the maximum is the no-cap value, and
+        // an absent entry is what the per-relayout fast path tests for. The
+        // focusFollowsMouse gate matters because the two are independent
+        // settings and a rule can set the cap without the toggle — an entry
+        // for a screen with the toggle off would put every relayout on that
+        // screen through the strip walk for a list the compositor never
+        // consults, since its lookup sits behind the same toggle.
         const int maxScrollPercent = params.focusFollowsMouseMaxScroll
             ? qRound(*params.focusFollowsMouseMaxScroll * 100.0)
             : m_settings->scrollingFocusFollowsMouseMaxScroll();
-        if (maxScrollPercent < 100) {
+        if (focusFollowsMouse && maxScrollPercent < ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax()) {
             m_scrollFfmMaxScrollPercent.insert(screenId, maxScrollPercent);
         }
         // Taken from the ENGINE, never re-derived here. The engine owns the

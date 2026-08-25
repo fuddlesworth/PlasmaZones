@@ -83,6 +83,8 @@ private Q_SLOTS:
     void outOfRangeWidthRuleDoesNotSuppressClientDecides();
     void retileKeepsClientDecidedWidthsUnlessARulePinsOne();
     void wrongTypedBehaviourOverridesAreRejected();
+    void focusScrollLimitNamesTheWindowsPastTheCap();
+    void focusScrollLimitFailsOpen();
 
 private:
     /// An engine on S1 and S2 with @p settings installed and its cached
@@ -488,6 +490,70 @@ void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()
         }
     }
     QVERIFY(sawActive);
+}
+
+void TestScrollEngineBehaviour::focusScrollLimitNamesTheWindowsPastTheCap()
+{
+    // The daemon publishes this list as membership and the compositor answers
+    // a pointer with one set lookup, so what it names has to be windows, and
+    // it has to name EVERY window of a column past the cap rather than the
+    // column's first tile.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->centerFocused = static_cast<int>(CenterFocusedColumn::Always);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.5;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
+
+    // The maximum is the no-cap sentinel and short-circuits before any walk.
+    QVERIFY(engine->windowsBeyondFocusScrollLimit(kS1, 100).isEmpty());
+    // Anything past it reads the same way rather than wrapping into a cap.
+    QVERIFY(engine->windowsBeyondFocusScrollLimit(kS1, 250).isEmpty());
+
+    // Zero means "follow the pointer only onto what needs no scrolling at
+    // all", so every column that is not already the focused one is refused.
+    const QStringList none = engine->windowsBeyondFocusScrollLimit(kS1, 0);
+    QVERIFY(!none.isEmpty());
+    QVERIFY(!none.contains(activeWindowOn(engine, kS1)));
+
+    // A negative percent is the same question as zero, not a wider cap.
+    QCOMPARE(engine->windowsBeyondFocusScrollLimit(kS1, -20), none);
+
+    // Every id named is a real strip window, and no id is named twice.
+    const QStringList order = orderOn(engine, kS1);
+    for (const QString& windowId : none) {
+        QVERIFY2(order.contains(windowId), qPrintable(windowId));
+        QCOMPARE(none.count(windowId), 1);
+    }
+
+    // The cap is monotone: relaxing it can only ever refuse fewer windows.
+    const QStringList half = engine->windowsBeyondFocusScrollLimit(kS1, 50);
+    for (const QString& windowId : half) {
+        QVERIFY2(none.contains(windowId), qPrintable(windowId));
+    }
+}
+
+void TestScrollEngineBehaviour::focusScrollLimitFailsOpen()
+{
+    // A question the engine cannot answer must come back as "refuse nothing".
+    // The caller turns this list into a REFUSAL, so an unknown screen or an
+    // empty strip answering anything else would silently break focus.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVERIFY(engine->windowsBeyondFocusScrollLimit(QStringLiteral("DP-nonexistent"), 0).isEmpty());
+    QVERIFY(engine->windowsBeyondFocusScrollLimit(kS1, 0).isEmpty()); // no windows yet
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    // A lone column is the one the pointer is already on, so nothing is past
+    // the cap however tight it is.
+    QVERIFY(engine->windowsBeyondFocusScrollLimit(kS1, 0).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineBehaviour)

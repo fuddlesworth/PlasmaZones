@@ -339,18 +339,31 @@ QStringList ScrollEngine::windowsBeyondFocusScrollLimit(const QString& screenId,
     // any size. A negative percent is clamped to 0 rather than rejected: 0 is
     // a meaningful setting ("only focus what needs no scrolling at all") and
     // it is the nearest honest reading of a value below it.
-    const QRect& area = params.workArea;
-    const int viewMain = params.axis.isVertical() ? area.height() : area.width();
-    const int maxPx = qMax(0, viewMain) * qMax(0, maxScrollPercent) / 100;
+    const int maxPx = qMax(0, params.axis.mainSize(params.workArea)) * qMax(0, maxScrollPercent) / 100;
     const ScrollStrip& strip = state->strip();
     QStringList blocked;
-    for (const QString& windowId : strip.windowsInOrder()) {
-        const int column = strip.columnOfWindow(windowId);
-        if (column < 0) {
+    // Walked per COLUMN, not per window: the cost of focusing a window is a
+    // property of the column it sits in, so asking per window would recompute
+    // one answer once per tile of a tabbed or stacked column, and pay a full
+    // columnOfWindow scan per tile on top. This runs on every relayout of
+    // every capped screen, so the difference is the whole shape of the loop.
+    const QVector<Column>& columns = strip.columns();
+    for (int i = 0; i < columns.size(); ++i) {
+        const Column& column = columns.at(i);
+        // A fully minimized column holds no strip extent, so the centering
+        // policy's arms run against a zero width and answer a shift that
+        // describes nothing. Its tiles are not focus targets under the
+        // pointer either, so they are skipped rather than measured.
+        if (column.isFullyMinimized()) {
             continue;
         }
-        if (strip.predictedFocusScrollPx(column, params) > maxPx) {
-            blocked.append(windowId);
+        if (strip.predictedFocusScrollPx(i, params) <= maxPx) {
+            continue;
+        }
+        for (const Tile& tile : column.tiles) {
+            if (!tile.minimized) {
+                blocked.append(tile.windowId);
+            }
         }
     }
     return blocked;

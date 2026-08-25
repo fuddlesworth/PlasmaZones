@@ -301,6 +301,12 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
 
 void TilingHandler::clearScrollEffectBehaviourForTeardown()
 {
+    // Bumped for the same reason both sibling teardowns bump theirs: a Get
+    // dispatched by the dying session can still land after this clear, and the
+    // fetch reply gates on nothing but these counters. Without the bump the
+    // reply passes both guards and repopulates all four sets from the dead
+    // session, which is exactly what this function exists to prevent.
+    ++m_scrollEffectBehaviourGeneration;
     m_scrollEffectBehaviourSeeded = false;
     m_scrollFocusFollowsMouseScreens.clear();
     // Cleared with the set it caps: a block list outliving the session that

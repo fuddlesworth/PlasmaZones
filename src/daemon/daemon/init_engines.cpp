@@ -1280,13 +1280,26 @@ void Daemon::initEnginesAndWiring()
         });
     // Which windows the focus-follows-mouse scroll cap refuses is a fact about
     // the strip's layout and where the view sits, so it is re-derived here
-    // rather than only when settings or rules change. Unconditional, unlike
-    // the tilingChanged relay above: the handler's own first line returns when
-    // no screen caps at all, which is the shipped default, so an auto-scroll
-    // tick costs a hash-emptiness test rather than a bus broadcast.
-    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this, [this](const QString&) {
-        publishScrollFocusScrollBlocks();
-    });
+    // rather than only when settings or rules change. When no screen caps at
+    // all, which is the shipped default, the handler's own first line returns
+    // and a tick costs a hash-emptiness test. On a CAPPED screen it is not
+    // cheap, so it takes the same gated shape as the tilingChanged relay
+    // above: the edge auto-scroll moves the view every tick, which moves the
+    // answer every tick, so an ungated relay would walk the strip and push a
+    // bus broadcast at ~60 Hz for the length of an edge hold, and flicker
+    // what focus-follows-mouse refuses while the user is still holding. The
+    // drop is lossless for the same reason it is there: the commit or cancel
+    // that ends the hold emits a final placementChanged with the auto-scroll
+    // no longer owning, and that one republishes.
+    connect(
+        scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
+        [this, scrollEngine](const QString& screenId) {
+            if (scrollEngine->dragAutoScrollActive()
+                && PhosphorScreens::ScreenIdentity::screensMatch(scrollEngine->dragInsertPreviewScreenId(), screenId)) {
+                return;
+            }
+            publishScrollFocusScrollBlocks();
+        });
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, m_tilingAdaptor,
             &TilingAdaptor::relayWindowFloatingChanged);
     // The scroll engine manages its float STATE itself, but only the daemon can

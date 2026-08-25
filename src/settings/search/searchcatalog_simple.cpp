@@ -137,6 +137,11 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Focus new windows"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("open")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouse"),
                PhosphorI18n::tr("Focus follows mouse"), {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse")});
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocusFollowsMouseMaxScroll"),
+               PhosphorI18n::tr("Limit how far the strip scrolls"),
+               {PhosphorI18n::tr("focus"), PhosphorI18n::tr("mouse"), PhosphorI18n::tr("hover"),
+                PhosphorI18n::tr("scroll"), PhosphorI18n::tr("limit"), PhosphorI18n::tr("strip"),
+                PhosphorI18n::tr("cap")});
     addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("wheelFocusEnabled"),
                PhosphorI18n::tr("Scroll the strip with the mouse wheel"),
                {PhosphorI18n::tr("wheel"), PhosphorI18n::tr("mouse")});
