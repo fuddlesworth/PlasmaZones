@@ -390,6 +390,56 @@ void OverlayService::updateGeometries()
     // updateZonesForAllWindows() is the single authoritative version bump point.
 }
 
+void OverlayService::restampZoneHighlights()
+{
+    // The zones list each slot already holds carries a baked isHighlighted per
+    // zone (overlay_data.cpp stamps it from the ZoneDetector, updateOverlayWindow
+    // re-stamps it through patchZonesWithHighlight), and both QML contents OR
+    // that flag with the live highlightedZoneId / highlightedZoneIds properties.
+    // So a highlight write that only touches the properties leaves the zone that
+    // was highlighted when the list was last pushed lit as well: the overlay
+    // showed the previous zone alongside the one under the cursor, and only the
+    // next full push — refreshFromIdle() on the following activation — cleared
+    // it. Marking m_zoneDataDirty does not close that gap either, because the
+    // flag's only consumer is updateShaderUniforms, whose timer runs solely when
+    // a screen renders through a shader pack; on a plain-rectangle overlay
+    // nothing ever serviced it.
+    //
+    // Re-stamping the list that is already there keeps this off the rebuild
+    // path: no zone geometry recompute, no labels-texture build, no shader
+    // re-apply. A blanked (warm-idled) or never-populated slot holds an empty
+    // list and is skipped, so the idle blank is preserved.
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* slot = it_.value().mainOverlaySlot();
+        if (!slot) {
+            continue;
+        }
+        const QVariantList current = slot->property(OverlayQmlPropertyNames::Zones.data()).toList();
+        if (current.isEmpty()) {
+            continue;
+        }
+        const QVariantList patched = patchZonesWithHighlight(current, slot);
+        writeQmlProperty(slot, QString(OverlayQmlPropertyNames::Zones), patched);
+        // previewZones mirrors the patched list whenever LayoutPreview mode is
+        // active (updateOverlayWindow writes both from the same value); leaving
+        // it behind would keep the miniature previews on the stale highlight.
+        if (!slot->property("previewZones").toList().isEmpty()) {
+            writeQmlProperty(slot, QStringLiteral("previewZones"), patched);
+        }
+        // highlightedCount gates RenderNodeOverlayContent's cursor-hover
+        // fallback, so it has to track the same list it is derived from.
+        if (slot->property("useShader").toBool()) {
+            int highlightedCount = 0;
+            for (const QVariant& z : patched) {
+                if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+                    ++highlightedCount;
+                }
+            }
+            writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedCount), highlightedCount);
+        }
+    }
+}
+
 void OverlayService::highlightZone(const QString& zoneId)
 {
     // Mark zone data dirty for shader overlay updates - but never while
@@ -411,6 +461,8 @@ void OverlayService::highlightZone(const QString& zoneId)
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         }
     }
+
+    restampZoneHighlights();
 }
 
 void OverlayService::highlightZones(const QStringList& zoneIds)
@@ -434,6 +486,8 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneId), QString());
         }
     }
+
+    restampZoneHighlights();
 }
 
 void OverlayService::clearHighlight()
@@ -456,6 +510,8 @@ void OverlayService::clearHighlight()
             writeQmlProperty(slot, QString(OverlayQmlPropertyNames::HighlightedZoneIds), QVariantList());
         }
     }
+
+    restampZoneHighlights();
 }
 
 void OverlayService::updateMousePosition(int cursorX, int cursorY)
