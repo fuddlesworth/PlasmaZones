@@ -942,6 +942,12 @@ void Daemon::stop()
     // otherwise still count as "already seen" a session later.
     m_activeAssignmentByScreen.clear();
     m_lastAnnouncedTemplateByScreen.clear();
+    // The per-screen scroll caps the scrolling pass resolves. Same per-session
+    // shape as the derived sets above: rewritten by the next pass before any
+    // read, but this hash is what decides whether a placementChanged arriving
+    // between the stop and that pass walks the strip at all, so a dead
+    // session's caps must not be what answers that.
+    m_scrollFfmMaxScrollPercent.clear();
     // m_lastEngineOrders is the one per-context cache this block deliberately
     // LEAVES ALONE. It is not change-gate state: it holds the window order
     // captured when a context left a tiling engine, and a stop() does not close

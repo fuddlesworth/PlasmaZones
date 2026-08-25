@@ -376,6 +376,11 @@ inline constexpr QLatin1StringView SetScrollSmartGaps{"setScrollSmartGaps"};
 /// per-mode focus-follows-mouse split only — a snapping or tiling screen
 /// keeps reading the global setting.
 inline constexpr QLatin1StringView SetScrollFocusFollowsMouse{"setScrollFocusFollowsMouse"};
+/// Numeric `ActionParam::Value` in [MinFocusFollowsMouseMaxScrollRatio,
+/// MaxFocusFollowsMouseMaxScrollRatio], the furthest focus-follows-mouse may
+/// scroll the strip to reveal the window under the pointer, as a fraction of
+/// the viewport's extent along it. 1.0 is no cap. Editors show a percent.
+inline constexpr QLatin1StringView SetScrollFocusFollowsMouseMaxScroll{"setScrollFocusFollowsMouseMaxScroll"};
 /// How the strip treats windows shown on all desktops. Closed enum token
 /// (`ActionParam::Value`, StickyWindowHandlingToken). The scrolling engine
 /// collapses both non-normal values to "float it", matching its single

@@ -65,6 +65,10 @@ void TilingHandler::connectSignals()
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"),
                    this, SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Scrolling,
+                   QStringLiteral("scrollFocusScrollBlockedWindowsChanged"), this,
+                   SLOT(slotScrollFocusScrollBlockedWindowsChanged(QStringList)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
                    SLOT(slotActiveLayoutsChanged(QVariantMap)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
@@ -104,6 +108,14 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"), this,
                 SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
+
+    // The scroll cap's blocked-window list, on its own signal because it fires
+    // on every relayout that moves the answer while the map above fires when
+    // settings or rules change.
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Scrolling,
+                QStringLiteral("scrollFocusScrollBlockedWindowsChanged"), this,
+                SLOT(slotScrollFocusScrollBlockedWindowsChanged(QStringList)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
@@ -245,11 +257,13 @@ void TilingHandler::loadSettings()
     m_scrollingScreensFetchRetriesLeft = kBringUpFetchRetryMax;
     m_activeLayoutsFetchRetriesLeft = kBringUpFetchRetryMax;
     m_scrollEffectBehaviourFetchRetriesLeft = kBringUpFetchRetryMax;
+    m_scrollFocusScrollBlockedFetchRetriesLeft = kBringUpFetchRetryMax;
     m_scrollTabStripsFetchRetriesLeft = kBringUpFetchRetryMax;
     m_scrollTabOverridesFetchRetriesLeft = kBringUpFetchRetryMax;
     fetchScrollingScreens();
     fetchActiveLayouts();
     fetchScrollEffectBehaviour();
+    fetchScrollFocusScrollBlockedWindows();
     // Overrides BEFORE strips: both replies travel the same connection in
     // dispatch order, so the first rebuild already layers the overrides.
     fetchScrollTabPaintOverrides();
@@ -310,8 +324,18 @@ void TilingHandler::fetchScrollingScreens()
                     // and nothing has seeded the set.
                     if (m_scrollingScreensFetchRetriesLeft > 0) {
                         --m_scrollingScreensFetchRetriesLeft;
-                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                            fetchScrollingScreens();
+                        // Bail if the generation moved while the retry was
+                        // armed. Only a newer DISPATCH moves this counter (unlike
+                        // the two tab fetches, which voidInFlightScrollTabFetches
+                        // also bumps on daemon loss), so the case this catches is a
+                        // retry armed before a daemon restart: the new session's
+                        // loadSettings dispatches its own fetch, and without this
+                        // the stale retry would land afterwards and discard that
+                        // fresh reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, scrollQueryGeneration] {
+                            if (scrollQueryGeneration == m_scrollingScreensQueryGeneration) {
+                                fetchScrollingScreens();
+                            }
                         });
                     }
                 }
@@ -320,7 +344,8 @@ void TilingHandler::fetchScrollingScreens()
 
 // The three scrolling behaviours the compositor owns, published by the daemon
 // as ALREADY-RESOLVED screen-id lists (rule ?? config decided daemon-side):
-// focus-follows-mouse, straddler crop, and the vertical-strip axis.
+// focus-follows-mouse, straddler crop, and the vertical-strip axis. The
+// scroll cap's blocked-window list is fetched separately, below.
 // Bring-up fetch with the same bounded retry as the scrolling-screens query
 // above; a failed Get leaves all three sets empty, which reads as "off
 // everywhere" — the historical behaviour before any of them was per-screen,
@@ -376,8 +401,79 @@ void TilingHandler::fetchScrollEffectBehaviour()
                     qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
                     if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
                         --m_scrollEffectBehaviourFetchRetriesLeft;
-                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                            fetchScrollEffectBehaviour();
+                        // Bail if the generation moved while the retry was
+                        // armed. Only a newer DISPATCH moves this counter (unlike
+                        // the two tab fetches, which voidInFlightScrollTabFetches
+                        // also bumps on daemon loss), so the case this catches is a
+                        // retry armed before a daemon restart: the new session's
+                        // loadSettings dispatches its own fetch, and without this
+                        // the stale retry would land afterwards and discard that
+                        // fresh reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, queryGeneration] {
+                            if (queryGeneration == m_scrollEffectBehaviourQueryGeneration) {
+                                fetchScrollEffectBehaviour();
+                            }
+                        });
+                    }
+                }
+            });
+}
+
+// The focus-follows-mouse scroll cap's blocked-window list. Its own property
+// beside the behaviour map, because the daemon re-derives it on every relayout
+// of a capped screen while that map answers settings and rules — carrying both
+// on one property made a strip that merely scrolled re-publish three screen
+// lists that had not moved, and this side re-parse them to find out.
+//
+// A failed Get leaves the set empty, which reads as "refuse nothing": focus
+// follows the pointer the way it did before the cap existed. That is the safe
+// direction for the same reason the parse fails open — the caller turns
+// membership into a REFUSED focus, so a wire hiccup that refused everything
+// would look like focus-follows-mouse being broken rather than uncapped.
+void TilingHandler::fetchScrollFocusScrollBlockedWindows()
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    msg << PhosphorProtocol::Service::Interface::Scrolling << QStringLiteral("scrollFocusScrollBlockedWindows");
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    // Both guards its sibling carries, for the same two races: the write
+    // generation voids this reply when a live signal applied between dispatch
+    // and landing, and the query generation handles two loadSettings runs
+    // across a daemon restart.
+    const quint64 generationAtDispatch = m_scrollFocusScrollBlockedGeneration;
+    const quint64 queryGeneration = ++m_scrollFocusScrollBlockedQueryGeneration;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, generationAtDispatch, queryGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (queryGeneration != m_scrollFocusScrollBlockedQueryGeneration
+                    || generationAtDispatch != m_scrollFocusScrollBlockedGeneration) {
+                    return;
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    applyScrollFocusScrollBlockedWindows(reply.value().variant().toStringList());
+                    // Logged on its OWN reply rather than beside the behaviour
+                    // map's: the two are separate Gets now, and the map's reply
+                    // lands first, so printing this there would have described
+                    // a set that reply did not load.
+                    qCInfo(lcEffect) << "Loaded focus scroll blocks:" << m_scrollFocusScrollBlockedWindows;
+                } else {
+                    qCDebug(lcEffect) << "Focus scroll blocks: query failed, daemon may not be running";
+                    if (m_scrollFocusScrollBlockedFetchRetriesLeft > 0) {
+                        --m_scrollFocusScrollBlockedFetchRetriesLeft;
+                        // Bail if the generation moved while the retry was
+                        // armed. Only a newer DISPATCH moves this counter, so
+                        // the case this catches is a retry armed before a
+                        // daemon restart: the new session's loadSettings
+                        // dispatches its own fetch, and without this the stale
+                        // retry would land afterwards and discard that fresh
+                        // reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, queryGeneration] {
+                            if (queryGeneration == m_scrollFocusScrollBlockedQueryGeneration) {
+                                fetchScrollFocusScrollBlockedWindows();
+                            }
                         });
                     }
                 }
@@ -439,8 +535,18 @@ void TilingHandler::fetchActiveLayouts()
                                         << reply.error().message();
                     if (m_activeLayoutsFetchRetriesLeft > 0) {
                         --m_activeLayoutsFetchRetriesLeft;
-                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                            fetchActiveLayouts();
+                        // Bail if the generation moved while the retry was
+                        // armed. Only a newer DISPATCH moves this counter (unlike
+                        // the two tab fetches, which voidInFlightScrollTabFetches
+                        // also bumps on daemon loss), so the case this catches is a
+                        // retry armed before a daemon restart: the new session's
+                        // loadSettings dispatches its own fetch, and without this
+                        // the stale retry would land afterwards and discard that
+                        // fresh reply in favour of its own.
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, layoutsQueryGeneration] {
+                            if (layoutsQueryGeneration == m_activeLayoutsQueryGeneration) {
+                                fetchActiveLayouts();
+                            }
                         });
                     }
                 }

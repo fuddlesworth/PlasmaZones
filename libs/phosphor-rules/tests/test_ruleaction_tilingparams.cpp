@@ -578,6 +578,33 @@ private Q_SLOTS:
             QVERIFY2(roundTripped.has_value(), type.data());
             QCOMPARE(*roundTripped, *accepted);
         }
+
+        // SetScrollFocusFollowsMouseMaxScroll: [0.0, 1.0] fraction. Unlike the
+        // pair above its floor is zero, and zero is a MEANINGFUL value (focus
+        // follows the pointer only onto columns already fully in view), so the
+        // lower bound must be accepted rather than rejected as empty.
+        {
+            constexpr QLatin1StringView type = ActionType::SetScrollFocusFollowsMouseMaxScroll;
+            rejectsMissingValue(type);
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), -0.1); // below 0.0 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 1.5); // above 1.0 rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), QStringLiteral("0.5")); // non-numeric rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 0.0); // inclusive lower bound accepted
+            QVERIFY(RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), 1.0); // inclusive upper bound accepted
+            const auto accepted = RuleAction::fromJson(o);
+            QVERIFY(accepted.has_value());
+            QCOMPARE(ActionRegistry::instance().slotFor(*accepted),
+                     QString(ActionSlot::ScrollFocusFollowsMouseMaxScroll));
+            const auto roundTripped = RuleAction::fromJson(accepted->toJson());
+            QVERIFY(roundTripped.has_value());
+            QCOMPARE(*roundTripped, *accepted);
+        }
         // SetCenterFocusedColumn: closed token vocabulary.
         {
             rejectsMissingValue(ActionType::SetCenterFocusedColumn);

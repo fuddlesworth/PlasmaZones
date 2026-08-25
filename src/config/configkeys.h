@@ -503,6 +503,7 @@ public:
     P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
     P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")
+    P_CONFIG_KEY(focusFollowsMouseMaxScrollKey, "FocusFollowsMouseMaxScroll")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Scrolling.Behavior.DragScroll

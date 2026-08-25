@@ -795,6 +795,38 @@ void ActionRegistry::registerBuiltinsAppearance()
             .tags = {QString(Tag::LayoutEngine)},
         });
     }
+    // The cap on the toggle above. A percent slot rather than a bool, so it
+    // registers on its own instead of joining the loop.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollFocusFollowsMouseMaxScroll),
+        .slotFor = constantSlot(ActionSlot::ScrollFocusFollowsMouseMaxScroll),
+        .validate =
+            [](const QJsonObject& p) {
+                // Wire is the fraction of the viewport's extent along the
+                // strip; edited as a percent, like the column-width slot. The
+                // ZERO-floored helper: a negative cap is not a stricter one,
+                // it is a malformed payload.
+                return hasNumberInRange(p, ActionParam::Value, kMaxFfmMaxScrollRatio);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinFfmMaxScrollPercent,
+                     .max = kMaxFfmMaxScrollPercent,
+                     .scale = 0.01,
+                     // Seeds a cap that actually caps: the global default is
+                     // 100 (no cap), so a rule reaching for this slot wants a
+                     // limit, and half a viewport is the useful middle.
+                     .defaultDisplay = 50.0}},
+        .category = QStringLiteral("layoutEngine"),
+        // 35 through 37 are taken (sticky handling, the toggle this caps, the
+        // strip axis), so the cap takes the next free slot rather than sitting
+        // beside its toggle.
+        .displayOrder = 38,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetScrollStickyWindowHandling),
         .slotFor = constantSlot(ActionSlot::ScrollStickyWindowHandling),

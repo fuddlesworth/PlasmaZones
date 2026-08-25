@@ -119,7 +119,7 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 QVariantMap ScrollingAdaptor::scrollEffectBehaviour() const
 {
     // No engine gate, unlike scrollingScreens above: this map is daemon-built
-    // (the engine never sees the three effect-owned facts), so a cleared
+    // (the engine never sees the effect-owned facts), so a cleared
     // engine pointer during shutdown does not invalidate it. The last
     // published value stands until the daemon pushes another.
     return m_scrollEffectBehaviour;
@@ -147,7 +147,7 @@ void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsM
     QVariantMap next;
     next.insert(focusFollowsMouseKey(), canonical(focusFollowsMouseScreens));
     next.insert(cropStraddlersKey(), canonical(cropStraddlerScreens));
-    // Same canonicalization as its two siblings, for the same reason: this is
+    // Same canonicalization as its siblings, for the same reason: this is
     // the published-contract boundary, and the emit-on-change compare below is
     // an order-sensitive list compare.
     next.insert(verticalAxisKey(), canonical(verticalAxisScreens));
@@ -156,6 +156,31 @@ void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsM
     }
     m_scrollEffectBehaviour = next;
     Q_EMIT scrollEffectBehaviourChanged(m_scrollEffectBehaviour);
+}
+
+QStringList ScrollingAdaptor::scrollFocusScrollBlockedWindows() const
+{
+    // Ungated like the behaviour map above and for the same reason: the list
+    // is daemon-built, so a cleared engine pointer during shutdown does not
+    // invalidate it. The last published value stands until the next push.
+    return m_scrollFocusScrollBlockedWindows;
+}
+
+void ScrollingAdaptor::setScrollFocusScrollBlockedWindows(const QStringList& windowIds)
+{
+    QStringList next = windowIds;
+    std::sort(next.begin(), next.end());
+    next.erase(std::unique(next.begin(), next.end()), next.end());
+    // The emit-on-change gate that makes the per-relayout push cheap: the
+    // daemon re-derives this list on every relayout of every capped screen,
+    // and a strip that scrolled without crossing any window's cap threshold
+    // produces the same membership. This compare is what keeps that a local
+    // no-op instead of a bus broadcast.
+    if (next == m_scrollFocusScrollBlockedWindows) {
+        return;
+    }
+    m_scrollFocusScrollBlockedWindows = next;
+    Q_EMIT scrollFocusScrollBlockedWindowsChanged(m_scrollFocusScrollBlockedWindows);
 }
 
 void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
@@ -414,14 +439,15 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
-    // m_scrollEffectBehaviour is deliberately NOT cleared, and it is the one
-    // member that differs: the set above is engine-derived, so leaving it
-    // populated would contradict every other slot this adaptor answers. The
-    // behaviour map is daemon-built and its getter has no engine gate
-    // (scrollEffectBehaviour documents why), so the last published value stays
-    // the honest answer for as long as this object exists — clearing it would
-    // replace a true answer with an empty one that reads as "no screen has any
-    // of the three".
+    // m_scrollEffectBehaviour and m_scrollFocusScrollBlockedWindows are
+    // deliberately NOT cleared, and they are the two members that differ: the
+    // set above is engine-derived, so leaving it populated would contradict
+    // every other slot this adaptor answers. Both of those are daemon-built
+    // and neither getter has an engine gate (scrollEffectBehaviour documents
+    // why), so the last published values stay the honest answer for as long as
+    // this object exists — clearing them would replace a true answer with an
+    // empty one that reads as "no screen has any of the three" and "the scroll
+    // cap refuses nothing".
 }
 
 } // namespace PlasmaZones

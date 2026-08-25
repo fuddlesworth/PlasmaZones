@@ -122,6 +122,7 @@ PickerCategory actionCategory(const QString& type, const QString& cat)
             || type == ActionType::SetScrollAlwaysCenterSingleColumn || type == ActionType::SetScrollRespectMinimumSize
             || type == ActionType::SetScrollCropStraddlers || type == ActionType::SetScrollFocusNewWindows
             || type == ActionType::SetScrollSmartGaps || type == ActionType::SetScrollFocusFollowsMouse
+            || type == ActionType::SetScrollFocusFollowsMouseMaxScroll
             || type == ActionType::SetScrollStickyWindowHandling || type == ActionType::SetScrollStripAxis) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), kOrderScrolling};
         }
@@ -289,6 +290,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetScrollFocusFollowsMouse) {
         return PhosphorI18n::tr("Focus follows the mouse");
+    }
+    if (type == ActionType::SetScrollFocusFollowsMouseMaxScroll) {
+        return PhosphorI18n::tr("Limit how far the strip scrolls");
     }
     if (type == ActionType::SetScrollStickyWindowHandling) {
         return PhosphorI18n::tr("Set sticky window handling");

@@ -98,7 +98,13 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // monitor while the global setting is off must not be bailed out from
     // here — that bail sat upstream of the per-screen read below and made the
     // rule a one-way switch (off yes, on never).
-    if (ffmOffEverywhere() || m_managedScreens.isEmpty()) {
+    // KWin::effects folded into the entry bail rather than tested at the two
+    // derefs below, which is where every sibling in this file guards it (see
+    // atScrollPark's note: an unguarded deref in compositor code is a session
+    // crash, not a wrong answer). Clearing the latch on the way out is right
+    // for the same reason it is right for the other two arms — there is no
+    // compositor left for a suppressed move to be suppressed against.
+    if (!KWin::effects || ffmOffEverywhere() || m_managedScreens.isEmpty()) {
         m_ffmSuppressPending = false;
         return;
     }
@@ -259,6 +265,22 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
         // into this one, so a hit on the overhang would activate a window that
         // is clipped invisible over there.
         if (m_effect->getWindowScreenId(w) != screenId) {
+            return;
+        }
+        // The focus-follows-mouse scroll cap, niri's max-scroll-amount: the
+        // daemon has already asked the strip how far focusing each window
+        // would move the view and named the ones past their screen's cap, so
+        // the answer here is a set lookup on a per-pointer-event path. The
+        // set is the UNION across every capped screen and carries no screen
+        // dimension of its own; what makes this window's membership the right
+        // question is the screen match that returned just above.
+        //
+        // A plain return, like the occluder bails above rather than a
+        // `continue`: the window under the cursor is still the window under
+        // the cursor, and looking THROUGH a refused one to focus a tiled
+        // window behind it would scroll the strip by the very amount the cap
+        // just refused.
+        if (m_scrollFocusScrollBlockedWindows.contains(m_effect->getWindowId(w))) {
             return;
         }
         KWin::effects->activateWindow(w);
@@ -1058,7 +1080,7 @@ void TilingHandler::drainDeadSessionState()
     // a surviving crop set keeps blocksDirectScanout forcing composition
     // session-wide, and a surviving focus-follows-mouse set answers for
     // screens the new daemon has not published. loadSettings' fetch, once the
-    // new daemon signals ready, re-seeds both. Idempotent on the
+    // new daemon signals ready, re-seeds the whole map. Idempotent on the
     // teardown-first path (clearScrollingScreensForTeardown already ran it).
     clearScrollEffectBehaviourForTeardown();
     // The per-screen active-layout map is the same shape of dead-session
@@ -1180,7 +1202,7 @@ void TilingHandler::clearPerSessionDaemonState()
     m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
-    // The three per-session scroll maps the serviceUnregistered teardown
+    // The per-session scroll maps the serviceUnregistered teardown
     // clears, repeated here so bring-up is authoritative on its own rather
     // than on what that edge left behind. A stale commanded rect
     // re-arms the counter-assert against the dead session's position the

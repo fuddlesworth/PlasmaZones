@@ -652,6 +652,70 @@ private Q_SLOTS:
     // telling consumers to ignore a signal they were in fact receiving, and a
     // consumer that believed it would poll instead of subscribing.
     //
+    // The focus-follows-mouse scroll cap's blocked-window list rides its own
+    // property rather than a fourth key on the behaviour map, and the reason is
+    // the update rate: the daemon re-derives it on every relayout of a capped
+    // screen, while the map answers settings and rules. So what has to hold is
+    // that publishing one leaves the other completely alone, and that a
+    // re-publish of the same membership reaches neither.
+    void testFocusScrollBlockedWindows_isIndependentOfTheBehaviourMap()
+    {
+        QSignalSpy blocked(m_adaptor, &ScrollingAdaptor::scrollFocusScrollBlockedWindowsChanged);
+        QSignalSpy behaviour(m_adaptor, &ScrollingAdaptor::scrollEffectBehaviourChanged);
+
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-1")}, {}, {});
+        QCOMPARE(behaviour.count(), 1);
+        // The map moving must not disturb the block list or its signal.
+        QCOMPARE(blocked.count(), 0);
+        QVERIFY(m_adaptor->scrollFocusScrollBlockedWindows().isEmpty());
+
+        // The relayout path: only the block list moves. This is the case the
+        // split exists for — before it, every scroll republished the three
+        // screen lists too and the effect re-parsed them to find them unchanged.
+        m_adaptor->setScrollFocusScrollBlockedWindows({QStringLiteral("app|b"), QStringLiteral("app|a")});
+        QCOMPARE(blocked.count(), 1);
+        QCOMPARE(behaviour.count(), 1);
+        // Sorted and de-duplicated at this boundary, like the map's lists and
+        // for the same two reasons: the published contract says sorted, and the
+        // change gate below is an order-sensitive list compare.
+        QCOMPARE(m_adaptor->scrollFocusScrollBlockedWindows(),
+                 QStringList({QStringLiteral("app|a"), QStringLiteral("app|b")}));
+
+        // Emit-on-change is what makes the per-relayout push cheap: the same
+        // membership in a different order, or with a duplicate, is not a change.
+        m_adaptor->setScrollFocusScrollBlockedWindows(
+            {QStringLiteral("app|b"), QStringLiteral("app|a"), QStringLiteral("app|b")});
+        QCOMPARE(blocked.count(), 1);
+
+        // Emptying is a real change, and it is how raising the cap back to
+        // no-cap clears a membership rather than latching it.
+        m_adaptor->setScrollFocusScrollBlockedWindows({});
+        QCOMPARE(blocked.count(), 2);
+        QVERIFY(m_adaptor->scrollFocusScrollBlockedWindows().isEmpty());
+        QCOMPARE(behaviour.count(), 1);
+    }
+
+    // clearEngine drops the ENGINE-derived screen set, because leaving it
+    // populated would contradict every other slot the adaptor then answers.
+    // Both daemon-built values are deliberately left alone: neither getter has
+    // an engine gate, so the last published value stays the honest answer for
+    // as long as the object exists, and clearing them would replace a true
+    // answer with an empty one that reads as "no screen has any of these" and
+    // "the scroll cap refuses nothing".
+    void testClearEngine_keepsTheDaemonBuiltPublishedValues()
+    {
+        m_engine->setActiveScreens({QStringLiteral("DP-1")});
+        m_adaptor->setScrollEffectBehaviour({QStringLiteral("DP-1")}, {}, {QStringLiteral("DP-1")});
+        m_adaptor->setScrollFocusScrollBlockedWindows({QStringLiteral("app|a")});
+
+        m_adaptor->clearEngine();
+
+        QVERIFY(m_adaptor->scrollingScreens().isEmpty());
+        QCOMPARE(m_adaptor->scrollFocusScrollBlockedWindows(), QStringList({QStringLiteral("app|a")}));
+        QCOMPARE(m_adaptor->scrollEffectBehaviour().value(ScrollingAdaptor::focusFollowsMouseKey()).toStringList(),
+                 QStringList({QStringLiteral("DP-1")}));
+    }
+
     // Driven over a REAL bus, because the claim is about what reaches the wire
     // rather than about the adaptor's own emissions.
     void testScrollingScreensProperty_doesNotEmitPropertiesChanged()

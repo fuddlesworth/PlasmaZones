@@ -607,6 +607,23 @@ private Q_SLOTS:
         // A screen the rules do not pin → all-unset (the engine then keeps its
         // config-derived parameters for that screen).
         QVERIFY(f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+
+        // The focus-follows-mouse scroll cap, pinned ALONE on its own screen
+        // rather than folded into the composed rule above. The resolver reaches
+        // its slots through a filtered walk whose admission set is written by
+        // hand, and a slot missing from that set is skipped with the whole rule
+        // it rides: a cap folded in beside four admitted siblings would resolve
+        // on THEIR admission and prove nothing. A rule whose only action is the
+        // cap is the shape the settings UI produces for a single-action rule,
+        // and it is the shape that fails when the set is wrong.
+        const PWR::Rule capOnly = scrollRule(QStringLiteral("cap"), 500, QStringLiteral("DP-3"),
+                                             {valueAction(PWR::ActionType::SetScrollFocusFollowsMouseMaxScroll, 0.4)});
+        QVERIFY(f.store->setAllRules({capOnly}));
+        const PhosphorZones::ContextScrollingParams capParams =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-3"), 0, QString());
+        QVERIFY(capParams.focusFollowsMouseMaxScroll.has_value());
+        QCOMPARE(*capParams.focusFollowsMouseMaxScroll, 0.4);
+        QVERIFY(!capParams.isEmpty());
     }
 
     // ─── Context scrolling params: the tab LABEL FONT slots ────────────────

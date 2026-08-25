@@ -785,6 +785,37 @@ private Q_SLOTS:
         const auto* ffm = findKey(schema, group, ConfigDefaults::focusFollowsMouseKey());
         QVERIFY(ffm);
         QCOMPARE(ffm->defaultValue.toBool(), ConfigDefaults::scrollingFocusFollowsMouse());
+        const auto* ffmCap = findKey(schema, group, ConfigDefaults::focusFollowsMouseMaxScrollKey());
+        QVERIFY(ffmCap && ffmCap->validator);
+        QCOMPARE(ffmCap->defaultValue.toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
+        QCOMPARE(ffmCap->validator(-5).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
+        QCOMPARE(ffmCap->validator(999).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
+        // A value that does not convert falls back to the DEFAULT, not to the
+        // minimum. This key is the reason clampIntOrDefault exists: its minimum
+        // is 0 and 0 is the most restrictive setting, so the plain clamp — which
+        // reads an unconvertible QVariant as 0 and then keeps it — would turn a
+        // corrupt config entry into "focus barely follows the pointer at all".
+        QCOMPARE(ffmCap->validator(QStringLiteral("abc")).toInt(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
+        QCOMPARE(ffmCap->validator(QVariant()).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScroll());
+        // A numeric STRING still converts, so it clamps rather than falling back,
+        // and a FRACTIONAL one converts too rather than reading as unparseable.
+        QCOMPARE(ffmCap->validator(QStringLiteral("40")).toInt(), 40);
+        QCOMPARE(ffmCap->validator(QStringLiteral("40.7")).toInt(), 41);
+        // The JSON backend hands a number back as a DOUBLE, so those are the
+        // values this validator really sees. Fractions round rather than
+        // truncate, matching what the slider would have written.
+        QCOMPARE(ffmCap->validator(50.0).toInt(), 50);
+        QCOMPARE(ffmCap->validator(50.7).toInt(), 51);
+        // The reason this reads the double rather than the int: QVariant's
+        // int conversion WRAPS an out-of-range number and still reports
+        // success, and the wrap is typically negative, so a plain clamp would
+        // land on the minimum — the most restrictive setting, from the most
+        // obviously garbage input. Both ends must saturate, not wrap.
+        QCOMPARE(ffmCap->validator(1.0e12).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
+        QCOMPARE(ffmCap->validator(-1.0e12).toInt(), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
+        QCOMPARE(ffmCap->validator(QVariant::fromValue(qlonglong(5000000000))).toInt(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
         const auto* respectMin = findKey(schema, group, ConfigDefaults::respectMinimumSizeKey());
         QVERIFY(respectMin);
         QCOMPARE(respectMin->defaultValue.toBool(), ConfigDefaults::scrollingRespectMinimumSize());
@@ -1148,6 +1179,34 @@ private Q_SLOTS:
         settings.setScrollingViewScrollStepPercent(1000); // clamps to the same max: silent
         QCOMPARE(viewStepSpy.count(), 2);
         QCOMPARE(changedSpy.count(), preViewChanged + 2);
+
+        // The focus-follows-mouse scroll cap. Same clampInt shape as the three
+        // step percents above, with one arm they cannot pin: its minimum is 0
+        // and 0 is a MEANINGFUL value here (focus follows the pointer only onto
+        // columns already fully in view), so the clamp-to-min write has to
+        // announce rather than being indistinguishable from a rejected write.
+        QSignalSpy capSpy(&settings, &Settings::scrollingFocusFollowsMouseMaxScrollChanged);
+        const int preCapChanged = changedSpy.count();
+        settings.setScrollingFocusFollowsMouseMaxScroll(50);
+        QCOMPARE(settings.scrollingFocusFollowsMouseMaxScroll(), 50);
+        QCOMPARE(capSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preCapChanged + 1);
+        settings.setScrollingFocusFollowsMouseMaxScroll(50); // unchanged: silent
+        QCOMPARE(capSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), preCapChanged + 1);
+        settings.setScrollingFocusFollowsMouseMaxScroll(999);
+        QCOMPARE(settings.scrollingFocusFollowsMouseMaxScroll(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax());
+        QCOMPARE(capSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preCapChanged + 2);
+        settings.setScrollingFocusFollowsMouseMaxScroll(200); // clamps to the same max: silent
+        QCOMPARE(capSpy.count(), 2);
+        QCOMPARE(changedSpy.count(), preCapChanged + 2);
+        settings.setScrollingFocusFollowsMouseMaxScroll(-5);
+        QCOMPARE(settings.scrollingFocusFollowsMouseMaxScroll(),
+                 ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin());
+        QCOMPARE(capSpy.count(), 3);
+        QCOMPARE(changedSpy.count(), preCapChanged + 3);
     }
 
     /// Preset lists canonicalize to numeric proportions in (0, 1]: junk and

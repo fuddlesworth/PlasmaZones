@@ -6,7 +6,7 @@
 // The scrollEffectBehaviour value parser, extracted from
 // TilingHandler::applyScrollEffectBehaviour so its three-way contract is unit
 // testable (tests/unit/compositor-common/test_scroll_behaviour_parse.cpp):
-// the map crosses D-Bus from another process, and every half of it decides
+// the map crosses D-Bus from another process, and every key of it decides
 // compositor behaviour, so the parse failing SILENTLY on screen is exactly
 // what the tests exist to prevent. Header-only plain Qt types, no KWin — the
 // test_strip_motion_sampler shape.
@@ -22,7 +22,9 @@
 
 namespace PlasmaZones::ScrollBehaviourParse {
 
-/// One screen-id list out of the scrollEffectBehaviour map.
+/// One id list out of the scrollEffectBehaviour map. All three of them
+/// carry screen ids today, but the parse is id-space agnostic, which is
+/// why this names neither.
 ///
 /// The three-way contract, load-bearing at the caller:
 ///  - ABSENT (invalid QVariant): a legitimate publish with that key
@@ -32,7 +34,7 @@ namespace PlasmaZones::ScrollBehaviourParse {
 ///    optional, plus a warning line in @p warnings — the caller decides per
 ///    key whether empty or keep-current is the safe fallback (the axis keeps
 ///    its membership; the two behaviour toggles fall to empty).
-///  - VALID: the de-duplicated set, with empty screen ids dropped (each adds
+///  - VALID: the de-duplicated set, with empty ids dropped (each adds
 ///    a warning — no window resolves to one, and they only defeat the
 ///    caller's change gate).
 ///
@@ -42,7 +44,7 @@ namespace PlasmaZones::ScrollBehaviourParse {
 /// A container Qt's demarshaller did not special-case arrives as a raw
 /// QDBusArgument, which converts to NOTHING and would read as "off
 /// everywhere" — it is demarshalled explicitly instead.
-inline std::optional<QSet<QString>> parseScreenIdList(const QVariant& raw, QLatin1StringView key, QStringList& warnings)
+inline std::optional<QSet<QString>> parseIdList(const QVariant& raw, QLatin1StringView key, QStringList& warnings)
 {
     QVariant v = raw;
     if (v.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
@@ -62,12 +64,12 @@ inline std::optional<QSet<QString>> parseScreenIdList(const QVariant& raw, QLati
     }
     const QStringList list = v.toStringList();
     out.reserve(list.size());
-    for (const QString& screenId : list) {
-        if (screenId.isEmpty()) {
-            warnings.append(QStringLiteral("scrollEffectBehaviour: dropping empty screen id from %1").arg(key));
+    for (const QString& id : list) {
+        if (id.isEmpty()) {
+            warnings.append(QStringLiteral("scrollEffectBehaviour: dropping empty id from %1").arg(key));
             continue;
         }
-        out.insert(screenId);
+        out.insert(id);
     }
     return out;
 }

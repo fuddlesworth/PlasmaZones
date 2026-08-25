@@ -686,6 +686,7 @@ void TestRuleController::actionMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusNewWindows"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollSmartGaps"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouse"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouseMaxScroll"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStickyWindowHandling"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStripAxis"), -1), 4);
     // The per-window Open* actions are window-domain and ride the

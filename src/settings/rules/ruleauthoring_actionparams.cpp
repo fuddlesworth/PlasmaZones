@@ -136,6 +136,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetScrollFocusFollowsMouse && key == ActionParam::Value) {
         return PhosphorI18n::tr("Focus follows the mouse (off = focus stays until you click)");
     }
+    if (type == ActionType::SetScrollFocusFollowsMouseMaxScroll && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Furthest the strip may scroll, as a share of the work area (%)");
+    }
     // Tab indicator. The colour actions all share one label: the action label
     // already names which colour, so repeating it here would read twice.
     if ((type == ActionType::SetTabIndicatorActiveColor || type == ActionType::SetTabIndicatorInactiveColor

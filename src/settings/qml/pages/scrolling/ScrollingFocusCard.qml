@@ -30,6 +30,7 @@ SettingsCard {
     id: root
 
     readonly property var settingsBridge: settingsController.scrollingBehaviorPage
+    readonly property var _scrollConsts: settingsController.scrollingConstants()
 
     headerText: i18n("Focus and view")
     searchAnchor: "scrollingFocus"
@@ -109,10 +110,35 @@ SettingsCard {
             description: i18n("Moving the mouse pointer over a window gives it focus.")
 
             SettingsSwitch {
+                id: focusFollowsMouseSwitch
+
                 checked: appSettings.scrollingFocusFollowsMouse
                 accessibleName: i18n("Focus follows mouse pointer")
                 onToggled: function (newValue) {
                     appSettings.scrollingFocusFollowsMouse = newValue;
+                }
+            }
+        }
+
+        // Dependent row: it hugs the switch that gates it, with no separator
+        // between them, and stays visible while disabled so a deep link can
+        // still reveal its anchor. Same caveat as the scroll-key rows below.
+        SettingsRow {
+            title: i18n("Limit how far the strip scrolls")
+            searchAnchor: "scrollingFocusFollowsMouseMaxScroll"
+            description: i18n("Moving the pointer onto a column that is partly off screen scrolls the strip to bring it in. When that scroll would be longer than this share of the work area along the strip, the pointer is ignored and focus stays put. At 100% nothing is ignored.")
+            enabled: focusFollowsMouseSwitch.checked
+            visible: true
+
+            SettingsSlider {
+                accessibleName: i18n("Limit how far the strip scrolls")
+                from: root._scrollConsts.ffmMaxScrollMin
+                to: root._scrollConsts.ffmMaxScrollMax
+                stepSize: 1
+                tickMarkStepSize: 5
+                value: appSettings.scrollingFocusFollowsMouseMaxScroll
+                onMoved: function (newValue) {
+                    appSettings.scrollingFocusFollowsMouseMaxScroll = Math.round(newValue);
                 }
             }
         }
@@ -135,15 +161,6 @@ SettingsCard {
             }
         }
 
-        // The two scroll keys hug the switch that gates them, and stay
-        // visible while disabled so a deep link can still reveal their
-        // anchors.
-        //
-        // CAVEAT for all three of the rows that follow (both scroll keys and
-        // the invert row): the sanctioned `visible: true` idiom drops BOTH of
-        // SettingsRow's gates, so marking any of them advancedOnly later
-        // would silently keep it visible in simple mode. Re-plumb the visible
-        // binding if that curation ever happens.
         // Both lists holding the same chord is legal, and the effect resolves
         // it the same way every time (focus wins), but the view binding is
         // then dead and nothing else on the page would say so.
@@ -154,6 +171,16 @@ SettingsCard {
             visible: root.settingsBridge.wheelTriggersCollide && wheelEnabledSwitch.checked
         }
 
+        // The two scroll keys hug the switch that gates them, and stay
+        // visible while disabled so a deep link can still reveal their
+        // anchors.
+        //
+        // CAVEAT for all three of the rows that follow (both scroll keys and
+        // the invert row), and for the scroll-cap row above that points here:
+        // the sanctioned `visible: true` idiom drops BOTH of SettingsRow's
+        // gates, so marking any of them advancedOnly later would silently
+        // keep it visible in simple mode. Re-plumb the visible binding if
+        // that curation ever happens.
         SettingsRow {
             title: i18n("Scroll key for column focus")
             searchAnchor: "wheelFocusTriggers"

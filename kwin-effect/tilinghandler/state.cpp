@@ -3,9 +3,11 @@
 
 // Per-session screen and behaviour state for TilingHandler: which screens the
 // daemon manages, which of those run the scrolling engine, the active layout
-// per screen, the daemon-resolved per-screen scroll behaviours (focus-follows-
-// mouse, straddler crop, strip axis), the focus-follows-mouse and wheel-focus
-// settings, and the wheel shortcut registration those settings drive.
+// per screen, the daemon-resolved scroll behaviours (the focus-follows-mouse,
+// straddler-crop and strip-axis screen sets, plus the per-WINDOW set naming
+// what the focus-follows-mouse scroll cap refuses), the focus-follows-mouse
+// and wheel-focus settings, and the wheel shortcut registration those settings
+// drive.
 //
 // What unites this file is that every member here is published BY the daemon
 // and consumed by the effect, so all of it is per-session and all of it is
@@ -169,7 +171,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // straight replace is correct even if a previous signal was missed.
     //
     // Boundary validation, mirroring slotActiveLayoutsChanged: this map
-    // crosses D-Bus from another process, and every half of it decides
+    // crosses D-Bus from another process, and every key of it decides
     // compositor behaviour (focus stealing, forced composition, which way the
     // strip slides). An a{sv} value arrives
     // either already demarshalled (the property Get path, which qdbus_cast
@@ -193,7 +195,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // silent, which is why the contract must not rest on this file alone.
     QStringList parseWarnings;
     const auto toSet = [&parseWarnings](const QVariant& raw, QLatin1StringView key) {
-        return ScrollBehaviourParse::parseScreenIdList(raw, key, parseWarnings);
+        return ScrollBehaviourParse::parseIdList(raw, key, parseWarnings);
     };
     // One spelling per key, shared with the daemon's producer through
     // PhosphorProtocol, so the lookup and its diagnostic label cannot drift.
@@ -290,10 +292,58 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     }
 }
 
+void TilingHandler::slotScrollFocusScrollBlockedWindowsChanged(const QStringList& windowIds)
+{
+    applyScrollFocusScrollBlockedWindows(windowIds);
+}
+
+void TilingHandler::applyScrollFocusScrollBlockedWindows(const QStringList& windowIds)
+{
+    // Bumped before the assignment, the applyScrollEffectBehaviour shape: an
+    // identical list is still a real write, and it still proves this state is
+    // newer than any property reply dispatched earlier.
+    ++m_scrollFocusScrollBlockedGeneration;
+    // No parse contract to honour here, unlike the behaviour map: this arrives
+    // as a typed `as` on its own property rather than as one variant of an
+    // a{sv}, so Qt has already refused anything that is not a string list and
+    // an empty list is the only "nothing" this can be. Empty ids are dropped
+    // for the same reason the map's parser drops them — no window resolves to
+    // one, and they would only defeat the change gate below.
+    QSet<QString> next;
+    next.reserve(windowIds.size());
+    for (const QString& id : windowIds) {
+        if (!id.isEmpty()) {
+            next.insert(id);
+        }
+    }
+    if (next == m_scrollFocusScrollBlockedWindows) {
+        return;
+    }
+    m_scrollFocusScrollBlockedWindows = next;
+    // Deliberately no repaint and no latch touch. The set is read once per
+    // pointer event in handleCursorMoved and feeds no painted state, so there
+    // is nothing on screen to invalidate; and unlike the focus-follows-mouse
+    // membership it cannot change whether ANY screen can focus-follow, so
+    // ffmOffEverywhere cannot flip here and the suppression latch stays as it
+    // is.
+}
+
 void TilingHandler::clearScrollEffectBehaviourForTeardown()
 {
+    // Bumped for the same reason both sibling teardowns bump theirs: a Get
+    // dispatched by the dying session can still land after this clear, and the
+    // fetch replies gate on nothing but these counters. Without the bumps a
+    // reply passes its guards and repopulates the sets from the dead session,
+    // which is exactly what this function exists to prevent. Both channels
+    // need one, because the blocked-window list has its own property and so
+    // its own in-flight reply.
+    ++m_scrollEffectBehaviourGeneration;
+    ++m_scrollFocusScrollBlockedGeneration;
     m_scrollEffectBehaviourSeeded = false;
     m_scrollFocusFollowsMouseScreens.clear();
+    // Cleared with the set it caps: a block list outliving the session that
+    // published it would refuse focus for windows whose strip is gone.
+    m_scrollFocusScrollBlockedWindows.clear();
     if (ffmOffEverywhere()) {
         // Same latch reasoning as the apply above — the dead session's set was
         // the last thing keeping FFM alive anywhere, and its anchor names a

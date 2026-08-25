@@ -152,8 +152,18 @@ inline constexpr QLatin1String FontStrikeout("fontStrikeout");
 /// scrollEffectBehaviourChanged): three already-resolved screen-id lists, the
 /// per-context focus-follows-mouse and crop-straddlers rule slots and the
 /// vertical-axis MEMBERSHIP (a screen in the list runs its strip vertically;
-/// absence means horizontal). The daemon's ScrollingAdaptor produces the map
-/// and the effect's TilingHandler reads it; one home for the spellings, on
+/// absence means horizontal).
+///
+/// What is NOT here is the focus-follows-mouse scroll cap's blocked-window
+/// list, which rides its own property beside this one. The split is about
+/// UPDATE RATE, not about shape: these three answer settings and rules and
+/// change when the user changes something, while the block list is a fact
+/// about where each strip's view currently sits and is re-derived on every
+/// relayout. Folded in here, a strip that merely scrolled made the effect
+/// re-parse and re-compare three screen lists that had not moved.
+///
+/// The daemon's ScrollingAdaptor produces the map and the effect's
+/// TilingHandler reads it; one home for the spellings, on
 /// ScrollTabKey's terms, so a rename is a compile error on both sides rather
 /// than a lookup that silently misses its diagnostic label. The XML DocString
 /// in dbus/org.plasmazones.Scrolling.xml repeats them as prose only.

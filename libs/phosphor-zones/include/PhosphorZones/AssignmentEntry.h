@@ -468,7 +468,8 @@ struct ContextTilingParams
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
  * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
- * behaviour toggles, the eighteen SetTabIndicator* slots and the six
+ * behaviour toggles and the focus-follows-mouse scroll cap beside them,
+ * the eighteen SetTabIndicator* slots and the six
  * SetDropIndicator* slots, each documented in its own block below); an unset
  * field means "use the config value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
@@ -510,6 +511,12 @@ struct ContextScrollingParams
     /// resolved per-screen verdict into a set and pushes it to the KWin
     /// effect, which owns focus-follows-mouse entirely.
     std::optional<bool> focusFollowsMouse;
+    /// The cap on the toggle above, as a FRACTION of the viewport's extent
+    /// along the strip (niri's `max-scroll-amount`); 1.0 is no cap. Reaches
+    /// the compositor by a channel of its own: the daemon hands the percent
+    /// to the engine, which names the windows too far from the current view,
+    /// and that window set is what the effect receives.
+    std::optional<double> focusFollowsMouseMaxScroll;
     /// StickyWindowHandling ints (treatAsNormal 0 / restoreOnly 1 /
     /// ignoreAll 2); the resolver maps the wire token to the int the config
     /// store uses, matching centerFocusedColumn's treatment.
@@ -590,11 +597,13 @@ struct ContextScrollingParams
             || tabIndicatorFontItalic || tabIndicatorFontUnderline || tabIndicatorFontStrikeout;
     }
 
-    /// True when at least one of the seven behaviour toggles resolved.
+    /// True when at least one of the seven behaviour toggles resolved, or the
+    /// scroll cap did. The cap is a percent rather than a toggle, but it is a
+    /// behaviour override like the rest and isEmpty() has to see it.
     bool hasBehaviourOverrides() const
     {
         return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
-            || stickyWindowHandling || focusFollowsMouse;
+            || stickyWindowHandling || focusFollowsMouse || focusFollowsMouseMaxScroll;
     }
 
     bool isEmpty() const

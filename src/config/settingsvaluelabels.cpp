@@ -353,6 +353,7 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()), number(pct));
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()), number(pct));
         t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::viewScrollStepPercentKey()), number(pct));
+        t.insert(pairKey(CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()), number(pct));
         // Edge auto-scroll: a band width in pixels, a delay in milliseconds
         // and a speed in pixels per second. The speed gets its own unit
         // rather than borrowing px, which would render 1500 as a distance.

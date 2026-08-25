@@ -580,13 +580,15 @@ public:
     {
         ++m_scrollingScreensGeneration;
         m_scrollingScreens.clear();
-        // The per-screen behaviour sets belong to the same dead session, and
-        // ALL THREE outlive the screen set they are keyed by if they are not
-        // cleared here: a stale crop entry keeps forcing composition
-        // session-wide, a stale focus-follows-mouse entry answers for a
-        // screen the new daemon may not run the scrolling engine on at all,
-        // and a stale vertical-axis entry answers Vertical for a screen the
-        // new daemon may lay out horizontally.
+        // The behaviour sets belong to the same dead session, and all of
+        // them outlive it if they are not cleared here: a stale crop entry
+        // keeps forcing composition session-wide, a stale
+        // focus-follows-mouse entry answers for a screen the new daemon may
+        // not run the scrolling engine on at all, a stale vertical-axis
+        // entry answers Vertical for a screen the new daemon may lay out
+        // horizontally, and the scroll-cap block list — which arrives on
+        // its own property and is keyed by window rather than by screen —
+        // would keep refusing focus for windows whose strip is gone.
         clearScrollEffectBehaviourForTeardown();
         // The wheel chords need no teardown of their own. They are matched
         // per event against the (now empty) scrolling-screen set rather than
@@ -594,8 +596,10 @@ public:
         // matching and every axis event passes straight through.
     }
 
-    /// Drop the dead session's resolved scroll-behaviour map (all three
-    /// per-screen sets plus the seeded flag). Shared by the serviceUnregistered teardown
+    /// Drop the dead session's resolved scroll-behaviour map (the three
+    /// per-screen sets, the per-window scroll-cap block list, and the
+    /// seeded flag), and bump the write generation so a reply still in
+    /// flight from that session cannot repopulate any of them. Shared by the serviceUnregistered teardown
     /// (via clearScrollingScreensForTeardown) and by drainDeadSessionState,
     /// which repeats it at bring-up so the new session starts from a map it
     /// published rather than one the teardown happened to leave.
@@ -838,6 +842,12 @@ public Q_SLOTS:
                                           const QList<KWin::EffectWindow*>& windows, QStringList& windowedFsToRelease);
     void slotScrollingScreensChanged(const QStringList& screenIds);
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
+
+    /// The scroll cap's blocked-window list changed. Its own signal rather
+    /// than a key on the behaviour map, because it fires on every relayout
+    /// that moves the answer while that map fires on a settings or rule
+    /// change — see applyScrollFocusScrollBlockedWindows.
+    void slotScrollFocusScrollBlockedWindowsChanged(const QStringList& windowIds);
     void slotActiveLayoutsChanged(const QVariantMap& activeLayouts);
     /// The scroll engine's tab-indicator payload for one screen (the JSON
     /// `ScrollEngine::tabStripsChanged` emits, relayed by the daemon's Tiling
@@ -1101,6 +1111,11 @@ private:
     /// compositor owns (focus-follows-mouse, straddler crop, strip axis).
     /// Bounded retry, the fetchScrollingScreens pattern.
     void fetchScrollEffectBehaviour();
+    /// Bring-up read of the blocked-window list. Needed even though the
+    /// daemon republishes on every relayout of a capped screen: a session
+    /// whose strips are already settled emits nothing until something moves,
+    /// so without this the cap would not apply until the first relayout.
+    void fetchScrollFocusScrollBlockedWindows();
     /// Bring-up replay of the tab-indicator payload per screen (see wiring.cpp).
     void fetchScrollTabStrips();
     /// Bring-up replay of the per-screen tab paint overrides (see wiring.cpp).
@@ -1149,6 +1164,12 @@ private:
     /// layout rather than stale pixels of its own. Focus-follows-mouse is
     /// consulted per pointer move and needs nothing.
     void applyScrollEffectBehaviour(const QVariantMap& behaviour);
+    /// Shared apply for the blocked-window fetch reply and its live signal.
+    /// Deliberately does NOT repaint and does not touch the FFM suppression
+    /// latch: the set feeds one lookup on the pointer path and no painted
+    /// state, and unlike the focus-follows-mouse membership beside it, it can
+    /// never take the last FFM screen away.
+    void applyScrollFocusScrollBlockedWindows(const QStringList& windowIds);
     void fetchActiveLayouts();
     /// The cursor-screen resolution and ownership gate both wheel chords
     /// share, and the one place the inversion setting is applied (it flips
@@ -1236,6 +1257,11 @@ private:
     int m_scrollEffectBehaviourFetchRetriesLeft = 0;
     /// Per-dispatch guard for the scroll-effect-behaviour fetch.
     quint64 m_scrollEffectBehaviourQueryGeneration = 0;
+    /// The scroll cap's blocked-window list, on its own property because it
+    /// updates per relayout rather than per settings change, carries the same
+    /// bounded retry and the same two guards as the map beside it.
+    int m_scrollFocusScrollBlockedFetchRetriesLeft = 0;
+    quint64 m_scrollFocusScrollBlockedQueryGeneration = 0;
     /// The two tab-indicator bring-up fetches carry the same bounded retry
     /// and per-dispatch generation guard as their three siblings. The guard
     /// matters across a daemon restart: two loadSettings runs put two Gets in
@@ -1257,6 +1283,11 @@ private:
     /// change gate, because an identical-content signal still proves the
     /// current state is newer than any reply dispatched earlier.
     quint64 m_scrollEffectBehaviourGeneration = 0;
+    /// Write-generation twin for the blocked-window list, same race and same
+    /// resolution as the map's: the live signal writes locally, and a reply
+    /// dispatched before it must not land afterwards and revert the set.
+    /// Bumped on every apply, before the change gate.
+    quint64 m_scrollFocusScrollBlockedGeneration = 0;
     /// Screens whose RESOLVED scrolling focus-follows-mouse is on, and whose
     /// RESOLVED straddler crop is on (`rule ?? config`, decided daemon-side).
     /// Membership is the whole answer — the effect holds no config fallback
@@ -1264,6 +1295,12 @@ private:
     /// bring-up before the daemon's first reply looks like.
     QSet<QString> m_scrollFocusFollowsMouseScreens;
     QSet<QString> m_scrollCropStraddlerScreens;
+    /// WINDOW ids the focus-follows-mouse scroll cap refuses on a scrolling
+    /// screen (the daemon resolves the cap against the live strip and
+    /// publishes the answer, because this side cannot run the strip's
+    /// centering maths per pointer event). Empty means nothing is refused,
+    /// which is both the no-cap default and the fail-open direction.
+    QSet<QString> m_scrollFocusScrollBlockedWindows;
     /// Scrolling screens whose strip runs VERTICALLY. Membership, so an absent
     /// key or an empty list means horizontal everywhere — which is exactly
     /// what a session with no vertical strip publishes. It is NOT a

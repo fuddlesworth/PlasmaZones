@@ -24,6 +24,10 @@ inline constexpr QLatin1StringView Layout{"layout"};
 /// lossless assignment set can carry a snapping layout AND a scrolling
 /// template in one rule, and per-slot accumulation would drop one of them.
 inline constexpr QLatin1StringView ScrollingTemplate{"scrolling-template"};
+/// NOTE, as for `Locked`, `DefaultAssignment`, `OsdEnabled` and
+/// `DragSelectorEnabled` below: the slot id itself has no reader. The action
+/// it belongs to, `DisableEngine`, is consumed by scanning for the action
+/// TYPE rather than by resolving this slot.
 inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
 /// A single boolean: a winning rule with `value == true` locks the context.
@@ -134,25 +138,31 @@ inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-co
 inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
 inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
 /// Per-context scrolling BEHAVIOUR slots — the knobs that had no rule seam
-/// until now; this block holds eight. Seven ride the same per-screen
+/// until now; this block holds nine. Seven ride the same per-screen
 /// override map as the sizing slots above, each read through an
 /// `effective*` accessor that falls back to the global config value —
 /// including ScrollStickyWindowHandling and ScrollStripAxis (the axis
 /// SHARES its map key with the per-screen settings channel, so the rule's
 /// insert is the precedence collapse, and its resolved membership is ALSO
 /// pushed to the compositor; ScrollCropStraddlers is likewise dual-consumed
-/// by the engine's clamp and the effect's paint clip). The remaining one,
-/// ScrollFocusFollowsMouse, has no engine consumer at all: the daemon
-/// resolves it per screen and pushes the resolved set to the compositor
-/// (see its own note).
+/// by the engine's clamp and the effect's paint clip). The remaining two,
+/// ScrollFocusFollowsMouse and the cap beside it, have no engine consumer
+/// at all: the daemon resolves each per screen and pushes a resolved set to
+/// the compositor (see their own notes).
 inline constexpr QLatin1StringView ScrollAlwaysCenterSingleColumn{"scroll-always-center-single-column"};
 inline constexpr QLatin1StringView ScrollRespectMinimumSize{"scroll-respect-minimum-size"};
 inline constexpr QLatin1StringView ScrollCropStraddlers{"scroll-crop-straddlers"};
 inline constexpr QLatin1StringView ScrollFocusNewWindows{"scroll-focus-new-windows"};
 inline constexpr QLatin1StringView ScrollSmartGaps{"scroll-smart-gaps"};
-/// Effect-consumed, unlike its five neighbours: the daemon resolves it per
-/// screen and pushes the resolved set to the compositor.
+/// Effect-consumed, unlike the five neighbours above it: the daemon resolves
+/// it per screen and pushes the resolved set to the compositor.
 inline constexpr QLatin1StringView ScrollFocusFollowsMouse{"scroll-focus-follows-mouse"};
+/// Effect-consumed like the toggle it caps, but through a different channel:
+/// the daemon asks the engine which windows are further than this from the
+/// current view and pushes THAT set to the compositor, because the answer
+/// depends on the strip's layout and the compositor cannot ask per pointer
+/// event.
+inline constexpr QLatin1StringView ScrollFocusFollowsMouseMaxScroll{"scroll-focus-follows-mouse-max-scroll"};
 inline constexpr QLatin1StringView ScrollStickyWindowHandling{"scroll-sticky-window-handling"};
 inline constexpr QLatin1StringView ScrollStripAxis{"scroll-strip-axis"};
 // Per-context tab-indicator slots, one per property so independent context

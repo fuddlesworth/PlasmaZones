@@ -167,6 +167,22 @@ inline constexpr double MaxBorderRadius = 20.0;
 inline constexpr double MinColumnWidthRatio = 0.05;
 inline constexpr double MaxColumnWidthRatio = 1.0;
 
+/// Bounds for the focus-follows-mouse scroll cap, niri's
+/// `max-scroll-amount`, as a FRACTION of the viewport's extent along the
+/// strip. Installed here for the same lockstep reason as the pair above,
+/// though the readers differ: the zones-layer context resolver checks the
+/// pair, while the descriptor validator checks only the CEILING, because
+/// `hasNumberInRange` carries its own zero floor and the minimum here simply
+/// restates it. The rules-model label renderer reads the pair too.
+///
+/// The ceiling is 1.0 and it means "no cap" as a SENTINEL rather than as a
+/// measured limit — see ScrollEngine::windowsBeyondFocusScrollLimit, where a
+/// recentring step can genuinely cost more than one viewport. The floor is a
+/// real setting rather than a disabled one, meaning focus only follows the
+/// pointer onto windows already fully in view.
+inline constexpr double MinFocusFollowsMouseMaxScrollRatio = 0.0;
+inline constexpr double MaxFocusFollowsMouseMaxScrollRatio = 1.0;
+
 /// Bounds for the tab-indicator numeric slots. Installed here, next to the
 /// column-width pair and for the same reason: the descriptor validators
 /// (ruleaction_builtins_indicators.cpp) and the per-context consumer

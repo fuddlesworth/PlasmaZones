@@ -516,6 +516,19 @@ public:
     /// callers.
     bool scrollViewBy(int delta, const ScrollLayoutParams& params);
 
+    /// How far the view WOULD move, in pixels along the strip, if column
+    /// @p columnIndex became the active one right now. A pure query: it runs
+    /// the same centering policy reanchorAfterFocusChange runs and compares
+    /// the resulting view offset with the current one, mutating nothing.
+    ///
+    /// This is niri's `focus-follows-mouse max-scroll-amount` predicate:
+    /// focus-follows-mouse asks it before activating a window so a pointer
+    /// grazing a column that is mostly off screen does not yank the whole
+    /// strip. Answers 0 for the active column, for an out-of-range index and
+    /// for a degenerate work area, all of which mean "focusing this costs no
+    /// scroll" and so can never be refused by a cap.
+    int predictedFocusScrollPx(int columnIndex, const ScrollLayoutParams& params) const;
+
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against
     /// @p params. Pure function of the current model state; does not mutate.
@@ -617,6 +630,16 @@ private:
     /// [0, stripMain - workMain] (pinned at the strip's START when the strip
     /// fits the viewport entirely).
     int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
+    /// clampedAnchor for an ARBITRARY column rather than the active one, so
+    /// the focus-policy maths can be run predictively for a column that is
+    /// not focused yet. clampedAnchor is the @p columnIndex == active case.
+    int clampedAnchorFor(int columnIndex, int anchor, const ScrollLayoutParams& params) const;
+    /// The anchor the centering policy lands on when @p targetIdx becomes
+    /// active, coming from @p prevIdx with the view at @p oldViewOffset. The
+    /// whole policy (Always / lone-column / OnOverflow / the Never fit) lives
+    /// here and nowhere else: reanchorAfterFocusChange applies the answer and
+    /// predictedFocusScrollPx merely measures it, so the two can never drift.
+    int focusAnchorFor(int targetIdx, int prevIdx, int oldViewOffset, const ScrollLayoutParams& params) const;
     /// The anchor a structural mutation ends on: KEEP the view where it was
     /// (an anchor reproducing @p oldViewOffset, clamped at BOTH strip edges —
     /// deliberately stricter than removeWindowInternal's leading-edge-only

@@ -519,6 +519,8 @@ public:
                    scrollingFocusNewWindowsChanged)
     Q_PROPERTY(bool scrollingFocusFollowsMouse READ scrollingFocusFollowsMouse WRITE setScrollingFocusFollowsMouse
                    NOTIFY scrollingFocusFollowsMouseChanged)
+    Q_PROPERTY(int scrollingFocusFollowsMouseMaxScroll READ scrollingFocusFollowsMouseMaxScroll WRITE
+                   setScrollingFocusFollowsMouseMaxScroll NOTIFY scrollingFocusFollowsMouseMaxScrollChanged)
     Q_PROPERTY(int scrollingStickyWindowHandling READ scrollingStickyWindowHandling WRITE
                    setScrollingStickyWindowHandling NOTIFY scrollingStickyWindowHandlingChanged)
     Q_PROPERTY(bool scrollingRespectMinimumSize READ scrollingRespectMinimumSize WRITE setScrollingRespectMinimumSize
@@ -1523,6 +1525,8 @@ public:
     void setScrollingFocusNewWindows(bool focus);
     bool scrollingFocusFollowsMouse() const;
     void setScrollingFocusFollowsMouse(bool follows);
+    int scrollingFocusFollowsMouseMaxScroll() const;
+    void setScrollingFocusFollowsMouseMaxScroll(int percent);
     int scrollingStickyWindowHandling() const override;
     void setScrollingStickyWindowHandling(int handling);
     bool scrollingRespectMinimumSize() const override;

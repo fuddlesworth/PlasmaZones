@@ -51,6 +51,39 @@ inline auto clampInt(int minVal, int maxVal)
     };
 }
 
+/// Range clamp for numeric int keys whose MINIMUM is a meaningful setting
+/// rather than a floor nobody chooses. clampInt is fine when the minimum is
+/// inert, because QVariant::toInt() answers 0 for a value it cannot convert
+/// and 0 then clamps up to the minimum — the user gets the tamest setting.
+/// Where the minimum is itself the most restrictive choice, that same path
+/// turns a corrupt or hand-mangled config entry into the strictest possible
+/// behaviour, which is the opposite of what an unreadable value should mean.
+/// So a value that does not convert falls back to @p defaultVal instead.
+inline auto clampIntOrDefault(int minVal, int maxVal, int defaultVal)
+{
+    return [minVal, maxVal, defaultVal](const QVariant& v) -> QVariant {
+        // Through toDouble rather than toInt, because toInt's `ok` is not the
+        // guard it looks like: a JSON number too large for an int comes back
+        // WRAPPED, with ok still true, and the wrap is usually negative — so
+        // an absurd entry would clamp to the minimum, which is the strictest
+        // setting and the exact outcome this validator exists to avoid.
+        // Reading the double first makes out-of-range unrepresentable rather
+        // than silently reinterpreted.
+        bool ok = false;
+        const double raw = v.toDouble(&ok);
+        if (!ok || qIsNaN(raw)) {
+            return defaultVal;
+        }
+        if (raw <= static_cast<double>(minVal)) {
+            return minVal;
+        }
+        if (raw >= static_cast<double>(maxVal)) {
+            return maxVal;
+        }
+        return static_cast<int>(qRound(raw));
+    };
+}
+
 /// Snap-to-default enum validator: accept a value only if it appears in the
 /// explicit valid set, otherwise return @p fallback. Used for enums where
 /// qBound would silently reinterpret out-of-range values as the nearest
