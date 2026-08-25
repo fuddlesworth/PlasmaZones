@@ -222,6 +222,11 @@ public:
         return capturedWindowOrder(screenId);
     }
     QStringList capturedWindowOrder(const QString& screenId) const;
+    /// Capture half only. This engine paints no view of its own, so it has
+    /// nothing to restore on the way IN (setInitialFocusedWindow keeps the
+    /// interface's no-op default) — but a screen flipping OUT of autotile
+    /// still has to tell the incoming engine which window the user was on.
+    QString managedFocusedWindow(const QString& screenId) const override;
     bool isModeSpecificFloated(const QString& windowId) const override
     {
         return isAutotileFloated(windowId);

@@ -101,6 +101,8 @@ private Q_SLOTS:
     void applyPathEmitsOnChangeOnly();
     void orderedOpenFollowsAndConsumesSeed();
     void partiallyConsumedSeedGuardsReopens();
+    void modeTransitionFocusSeedAnchorsArrival();
+    void modeTransitionFocusSeedIsDrained();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
@@ -1673,6 +1675,60 @@ void TestScrollEngineSmoke::partiallyConsumedSeedGuardsReopens()
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b")}));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedAnchorsArrival()
+{
+    // A mode flip seeds POSITION and FOCUS together. Position alone left the
+    // strip pointed at whichever column the seed adopted first — insertWindowAt
+    // takes no focus — so the window the user was actually on could not pull
+    // the view onto itself, and a window opened just before the flip landed
+    // parked off-screen.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
+
+    // The re-announce arrives as a burst, which is what defers the apply (and
+    // the focus restore with it) to the end.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    // Still on the first arrival until the burst closes: the restore is a
+    // burst-end step precisely because the seeded window is usually not last.
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|a"));
+    engine->endArrivalBurst();
+
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
+    // Position is untouched by the focus restore.
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedIsDrained()
+{
+    // The seed is consumed by the burst that follows it and never re-applied:
+    // a later burst on the same screen must leave focus where the user's own
+    // arrivals put it, or every subsequent flip would rewind the view to a
+    // transition the user has long since moved past.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"), {QStringLiteral("app|a"), QStringLiteral("app|b")});
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|b"));
+
+    // Second burst, no fresh seed: the arrival keeps the focus it took.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
 }
 
 void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()

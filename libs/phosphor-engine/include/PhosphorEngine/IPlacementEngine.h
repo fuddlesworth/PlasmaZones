@@ -402,6 +402,32 @@ public:
         Q_UNUSED(windowIds)
     }
 
+    /// The window this engine considers focused on @p screenId, or empty.
+    ///
+    /// The focus half of the mode-transition capture that managedWindowOrder
+    /// supplies the position half of. Order alone is not enough to hand a
+    /// flip back to the user unchanged: an engine with a VIEW (the strip) has
+    /// to know which window to anchor on, and re-deriving that from position
+    /// picks whichever column the seed happened to adopt first.
+    virtual QString managedFocusedWindow(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+    /// Hand the incoming engine the focus captured from the outgoing one.
+    ///
+    /// Advisory, and consumed at the END of the arrival burst rather than per
+    /// arrival: the seeded window is usually not the first to re-announce, so
+    /// applying it eagerly would be overwritten by the arrivals that follow.
+    /// An engine with no view of its own has nothing to do with this and the
+    /// default no-op is the right implementation for it — the focused window
+    /// is wherever the compositor already has it.
+    virtual void setInitialFocusedWindow(const QString& screenId, const QString& windowId)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(windowId)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Per-screen config (override if engine supports per-screen overrides)
     //

@@ -259,6 +259,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // openColumnPlacement=consume while its config-driven twin (the
     // IntoActiveColumn arm below) applied it.
     bool inserted = false;
+    // Which arm below actually placed the tile. Reported at the tail together
+    // with the resulting active window: the arms differ in whether they take
+    // focus and re-anchor the view (insertWindow does both, insertWindowAt and
+    // insertWindowIntoActiveColumn do neither), so an arrival that lands
+    // off-screen is diagnosable only by naming the arm that placed it.
+    const char* insertArm = "none";
     // Whether the tile came back out of the mode-round-trip stash. The height
     // commit at the tail reads it: a stash restore rebuilds the remembered
     // SHAPE, and the open rules' width verdicts are already dropped on that
@@ -278,6 +284,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
         inserted = true;
         restoredFromStash = true;
+        insertArm = "stash";
         consumePendingInitialOrder(screenId, windowId);
     }
     if (!inserted && openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
@@ -290,6 +297,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // open (the block below documents exactly that hazard).
             consumePendingInitialOrder(screenId, windowId);
             inserted = true;
+            insertArm = "consume-rule";
         }
     }
 
@@ -316,6 +324,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             }
             inserted = state->strip().insertWindowAt(columnIdx, windowId, width, display, params);
             if (inserted) {
+                insertArm = "order-seed";
                 state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
             }
             // Through the shared consume helper — it drops the screen's entry
@@ -429,6 +438,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
             inserted = state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
                                                                    minHeight);
+            if (inserted) {
+                insertArm = "into-active-column";
+            }
         }
         if (!inserted) {
             inserted = state->strip().insertWindow(
@@ -496,6 +508,14 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             m_states.removeWindow(windowId);
         }
     }
+    // Which arm placed the arrival, and whether it ended up as the strip's
+    // active window. The arms differ in whether they take focus and re-anchor
+    // (insertWindow does both; insertWindowAt and insertWindowIntoActiveColumn
+    // do neither), and an arrival that is not active cannot pull the view onto
+    // itself — which is how a freshly-opened window ends up parked off-screen.
+    qCDebug(lcScrollEngine) << "insertOpenedWindow:" << windowId << "arm=" << insertArm << "inserted=" << inserted
+                            << "active=" << state->strip().activeWindowId()
+                            << "viewDetached=" << state->strip().viewDetached() << "burstDepth=" << m_arrivalBurstDepth;
     return inserted;
 }
 
@@ -710,6 +730,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // qobject_cast on the settings object.
     const bool focusNew = openParams.focused ? *openParams.focused : effectiveFocusNewWindows(screenId);
     const bool arrivalTookFocus = focusNew && state->strip().activeWindowId() == windowId;
+    // Paired with the insertOpenedWindow report above: arrivalTookFocus is what
+    // decides whether the deferred/immediate applyLayout re-centres the view on
+    // the arrival, so a false here with focusNew true is the signal that the
+    // insert arm silently declined focus.
+    qCDebug(lcScrollEngine) << "windowOpened focus:" << windowId << "focusNew=" << focusNew
+                            << "arrivalTookFocus=" << arrivalTookFocus << "burstDepth=" << m_arrivalBurstDepth;
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {
         const ScrollLayoutParams params = layoutParamsForScreen(screenId);
@@ -795,7 +821,37 @@ void ScrollEngine::endArrivalBurst()
         if (key != currentKeyForScreen(key.screenId)) {
             continue;
         }
-        applyLayout(key.screenId, pending.value(key));
+        // Mode-transition focus restore, consumed here and nowhere else.
+        //
+        // The order seed positions each arrival with insertWindowAt, which
+        // deliberately takes NO focus and re-anchors nothing — right for
+        // seeding a whole strip, but it leaves the strip pointed at whichever
+        // column happened to be adopted first. The window the user was
+        // actually on then has no way to pull the view onto itself, and a
+        // window that opened just before the flip lands parked off-screen.
+        //
+        // Applied BEFORE applyLayout so the same pass's updateViewForFocus
+        // re-anchors on the restored focus, and forced through the focus
+        // verb (not a bare active-index write) so the latch clears with it —
+        // "a focus change re-attaches" is the strip's own contract.
+        //
+        // The seed is dropped whether or not it landed: a window that closed
+        // between the capture and the re-announce is gone for good, and
+        // leaving the entry armed would re-anchor some later, unrelated
+        // transition onto a view the user has since moved away from.
+        const QString seededFocus = m_pendingInitialFocus.take(key.screenId);
+        bool restoredFocus = false;
+        if (!seededFocus.isEmpty()) {
+            ScrollState* state = stateForKey(key, false);
+            if (state && state->strip().containsWindow(seededFocus)) {
+                state->strip().focusWindow(seededFocus, layoutParamsForScreen(key.screenId));
+                restoredFocus = true;
+            }
+        }
+        // A restored focus is a focus move in its own right, so the apply has
+        // to treat it as one — otherwise the arm that re-centres the view is
+        // skipped for exactly the case this restore exists to fix.
+        applyLayout(key.screenId, pending.value(key) || restoredFocus);
     }
 }
 

@@ -444,6 +444,8 @@ public:
     QVector<VisibleTileWithRect> visibleTilesWithRects(const QString& screenId) const;
 
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
+    QString managedFocusedWindow(const QString& screenId) const override;
+    void setInitialFocusedWindow(const QString& screenId, const QString& windowId) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
     // Layout capability (see IPlacementEngine's Layout capability section)
@@ -1289,6 +1291,14 @@ private:
     /// Kept beside, not inside, the list so consuming an id cannot shift the
     /// recorded positions of the ids still pending.
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
+    /// Focus seed for a mode transition, the companion to
+    /// m_pendingInitialOrder. Consumed at the END of the arrival burst rather
+    /// than per arrival: the seeded window is usually not the last to
+    /// re-announce, and every positional insert leaves the strip pointed at
+    /// whichever column it adopted first, so an eager apply is overwritten by
+    /// the arrivals that follow. Dropped on consumption, and on a seed
+    /// replacement, so it can never re-anchor a strip the user has since moved.
+    QHash<QString, QString> m_pendingInitialFocus;
     /// Snapshot @p state's strip as a stash entry: columns, focus, view
     /// anchor, captured axis, and the blueprint cursor with the blueprint
     /// identity it counts against. Empty columns list when the state is null

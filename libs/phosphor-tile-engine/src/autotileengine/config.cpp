@@ -246,6 +246,16 @@ QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
     return order;
 }
 
+QString AutotileEngine::managedFocusedWindow(const QString& screenId) const
+{
+    // Same non-creating, CURRENT-context lookup capturedWindowOrder uses, so
+    // the order and the focus a mode transition captures always describe one
+    // state. stateForKey (not tilingStateForScreen) because the capture must
+    // never lazily materialise a state for a screen that has none.
+    PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    return state ? state->focusedWindow() : QString();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════

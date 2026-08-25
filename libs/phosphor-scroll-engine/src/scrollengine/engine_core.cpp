@@ -861,6 +861,28 @@ void ScrollEngine::setInitialWindowOrder(const QString& screenId, const QStringL
     }
 }
 
+QString ScrollEngine::managedFocusedWindow(const QString& screenId) const
+{
+    // The strip's active window IS this engine's focus, and the CURRENT
+    // context's is the only one a transition can be capturing. Non-creating,
+    // matching managedWindowOrder's own lookup so the pair always describes
+    // one strip.
+    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    return state ? state->strip().activeWindowId() : QString();
+}
+
+void ScrollEngine::setInitialFocusedWindow(const QString& screenId, const QString& windowId)
+{
+    // Empty clears rather than storing a blank: an outgoing engine with no
+    // focus to report must not leave a previous transition's seed armed for
+    // the next flip to apply.
+    if (windowId.isEmpty()) {
+        m_pendingInitialFocus.remove(screenId);
+    } else {
+        m_pendingInitialFocus.insert(screenId, windowId);
+    }
+}
+
 // ── Persistence + settings ──────────────────────────────────────────────────
 
 void ScrollEngine::saveState()

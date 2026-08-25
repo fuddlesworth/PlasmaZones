@@ -277,6 +277,15 @@ void Daemon::updateEngineScreens()
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
     // restores the same window positions. Without this, only the settingsChanged path
     // (handleAutotileDisabled) captured orders — layout cycling lost them.
+    // Focus seed for THIS pass only, so it never needs the pruning and
+    // persistence m_lastEngineOrders carries. That is not just a shortcut:
+    // the order cache is deliberately long-lived (a screen re-entering an
+    // engine months later still replays its positions), and replaying a
+    // focus captured that long ago would re-anchor a view the user has since
+    // moved. A focus is only meaningful for the transition that captured it,
+    // and capture→seed→apply all run inside this one call.
+    m_transitionFocusSeed.clear();
+
     const QSet<QString> currentAutotileScreens = m_autotileEngine->activeScreens();
     const QSet<QString> removedScreens = currentAutotileScreens - autotileScreens;
     for (const QString& screenId : removedScreens) {
@@ -317,6 +326,9 @@ void Daemon::updateEngineScreens()
         // the wrong context".
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = order;
+        // Focus travels with the order, under the same state-existence gate
+        // that guarantees both describe the state being torn down.
+        m_transitionFocusSeed.insert(screenId, m_autotileEngine->managedFocusedWindow(screenId));
     }
 
     // Capture the SCROLLING engine's leaving orders in the same phase, before

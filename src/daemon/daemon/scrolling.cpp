@@ -73,6 +73,10 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
         // its mode-toggle caller additionally pre-clears the toggled screen's
         // key, which this path has no equivalent of.)
         m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = m_scrollEngine->managedWindowOrder(screenId);
+        // Focus travels with the order (the autotile twin does the same), so
+        // a scrolling→autotile→scrolling round trip hands the view back on
+        // the window the user left it on.
+        m_transitionFocusSeed.insert(screenId, m_scrollEngine->managedFocusedWindow(screenId));
     }
 }
 
@@ -142,6 +146,23 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         filterEngineSeedOrder(order, wts, wts->windowRegistry(), PhosphorEngine::WindowPlacement::scrollingEngineId());
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);
+        }
+    }
+
+    // Focus seed, separate from the order loop above on purpose. The order is
+    // read out of the long-lived cache and is skipped for a context that has
+    // never been in scrolling; the focus comes from THIS pass's capture and is
+    // meaningful exactly when a screen just left the other engine — including
+    // the first time it enters scrolling, which the order loop `continue`s
+    // past. Without it the strip anchors on whichever column the seed adopted
+    // first and a window opened just before the flip lands parked off-screen.
+    //
+    // Drained (take) so a screen that flips again in a later pass cannot
+    // re-apply this one's focus.
+    for (const QString& screenId : enteringScreens) {
+        const QString focused = m_transitionFocusSeed.take(screenId);
+        if (!focused.isEmpty()) {
+            m_scrollEngine->setInitialFocusedWindow(screenId, focused);
         }
     }
 

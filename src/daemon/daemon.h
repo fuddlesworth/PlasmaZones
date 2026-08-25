@@ -1438,6 +1438,20 @@ private:
     // screen name) so cross-desktop toggles don't overwrite each other.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
 
+    /// Focus captured from an engine a screen is LEAVING, for the engine it is
+    /// entering in the SAME updateEngineScreens pass. Cleared at the top of
+    /// that pass's capture phase and drained by the seed phase, so unlike
+    /// m_lastEngineOrders it needs no pruning and is never persisted.
+    ///
+    /// Pass-scoped deliberately, not as a shortcut. The order cache is
+    /// long-lived by design — a screen re-entering an engine much later still
+    /// replays its positions — but a focus is only true for the transition
+    /// that captured it, and replaying a stale one would re-anchor a view the
+    /// user has since moved. Keyed by plain screen id (not TilingStateKey)
+    /// for the same reason: within one pass a screen has exactly one
+    /// transition.
+    QHash<QString, QString> m_transitionFocusSeed;
+
     /// Per scrolling screen, the resolved focus-follows-mouse scroll cap as a
     /// percent of the viewport's extent along the strip (`rule ?? config`).
     /// Screens at 100 (no cap) are ABSENT rather than stored, so an empty hash
