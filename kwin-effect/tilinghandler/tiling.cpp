@@ -1231,9 +1231,94 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     };
 
+    // Insert-displaced parks teleport instead of sliding out.
+    //
+    // When a window opens onto a strip its column takes the slot a VISIBLE
+    // neighbour holds, and that neighbour is parked in the SAME batch. The
+    // arriving window is withheld from compositing until its configure lands
+    // (see RestoreSuppression), but the departing one is a live window running
+    // an ordinary animated slide out past the screen edge — so for the length
+    // of that slide it paints over the rect the arrival has already been
+    // given, and the open reads as "the new window appeared on top of the old
+    // one, then something moved".
+    //
+    // Only INSERT-caused displacement takes the teleport. A scroll parks
+    // columns too, and there the slide IS the motion the user asked for. The
+    // discriminator is the CLAIMER: for an insert it is a window that was not
+    // tile-tracked anywhere before this batch, for a scroll it is always an
+    // existing column. isTiledWindow is therefore read HERE, ahead of the
+    // apply lambda's markWindowTiled, which is what makes the answer the
+    // pre-batch state.
+    QSet<QString> insertDisplaced;
+    // Windows taking their FIRST strip placement in this batch. Their live
+    // frame is the compositor's open placement (a small centred rect), which
+    // is not a strip position at all — see the animation block's use.
+    QSet<QString> freshArrivals;
+    {
+        QHash<QString, QRect> outputRectCache;
+        const auto outputRectFor = [&](const QString& screenId) -> QRect {
+            auto it = outputRectCache.find(screenId);
+            if (it == outputRectCache.end()) {
+                QRect outRect;
+                if (const KWin::LogicalOutput* out = m_effect->outputForScreenId(screenId)) {
+                    outRect = out->geometry();
+                }
+                it = outputRectCache.insert(screenId, outRect);
+            }
+            return it.value();
+        };
+        // The rect applyWindowGeometry will actually COMMIT, matching the
+        // animation branch's own predicates below — for a size-constrained X11
+        // column that is the centred frame, not the column rect.
+        const auto committedRectFor = [this](const TileSnap& s) {
+            const QRect raw = s.geometry.normalized();
+            return s.window ? m_effect->constrainTileGeometry(s.window, raw) : raw;
+        };
+        QVector<QRect> claimedByArrival;
+        for (const TileSnap& s : toApply) {
+            if (!s.window || isTiledWindow(s.windowId)) {
+                continue;
+            }
+            freshArrivals.insert(s.windowId);
+            const QRect outRect = outputRectFor(s.screenId);
+            const QRect committed = committedRectFor(s);
+            if (outRect.isValid() && outRect.intersects(committed)) {
+                claimedByArrival.append(committed);
+            }
+        }
+        if (!claimedByArrival.isEmpty()) {
+            for (const TileSnap& s : toApply) {
+                if (!s.window) {
+                    continue;
+                }
+                const QRect outRect = outputRectFor(s.screenId);
+                // Leaving: the target lies entirely off this entry's OWN
+                // output. An on-screen target is not a park and keeps its
+                // ordinary leg whatever else the batch does.
+                if (!outRect.isValid() || outRect.intersects(committedRectFor(s))) {
+                    continue;
+                }
+                const QRect frame = s.window->frameGeometry().toRect();
+                for (const QRect& claimed : claimedByArrival) {
+                    // Any overlap, not rect equality: on a fractional-scale
+                    // output frameGeometry carries sub-pixel residue that
+                    // rounding does not always reconcile, and the artifact
+                    // being removed is the overdraw itself — so overlap is
+                    // both the more robust test and the one that names the
+                    // actual condition.
+                    if (claimed.intersects(frame)) {
+                        insertDisplaced.insert(s.windowId);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen, genByScreen, startedViewScreens, immediateViewScreens, wireToLive](int i) {
+        [this, toApply, gen, genByScreen, startedViewScreens, immediateViewScreens, wireToLive, insertDisplaced,
+         freshArrivals](int i) {
             // Local copy (not const ref) so a stale window pointer can be
             // re-resolved below; the rest of the body reads snap.window.
             TileSnap snap = toApply[i];
@@ -1694,7 +1779,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // a virtual sub-screen spelling never reaches this path.
                     QRectF originOverride;
                     QRectF visualTargetOverride;
-                    bool skipScrollAnimation = false;
+                    // Seeded from the batch-wide insert-displacement pass (see
+                    // insertDisplaced, built before the dispatch): a column
+                    // parked to make room for an ARRIVING window teleports, so
+                    // its slide-out cannot paint over the rect the arrival was
+                    // just given. Every branch below only ever sets this true,
+                    // so seeding it here cannot be undone downstream.
+                    bool skipScrollAnimation = insertDisplaced.contains(snap.windowId);
                     // The rect applyWindowGeometry will actually COMMIT for
                     // this request. For an X11 client with size hints that is
                     // the constrained frame centred in the column, NOT the
@@ -1724,7 +1815,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // it downstream, leaving the two disagreeing about the
                     // predicted commit.
                     const QRect committedGeo = m_effect->constrainTileGeometry(snap.window, geo.normalized());
-                    if (snap.hasVisualPos) {
+                    if (freshArrivals.contains(snap.windowId)) {
+                        // FIRST strip placement for this window. Its live
+                        // frame is the compositor's open placement — a small
+                        // centred rect that overlaps whatever is already on
+                        // screen — and that is not a strip position, so
+                        // differencing against it describes no strip motion at
+                        // all. Every branch below would build a real leg from
+                        // it and play a grow-and-move out of the middle of the
+                        // screen before the window settled into its column.
+                        //
+                        // Degenerate leg, the same answer (and the same
+                        // reasoning) as the park arms below: a rect that says
+                        // nothing about where the window came from cannot
+                        // anchor an animation. The window's OPEN shader still
+                        // plays, from the column it actually lands in, which is
+                        // the motion this case is supposed to show.
+                        //
+                        // First in the chain so it outranks the view-carried
+                        // arms: a batch that also scrolls the view carries a
+                        // fresh arrival too, and the residual those arms
+                        // compute is meaningless for a window with no prior
+                        // position to be residual to.
+                        originOverride = QRectF(committedGeo);
+                    } else if (snap.hasVisualPos) {
                         // Parked, but drawn at its real strip position and
                         // carried by the view like every other column. There is
                         // no per-window motion left to describe, so the leg is
