@@ -85,6 +85,22 @@ QJsonObject floatParam(const QString& id, double def, double min, double max)
                        {QStringLiteral("max"), max}};
 }
 
+QJsonObject colorParam(const QString& id, const QString& def)
+{
+    return QJsonObject{{QStringLiteral("id"), id},
+                       {QStringLiteral("name"), id},
+                       {QStringLiteral("type"), QStringLiteral("color")},
+                       {QStringLiteral("default"), def}};
+}
+
+QJsonObject boolParam(const QString& id, bool def)
+{
+    return QJsonObject{{QStringLiteral("id"), id},
+                       {QStringLiteral("name"), id},
+                       {QStringLiteral("type"), QStringLiteral("bool")},
+                       {QStringLiteral("default"), def}};
+}
+
 } // namespace
 
 class TestDecorationPreviewController : public QObject
@@ -129,6 +145,17 @@ private Q_SLOTS:
                          QJsonArray{QStringLiteral("builtin:gaussian-h"), QStringLiteral("builtin:gaussian-v")}},
                         {QStringLiteral("parameters"),
                          QJsonArray{floatParam(QStringLiteral("blurRadius"), 12.0, 1.0, 64.0)}}}));
+
+        // Theme-reactive pack, the border family's shape: it declares the two
+        // colour params the resolver writes and opts into the system accent.
+        // Declaration order is slot order, so activeColor takes customColor0
+        // and inactiveColor customColor1.
+        QVERIFY(
+            writePack(root, QStringLiteral("accented"),
+                      QJsonObject{{QStringLiteral("parameters"),
+                                   QJsonArray{colorParam(QStringLiteral("activeColor"), QStringLiteral("#ff0000")),
+                                              colorParam(QStringLiteral("inactiveColor"), QStringLiteral("#00ff00")),
+                                              boolParam(QStringLiteral("useSystemAccent"), true)}}}));
 
         m_registry.addSearchPath(root, PhosphorFsLoader::LiveReload::Off);
         QVERIFY2(m_registry.hasEffect(QStringLiteral("border")), "fixture packs must be discoverable");
@@ -257,6 +284,36 @@ private Q_SLOTS:
         gated.startAudioCapture();
         QVERIFY(gated.audioSpectrumVariant().value<QVector<float>>().isEmpty());
         gated.stopAudioCapture();
+    }
+
+    /// A theme-reactive pack previews in the USER's colours, not the palette's.
+    ///
+    /// previewChain resolves useSystemAccent / useThemeNeutral against the
+    /// highlight and inactive colours from settings, falling back to the
+    /// QPalette only when there are none. Every other slot here passes a null
+    /// ISettings, so the settings-driven direction — the one the class doc
+    /// sells, and the reason the preview matches what the daemon will draw —
+    /// was never exercised.
+    void theme_colors_come_from_settings_when_a_pack_asks_for_them()
+    {
+        const QColor highlight(0x11, 0x22, 0xEE);
+        const QColor inactive(0x44, 0x55, 0x66);
+        StubSettings settings;
+        settings.setHighlightColor(highlight);
+        settings.setInactiveColor(inactive);
+
+        DecorationPreviewController c(&m_registry, &settings);
+        const QVariantMap stage = c.previewChain(QStringLiteral("accented"), {}).first().toMap();
+        const QVariantMap params = stage.value(QStringLiteral("params")).toMap();
+
+        // The pack declares activeColor / inactiveColor, so the resolver's
+        // writes reach real slot lanes. Colour slot keys are 1-based, and
+        // declaration order assigns them, so activeColor is customColor1.
+        // Alpha is forced opaque by the resolver.
+        QColor active = params.value(QStringLiteral("customColor1")).value<QColor>();
+        QColor idle = params.value(QStringLiteral("customColor2")).value<QColor>();
+        QCOMPARE(active.rgb(), highlight.rgb());
+        QCOMPARE(idle.rgb(), inactive.rgb());
     }
 
     /// The wallpaper stand-in accessors must be total.

@@ -72,6 +72,18 @@ private Q_SLOTS:
         // `<receiver>.<name>`, with or without a call paren. Word-boundary
         // anchored so a longer identifier ending in the receiver name cannot
         // match.
+        //
+        // What this deliberately does NOT see, so its greenness is not
+        // overread. It matches a LITERAL `receiver.name` only, so it is blind
+        // to bracket access (`bridge["previewChain"]`), to a JS-local rebind
+        // (`const b = bridge; b.foo()`), and to names reached through a
+        // `Connections { target: bridge }` handler — signal names are never
+        // checked at all. It also checks existence by NAME, so an arity or
+        // parameter-type change is invisible: reducing
+        // `previewChain(packId, params)` to `previewChain(packId)` passes here
+        // and fails at runtime. Each of those is a real gap rather than a
+        // theoretical one; they are accepted because the common regression is a
+        // rename, which this does catch.
         const auto namesUsedOn = [](const QString& src, const QString& receiver) {
             QSet<QString> names;
             const QRegularExpression re(QStringLiteral("\\b%1\\.([A-Za-z_][A-Za-z0-9_]*)").arg(receiver));
