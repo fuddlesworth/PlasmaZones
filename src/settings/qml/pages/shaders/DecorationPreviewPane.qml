@@ -30,8 +30,8 @@ import org.plasmazones.common as PZCommon
  *
  * Packs that mix an active against an inactive appearance key on
  * `uSurfaceFocused`, which no other preview surface exposes. The toggle drives
- * both the shader uniform (through the host) and the card's own styling, so the
- * two read consistently.
+ * that uniform and NOTHING else — the stand-in card holds still across it, so
+ * everything that moves is the pack's doing rather than the subject's.
  */
 Item {
     id: root
@@ -86,7 +86,7 @@ Item {
                 packId: root.packId
                 params: root.liveParams
                 active: root.active
-                focusedLook: focusToggle.checked
+                focused: focusToggle.checked
                 audioSpectrum: root._audioSpectrum
                 cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
             }
@@ -99,12 +99,12 @@ Item {
             CheckBox {
                 id: focusToggle
 
-                checked: true
+                // Starts UNFOCUSED, matching the browser cards. That is the
+                // state that shows what a focus-reactive pack does: focus-fade
+                // is inert when focused, and the border family's inactive
+                // colour never appears. Ticking it is the comparison.
+                checked: false
                 text: i18nc("@option:check decoration preview", "Focused")
-                // Drives uSurfaceFocused on the chain AND the stand-in card's
-                // own styling. A pack with no active/inactive split simply
-                // ignores the uniform, so the toggle then moves only the card —
-                // which is honest, since that is all a real window would do.
             }
 
             Item {

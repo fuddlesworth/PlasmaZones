@@ -43,9 +43,16 @@ Item {
     /// Friendly parameter map. Empty means the pack's declared defaults, which
     /// is what the browser card shows.
     property var params: ({})
-    /// Drives uSurfaceFocused and the card's own styling together, so packs
-    /// with an active / inactive split read consistently.
-    property bool focusedLook: true
+    /// Drives uSurfaceFocused, and nothing else. The stand-in card holds still
+    /// across it on purpose, so whatever moves when this is toggled is the
+    /// pack's doing rather than the subject's.
+    ///
+    /// Defaults to UNFOCUSED, which is the state that actually shows what a
+    /// pack does. focus-fade only washes the surface out while unfocused and is
+    /// inert when focused; the border family's inactive colour is likewise
+    /// invisible until then. It is also the state most windows on a desktop are
+    /// in at any moment.
+    property bool focused: false
     /// Master gate. False composes no chain and instantiates no shader item.
     property bool active: false
     /// Live CAVA spectrum for audio-reactive packs; the host supplies it only
@@ -122,11 +129,9 @@ Item {
         }
     }
 
-    // The decorated subject. Sized to leave room for an outer effect: the host
-    // extends its canvas bottom/right by _outerPad, while the card's own
-    // PopupFrame capture ring supplies the top/left halo room (the extension is
-    // trailing by design — placement comes from the item's own coordinates and
-    // the FBO extension is offset inside it).
+    // The decorated subject. Sized to leave room for an outer effect on every
+    // side: the host centres its padded canvas on the card, so the halo needs
+    // _outerPad clear above and below, left and right (see _cardSize).
     PZCommon.DecorationPreviewCard {
         id: card
 
@@ -134,7 +139,6 @@ Item {
         width: root._cardSize.width
         height: root._cardSize.height
         title: root.cardTitle
-        focusedLook: root.focusedLook
     }
 
     /// Caption on the stand-in card. Exposed so the host supplies it already
@@ -147,11 +151,10 @@ Item {
         decorationChain: root._chain
         decorationOuterPadding: root._outerPad
         audioSpectrum: root.audioSpectrum
-        // The same toggle that styles the stand-in card, so the pack and the
-        // card it decorates agree about which state is being shown. Without
-        // this the toggle only restyled the card's title bar and the pack
-        // stayed permanently focused.
-        surfaceFocused: root.focusedLook
+        // The only thing the focus toggle moves. The host used to pin this
+        // true, so a focus-reactive pack could never show its inactive state
+        // and the toggle appeared to do nothing but restyle the card.
+        surfaceFocused: root.focused
         // Only decoded for a pack that actually samples it. Every other pack
         // ignores the backdrop, and handing one over regardless would upload a
         // wallpaper-sized texture per card for nothing.

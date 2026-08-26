@@ -48,11 +48,17 @@ PopupFrame {
     /// Card caption, supplied already-translated by the host.
     property string title: "Window"
 
-    /// Drives packs that mix an active against an inactive appearance
-    /// (`uSurfaceFocused`). The preview host binds its own focus toggle here
-    /// AND to the shader item; this half only styles the stand-in card so the
-    /// two read consistently.
-    property bool focusedLook: true
+    // Deliberately has NO focus state of its own.
+    //
+    // A real window dims its chrome when it loses focus, so an earlier version
+    // restyled the title bar with the host's focus toggle. That made the
+    // preview useless for its actual job: with both the card and the pack
+    // reacting, you could not tell which of them produced a change, and for a
+    // pack with no active/inactive split the toggle still moved something.
+    //
+    // The subject is held CONSTANT so that everything which changes is the
+    // decoration's doing. Focus reaches the pack through the host's
+    // surfaceFocused instead.
 
     implicitWidth: Kirigami.Units.gridUnit * 22
     implicitHeight: Kirigami.Units.gridUnit * 14
@@ -79,14 +85,14 @@ PopupFrame {
         clip: true
 
         // Title bar. Gives border and corner packs a strong horizontal edge to
-        // sit against, and shifts with focus so focus-reactive packs are
-        // legible next to the card they decorate.
+        // sit against, and a saturated band for tint and duotone packs to
+        // remap. Fixed at the active colours — see the focus note above.
         Rectangle {
             id: titleBar
 
             width: parent.width
             height: Math.max(2, parent.height * 0.2)
-            color: root.focusedLook ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
+            color: Kirigami.Theme.highlightColor
 
             Text {
                 anchors.left: parent.left
@@ -101,7 +107,7 @@ PopupFrame {
                 // rather than smearing the title bar a pack is trying to show.
                 visible: titleBar.height >= 10
                 font.pixelSize: Math.max(4, titleBar.height * 0.5)
-                color: root.focusedLook ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                color: Kirigami.Theme.highlightedTextColor
                 font.bold: true
             }
         }
