@@ -65,10 +65,12 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Kirigami.Units.smallSpacing
-            // The preview's own ground, so this frame and the card inside it
-            // can never disagree about what a pack is composited over. See
-            // DecorationChainPreview.groundColor for why it is a flat neutral.
-            color: chainPreview.groundColor
+            // The same slot colour the browser cards frame their previews with,
+            // so a pack looks the same in both and the wallpaper arriving is the
+            // only thing that changes. The preview itself paints no ground of
+            // its own (see DecorationChainPreview.groundColor), which is what
+            // lets this show through while the wallpaper decodes.
+            color: Kirigami.Theme.alternateBackgroundColor
             border.width: 1
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             clip: true

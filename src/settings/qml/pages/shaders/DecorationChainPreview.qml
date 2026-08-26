@@ -59,16 +59,21 @@ Item {
     /// translated — this file stays free of user-facing copy.
     property string cardTitle: ""
 
-    /// The ground a previewed decoration is composited over, and the fallback
-    /// wherever the wallpaper cannot be resolved or does not cover.
+    /// The ground a previewed decoration is composited over.
     ///
-    /// Deliberately a flat neutral rather than a theme colour: the pack
-    /// composites over this, so a tinted ground would misrepresent the colours
-    /// it produces. Mid-grey rather than the zone pane's black so a dark border
-    /// and a bright glow are both legible. Exposed as a constant so the hosts
-    /// that frame this preview paint the same ground instead of keeping their
-    /// own copy of the literal.
-    readonly property color groundColor: "#3a3a3a"
+    /// Deliberately NOTHING of its own: the wallpaper covers this whole item
+    /// once it decodes, so the only times a ground shows are while that decode
+    /// is in flight and when no wallpaper can be resolved at all. Painting a
+    /// slab of its own for those left a flat mid-grey rectangle flashing in
+    /// every card on the way to the real thing, and against a saturated colour
+    /// scheme a neutral grey reads as its complement, so on a blue desktop it
+    /// looked brown.
+    ///
+    /// Letting the host's own background show through instead means the slot
+    /// looks exactly like a pack that ships a baked preview.png does before ITS
+    /// image arrives, which is the behaviour to match, and it keeps a hardcoded
+    /// colour out of a file that has a whole theme available to it.
+    readonly property color groundColor: "transparent"
     /// Live CAVA spectrum for audio-reactive packs; the host supplies it only
     /// where audio is actually running.
     property var audioSpectrum: []
@@ -91,9 +96,22 @@ Item {
         void root._rev;
         return (active && previewController && packId.length > 0) ? (previewController.previewChain(packId, params) || []) : [];
     }
+    /// NOT gated on `active`, unlike the chain above, and that is the whole
+    /// point of it being separate.
+    ///
+    /// `_cardSize` reserves this margin on all four sides, so a value that
+    /// starts at 0 and only fills in once the preview goes active lays the card
+    /// out at full size for a frame and then shrinks it. That is the size jump
+    /// on opening the details, and it is worst on exactly the packs that need
+    /// the margin most: phosphor-motes asks 56px a side, so its card visibly
+    /// snapped inward.
+    ///
+    /// Nothing is saved by deferring it. This is one call returning a double —
+    /// no chain composed, no capture started, no shader item instantiated — so
+    /// an inactive preview can afford to know how big its card will be.
     readonly property real _outerPad: {
         void root._rev;
-        return (active && previewController && packId.length > 0) ? previewController.previewOuterPadding(packId, params) : 0;
+        return (previewController && packId.length > 0) ? previewController.previewOuterPadding(packId, params) : 0;
     }
 
     /// Window-ish aspect the stand-in card always keeps, so the same pack reads
