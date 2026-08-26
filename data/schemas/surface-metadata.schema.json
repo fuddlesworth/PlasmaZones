@@ -28,19 +28,22 @@
         "multipass": { "type": "boolean" },
         "bufferShaders": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "type": "string" },
+            "maxItems": 4
         },
-        "bufferScale": { "type": "number" },
+        "bufferScale": { "type": "number", "minimum": 0.125, "maximum": 1.0 },
         "bufferFeedback": { "type": "boolean" },
         "bufferWrap": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
         "bufferWraps": {
             "type": "array",
-            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] }
+            "items": { "type": "string", "enum": ["clamp", "repeat", "mirror"] },
+            "maxItems": 4
         },
         "bufferFilter": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
         "bufferFilters": {
             "type": "array",
-            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] }
+            "items": { "type": "string", "enum": ["linear", "nearest", "mipmap"] },
+            "maxItems": 4
         },
         "depthBuffer": { "type": "boolean" },
         "paddingParam": { "type": "string" },

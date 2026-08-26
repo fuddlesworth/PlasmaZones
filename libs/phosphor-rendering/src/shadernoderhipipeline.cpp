@@ -675,6 +675,18 @@ void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& b
     QRhiTexture* tex = live ? m_wallpaperTexture.get() : m_dummyChannelTexture.get();
     QRhiSampler* sam = live ? m_wallpaperSampler.get() : m_dummyChannelSampler.get();
     if (!tex || !sam) {
+        // Unreachable in practice: ensurePipeline and ensureBufferPipeline both
+        // fail closed when the dummy resources are missing, which is the only
+        // way the fallback can be null. Omitting the binding here would
+        // reproduce the exact layout mismatch this function exists to prevent,
+        // so say so once rather than leaving a silent return to be diagnosed
+        // from a pipeline failure.
+        if (!m_warnedWallpaperBindingOmitted) {
+            m_warnedWallpaperBindingOmitted = true;
+            qCWarning(lcShaderNode) << "Wallpaper binding 11 omitted: no wallpaper and no dummy substitute"
+                                    << "(texture:" << static_cast<bool>(tex) << "sampler:" << static_cast<bool>(sam)
+                                    << ") — a pack declaring uBackdrop will fail its pipeline";
+        }
         return;
     }
     bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage, tex, sam));

@@ -183,9 +183,15 @@ std::optional<SurfaceShaderEffect> parseEffect(const QString& effectDir, const Q
         // the watch set and the content signature: the preview never feeds the
         // GPU pipeline, so re-registering (and re-baking) a pack because its
         // thumbnail changed would be pure churn.
-        const QString conventional = QDir(effectDir).filePath(QStringLiteral("preview.png"));
-        if (QFile::exists(conventional)) {
-            e.previewPath = conventional;
+        // Guarded on effectDir: QDir(QString()).filePath() yields a bare
+        // relative name, so a dirless (in-memory) effect would otherwise adopt
+        // whatever preview.png happens to sit in the process's working
+        // directory.
+        if (!effectDir.isEmpty()) {
+            const QString conventional = QDir(effectDir).filePath(QStringLiteral("preview.png"));
+            if (QFile::exists(conventional)) {
+                e.previewPath = conventional;
+            }
         }
     }
 

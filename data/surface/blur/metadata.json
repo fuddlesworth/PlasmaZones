@@ -1,7 +1,7 @@
 {
     "id": "blur",
     "name": "Blur",
-    "description": "A plain blur behind the window. The scene behind the surface is blurred and lightly tinted, and shows through wherever the window itself is translucent. Lowering the Content opacity parameter fades the window content so the blur has translucency to fill.",
+    "description": "A plain blur behind the window. The scene behind the surface is blurred and lightly tinted, and shows through wherever the window itself is translucent. The Content opacity parameter sets how much of the window content stays visible over the blur.",
     "author": "PlasmaZones",
     "version": "1.1",
     "category": "Blur",

@@ -727,6 +727,11 @@ private:
     /// the source provider's QRhiTexture comes from a different QRhi than our
     /// own (cross-window provider). Prevents log spam.
     bool m_warnedForeignRhi = false;
+    /// One-shot: binding 11 had neither a wallpaper nor a dummy substitute.
+    /// Mutable because appendWallpaperBinding() is const — it only reads state
+    /// to build the binding list, and this is a diagnostic latch, not state the
+    /// binding depends on.
+    mutable bool m_warnedWallpaperBindingOmitted = false;
     /// One-shot latches for the audio-spectrum diagnostics. Both conditions
     /// persist across frames by design (an oversized vector stays oversized;
     /// the create() retry is per-frame), so without a latch each would log at

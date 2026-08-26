@@ -6,6 +6,7 @@
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
 #include <QJsonArray>
+#include <QSet>
 #include <QJsonValue>
 #include <QLoggingCategory>
 
@@ -252,10 +253,27 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
+    // Ids already taken, so a duplicate is dropped rather than carried.
+    // buildParamPreamble emits one `#define p_<id> …` per parameter and assigns
+    // lanes by declaration order, so two entries sharing an id redefine the
+    // same macro with a different replacement list. That is a GLSL compile
+    // error, which takes the whole pack down to a black surface — a far worse
+    // outcome than losing the second entry's editor row.
+    QSet<QString> seenParamIds;
     for (const QJsonValue& v : params) {
         const QJsonObject pObj = v.toObject();
         ParameterInfo p;
         p.id = pObj.value(QLatin1String("id")).toString();
+        if (!p.id.isEmpty() && seenParamIds.contains(p.id)) {
+            qCWarning(lcSurfaceShader) << "SurfaceShaderEffect::fromJson: effect" << e.id << "declares parameter id"
+                                       << p.id
+                                       << "more than once — ignoring the later entry (a duplicate would redefine its "
+                                          "p_ macro and fail the shader compile)";
+            continue;
+        }
+        if (!p.id.isEmpty()) {
+            seenParamIds.insert(p.id);
+        }
         p.name = pObj.value(QLatin1String("name")).toString();
         p.type = pObj.value(QLatin1String("type")).toString();
         p.description = pObj.value(QLatin1String("description")).toString();
