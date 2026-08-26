@@ -98,6 +98,10 @@ QJsonObject SurfaceShaderEffect::toJson() const
     }
     if (useDepthBuffer)
         obj.insert(QLatin1String("depthBuffer"), true);
+    // Only written when a pack opted out, matching the round-trip shape of
+    // every other default-true flag here.
+    if (!halfFloatBuffers)
+        obj.insert(QLatin1String("halfFloatBuffers"), false);
 
     if (!parameters.isEmpty()) {
         QJsonArray params;
@@ -264,6 +268,7 @@ SurfaceShaderEffect SurfaceShaderEffect::fromJson(const QJsonObject& obj)
     // count. Truncating here would break fromJson's documented in-place
     // positional contract (pinned by the surface registry tests).
     e.useDepthBuffer = obj.value(QLatin1String("depthBuffer")).toBool(false);
+    e.halfFloatBuffers = obj.value(QLatin1String("halfFloatBuffers")).toBool(true);
 
     const QJsonArray params = obj.value(QLatin1String("parameters")).toArray();
     e.parameters.reserve(params.size());
@@ -381,7 +386,8 @@ bool SurfaceShaderEffect::operator==(const SurfaceShaderEffect& other) const
     if (isMultipass != other.isMultipass || animated != other.animated || paddingParam != other.paddingParam
         || needsBackdrop != other.needsBackdrop || interiorOpaque != other.interiorOpaque || audio != other.audio
         || providesBorder != other.providesBorder || providesOpacityTint != other.providesOpacityTint
-        || bufferFeedback != other.bufferFeedback || useDepthBuffer != other.useDepthBuffer)
+        || bufferFeedback != other.bufferFeedback || useDepthBuffer != other.useDepthBuffer
+        || halfFloatBuffers != other.halfFloatBuffers)
         return false;
     if (!qFuzzyCompare(bufferScale + 1.0, other.bufferScale + 1.0))
         return false;

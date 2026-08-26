@@ -90,6 +90,7 @@ QVariantMap composeStageMap(const SurfaceShaderEffect& effect, const QVariantMap
         stageMap.insert(QLatin1String("bufferFilter"), effect.bufferFilter);
         stageMap.insert(QLatin1String("bufferFilters"), QVariant::fromValue(effect.bufferFilters));
         stageMap.insert(QLatin1String("useDepthBuffer"), effect.useDepthBuffer);
+        stageMap.insert(QLatin1String("halfFloatBuffers"), effect.halfFloatBuffers);
     }
     return stageMap;
 }

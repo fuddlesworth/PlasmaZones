@@ -151,6 +151,7 @@ private Q_SLOTS:
         e.bufferFilter = QStringLiteral("linear");
         e.bufferFilters = QStringList{QString(), QStringLiteral("nearest")};
         e.useDepthBuffer = true;
+        e.halfFloatBuffers = false;
 
         const QVariantMap stage = composeStageMap(e, {});
         QCOMPARE(stage.value(QStringLiteral("multipass")).toBool(), true);
@@ -162,6 +163,28 @@ private Q_SLOTS:
         QCOMPARE(stage.value(QStringLiteral("bufferFilter")).toString(), QStringLiteral("linear"));
         QCOMPARE(stage.value(QStringLiteral("bufferFilters")).toStringList(), e.bufferFilters);
         QCOMPARE(stage.value(QStringLiteral("useDepthBuffer")).toBool(), true);
+        // Opted OUT here, so the assertion fails both if the key is dropped
+        // (absent reads as false only by accident) and if it is hardcoded to
+        // the true default.
+        QCOMPARE(stage.value(QStringLiteral("halfFloatBuffers")).toBool(), false);
+        QVERIFY(stage.contains(QStringLiteral("halfFloatBuffers")));
+    }
+
+    /// The buffer format is a per-pack contract, and its default is the
+    /// EXPENSIVE one.
+    ///
+    /// A pack that says nothing keeps RGBA16F, because a buffer holding HDR
+    /// radiance or a feedback accumulator degrades visibly at 8 bits. Pinned
+    /// separately from the opted-out case above so a default flipped the other
+    /// way is caught rather than quietly halving every pack's precision.
+    void composeStageMap_defaults_a_multipass_pack_to_half_float_buffers()
+    {
+        SurfaceShaderEffect e = basePack();
+        e.isMultipass = true;
+        e.bufferShaderPaths = QStringList{QStringLiteral("/packs/blur/gaussian_h.frag")};
+
+        const QVariantMap stage = composeStageMap(e, {});
+        QCOMPARE(stage.value(QStringLiteral("halfFloatBuffers")).toBool(), true);
     }
 
     /// The registry clears bufferShaderPaths fail-closed when a declared

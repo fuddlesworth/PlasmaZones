@@ -583,6 +583,10 @@ Item {
                 bufferFilter: stage.stageData.bufferFilter !== undefined && stage.stageData.bufferFilter !== "" ? stage.stageData.bufferFilter : "linear"
                 bufferFilters: stage.stageData.bufferFilters !== undefined ? Array.from(stage.stageData.bufferFilters) : []
                 useDepthBuffer: stage.stageData.useDepthBuffer === true
+                // Defaults TRUE when the key is absent, matching the pack
+                // contract: a buffer holding HDR or feedback state needs the
+                // precision, so opting out is the deliberate act.
+                halfFloatBuffers: stage.stageData.halfFloatBuffers !== false
 
                 // Multipass REQUIRES a private layer FBO: the render node
                 // drives its own buffer passes, and without an isolated target

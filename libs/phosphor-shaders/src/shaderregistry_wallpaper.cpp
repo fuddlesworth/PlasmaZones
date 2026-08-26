@@ -172,7 +172,11 @@ WallpaperCover wallpaperCoverFor(QSize wpSize, const QRect& physGeom)
     // NOT clamped to 1.0. physGeom.isValid() guarantees height >= 1 so this is
     // strictly positive, and clamping silently rewrote the crop for every
     // PORTRAIT or rotated output (physAspect < 1), where it must divide by the
-    // real aspect — the shader this mirrors uses it unclamped too.
+    // real aspect. The shader this mirrors uses it unclamped too
+    // (data/overlays/shared/wallpaper.glsl: uv.y scaled by wpAspect/scrAspect).
+    // Getting it wrong made adjacent virtual screens on such an output sample
+    // different portions of the wallpaper, which breaks the seam-free tiling
+    // computeWallpaperCropRect's edge-independent maths exists to guarantee.
     const qreal physAspect = physW / qMax<qreal>(physH, 1.0);
 
     WallpaperCover cover;
@@ -231,34 +235,20 @@ QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGe
     // so the cropped image sampled with aspect == subGeom reproduces the same
     // portion of the wallpaper that would appear inside subGeom if the whole
     // physical screen were drawn with the full wallpaper.
-    const qreal wpW = wpSize.width();
-    const qreal wpH = wpSize.height();
+    //
+    // The placement itself is wallpaperCoverFor's, shared with
+    // wallpaperSliceNormalized. Only what the two do with it differs: this one
+    // cuts an image out, the other maps it across a quad. A second copy here
+    // would be a second chance to disagree with the shader both of them mirror,
+    // and it would carry its own duplicate of the unclamped-physAspect note
+    // that copy needed.
     const qreal physW = physGeom.width();
     const qreal physH = physGeom.height();
-    const qreal wpAspect = wpW / qMax<qreal>(wpH, 1.0);
-    const qreal physAspect = physW / qMax<qreal>(physH, 1.0);
-
-    qreal coverX, coverY, coverW, coverH;
-    if (wpAspect > physAspect) {
-        coverH = wpH;
-        coverW = wpH * physAspect;
-        coverX = (wpW - coverW) * 0.5;
-        coverY = 0.0;
-    } else {
-        coverW = wpW;
-        // NOT clamped to 1.0. `physGeom.isValid()` already guarantees height >= 1
-        // so `physAspect` is strictly positive, and clamping at 1.0 silently
-        // rewrote the crop for every PORTRAIT or rotated output (physAspect < 1),
-        // where it must divide by the real aspect. The sibling branch above uses
-        // `physAspect` unclamped, and so does the shader this mirrors
-        // (data/overlays/shared/wallpaper.glsl: uv.y scaled by wpAspect/scrAspect).
-        // Getting this wrong made adjacent virtual screens on such an output
-        // sample different portions of the wallpaper, breaking the seam-free
-        // tiling the edge-independent maths below exists to guarantee.
-        coverH = wpW / physAspect;
-        coverX = 0.0;
-        coverY = (wpH - coverH) * 0.5;
-    }
+    const WallpaperCover cover = wallpaperCoverFor(wpSize, physGeom);
+    const qreal coverX = cover.x;
+    const qreal coverY = cover.y;
+    const qreal coverW = cover.w;
+    const qreal coverH = cover.h;
 
     // Compute edges (left/top/right/bottom) independently so adjacent VSes
     // tile the wallpaper seam-free: VS-A's right edge equals VS-B's left edge

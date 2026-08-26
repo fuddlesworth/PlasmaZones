@@ -191,6 +191,10 @@ void OverlayService::onCheatsheetSlotHideCompleted(const QString& effectiveId)
     }
     it->cheatsheetSlot()->setVisible(false);
     writeQmlProperty(it->cheatsheetSlot(), QStringLiteral("loaded"), false);
+    // Release the backdrop stand-in, matching onOsdSlotHideCompleted: a hidden
+    // slot draws none of it, the image is wallpaper-sized, and every show runs
+    // applyDecoration again, which rewrites it.
+    writeQmlProperty(it->cheatsheetSlot(), QStringLiteral("backdropTexture"), QVariant());
     syncPassiveShellSurfaceState(effectiveId);
 }
 

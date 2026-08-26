@@ -230,6 +230,16 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
     /// can sample window depth. Daemon-only.
     bool useDepthBuffer = false;
 
+    /// Whether the intermediate buffers hold half-float texels. Daemon-only.
+    ///
+    /// True keeps RGBA16F, which a buffer legitimately needs when it stores
+    /// HDR radiance, signed data, or a feedback accumulator whose decay would
+    /// quantise to a standstill at 8 bits. A pack whose buffers hold plain
+    /// clamped colour sets `"halfFloatBuffers": false` and halves the bandwidth
+    /// its passes cost, which is the scarce resource on an integrated GPU.
+    /// Mirrors the overlay category's key of the same name.
+    bool halfFloatBuffers = true;
+
     /// Lower / upper bounds on `bufferScale` (multipass FBO downscale
     /// factor) — forwarders onto the cross-library canonical constants in
     /// `<PhosphorShaders/CustomParamsKey.h>` (see there for the 0.125

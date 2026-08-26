@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QQmlEngine>
 #include <QGuiApplication>
+#include <QImage>
 #include <QPalette>
 
 #include <optional>
@@ -693,9 +694,15 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // as frosted glass and reading as a flat tint. Only resolved for a chain
     // that actually samples it; every other chain writes a null image, leaves
     // uHasBackdrop at 0, and behaves exactly as it did before.
+    //
+    // Loaded once into a local so an unresolvable wallpaper writes the SAME
+    // invalid QVariant the no-backdrop arm and the two clear paths write. A
+    // valid QVariant holding a null QImage is not the same thing to the QML
+    // side, which gates on the property being null or undefined, so it would
+    // flip useWallpaper true with no pixels behind it.
+    const QImage backdrop = chainWantsBackdrop ? PhosphorShaders::ShaderRegistry::loadWallpaperImage() : QImage();
     writeQmlProperty(slot, QStringLiteral("backdropTexture"),
-                     chainWantsBackdrop ? QVariant::fromValue(PhosphorShaders::ShaderRegistry::loadWallpaperImage())
-                                        : QVariant());
+                     backdrop.isNull() ? QVariant() : QVariant::fromValue(backdrop));
     writeQmlProperty(slot, QStringLiteral("decorationChain"), QVariant::fromValue(stages));
 
     // Record whether this slot now carries an audio-reactive pack, then reconcile
