@@ -10,20 +10,47 @@
 #include <QUrl>
 #include <QVariant>
 
+#include <cmath>
+
 namespace PhosphorSurfaceShaders {
+
+/// A padding request is usable only if it converts to a number AND is finite.
+///
+/// Both inputs cross a trust boundary: the declared default comes from an
+/// installed pack's metadata.json, and the override comes from a stored
+/// per-surface profile. QVariant::toDouble() answers 0.0 for anything it
+/// cannot convert, so testing convertibility separately is what keeps a
+/// wrong-typed override from silently reading as "no padding requested" and
+/// suppressing the pack's declared default. Rejecting non-finite values here
+/// keeps NaN and infinity out of the callers' clamps, where the compositor's
+/// narrowing to int would otherwise be undefined.
+static bool usablePadding(const QVariant& value, double* out)
+{
+    bool ok = false;
+    const double v = value.toDouble(&ok);
+    if (!ok || !std::isfinite(v)) {
+        return false;
+    }
+    *out = v;
+    return true;
+}
 
 double paddingRequest(const SurfaceShaderEffect& effect, const QVariantMap& friendlyParams)
 {
     if (effect.paddingParam.isEmpty()) {
         return 0.0;
     }
-    // Per-surface override wins over the declared default.
-    if (friendlyParams.contains(effect.paddingParam)) {
-        return friendlyParams.value(effect.paddingParam).toDouble();
+    double value = 0.0;
+    // Per-surface override wins over the declared default, but only when it is
+    // actually a number: an unusable override falls through to the default
+    // rather than collapsing the margin to zero.
+    const auto override = friendlyParams.constFind(effect.paddingParam);
+    if (override != friendlyParams.constEnd() && usablePadding(*override, &value)) {
+        return value;
     }
     for (const auto& param : effect.parameters) {
         if (param.id == effect.paddingParam) {
-            return param.defaultValue.toDouble();
+            return usablePadding(param.defaultValue, &value) ? value : 0.0;
         }
     }
     // paddingParam names a parameter the pack does not declare: no room asked

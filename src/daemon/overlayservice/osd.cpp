@@ -536,8 +536,9 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // a border + glow chain renders both packs here too. Buffer passes
     // (multipass packs like the blur family) run here as well — each stage
     // forwards its pack's declared buffer set below. needsBackdrop packs have
-    // no scene to sample on the daemon and take their documented
-    // uHasBackdrop = 0 fallback regardless.
+    // no scene to sample on the daemon, so the desktop wallpaper is bound as a
+    // stand-in below and they take their uHasBackdrop = 0 fallback only when
+    // that cannot be resolved.
     //
     // Per-pack parameter overrides come from the resolved profile (shape
     // { packId -> { paramId -> value } }). p_useSystemAccent is a
@@ -558,8 +559,16 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     const QPalette pal = QGuiApplication::palette();
     for (const QString& packId : chain) {
         if (!m_surfaceShaderRegistry->hasEffect(packId)) {
-            qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
-                                 << "is not present in the surface-shader registry — skipping this chain stage";
+            // One warning per pack id, not one per show: a profile naming a
+            // pack the user uninstalled is a standing condition, and this runs
+            // on every OSD show. The sibling diagnostics in this path
+            // (translateSurfaceParams' overflow summaries, parseEffect's
+            // texture drops) are one-shot for the same reason.
+            if (!m_warnedMissingDecorationPacks.contains(packId)) {
+                m_warnedMissingDecorationPacks.insert(packId);
+                qCWarning(lcOverlay) << "Surface decoration (" << surfacePath << "): resolved pack id" << packId
+                                     << "is not present in the surface-shader registry — skipping this chain stage";
+            }
             continue;
         }
         const PhosphorSurfaceShaders::SurfaceShaderEffect effect = m_surfaceShaderRegistry->effect(packId);
@@ -787,6 +796,12 @@ void OverlayService::onOsdSlotHideCompleted(const QString& effectiveId)
     // small between shows and forces a fresh per-show shaderAnchor on
     // the next mode write.
     writeQmlProperty(it->osdSlot(), QStringLiteral("mode"), QString());
+    // Release the backdrop stand-in for the same reason clearDecoration does:
+    // a hidden slot draws none of it, and the image is wallpaper-sized. Every
+    // show runs applyDecoration again, which rewrites this, so nothing is lost
+    // by dropping it for the idle interval between shows. The chain itself is
+    // left alone deliberately: it is rewritten per show and costs a list.
+    writeQmlProperty(it->osdSlot(), QStringLiteral("backdropTexture"), QVariant());
     // Symmetric restore: layout/disabled/navigation OSD show paths
     // hid the zone-selector slot to keep it from peeking through the
     // OSD card. snap-assist's onSnapAssistSlotHideCompleted does the

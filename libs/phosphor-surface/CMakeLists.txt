@@ -84,6 +84,7 @@ set(phosphorsurface_public_HDRS
     include/PhosphorSurface/DecorationProfileTree.h
     include/PhosphorSurface/DecorationSupportedPaths.h
     include/PhosphorSurface/SurfaceThemeResolve.h
+    include/PhosphorSurface/SurfaceChainCompose.h
 )
 
 # ===============================================================================

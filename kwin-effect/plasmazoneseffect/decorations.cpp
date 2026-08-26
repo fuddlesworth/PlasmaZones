@@ -151,7 +151,13 @@ void PlasmaZonesEffect::deferDecorationTeardownWhileAnimated(const QString& wind
     // `this` as context cancels the poll on effect teardown (clearAllDecorations
     // handles the windows themselves there).
     QTimer::singleShot(kAnimatedTeardownPollMs, this, [this, windowId] {
-        m_animatedDecoTeardownPending.remove(windowId);
+        // A bulk teardown between arming and firing (clearAllDecorations, on
+        // daemon loss) clears the set. Treat that as a cancellation: without
+        // this the poll would refresh a decoration the teardown just released,
+        // because the effect and its resolve tree are still alive there.
+        if (!m_animatedDecoTeardownPending.remove(windowId)) {
+            return;
+        }
         // Exact-id re-check, same discipline as the windowDecorationRestored
         // handler: findWindowById's fuzzy appId fallback must not resolve a
         // same-app sibling and refresh IT under the dead window's id.
@@ -535,13 +541,18 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Outer-margin request (e.g. the glow pack's glowSize): the resolved
         // per-surface override wins, else the param's declared default. The
         // chain's largest request pads the capture canvas (composite path).
-        outerPadding = qMax(outerPadding, qCeil(PhosphorSurfaceShaders::paddingRequest(eff, packOverrides)));
+        // Bound in DOUBLE space before narrowing: the request comes from
+        // installed pack metadata, and converting an out-of-range double to
+        // int is undefined, so the int clamp below would never see it.
+        const double request = qBound(0.0, PhosphorSurfaceShaders::paddingRequest(eff, packOverrides),
+                                      static_cast<double>(PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx));
+        outerPadding = qMax(outerPadding, qCeil(request));
     }
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
     wb.chainInteriorOpaque = chainInteriorOpaque;
-    if (chainInteriorOpaque && !chain.isEmpty()) {
+    if (chainInteriorOpaque) {
         // interiorOpaque comes verbatim from installable pack metadata (an
         // XDG_DATA_HOME boundary, "input validation at system boundaries"): a
         // third-party pack that declares it while thinning interior texels
