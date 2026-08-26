@@ -170,7 +170,10 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
                 // (the sibling prune's payload keeps the same contract).
                 releasedScreens.insert(screenId);
             });
-        m_context.removeScreen(screenId);
+        // Ownership only — the per-output desktop STAYS. This screen is
+        // leaving scrolling, not disappearing, and its desktop is compositor
+        // truth this engine cannot re-derive (see releaseScreenOwnership).
+        m_context.releaseScreenOwnership(screenId);
         // Even a STATELESS leaving screen (seed pushed before any window
         // arrived) must drop its per-screen bookkeeping — the state-driven
         // sweep in releaseScreenState never ran for it. The tab-strip clear
@@ -180,6 +183,13 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // pruneStatesForRemovedScreen is the output-removal purge.
         m_pendingInitialOrder.remove(screenId);
         m_consumedInitialOrder.remove(screenId);
+        // The focus seed is PASS-SCOPED, exactly as the daemon declares it:
+        // a focus is only true for the transition that captured it. Its only
+        // consumer is the arrival burst, and a screen that leaves without
+        // bursting never reaches one — so the drop has to happen at the
+        // lifecycle edges like its order twin, or the seed sits armed and
+        // re-anchors a view the user has since moved, several transitions later.
+        m_pendingInitialFocus.remove(screenId);
         clearTabStripsForScreen(screenId);
     }
     if (!releasedWindows.isEmpty()) {
@@ -266,6 +276,10 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // no relayout will ever run for a departed screen to do it.
     m_pendingInitialOrder.remove(screenId);
     m_consumedInitialOrder.remove(screenId);
+    // Same reasoning for the focus seed: it is scoped to the transition that
+    // captured it, so a state teardown ends its validity whether or not any
+    // burst consumed it.
+    m_pendingInitialFocus.remove(screenId);
     // Latch and payload cleared inline (plain containers, safe), but the
     // broadcast is DEFERRED: this function runs from inside
     // PerScreenStates::removeStatesIf's iteration over m_states, and a
@@ -855,6 +869,35 @@ void ScrollEngine::setInitialWindowOrder(const QString& screenId, const QStringL
         m_pendingInitialOrder.remove(screenId);
     } else {
         m_pendingInitialOrder.insert(screenId, windowIds);
+    }
+    // A re-seed IS the "new transition" boundary the seed is scoped to, so the
+    // focus half of the previous one cannot outlive it. The daemon writes the
+    // two under different gates, so without this a fresh order can arrive
+    // paired with a focus captured for an earlier flip. Cleared rather than
+    // required-to-be-rewritten, because the caller may legitimately have no
+    // focus to report; setInitialFocusedWindow then re-arms it.
+    m_pendingInitialFocus.remove(screenId);
+}
+
+QString ScrollEngine::managedFocusedWindow(const QString& screenId) const
+{
+    // The strip's active window IS this engine's focus, and the CURRENT
+    // context's is the only one a transition can be capturing. Non-creating,
+    // matching managedWindowOrder's own lookup so the pair always describes
+    // one strip.
+    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    return state ? state->strip().activeWindowId() : QString();
+}
+
+void ScrollEngine::setInitialFocusedWindow(const QString& screenId, const QString& windowId)
+{
+    // Empty clears rather than storing a blank: an outgoing engine with no
+    // focus to report must not leave a previous transition's seed armed for
+    // the next flip to apply.
+    if (windowId.isEmpty()) {
+        m_pendingInitialFocus.remove(screenId);
+    } else {
+        m_pendingInitialFocus.insert(screenId, windowId);
     }
 }
 

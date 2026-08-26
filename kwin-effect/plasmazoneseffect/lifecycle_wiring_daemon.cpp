@@ -303,7 +303,15 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // scrolling set, and the min-size cache says "already sent" about a
         // daemon that no longer holds anything.
         m_scrollCommandedRects.clear();
+        m_scrollOfferedColumn.clear();
         m_lastReportedMinSize.clear();
+        // The autotile centring targets too, mirroring the bring-up drain.
+        // Their consumer is the reactive centring pass, which is driven by
+        // KWin's frameGeometryChanged and has no daemon gate at all — so with
+        // the daemon down a user resize of an affected window would still
+        // moveResize it into a zone rect nothing owns any more, and clamp it
+        // onto that zone's output. Bounded today only by a daemon coming back.
+        m_tilingHandler->clearCenteringTargetsForTeardown();
         // Same reasoning for the per-screen active-layout map: it is a pure
         // ruleQuery input owned by the dead session, and the
         // invalidateAllRuleCaches below would otherwise re-resolve every

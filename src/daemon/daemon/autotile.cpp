@@ -277,6 +277,15 @@ void Daemon::updateEngineScreens()
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
     // restores the same window positions. Without this, only the settingsChanged path
     // (handleAutotileDisabled) captured orders — layout cycling lost them.
+    // Focus seed for THIS pass only, so it never needs the pruning and
+    // persistence m_lastEngineOrders carries. That is not just a shortcut:
+    // the order cache is deliberately long-lived (a screen re-entering an
+    // engine months later still replays its positions), and replaying a
+    // focus captured that long ago would re-anchor a view the user has since
+    // moved. A focus is only meaningful for the transition that captured it,
+    // and capture→seed→apply all run inside this one call.
+    m_transitionFocusSeed.clear();
+
     const QSet<QString> currentAutotileScreens = m_autotileEngine->activeScreens();
     const QSet<QString> removedScreens = currentAutotileScreens - autotileScreens;
     for (const QString& screenId : removedScreens) {
@@ -315,8 +324,34 @@ void Daemon::updateEngineScreens()
         // guarantees this key is the one being torn down, so an empty order here
         // genuinely means "nothing was tiled at toggle-off" rather than "we asked
         // the wrong context".
+        // A screen whose members are all sticky carries an engine-side PIN that
+        // outranks the compositor's per-output desktop inside the engine's own
+        // lookup, and currentDesktopForScreen has no pin term. Filing the
+        // pinned desktop's order under the live desktop's key records a pairing
+        // that never existed — the same corruption shape the state-existence
+        // gate above guards against, which misses this one because the state it
+        // finds IS the pinned one.
+        //
+        // Compares the PIN, not the engine's resolved desktop. The two views can
+        // also differ merely by labelling — a virtual sub-screen resolves
+        // through its parent for the daemon and not for the tracker — and that
+        // is harmless, because each side is self-consistent: the daemon writes
+        // and reads this map with its own key throughout. Gating on the resolved
+        // desktop would skip those captures for no reason.
+        //
+        // Skipped rather than re-keyed. The pin is dropped the moment the engine
+        // releases the screen, so filing under it would store the order where
+        // the re-entry lookup never looks: a wrong-order bug traded for a
+        // no-order one, on exactly the sticky case.
+        if (const int pinned = m_autotileEngine->stickyPinnedDesktopForScreen(screenId);
+            pinned != 0 && pinned != desktop) {
+            continue;
+        }
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = order;
+        // Focus travels with the order, under the same state-existence gate
+        // that guarantees both describe the state being torn down.
+        m_transitionFocusSeed.insert(screenId, m_autotileEngine->managedFocusedWindow(screenId));
     }
 
     // Capture the SCROLLING engine's leaving orders in the same phase, before
@@ -326,6 +361,52 @@ void Daemon::updateEngineScreens()
     // tiled order when updateScrollingScreens seeds). Capture-all →
     // seed-all → apply-all; the map is shared between the engines by design.
     captureScrollingOrders(scrollingScreens);
+
+    // Third capture arm: screens entering scrolling from SNAPPING.
+    //
+    // The two arms above capture from a departing ENGINE, so a screen leaving
+    // snapping is in neither and would enter the strip with no focus seed at
+    // all. The strip then anchors on whichever column it adopted first, which
+    // is exactly the symptom the seed exists to prevent — and snapping is
+    // likely the most common flip into scrolling, so leaving it out would ship
+    // a fix covering two of the three mode pairs while its own comment claims
+    // the general case.
+    //
+    // SnapEngine cannot report this itself: it keeps no focus memory, because
+    // it has no view of its own to anchor. The daemon does track compositor
+    // focus, in the same adaptor member that fills HandoffContext::heldFocus,
+    // and a window that took focus just before the flip has already been
+    // reported through windowActivated.
+    //
+    // Guarded three ways. Only screens claimed by neither engine, so a real
+    // engine capture is never second-guessed. Only when the pass has not
+    // already seeded that screen, so the arms above always win. And only when
+    // the adaptor's focused window is actually ON this screen — the member is
+    // global, one focused window session-wide, and screensMatch is required
+    // because the virtual and physical id forms differ, so a raw comparison
+    // would silently never match on a subdivided screen.
+    //
+    // A wrong or stale id degrades to today's behaviour rather than misfiring:
+    // the engine drops a seed naming a window its strip does not contain, and
+    // drains it either way.
+    if (m_windowTrackingAdaptor && m_scrollEngine) {
+        const QString focusedId = m_windowTrackingAdaptor->lastActiveWindowId();
+        if (!focusedId.isEmpty()) {
+            const QString focusedScreen = m_windowTrackingAdaptor->lastActiveScreenName();
+            const QSet<QString> autotileActive = m_autotileEngine->activeScreens();
+            const QSet<QString> scrollActive = m_scrollEngine->activeScreens();
+            for (const QString& screenId : scrollingScreens) {
+                if (autotileActive.contains(screenId) || scrollActive.contains(screenId)
+                    || m_transitionFocusSeed.contains(screenId)) {
+                    continue;
+                }
+                if (!focusedScreen.isEmpty()
+                    && PhosphorScreens::ScreenIdentity::screensMatch(focusedScreen, screenId)) {
+                    m_transitionFocusSeed.insert(screenId, focusedId);
+                }
+            }
+        }
+    }
 
     // Seed window order for screens ENTERING autotile from saved state.
     // Must happen before setActiveScreens() which retiles added screens.

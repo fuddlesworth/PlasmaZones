@@ -388,7 +388,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Window ordering (override if engine maintains stacking order)
+    // OPTIONAL: Window ordering and focus (mode-transition capture and seed)
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual QStringList managedWindowOrder(const QString& screenId) const
@@ -400,6 +400,64 @@ public:
     {
         Q_UNUSED(screenId)
         Q_UNUSED(windowIds)
+    }
+
+    /// The window this engine considers focused on @p screenId, or empty.
+    ///
+    /// The focus half of the mode-transition capture that managedWindowOrder
+    /// supplies the position half of. Order alone is not enough to hand a
+    /// flip back to the user unchanged: an engine with a VIEW (the strip) has
+    /// to know which window to anchor on, and re-deriving that from position
+    /// picks whichever column the seed happened to adopt first.
+    virtual QString managedFocusedWindow(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return {};
+    }
+    /// The desktop this engine has PINNED @p screenId to, or 0 when it has not
+    /// pinned it (which is the normal case, and the default here).
+    ///
+    /// A pin is an engine-private override for a screen whose windows are all
+    /// sticky: it outranks the compositor's per-output desktop inside the
+    /// engine's own key resolution, and is invisible from outside. That makes it
+    /// the one way a capture can read one desktop's state while filing the
+    /// result under another's key, recording a pairing that never existed.
+    ///
+    /// Reports the PIN specifically, not the engine's resolved desktop, so a
+    /// caller comparing against its own desktop cannot be tripped by the two
+    /// merely LABELLING a screen differently — an engine and a caller can hold
+    /// consistent but differently-numbered views of the same screen (a virtual
+    /// sub-screen resolves through its parent for one and not the other), and
+    /// that costs nothing as long as each is self-consistent.
+    ///
+    /// Meant for a comparison gate, not for re-keying: the pin is dropped when
+    /// the engine releases the screen, so filing by the pinned desktop would
+    /// store under a key the re-entry lookup never consults.
+    virtual int stickyPinnedDesktopForScreen(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return 0;
+    }
+    /// Hand the incoming engine the focus captured from the outgoing one.
+    ///
+    /// Advisory. WHEN to apply it is the implementor's choice, not part of this
+    /// contract: the seeded window is usually not the LAST to re-announce, so
+    /// an implementor that re-derives focus from arrivals has to defer the seed
+    /// past them or have it overwritten. The scroll engine consumes it at the
+    /// end of its arrival burst for exactly that reason; an implementor with no
+    /// burst concept is free to apply it however it likes.
+    ///
+    /// An empty @p windowId is not a no-op: it means the capturing transition
+    /// found no focus to report, and it must CLEAR any seed an earlier one
+    /// left, or a stale seed outlives the transition that owned it.
+    ///
+    /// An engine with no view of its own has nothing to do with this and the
+    /// default no-op is the right implementation for it — the focused window
+    /// is wherever the compositor already has it.
+    virtual void setInitialFocusedWindow(const QString& screenId, const QString& windowId)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(windowId)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -735,9 +793,15 @@ public:
     }
 
     /// The window's client-reported minimum size as last known by this
-    /// engine, or 0x0 when unknown / untracked. Read by the cross-engine
+    /// engine, or an UNKNOWN answer when it has none. Read by the cross-engine
     /// handoff dispatcher to seed HandoffContext::minSize; must be queried
     /// before handoffRelease. Default suits engines without a min-size model.
+    ///
+    /// "Unknown" is spelled two ways in the tree and a caller must accept both:
+    /// a default-constructed 0x0, and an INVALID QSize (-1x-1), which the scroll
+    /// engine returns deliberately to distinguish "no entry" from "a real zero".
+    /// Every in-tree consumer clamps with qMax against 0, which treats the two
+    /// identically; a new consumer must do the same rather than assuming either.
     virtual QSize windowMinimumSize(const QString& windowId) const
     {
         Q_UNUSED(windowId)

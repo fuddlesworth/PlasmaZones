@@ -98,6 +98,12 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         // left behind it would eat the first genuine focus of a reused id
         // (windowClosed and releaseScreenState sweep for the same reason).
         m_pendingSelfActivations.removeAll(windowId);
+        // The declined-open marker with it. This sweep matters more for that
+        // map than for the one above: the marker's other three sweeps all hang
+        // off a windowClosed signal, and a window that dies WITHOUT one — the
+        // case this whole function exists to catch — reaches none of them. It
+        // also has no size cap of its own, so nothing else bounds its growth.
+        m_declinedOpenFocus.remove(windowId);
         ++pruned;
     }
     // Seed lists are swept against the ids this batch just untracked, NOT
@@ -497,6 +503,11 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
         // a stale entry would swallow the first genuine focus of a reused
         // id (windowClosed and releaseScreenState sweep the same way).
         m_pendingSelfActivations.removeAll(windowId);
+        // Identical reasoning, and the same reused-id hazard: a declined-open
+        // marker left behind swallows the first genuine focus the next window
+        // to take this id receives. Unlike its sibling above it carries no
+        // size cap, so this sweep is the only thing bounding it here.
+        m_declinedOpenFocus.remove(windowId);
     }
 }
 
@@ -523,6 +534,11 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
         if (!hasState) {
             m_pendingInitialOrder.remove(screenId);
             m_consumedInitialOrder.remove(screenId);
+            // The focus seed is per-screen bookkeeping of exactly this kind:
+            // with the screen's last state gone there is no strip left for it
+            // to name, and its only consumer runs per arrival burst, which a
+            // stateless screen never reaches.
+            m_pendingInitialFocus.remove(screenId);
             clearTabStripsForScreen(screenId);
         }
     }
@@ -661,6 +677,17 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         if (matches(it.key())) {
             m_consumedInitialOrder.remove(it.key());
             it = m_pendingInitialOrder.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // The focus seed rides the same stateless sweep, and for the same reason:
+    // the daemon can seed a screen that never built a state, and with the
+    // output gone the seed can only ever name a window on a monitor that is
+    // no longer there.
+    for (auto it = m_pendingInitialFocus.begin(); it != m_pendingInitialFocus.end();) {
+        if (matches(it.key())) {
+            it = m_pendingInitialFocus.erase(it);
         } else {
             ++it;
         }

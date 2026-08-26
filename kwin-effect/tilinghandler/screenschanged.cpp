@@ -155,9 +155,16 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
             // scroll companions go here too rather than being left
             // behind by this early exit.
             m_effect->m_scrollCommandedRects.remove(windowId);
+            m_effect->m_scrollOfferedColumn.remove(windowId);
             if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
                 KWin::effects->addRepaintFull();
             }
+            // The centring targets go with them, for the same reason the
+            // arm below sheds them: a stale target consumed against the
+            // fullscreen frame change would raw-moveResize the window to
+            // its old zone and clamp it onto that zone's output.
+            m_tileTargetZones.remove(windowId);
+            m_centeredWaylandZones.remove(windowId);
             continue;
         }
         // Capture tracked-ness BEFORE demoting: it is the only
@@ -187,6 +194,7 @@ void TilingHandler::demoteWindowsForDesktopSwitch(const QSet<QString>& removed,
         // session that just ended, and a relocation from a dead strip
         // survives into the next one.
         m_effect->m_scrollCommandedRects.remove(windowId);
+        m_effect->m_scrollOfferedColumn.remove(windowId);
         if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
             KWin::effects->addRepaintFull();
         }
@@ -328,6 +336,7 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
         clearWindowTiledAllScreens(wid);
         m_effect->m_scrollCommandedRects.remove(wid);
+        m_effect->m_scrollOfferedColumn.remove(wid);
         anyVisualDeltaDropped = (m_effect->m_scrollVisualDelta.remove(wid) > 0) || anyVisualDeltaDropped;
     }
     if (anyVisualDeltaDropped && KWin::effects) {
@@ -403,6 +412,17 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     };
     pruneRemovedScreenEntries(m_tileTargetZones);
     pruneRemovedScreenEntries(m_centeredWaylandZones);
+    // The offered column is pruned the same way, and needs to be: the per-window
+    // loop above classifies by the window's CURRENT frame, but this entry is a
+    // column RECT on a specific screen, and its consumer issues a real move()
+    // into that rect. An entry surviving its screen's removal teleports a live
+    // window into a dead column — strictly worse than the stale centring
+    // targets this prune already covers.
+    //
+    // For a PARKED column the stored rect's centre sits below every output, so
+    // screenAt() returns null and the lambda falls back to the window's own
+    // screen. That fallback is the right answer here; do not "fix" it.
+    pruneRemovedScreenEntries(m_effect->m_scrollOfferedColumn);
 
     // Expected-output-move markers, pruned BY VALUE rather than by key: the key
     // is a window id, but what leaves the managed set is a SCREEN, and the

@@ -106,6 +106,20 @@ public:
     {
         return false;
     }
+    /// Zero the OUTER gaps while the strip holds a single column.
+    ///
+    /// OFF by default, unlike the tiling twin it is named after. Tiling's
+    /// rationale is that a sole window fills the screen, so gaps around it
+    /// frame nothing — true there, false on a strip, where a sole column sits
+    /// at its own width (half the work area by default) and stripping the
+    /// gaps just pins it to the screen edge with dead space beside it. It
+    /// also makes every 1<->2 column transition resize the surviving column
+    /// by the gap. Worth having for a strip whose columns are full width, so
+    /// it stays available, but it has to be asked for.
+    static constexpr bool scrollingSmartGaps()
+    {
+        return false;
+    }
     /// Crop mode for partial edge columns: keep the TRUE column rect and let
     /// the compositor crop the overhang at the screen edge, instead of the
     /// default clamp that resizes the window at the boundary. Off by default

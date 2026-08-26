@@ -257,6 +257,14 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // fullscreen geometry (the exact hazard that cleanup documents).
         m_tileTargetZones.remove(windowId);
         m_centeredWaylandZones.remove(windowId);
+        // The offered column goes with them, for the reason the monocle arm in
+        // the batch apply spells out: the entry describes the last column this
+        // window was offered as a PLAIN strip tile, and it stops being one for
+        // the whole hold. The size-continuity block that would otherwise
+        // refresh it excludes windowed-fullscreen entries, so nothing corrects
+        // it until the hold ends. Dropping it costs at most one extra resize
+        // when the window returns to the strip and the next batch re-offers.
+        m_effect->m_scrollOfferedColumn.remove(windowId);
         // A live per-window leg means a batch committed the right rect this
         // very tick — reaping it (the skipAnimation tail calls
         // removeAnimation) would snap one column out of the strip's slide.
@@ -343,6 +351,12 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // consumer's self-heal arm sees flagged+member+not-fullscreen and
     // delivers this same reconcile when the daemon returns.
     if (!w->isFullScreen() && m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        // Symmetric with the enter arm above: whatever column the window was
+        // offered before the hold describes a strip membership it is only now
+        // resuming, and the next batch re-offers from scratch. Dropped on both
+        // legs of this branch, because the daemon-gone leg defers the reconcile
+        // but does not make the stale offer any more current.
+        m_effect->m_scrollOfferedColumn.remove(windowId);
         if (m_effect->m_daemonGate.serviceRegistered) {
             m_effect->m_windowedFullscreenWindows.remove(windowId);
             restoreWindowedFullscreenLayerDemotion(windowId, w->window());
@@ -484,6 +498,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // indefinitely when the daemon gate is closed. The float exits shed the
     // same pair for the same reason.
     m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollOfferedColumn.remove(windowId);
     if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
     }

@@ -2296,7 +2296,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="280"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="343"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="432"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="835"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="837"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="115"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="118"/>
         <source>Border color</source>
@@ -2575,7 +2575,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="157"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="718"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="720"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="86"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="280"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="161"/>
@@ -2867,7 +2867,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="318"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="692"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="710"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="712"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="80"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="250"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="256"/>
@@ -4009,14 +4009,14 @@
         <translation>გადავსებისას</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="673"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="675"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="67"/>
         <source>Proportion of the screen</source>
         <translation>ეკრანის წილი</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="202"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="676"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="678"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="70"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="197"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="171"/>
@@ -4030,7 +4030,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="204"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="678"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="680"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="72"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="227"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="198"/>
@@ -4044,14 +4044,14 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="209"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="295"/>
         <source>Fixed height</source>
         <translation>ფიქსირებული სიმაღლე</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="210"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="692"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="321"/>
         <source>Preset height</source>
         <translation>შაბლონის სიმაღლე</translation>
@@ -5574,14 +5574,14 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="89"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="270"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="364"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="600"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="602"/>
         <source>monitor</source>
         <translation>მონიტორი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="80"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="598"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="613"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="600"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="615"/>
         <source>display</source>
         <translation>ეკრანი</translation>
     </message>
@@ -5625,14 +5625,14 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="85"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="273"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="999"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1009"/>
         <source>export</source>
         <translation>გატანა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="86"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="273"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1001"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
         <source>import</source>
         <translation>შემოტანა</translation>
     </message>
@@ -5643,7 +5643,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="88"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="652"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="654"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="54"/>
         <source>split</source>
         <translation>გაყოფა</translation>
@@ -5674,7 +5674,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="69"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="97"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1016"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1026"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="51"/>
         <source>grid</source>
         <translation>ბადე</translation>
@@ -5685,10 +5685,10 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="232"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="254"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="272"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="679"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="691"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="681"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="693"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="703"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="73"/>
         <source>preset</source>
         <translation>შაბლონი</translation>
@@ -5698,10 +5698,10 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="148"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="178"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="181"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="680"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="692"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="698"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="702"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="682"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="694"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="700"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="704"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="74"/>
         <source>template</source>
         <translation>ნიმუში</translation>
@@ -5715,7 +5715,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="118"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="201"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="300"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="579"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="33"/>
         <source>overlay</source>
         <translation>გადადება</translation>
@@ -5724,9 +5724,9 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="65"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="118"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="579"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="924"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="930"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="934"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="33"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="35"/>
         <source>trigger</source>
@@ -5736,13 +5736,13 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="118"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="566"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="570"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="802"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="810"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="815"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1039"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="804"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1021"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1049"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
         <source>edge</source>
         <translation>წიბო</translation>
     </message>
@@ -5766,11 +5766,11 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="121"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="263"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="755"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="759"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="763"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="827"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="836"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="757"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="761"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="765"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="829"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="838"/>
         <source>color</source>
         <translation>ფერი</translation>
     </message>
@@ -5784,17 +5784,17 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="480"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="493"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="495"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="755"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="759"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="763"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="827"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="836"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="757"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="761"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="765"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="829"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="838"/>
         <source>colour</source>
         <translation>ფერი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="121"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="832"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="834"/>
         <source>opacity</source>
         <translation>გაუმჭვირვალობა</translation>
     </message>
@@ -5804,7 +5804,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="438"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="486"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="490"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="832"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="834"/>
         <source>transparency</source>
         <translation>გამჭვირვალობა</translation>
     </message>
@@ -5817,11 +5817,11 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="477"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="481"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="496"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="756"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="760"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="837"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="758"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="762"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="766"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="830"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="839"/>
         <source>theme</source>
         <translation>თემა</translation>
     </message>
@@ -5834,8 +5834,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="465"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="468"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="546"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="837"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="841"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="839"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="843"/>
         <source>border</source>
         <translation>საზღვარი</translation>
     </message>
@@ -5847,9 +5847,9 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="124"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="160"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="605"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1006"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1034"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="607"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1016"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="39"/>
         <source>picker</source>
         <translation>ამრჩევი</translation>
@@ -5877,7 +5877,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="195"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="241"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="263"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="686"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
         <source>window</source>
         <translation>ფანჯარა</translation>
     </message>
@@ -5887,27 +5887,27 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="161"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="165"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="195"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="805"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="814"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="819"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="33"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="176"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="180"/>
         <source>drag</source>
         <translation>გადათრევა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="128"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="166"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="607"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="784"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="921"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="925"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="609"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="931"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="945"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="35"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="156"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="188"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="157"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="160"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="192"/>
         <source>modifier</source>
         <translation>მოდიფიკატორი</translation>
     </message>
@@ -5931,7 +5931,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="131"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="172"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="178"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="952"/>
         <source>order</source>
         <translation>მიმდევრობა</translation>
     </message>
@@ -5948,10 +5948,10 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="174"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="180"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="295"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="109"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="112"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="879"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="113"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
         <source>shortcut</source>
         <translation>მალსახმობი</translation>
     </message>
@@ -5989,8 +5989,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="78"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="136"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="237"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="172"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="174"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="176"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="178"/>
         <source>effect</source>
         <translation>ეფექტი</translation>
     </message>
@@ -6018,7 +6018,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="140"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="686"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
         <source>auto</source>
         <translation>ავტო</translation>
     </message>
@@ -6028,9 +6028,11 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="561"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="564"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="569"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="733"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="735"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
         <source>gap</source>
         <translation>დაშორება</translation>
     </message>
@@ -6040,7 +6042,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="561"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="564"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="569"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
         <source>spacing</source>
         <translation>ინტერვალი</translation>
     </message>
@@ -6074,16 +6076,16 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="68"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="144"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="651"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="659"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="653"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="661"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="51"/>
         <source>master</source>
         <translation>მთავარი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="144"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="932"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="945"/>
         <source>stack</source>
         <translation>დასტა</translation>
     </message>
@@ -6126,28 +6128,28 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="186"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="818"/>
         <source>speed</source>
         <translation>სიჩქარე</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="189"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="853"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="137"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="172"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="855"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="916"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="141"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="176"/>
         <source>open</source>
         <translation>გახსნა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="189"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="172"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="176"/>
         <source>close</source>
         <translation>დახურვა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="189"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="174"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="178"/>
         <source>minimize</source>
         <translation>ჩაკეცვა</translation>
     </message>
@@ -6168,7 +6170,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="196"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="176"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="180"/>
         <source>move</source>
         <translation>გადატანა</translation>
     </message>
@@ -6205,14 +6207,14 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="199"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="245"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="987"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="255"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="997"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="259"/>
         <source>on-screen display</source>
         <translation>ეკრანული ჩვენება</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="203"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="178"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="182"/>
         <source>desktop</source>
         <translation>სამუშაო მაგიდა</translation>
     </message>
@@ -6230,7 +6232,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="204"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="273"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="178"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="182"/>
         <source>switch</source>
         <translation>გადართვა</translation>
     </message>
@@ -6327,9 +6329,9 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="561"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="564"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="569"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="574"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="944"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="576"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="954"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="234"/>
         <source>gaps</source>
         <translation>დაშორებები</translation>
     </message>
@@ -6361,16 +6363,16 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="269"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="863"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="955"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="101"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="104"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="212"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="235"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="633"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="869"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="960"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="965"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="105"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="108"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="239"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="243"/>
         <source>float</source>
         <translation>მოტივტივება</translation>
     </message>
@@ -6431,8 +6433,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="374"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="542"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="980"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="249"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="990"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="253"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="23"/>
         <source>Window filtering</source>
         <translation>ფანჯრების გაფილტვრა</translation>
@@ -6440,8 +6442,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="376"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="544"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="982"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="251"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="992"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="255"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="529"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="58"/>
         <source>Exclude transient windows</source>
@@ -6477,21 +6479,21 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="625"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="863"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="98"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="101"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="209"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="232"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="627"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="865"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="869"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="102"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="105"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="211"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="213"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="236"/>
         <source>restore</source>
         <translation>აღდგენა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="391"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="403"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="779"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="781"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="24"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="32"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="30"/>
@@ -6500,7 +6502,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="393"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="186"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="190"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="22"/>
         <source>Zone span</source>
         <oldsource>Zone Span</oldsource>
@@ -6527,11 +6529,11 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="400"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="405"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="849"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="851"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="90"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="197"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="224"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="23"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="201"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="228"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="24"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="15"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="15"/>
         <source>Window handling</source>
@@ -6541,8 +6543,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="401"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="406"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="217"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="242"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="221"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="246"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="186"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="13"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="13"/>
@@ -6551,7 +6553,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="411"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="749"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="751"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="425"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="51"/>
         <source>Colors</source>
@@ -6590,11 +6592,11 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="477"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="481"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="496"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="756"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="760"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="765"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="829"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="838"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="758"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="762"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="767"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="831"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="840"/>
         <source>scheme</source>
         <translation>სქემა</translation>
     </message>
@@ -6607,15 +6609,15 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="425"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="756"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="758"/>
         <source>active</source>
         <translation>აქტიური</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="425"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="912"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="142"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="919"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="146"/>
         <source>hover</source>
         <translation>თავზე გადატარება</translation>
     </message>
@@ -6640,7 +6642,7 @@
         <translation>კონტური</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1001"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
         <source>load</source>
         <translation>ჩატვირთვა</translation>
     </message>
@@ -6669,7 +6671,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="440"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="463"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="840"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="842"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="232"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="239"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="134"/>
@@ -6682,8 +6684,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="440"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="463"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="736"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="842"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="844"/>
         <source>thickness</source>
         <translation>სისქე</translation>
     </message>
@@ -6695,25 +6697,25 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="463"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="550"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="554"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="656"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="990"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="993"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="95"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="205"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="658"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1000"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1003"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="99"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="209"/>
         <source>size</source>
         <translation>ზომა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="442"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="465"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="846"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="848"/>
         <source>rounding</source>
         <translation>მომრგვალება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="845"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="748"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="847"/>
         <source>corner</source>
         <translation>კუთხე</translation>
     </message>
@@ -6731,13 +6733,13 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="445"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="722"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>font</source>
         <translation>შრიფტი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="447"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="721"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="181"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="304"/>
         <source>Font</source>
@@ -6745,7 +6747,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="448"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="722"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <source>typeface</source>
         <translation>შრიფტი</translation>
     </message>
@@ -6780,8 +6782,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="454"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="679"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="691"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="681"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="693"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="73"/>
         <source>index</source>
         <translation>ინდექსი</translation>
@@ -6793,7 +6795,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="454"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="725"/>
         <source>label</source>
         <translation>წარწერა</translation>
     </message>
@@ -6884,19 +6886,21 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="109"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="146"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="221"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="670"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="683"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="731"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="852"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="860"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="672"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="685"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="733"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="854"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="74"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="65"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="93"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="98"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="128"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="131"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="97"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="102"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="132"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>column</source>
         <translation>სვეტი</translation>
     </message>
@@ -6906,52 +6910,54 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="159"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="164"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="221"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="711"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="781"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="784"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="804"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="783"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="806"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="74"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="81"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="122"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="143"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="97"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="126"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
         <source>strip</source>
         <translation>ლენტა</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="165"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="924"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="928"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="156"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="158"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="927"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="930"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="934"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="938"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="120"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="151"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="157"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="160"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="162"/>
         <source>wheel</source>
         <translation>ბორბალი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="147"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="153"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="711"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="714"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="722"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="731"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="718"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="721"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="733"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="736"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="735"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="755"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="759"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="763"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="745"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="748"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="757"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="761"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="765"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="81"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
@@ -7429,8 +7435,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="442"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="465"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="745"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="844"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="747"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="846"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="262"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="269"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="163"/>
@@ -7539,20 +7545,20 @@
         <translation>ფოკუსის მილევის ხანგრძლივობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1089"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1099"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="135"/>
         <source>Save current settings</source>
         <translation>მიმდინარე პარამეტრების შენახვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1091"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1101"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="239"/>
         <source>Import a profile</source>
         <translation>პროფილის შემოტანა</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="94"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1092"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1102"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="260"/>
         <source>Profiles</source>
         <translation>პროფილები</translation>
@@ -7684,49 +7690,57 @@
         <translation>გვერდი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="573"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="229"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="575"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="857"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="95"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="233"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="215"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="221"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="52"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="58"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="59"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="65"/>
         <source>Smart gaps</source>
         <translation>ჭკვიანი დაშორებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="575"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
         <source>smart</source>
         <translation>ჭკვიანი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="575"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="714"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="131"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="96"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>single</source>
         <translation>ერთი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="579"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="40"/>
         <source>Activate on every drag</source>
         <translation>ყოველ გადათრევაზე გააქტიურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingDragTriggerRow.qml.cpp" line="41"/>
         <source>Hold to activate</source>
         <translation>გასააქტიურებლად დაჭერა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="581"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
         <source>deactivate</source>
         <translation>დეაქტივაცია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="947"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="78"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="82"/>
@@ -7736,92 +7750,92 @@
         <translation>გადართვის რეჟიმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="947"/>
         <source>tap</source>
         <translation>შეხება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="583"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
         <source>activation</source>
         <translation>გააქტიურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="188"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="192"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="35"/>
         <source>Span modifier</source>
         <translation>გადაფარვის მოდიფიკატორი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="190"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="193"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="197"/>
         <source>zone span</source>
         <translation>ზონის გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
         <source>paint</source>
         <translation>ხატვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
         <source>span</source>
         <translation>გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="195"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="199"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="88"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="95"/>
         <source>Edge threshold</source>
         <translation>წიბოს ზღვარი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1039"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="195"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1021"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1049"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="199"/>
         <source>distance</source>
         <translation>მანძილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="188"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="195"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="192"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="199"/>
         <source>multi-zone</source>
         <translation>მრავალზონიანი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="597"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="599"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="141"/>
         <source>Show zones on all monitors</source>
         <translation>ზონების ჩვენება ყველა მონიტორზე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="598"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="600"/>
         <source>screens</source>
         <translation>ეკრანები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="600"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="602"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="151"/>
         <source>Filter by aspect ratio</source>
         <translation>გვერდების თანაფარდობით გაფილტვრა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="600"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="619"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="602"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="621"/>
         <source>layouts</source>
         <translation>განლაგებები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="604"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="606"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="41"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="129"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="135"/>
@@ -7831,22 +7845,22 @@
         <translation>ყოველთვის ჩვენება მიმაგრების შემდეგ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="605"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="607"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="610"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="609"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="612"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="41"/>
         <source>snap assist</source>
         <translation>მიმაგრების დამხმარე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="607"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="609"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="63"/>
         <source>Hold to enable</source>
         <translation>ჩართვისთვის დაჭერა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="612"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="199"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="614"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="203"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="23"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="29"/>
         <source>Re-snap on resolution change</source>
@@ -7854,209 +7868,209 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="535"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="613"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="199"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="615"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="203"/>
         <source>resolution</source>
         <translation>გარჩევადობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="615"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="201"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="617"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="205"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="39"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="45"/>
         <source>Open new windows in the last-used zone</source>
         <translation>ახალი ფანჯრების გახსნა ბოლოს გამოყენებულ ზონაში</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="616"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="959"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="201"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="219"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="244"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="618"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="641"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="969"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="205"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="223"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="248"/>
         <source>new window</source>
         <translation>ახალი ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="616"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="618"/>
         <source>last zone</source>
         <translation>ბოლო ზონა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="618"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="203"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="620"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="55"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="61"/>
         <source>Auto-assign new windows for all layouts</source>
         <translation>ახალი ფანჯრების ავტომატური მინიჭება ყველა განლაგებისთვის</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="619"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="203"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="621"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
         <source>auto-assign</source>
         <translation>ავტომინიჭება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="694"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="354"/>
         <source>Width and height presets</source>
         <translation>სიგანისა და სიმაღლის შაბლონები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="696"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="698"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="379"/>
         <source>Column widths</source>
         <translation>სვეტების სიგანეები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="703"/>
         <source>cycle</source>
         <translation>გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="700"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="702"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="401"/>
         <source>Window heights</source>
         <translation>ფანჯრების სიმაღლეები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="718"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <source>chips</source>
         <translation>ჩიპები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="718"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="84"/>
         <source>bar</source>
         <translation>ზოლი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="721"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>left</source>
         <translation>მარცხნივ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="721"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>right</source>
         <translation>მარჯვნივ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="719"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="721"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="87"/>
         <source>top</source>
         <translation>ზემოთ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="720"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="722"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="88"/>
         <source>bottom</source>
         <translation>ქვემოთ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="715"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="126"/>
         <source>Hide it for a single window</source>
         <translation>დამალვა ერთი ფანჯრისთვის</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="714"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
         <source>hide</source>
         <translation>დამალვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="730"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="732"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="251"/>
         <source>Make room inside the column</source>
         <translation>სვეტში ადგილის გამოთავისუფლება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="731"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="733"/>
         <source>inside</source>
         <translation>შიგნით</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="732"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="734"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="265"/>
         <source>Gap</source>
         <translation>შუალედი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="735"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="737"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="292"/>
         <source>Thickness</source>
         <translation>სისქე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="313"/>
         <source>Length</source>
         <translation>სიგრძე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
         <source>length</source>
         <translation>სიგრძე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="740"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="335"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="342"/>
         <source>Gap between tabs</source>
         <translation>შუალედი ჩანართებს შორის</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="742"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="744"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="356"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="362"/>
         <source>Fully rounded tabs</source>
         <translation>სრულად მომრგვალებული ჩანართები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="745"/>
         <source>rounded</source>
         <translation>მომრგვალებული</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="743"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="745"/>
         <source>pill</source>
         <translation>აბი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="746"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="845"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="748"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="847"/>
         <source>radius</source>
         <translation>რადიუსი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="760"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="762"/>
         <source>inactive</source>
         <translation>არააქტიური</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="766"/>
         <source>urgent</source>
         <translation>სასწრაფო</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="766"/>
         <source>attention</source>
         <translation>ყურადღება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="892"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="125"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="902"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="129"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="35"/>
         <source>Focus and view</source>
         <translation>ფოკუსი და ხედი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="894"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="127"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="904"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="131"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="43"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="48"/>
         <source>Center the focused column</source>
@@ -8065,16 +8079,16 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="277"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="658"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="898"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="130"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="908"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="134"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="60"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="66"/>
         <source>Center a lone column</source>
         <translation>ერთადერთი სვეტის ცენტრში მოქცევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="916"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="926"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="150"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="149"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="157"/>
         <source>Scroll the strip with the mouse wheel</source>
@@ -8082,42 +8096,42 @@
         <translation>ზოლის გადახვევა თაგვის ბორბლით</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="912"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="142"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="919"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="927"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="143"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="151"/>
         <source>mouse</source>
         <translation>თაგვი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="927"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="158"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="162"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="239"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="247"/>
         <source>Invert wheel direction</source>
         <translation>ბორბლის მიმართულების შებრუნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="928"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="158"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="938"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="162"/>
         <source>invert</source>
         <translation>შებრუნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="928"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="938"/>
         <source>direction</source>
         <translation>მიმართულება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="667"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="669"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="120"/>
         <source>New columns</source>
         <translation>ახალი სვეტები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="669"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="671"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="64"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="144"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="123"/>
@@ -8127,66 +8141,66 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="109"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="147"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="670"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="674"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="672"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="676"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="679"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="697"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="736"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="841"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="678"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="681"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="699"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="738"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="843"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="879"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="65"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="68"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="70"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="73"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="109"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="113"/>
         <source>width</source>
         <translation>სიგანე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="671"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="676"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="804"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="673"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="678"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="806"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="70"/>
         <source>pixels</source>
         <translation>პიქსელები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="674"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="676"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="68"/>
         <source>percent</source>
         <translation>პროცენტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="682"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="684"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="259"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="264"/>
         <source>Open new columns as</source>
         <translation>ახალი სვეტების გახსნა როგორც</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="683"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="685"/>
         <source>tabbed</source>
         <translation>ჩანართებიანი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="683"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="685"/>
         <source>tabs</source>
         <translation>ჩანართები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="686"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="688"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="691"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="701"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="112"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="690"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="693"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="703"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
         <source>height</source>
         <translation>სიმაღლე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="685"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="687"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="278"/>
         <source>Default height</source>
         <translation>ნაგულისხმევი სიმაღლე</translation>
@@ -8194,161 +8208,161 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="161"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="167"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="708"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="710"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="104"/>
         <source>Tab indicator</source>
         <translation>ჩანართის ინდიკატორი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="154"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="711"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="833"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="837"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="713"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="830"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="835"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="839"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="81"/>
         <source>indicator</source>
         <translation>ინდიკატორი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="728"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="730"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="242"/>
         <source>Size and spacing</source>
         <translation>ზომა და დაშორება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="754"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="756"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="439"/>
         <source>Active tab</source>
         <translation>აქტიური ჩანართი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="758"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="760"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="453"/>
         <source>Inactive tabs</source>
         <translation>არააქტიური ჩანართები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="762"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="764"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="468"/>
         <source>Urgent tab</source>
         <translation>სასწრაფო ჩანართი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="783"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="785"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="52"/>
         <source>Hold to re-insert into strip</source>
         <translation>დააჭირეთ და გეჭიროთ ზოლში ხელახლა ჩასასმელად</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="786"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="789"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="791"/>
         <source>strip preview</source>
         <translation>ზოლის გადახედვა</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="175"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="178"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="824"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="826"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="49"/>
         <source>Drop indicator</source>
         <translation>დაგდების ინდიკატორი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="610"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="789"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="827"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="832"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="836"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="841"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="845"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="940"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="612"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="791"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="829"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="834"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="838"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="843"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="847"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <source>drop</source>
         <translation>დაგდება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
         <source>resize</source>
         <translation>ზომის შეცვლა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="97"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="67"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="73"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="864"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="101"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="84"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="90"/>
         <source>Restore columns on login</source>
         <translation>სვეტების აღდგენა შესვლისას</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="865"/>
         <source>session</source>
         <translation>სესია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="100"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="83"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="89"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="868"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="104"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="100"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="106"/>
         <source>Restore floated windows to their previous position</source>
         <translation>მოტივტივე ფანჯრების აღდგენა მათ წინა მდებარეობაზე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
         <source>all</source>
         <translation>ყველა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="106"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="110"/>
         <source>desktops</source>
         <translation>სამუშაო მაგიდები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="108"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="132"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="878"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="112"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="149"/>
         <source>Width adjustment step</source>
         <translation>სიგანის მორგების ბიჯი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="875"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="111"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="154"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="881"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="115"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="171"/>
         <source>Height adjustment step</source>
         <translation>სიმაღლის მორგების ბიჯი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="283"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="664"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="902"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="134"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="912"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="138"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="76"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="82"/>
         <source>Crop columns at the screen edge</source>
         <translation>სვეტების მოჭრა ეკრანის კიდეზე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
         <source>crop</source>
         <translation>მოჭრა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
         <source>clip</source>
         <translation>შემოჭრა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
         <source>cut off</source>
         <translation>მოკვეთა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="916"/>
         <source>new</source>
         <translation>ახალი</translation>
     </message>
@@ -8370,48 +8384,48 @@
         <translation>ზონების შევსება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="171"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="175"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSimplePage.qml.cpp" line="80"/>
         <source>Window opened &amp; closed</source>
         <translation>ფანჯარა გაიხსნა &amp; დაიხურა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="174"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="178"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSimplePage.qml.cpp" line="86"/>
         <source>Window minimized</source>
         <translation>ფანჯარა ჩაკეცილია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="176"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="180"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSimplePage.qml.cpp" line="96"/>
         <source>Window moved</source>
         <translation>ფანჯარა გადატანილია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="178"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="182"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSimplePage.qml.cpp" line="101"/>
         <source>Desktop switched</source>
         <translation>სამუშაო მაგიდა გადართულია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="234"/>
         <source>single window</source>
         <translation>ერთი ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="241"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="245"/>
         <source>overflow</source>
         <translation>გადავსება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1055"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1065"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Scrolling Quick Shortcuts</source>
         <translation>გადახვევის სწრაფი მალსახმობები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1073"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1079"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1083"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1089"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
         <translation>მომხმარებელი აყენებს</translation>
@@ -8529,91 +8543,91 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="454"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="605"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="621"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="205"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="623"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="209"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="71"/>
         <source>Restore size on unsnap</source>
         <translation>მოხსნისას ზომის აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="622"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="205"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="624"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="209"/>
         <source>unsnap</source>
         <translation>მოხსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="622"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="624"/>
         <source>original size</source>
         <translation>საწყისი ზომა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="624"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="207"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="626"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="211"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="87"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="93"/>
         <source>Restore windows to their previous zone</source>
         <translation>ფანჯრების წინა ზონაში აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="625"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="98"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="627"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="865"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="102"/>
         <source>login</source>
         <translation>შესვლა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="627"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="209"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="629"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="213"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="103"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="109"/>
         <source>Restore unsnapped windows to their previous position</source>
         <translation>მოხსნილი ფანჯრების წინა მდებარეობაზე აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="628"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="947"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="957"/>
         <source>floated</source>
         <translation>მოტივტივე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="628"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="852"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="863"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="947"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="854"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="869"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="952"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="957"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="93"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="101"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="226"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="105"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>position</source>
         <translation>მდებარეობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="634"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="214"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="636"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="218"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="135"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="141"/>
         <source>Unfloat to a zone when there is no previous zone</source>
         <translation>ზონაში დაბრუნება, როცა წინა ზონა არ არსებობს</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="635"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="214"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="218"/>
         <source>unfloat</source>
         <translation>ტივტივის მოხსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="635"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
         <source>fallback</source>
         <translation>სათადარიგო</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="869"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="953"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="106"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="237"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="115"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="875"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="963"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="110"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="220"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="241"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="132"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="151"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="156"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="107"/>
@@ -8622,30 +8636,30 @@
         <translation>წებოვანი ფანჯრები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="953"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="237"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="963"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="220"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="241"/>
         <source>all desktops</source>
         <translation>ყველა სამუშაო მაგიდა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="637"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="953"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="106"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="963"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="110"/>
         <source>sticky</source>
         <translation>წებოვანი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="286"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="668"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="959"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="137"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="219"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="244"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="641"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="915"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="969"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="141"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="223"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="248"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="92"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="21"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="21"/>
@@ -8656,33 +8670,33 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="164"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="190"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="518"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="639"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="641"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="912"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="921"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="959"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="961"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="128"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="137"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="142"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="219"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="221"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="244"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="246"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="643"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="916"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="919"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="931"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="969"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="971"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="132"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="141"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="143"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="146"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="223"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="225"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="248"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="250"/>
         <source>focus</source>
         <translation>ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="641"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="908"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="961"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="139"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="221"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="246"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="643"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="918"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="971"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="143"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="225"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="250"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="108"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="37"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="37"/>
@@ -8690,10 +8704,10 @@
         <translation>ფოკუსი მიჰყვება მაუსს</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="641"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="961"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="221"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="246"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="643"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="971"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="225"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="250"/>
         <source>pointer</source>
         <translation>მაჩვენებელი</translation>
     </message>
@@ -8701,13 +8715,13 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="302"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="54"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="112"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="644"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="646"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="161"/>
         <source>Algorithm</source>
         <translation>ალგორითმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="646"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="648"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="56"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="238"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingSimplePage.qml.cpp" line="276"/>
@@ -8715,33 +8729,33 @@
         <translation>ფანჯრების მაქსიმუმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="647"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="649"/>
         <source>windows</source>
         <translation>ფანჯრები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="647"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="649"/>
         <source>maximum</source>
         <translation>მაქსიმუმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="647"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="659"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1019"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="649"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="661"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1029"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="56"/>
         <source>count</source>
         <translation>რაოდენობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="648"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="650"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="56"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="143"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
         <source>limit</source>
         <translation>ლიმიტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="650"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="652"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="53"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="281"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="288"/>
@@ -8752,26 +8766,26 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="164"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="651"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="659"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="653"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="661"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="909"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="54"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="128"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="131"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="132"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="135"/>
         <source>center</source>
         <translation>ცენტრი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="651"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="656"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="653"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="658"/>
         <source>ratio</source>
         <translation>თანაფარდობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="652"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="670"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="674"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="654"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="672"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="676"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="54"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="65"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="68"/>
@@ -8779,31 +8793,31 @@
         <translation>პროპორცია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="655"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="657"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="307"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="312"/>
         <source>Ratio step size</source>
         <translation>თანაფარდობის ბიჯის ზომა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="656"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="109"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="112"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="658"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="879"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="113"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="120"/>
         <source>step</source>
         <translation>ბიჯი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="656"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="658"/>
         <source>increment</source>
         <translation>ნაზრდი</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="63"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="658"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="660"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="415"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="334"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingAlgorithmPage.qml.cpp" line="341"/>
@@ -8811,13 +8825,13 @@
         <translation>მთავრების რაოდენობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="660"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="662"/>
         <source>number</source>
         <translation>ნომერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="781"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="932"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="783"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="32"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="38"/>
         <source>Always re-insert on drag</source>
@@ -8825,59 +8839,59 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="165"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="781"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="852"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="932"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="783"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="854"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="93"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="226"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
         <source>insert</source>
         <translation>ჩასმა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="934"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="944"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingBehaviorPage.qml.cpp" line="58"/>
         <source>Hold to re-insert into stack</source>
         <translation>დაჭერით სტეკში ხელახლა ჩასმა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="940"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="947"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
         <source>stack preview</source>
         <translation>სტეკის გადახედვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="851"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="853"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="952"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="92"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="226"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="34"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="39"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="230"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="35"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="40"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="23"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="28"/>
         <source>New window placement</source>
         <translation>ახალი ფანჯრის განთავსება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="855"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="944"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="95"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="228"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="51"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="954"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="99"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="232"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="68"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="40"/>
         <source>Respect minimum size</source>
         <translation>მინიმალური ზომის დაცვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="944"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="95"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="228"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="954"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="99"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="232"/>
         <source>minimum</source>
         <translation>მინიმუმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="946"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="232"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="956"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="236"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="75"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="81"/>
         <source>Restore untiled windows to their previous position</source>
@@ -8885,93 +8899,93 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="72"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="955"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="239"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="965"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="243"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="124"/>
         <source>Drag behavior</source>
         <translation>გადათრევის ქცევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="955"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="239"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="965"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="243"/>
         <source>reorder</source>
         <translation>გადალაგება</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="69"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="957"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="241"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="967"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="245"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="142"/>
         <source>Overflow behavior</source>
         <translation>გადავსების ქცევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="957"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="967"/>
         <source>max windows</source>
         <translation>ფანჯრების მაქსიმუმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="957"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="241"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="967"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="245"/>
         <source>unlimited</source>
         <translation>შეუზღუდავი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="969"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="165"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="979"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="169"/>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalTimingDefaultsCard.qml.cpp" line="154"/>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalTimingDefaultsCard.qml.cpp" line="176"/>
         <source>Global animation defaults</source>
         <translation>ანიმაციის გლობალური ნაგულისხმევი პარამეტრები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="971"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="981"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="61"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="68"/>
         <source>Multiple windows</source>
         <translation>მრავალი ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="972"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="982"/>
         <source>sequence</source>
         <translation>მიმდევრობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="972"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="982"/>
         <source>simultaneous</source>
         <translation>ერთდროულად</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="972"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="982"/>
         <source>one by one</source>
         <translation>სათითაოდ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="974"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="984"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="89"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="94"/>
         <source>Stagger delay</source>
         <translation>საფეხურებრივი დაყოვნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="975"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="985"/>
         <source>pause</source>
         <translation>პაუზა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="975"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="985"/>
         <source>interval</source>
         <translation>ინტერვალი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="975"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="813"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="985"/>
         <source>delay</source>
         <translation>დაყოვნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="977"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="987"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="118"/>
         <source>Minimum distance</source>
@@ -8982,74 +8996,74 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="383"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="550"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="554"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="978"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="990"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="993"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="257"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="259"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="988"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1000"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1003"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="261"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="263"/>
         <source>threshold</source>
         <translation>ზღვარი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="978"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="988"/>
         <source>skip</source>
         <translation>გამოტოვება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="978"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="988"/>
         <source>geometry</source>
         <translation>გეომეტრია</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="983"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="993"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="256"/>
         <source>dialogs</source>
         <translation>დიალოგები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="983"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="993"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="256"/>
         <source>popups</source>
         <translation>მხტუნავები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="983"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="252"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="993"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="256"/>
         <source>tooltips</source>
         <translation>მინიშნებები</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="545"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="984"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="994"/>
         <source>menus</source>
         <translation>მენიუები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="986"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="254"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="996"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="258"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="62"/>
         <source>Exclude notifications and OSDs</source>
         <translation>შეტყობინებებისა და OSD-ების გამორიცხვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="987"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="255"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="997"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="259"/>
         <source>volume</source>
         <translation>ხმა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="987"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="255"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="997"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="259"/>
         <source>brightness</source>
         <translation>სიკაშკაშე</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="379"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="549"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="989"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="257"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="999"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="261"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="539"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="85"/>
         <source>Minimum window width</source>
@@ -9058,16 +9072,16 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="380"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="550"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="990"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="257"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1000"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="261"/>
         <source>narrow</source>
         <translation>ვიწრო</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="382"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="553"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="992"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="259"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1002"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="263"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="549"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="125"/>
         <source>Minimum window height</source>
@@ -9076,8 +9090,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="383"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="554"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="993"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="259"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1003"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="263"/>
         <source>short</source>
         <translation>დაბალი</translation>
     </message>
@@ -9085,20 +9099,20 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="246"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="306"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="371"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="997"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1007"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
         <source>Configuration</source>
         <translation>კონფიგურაცია</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="998"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1008"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="567"/>
         <source>Backup</source>
         <translation>სარეზერვო ასლი</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="274"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="999"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1009"/>
         <source>save</source>
         <translation>შენახვა</translation>
     </message>
@@ -9121,10 +9135,10 @@
         <translation>ხარისხი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="585"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="609"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="788"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="939"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="587"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="611"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="790"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="949"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="99"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="97"/>
@@ -9136,32 +9150,32 @@
         <translation>გაშვების შემდგომი შეღავათის დრო</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="586"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="593"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="610"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="789"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="940"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="588"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="595"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="612"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="791"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="193"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="197"/>
         <source>mouse button</source>
         <translation>თაგვის ღილაკი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="192"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="594"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="196"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="77"/>
         <source>Zone span release grace period</source>
         <translation>ზონების გაერთიანების გაშვების შემდგომი შეღავათის დრო</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="630"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="865"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="949"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="103"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="211"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="234"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="99"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="105"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="632"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="871"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="959"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="107"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="215"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="238"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="116"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="122"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="119"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="125"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="91"/>
@@ -9170,286 +9184,286 @@
         <translation>მოტივტივე ფანჯრები დარჩეს წინ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="104"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="212"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="235"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="633"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="960"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="108"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="239"/>
         <source>above</source>
         <translation>ზემოთ</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="633"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="960"/>
         <source>stacking</source>
         <translation>დაწყობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="632"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="867"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="951"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="104"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="212"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="235"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="634"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="961"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="108"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="239"/>
         <source>layer</source>
         <translation>ფენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="725"/>
         <source>title</source>
         <translation>სათაური</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="725"/>
         <source>bold</source>
         <translation>მსხვილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="726"/>
         <source>italic</source>
         <translation>კურსივი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="726"/>
         <source>weight</source>
         <translation>სისქე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="724"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="726"/>
         <source>underline</source>
         <translation>ხაზგასმა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="725"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="727"/>
         <source>strikeout</source>
         <translation>გადახაზვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="795"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="797"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="38"/>
         <source>Edge auto-scroll</source>
         <translation>ავტომატური გადახვევა კიდეზე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="797"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="799"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="54"/>
         <source>Trigger width</source>
         <translation>გამშვები არის სიგანე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="802"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="810"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="815"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="804"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
         <source>auto scroll</source>
         <translation>ავტომატური გადახვევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="805"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="813"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="818"/>
         <source>drag scroll</source>
         <translation>გადათრევით გადახვევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="803"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="805"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="813"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="818"/>
         <source>edge scroll</source>
         <translation>კიდით გადახვევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="809"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="811"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="83"/>
         <source>Start delay</source>
         <translation>დაწყების დაყოვნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="814"/>
         <source>milliseconds</source>
         <translation>მილიწამები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="814"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingEdgeScrollCard.qml.cpp" line="110"/>
         <source>Maximum speed</source>
         <translation>მაქსიმალური სიჩქარე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="819"/>
         <source>fast</source>
         <translation>სწრაფი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="879"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="115"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="176"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="181"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="119"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="193"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="198"/>
         <source>View scroll step</source>
         <translation>ხედის გადახვევის ბიჯი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="925"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="120"/>
         <source>view</source>
         <translation>ხედი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="122"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="126"/>
         <source>axis</source>
         <translation>ღერძი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="123"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="896"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="127"/>
         <source>portrait</source>
         <translation>პორტრეტული</translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="295"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="911"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="141"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="921"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="145"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="127"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="134"/>
         <source>Limit how far the strip scrolls</source>
         <translation>შეზღუდეთ, რამდენად შორს გადაიხვევა ზოლი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="919"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="152"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="929"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="156"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="185"/>
         <source>Scroll key for column focus</source>
         <translation>გადახვევის კლავიში სვეტის ფოკუსისთვის</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="924"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="153"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="156"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="930"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="934"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="157"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="160"/>
         <source>scroll key</source>
         <translation>გადახვევის კლავიში</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="155"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="933"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="159"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingFocusCard.qml.cpp" line="213"/>
         <source>Scroll key for the view</source>
         <translation>გადახვევის კლავიში ხედისთვის</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="925"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
         <source>pan</source>
         <translation>გადაადგილება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="999"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1001"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1009"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
         <source>data</source>
         <translation>მონაცემები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1000"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1010"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="582"/>
         <source>Restore</source>
         <translation>აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1005"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1015"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="113"/>
         <source>Zone selector popup</source>
         <translation>ზონის ამომრჩევის მხტუნავი ფანჯარა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1006"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1034"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1016"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <source>enable</source>
         <translation>ჩართვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1006"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1034"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1016"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1044"/>
         <source>toggle</source>
         <translation>გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1008"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1036"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1018"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1046"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="40"/>
         <source>Position and trigger</source>
         <oldsource>Position &amp; Trigger</oldsource>
         <translation>მდებარეობა და გამშვები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1010"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1038"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1020"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1048"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="81"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="95"/>
         <source>Trigger distance</source>
         <translation>ტრიგერის მანძილი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1011"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1039"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1021"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1049"/>
         <source>proximity</source>
         <translation>სიახლოვე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1013"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1023"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="157"/>
         <source>Layout arrangement</source>
         <oldsource>Layout Arrangement</oldsource>
         <translation>განლაგების დალაგება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1015"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1025"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="169"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="176"/>
         <source>Arrangement</source>
         <translation>განაწილება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="887"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1016"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="123"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="896"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1026"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="127"/>
         <source>horizontal</source>
         <translation>ჰორიზონტალური</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1016"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="122"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1026"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="126"/>
         <source>vertical</source>
         <translation>ვერტიკალური</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1018"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1028"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="193"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="200"/>
         <source>Grid columns</source>
         <translation>ბადის სვეტები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1019"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1029"/>
         <source>columns</source>
         <translation>სვეტები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1019"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1029"/>
         <source>per row</source>
         <translation>მწკრივზე</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1021"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1031"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="228"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="235"/>
         <source>Max visible rows</source>
         <translation>ხილული მწკრივების მაქსიმუმი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1022"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1032"/>
         <source>rows</source>
         <translation>მწკრივები</translation>
     </message>
@@ -9461,33 +9475,34 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="159"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="163"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="177"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="802"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="810"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="815"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="896"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="913"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1022"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="116"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="143"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="804"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="812"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="817"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="886"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="927"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1032"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="120"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="147"/>
         <source>scroll</source>
         <translation>გადახვევა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="914"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="144"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="924"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="148"/>
         <source>cap</source>
         <translation>ზღვარი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1022"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1032"/>
         <source>visible</source>
         <translation>ხილული</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1024"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1041"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1034"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1051"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="45"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="385"/>
@@ -9496,69 +9511,69 @@
         <translation>გადახედვის ზომა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1045"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1055"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="13"/>
         <source>Snapping layout priority</source>
         <oldsource>Snapping Layout Priority</oldsource>
         <translation>მიმაგრების განლაგებების პრიორიტეტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1047"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1057"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingOrderingPage.qml.cpp" line="13"/>
         <source>Tiling algorithm priority</source>
         <oldsource>Tiling Algorithm Priority</oldsource>
         <translation>ფილების ალგორითმების პრიორიტეტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1049"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1059"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingOrderingPage.qml.cpp" line="13"/>
         <source>Scrolling template priority</source>
         <translation>გადახვევის ნიმუშების პრიორიტეტი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1051"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1061"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Snapping Quick Shortcuts</source>
         <translation>მიმაგრების სწრაფი მალსახმობები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1053"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1063"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="103"/>
         <source>Tiling Quick Shortcuts</source>
         <translation>ფილების სწრაფი მალსახმობები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1061"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1063"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1065"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1071"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1073"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1075"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="464"/>
         <source>User shaders</source>
         <translation>მომხმარებლის შეიდერები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1067"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1077"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
         <translation>დარბილების შაბლონები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1069"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1079"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="282"/>
         <source>Spring presets</source>
         <oldsource>Spring Presets</oldsource>
         <translation>ზამბარის შაბლონები</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1071"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1077"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1081"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1087"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="127"/>
         <source>Save current state</source>
         <translation>მიმდინარე მდგომარეობის შენახვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1075"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1081"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1085"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1091"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="233"/>
         <source>Saved sets</source>
         <translation>შენახული ნაკრებები</translation>
@@ -9621,18 +9636,18 @@
         <translation>შემოცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="826"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="67"/>
         <source>Fill color</source>
         <translation>შევსების ფერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="828"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="830"/>
         <source>fill</source>
         <translation>შევსება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="831"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="833"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="97"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="102"/>
         <source>Fill opacity</source>
@@ -14293,7 +14308,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="154"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="715"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="717"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="83"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/FontPickerDialog.qml.cpp" line="314"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="264"/>
@@ -15183,8 +15198,8 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="105"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="121"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="894"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="125"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="173"/>
         <source>Direction</source>
         <translation>მიმართულება</translation>
@@ -19565,8 +19580,8 @@
         <translation>რამდენ ხანს რჩება გაერთიანება აქტიური გაერთიანების მოდიფიკატორის გაშვების შემდეგ, რათა ცოტა ხნის შემდეგ დაგდებულმა ფანჯარამაც დახატული ზონები დაიკავოს. ეხმარება, როცა მოდიფიკატორი არის თაგვის ღილაკი, რომელიც დაგდებასთან ერთად უშვებთ. 0 თიშავს მას.</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="590"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="190"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="592"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="194"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="62"/>
         <source>Zone span toggle mode</source>
         <translation>ზონის გავრცობის გადართვის რეჟიმი</translation>
@@ -20068,71 +20083,77 @@
         <translation>ფანჯრების ზომის მინიმუმზე დაბლა შემცირების აკრძალვა, რამაც შეიძლება დაშორებები დატოვოს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="36"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="37"/>
         <source>Where a new window&apos;s column enters the strip. Restored windows and per-window rules keep their own position.</source>
         <translation>სად შედის ახალი ფანჯრის სვეტი ზოლში. აღდგენილი ფანჯრები და ფანჯრების ცალკეული წესები საკუთარ პოზიციას ინარჩუნებენ.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="53"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="54"/>
+        <source>Remove the outer gaps while the strip holds a single column, so that column sits against the screen edge at its own width</source>
+        <oldsource>Remove the outer gaps while the strip holds a single column. Off by default, because a lone column sits at its own width rather than filling the screen.</oldsource>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="70"/>
         <source>Keep columns at least as wide and tall as their windows&apos; minimum size, which can push other windows off screen</source>
         <translation>სვეტები სულ მცირე იმდენად განიერი და მაღალი დარჩეს, რამდენიც მათი ფანჯრების მინიმალური ზომაა, რამაც შეიძლება სხვა ფანჯრები ეკრანიდან გაწიოს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="57"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingWindowHandlingCard.qml.cpp" line="46"/>
         <source>Respect window minimum size</source>
         <translation>ფანჯრის მინიმალური ზომის გათვალისწინება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="69"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="86"/>
         <source>When windows reopen after a restart, rebuild their columns with the same order, widths, and tab groups</source>
         <translation>როცა ფანჯრები გადატვირთვის შემდეგ ხელახლა იხსნება, მათი სვეტები იმავე რიგით, სიგანეებითა და ჩანართების ჯგუფებით აღდგეს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="85"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="102"/>
         <source>When a floated window reopens, it returns to the position and size it had before, rather than being placed by the compositor. A rule can override this either way, opting individual windows in or out.</source>
         <translation>როცა მოტივტივე ფანჯარა ხელახლა იხსნება, ის ბრუნდება იმ მდებარეობასა და ზომაზე, რაც ადრე ჰქონდა, და არა კომპოზიტორი განათავსებს მას. წესს შეუძლია ეს ორივე მიმართულებით გადაფაროს და ცალკეული ფანჯრები ჩართოს ან გამორიცხოს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="118"/>
         <source>Keep the windows you float stacked above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.</source>
         <oldsource>Stack windows you float above the columns of the strip. A rule that sets a window layer takes precedence for the windows it matches.</oldsource>
         <translation>ის ფანჯრები, რომლებსაც მოტივტივედ აქცევთ, ზოლის სვეტებზე ზემოთ დარჩეს. წესს, რომელიც ფანჯრის ფენას აყენებს, უპირატესობა აქვს იმ ფანჯრებისთვის, რომლებსაც ის ემთხვევა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="117"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="134"/>
         <source>How to handle windows that are shown on all virtual desktops</source>
         <translation>როგორ დამუშავდეს ფანჯრები, რომლებიც ყველა ვირტუალურ სამუშაო მაგიდაზე ჩანს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="120"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="137"/>
         <source>Sticky window handling</source>
         <translation>წებოვანი ფანჯრების დამუშავება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="134"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="151"/>
         <source>How far the increase and decrease column width shortcuts resize a column per press, as a share of the strip</source>
         <oldsource>How far the increase and decrease column width shortcuts move a column per press, as a share of the strip</oldsource>
         <translation>რამდენად ცვლის სვეტის სიგანის გაზრდისა და შემცირების მალსახმობი სვეტს ერთ დაჭერაზე, ზოლის წილის სახით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="137"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="154"/>
         <source>Column width adjustment step</source>
         <translation>სვეტის სიგანის მორგების ბიჯი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="173"/>
         <source>How far the increase and decrease window height shortcuts resize a window per press, as a share of the work area across the strip</source>
         <oldsource>How far the increase and decrease window height shortcuts resize a window per press, as a share of the screen height</oldsource>
         <translation>რამდენად ცვლის ფანჯრის სიმაღლის გაზრდისა და შემცირების მალსახმობი ფანჯარას ერთ დაჭერაზე, ზოლის განივი სამუშაო არის წილის სახით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="159"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="176"/>
         <source>Window height adjustment step</source>
         <translation>ფანჯრის სიმაღლის მორგების ბიჯი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowHandlingCard.qml.cpp" line="195"/>
         <source>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the work area along the strip</source>
         <oldsource>How far one notch of Meta+Shift+wheel moves the strip without changing focus, as a share of the screen along the strip</oldsource>
         <translation>რამდენად გადააადგილებს Meta+Shift+ბორბლის ერთი ბიჯი ზოლს ფოკუსის შეცვლის გარეშე, ზოლის გასწვრივ სამუშაო არის წილის სახით</translation>
@@ -21565,563 +21586,563 @@
         <translation>მიანიჭეთ გადახვევის ნიმუშებს კლავიატურის მალსახმობები სწრაფი გადართვისთვის.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="30"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingWindowPage.qml.cpp" line="31"/>
         <source>Choose Drop Indicator Color</source>
         <translation>აირჩიეთ დაგდების ინდიკატორის ფერი</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="28"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="31"/>
         <source>Sets which placement engine (snapping, tiling or scrolling) runs on the matched screen, desktop or activity.</source>
         <translation>განსაზღვრავს, რომელი განთავსების ძრავი (მიმაგრება, ფილებად დაწყობა თუ გადახვევა) მუშაობს შესაბამის ეკრანზე, სამუშაო მაგიდაზე ან აქტივობაში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="33"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
         <source>Assigns a snapping layout to the matched screen, desktop or activity.</source>
         <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს მიმაგრების განლაგებას.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="36"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
         <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს ფილების ალგორითმს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="39"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
         <source>Assigns a scrolling column template to the matched screen, desktop or activity.</source>
         <translation>შესაბამის ეკრანს, სამუშაო მაგიდას ან აქტივობას ანიჭებს გადახვევის სვეტების ნიმუშს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="42"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="45"/>
         <source>Turns the named engine off for the matched screen, desktop or activity.</source>
         <translation>გამორთავს დასახელებულ ძრავს შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="45"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="48"/>
         <source>Locks the active layout for the matched context so it cannot be switched.</source>
         <translation>დაბლოკავს აქტიურ განლაგებას შესაბამისი კონტექსტისთვის, ისე რომ მისი გადართვა ვერ მოხერხდეს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="48"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="51"/>
         <source>Allows or suppresses the automatic default layout for the matched context. Off means no engine activates there until you assign one yourself.</source>
         <translation>დაუშვებს ან აღკვეთს ავტომატურ ნაგულისხმევ განლაგებას შესაბამისი კონტექსტისთვის. გამორთული ნიშნავს, რომ იქ არცერთი ძრავი არ ჩაირთვება, სანამ თავად არ მიანიჭებთ.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="53"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="56"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
         <translation>აჩვენებს ან მალავს ეკრანულ შეტყობინებებს შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის. გამორთულის დროს იქ განლაგებისა და ნავიგაციის ამომხტომები ჩუმდება. ჩართულის დროს ისინი მაშინაც ჩანს, როცა გლობალური გადამრთველები გამორთულია, თუმცა ჩვენების სტილი „არცერთი“ მაინც ყველაფერს მალავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="73"/>
         <source>Keeps matching windows out of snapping, tiling and scrolling while their decorations and animations still apply.</source>
         <translation>შესაბამის ფანჯრებს მიმაგრების, ფილებად დაწყობისა და გადახვევის მიღმა ტოვებს, ხოლო მათი მორთულობები და ანიმაციები კვლავ მოქმედებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="75"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="78"/>
         <source>Turns off every PlasmaZones animation for matching windows.</source>
         <translation>გამორთავს PlasmaZones-ის ყველა ანიმაციას შესაბამისი ფანჯრებისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="78"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="81"/>
         <source>Turns off PlasmaZones borders and decoration packs for matching windows. Placement and animations are untouched.</source>
         <translation>გამორთავს PlasmaZones-ის საზღვრებსა და მორთულობის პაკეტებს შესაბამისი ფანჯრებისთვის. განთავსება და ანიმაციები ხელუხლებელი რჩება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="83"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="86"/>
         <source>Opens matching windows floating instead of placing them. A floated window can still be snapped or tiled by hand later.</source>
         <translation>შესაბამის ფანჯრებს მოტივტივედ ხსნის, განთავსების ნაცვლად. მოტივტივე ფანჯრის ხელით მიმაგრება ან დაფილვა მოგვიანებით მაინც შესაძლებელია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="94"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="97"/>
         <source>Moves matching windows to a chosen monitor when they open.</source>
         <translation>შესაბამის ფანჯრებს გახსნისას არჩეულ მონიტორზე გადაიტანს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="97"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
         <source>Moves matching windows to a chosen virtual desktop when they open.</source>
         <translation>შესაბამის ფანჯრებს გახსნისას არჩეულ ვირტუალურ სამუშაო მაგიდაზე გადაიტანს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="106"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="109"/>
         <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
         <translation>განსაზღვრავს, დაბრუნდება თუ არა შესაბამისი ფანჯარა თავის წინა ზონაში ხელახლა გახსნისას, სესიის განმავლობაში ან გამოსვლის შემდეგ. გადაფარავს პარამეტრს „ფანჯრების წინა ზონაში აღდგენა“, ამიტომ ისეთი აპლიკაცია, როგორიც ბრაუზერია, შეიძლება გამოირიცხოს, სანამ ყველა სხვა ფანჯარა კვლავ აღდგება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="115"/>
         <source>Controls whether a matching window gets its original size back when unsnapped, overriding the global setting.</source>
         <translation>განსაზღვრავს, დაიბრუნებს თუ არა შესაბამისი ფანჯარა თავდაპირველ ზომას ზონიდან მოხსნისას, და გლობალურ პარამეტრს გადაფარავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="117"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="120"/>
         <source>When a matching floating window is unfloated without a remembered zone, places it into a zone anyway. Overrides the global fallback setting for this window.</source>
         <translation>როცა შესაბამის მოტივტივე ფანჯარას მოტივტივება ეხსნება დამახსოვრებული ზონის გარეშე, ის მაინც ზონაში თავსდება. გადაფარავს გლობალურ სათადარიგო პარამეტრს ამ ფანჯრისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="122"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="125"/>
         <source>Keeps matching windows above or below other windows, for example floating windows above tiled ones when paired with the Floating condition.</source>
         <translation>შესაბამის ფანჯრებს სხვა ფანჯრებზე ზემოთ ან ქვემოთ ინარჩუნებს, მაგალითად მოტივტივე ფანჯრებს დაფილულებზე ზემოთ, როცა პირობა „მოტივტივე“ ერთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="128"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="131"/>
         <source>Sets how much of the strip a matching window&apos;s column takes on a scrolling screen.</source>
         <translation>განსაზღვრავს, ზოლის რა ნაწილს იკავებს შესაბამისი ფანჯრის სვეტი გადახვევის ეკრანზე.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="131"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="134"/>
         <source>Sets how much of its column a matching window takes when it opens.</source>
         <translation>განსაზღვრავს, თავისი სვეტის რა ნაწილს იკავებს შესაბამისი ფანჯარა გახსნისას.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="134"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="137"/>
         <source>Opens a matching window&apos;s column tabbed, or forces it normal where the default is tabbed.</source>
         <translation>შესაბამისი ფანჯრის სვეტს ჩანართებით ხსნის, ან ჩვეულებრივ ჩვენებას აიძულებს იქ, სადაც ნაგულისხმევად ჩანართებია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="139"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
         <source>Chooses whether a matching window opens its own column or joins the focused one.</source>
         <translation>ირჩევს, ხსნის თუ არა შესაბამისი ფანჯარა საკუთარ სვეტს, თუ ფოკუსირებულს უერთდება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="145"/>
         <source>Opens matching windows maximized, so their column fills the work area along the strip when they first appear.</source>
         <translation>შესაბამის ფანჯრებს მაქსიმალურად ხსნის, ისე რომ მათი სვეტი პირველად გამოჩენისას ზოლის გასწვრივ სამუშაო არეს ავსებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="147"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="150"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
         <translation>შესაბამის ფანჯრებს კლავიატურის ფოკუსს ანიჭებს გახსნისთანავე, ან გამორთულის დროს ფოკუსს იქ ტოვებს, სადაც იყო.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="152"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="155"/>
         <source>Opens matching windows in fullscreen mode. Off stops apps from starting in fullscreen on their own.</source>
         <translation>შესაბამის ფანჯრებს სრულეკრანიან რეჟიმში ხსნის. გამორთული აპლიკაციებს უშლის ხელს, რომ თავად გაეშვან სრულ ეკრანზე.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="163"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="166"/>
         <source>Uses a different animation shader for one event on matching windows. An empty choice turns that event&apos;s shader off for them.</source>
         <translation>შესაბამის ფანჯრებზე ერთი მოვლენისთვის სხვა ანიმაციის შეიდერს იყენებს. ცარიელი არჩევანი ამ მოვლენის შეიდერს მათთვის თიშავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="168"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
         <source>Uses a different animation duration for one event on matching windows.</source>
         <translation>შესაბამის ფანჯრებზე ერთი მოვლენისთვის სხვა ანიმაციის ხანგრძლივობას იყენებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
         <source>Uses a different easing curve for one event on matching windows.</source>
         <translation>შესაბამის ფანჯრებზე ერთი მოვლენისთვის სხვა შერბილების მრუდს იყენებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="177"/>
         <source>Replaces the decoration packs drawn on matching windows. An empty list removes their decorations.</source>
         <translation>ჩაანაცვლებს იმ მორთულობის პაკეტებს, რომლებიც შესაბამის ფანჯრებზე იხატება. ცარიელი სია მათ მორთულობებს შლის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="186"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="189"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
         <translation>შესაბამისი ფანჯრებისთვის ჩართავს ან გამორთავს გაუმჭვირვალობისა და ტონის ფენას. წესებს „გაუმჭვირვალობის დაყენება“ და „ტონის დაყენება“ ეს ფენა სჭირდება, რომ საერთოდ იმოქმედოს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="194"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
         <translation>განსაზღვრავს, რამდენად ძლიერად აფერადებს ტონირება შესაბამის ფანჯრებს. მოქმედებს მხოლოდ მაშინ, როცა ფანჯრისთვის გაუმჭვირვალობისა და ტონირების ფენა ჩართულია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="196"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="199"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
         <translation>განსაზღვრავს ტონირების ფერს შესაბამისი ფანჯრებისთვის. მოქმედებს მხოლოდ მაშინ, როცა ფანჯრისთვის გაუმჭვირვალობისა და ტონირების ფენა ჩართულია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="202"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="205"/>
         <source>Hides the title bar on matching windows, or forces it visible where a mode would hide it.</source>
         <translation>მალავს შესაბამისი ფანჯრების სათაურის ზოლს, ან აიძულებს მის ჩვენებას იქ, სადაც რეჟიმი მას დამალავდა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="207"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="210"/>
         <source>Shows or hides the PlasmaZones border on matching windows.</source>
         <translation>აჩვენებს ან მალავს PlasmaZones-ის საზღვარს შესაბამის ფანჯრებზე.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="210"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="213"/>
         <source>Sets the border thickness on matching windows.</source>
         <translation>განსაზღვრავს საზღვრის სისქეს შესაბამის ფანჯრებზე.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="213"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="216"/>
         <source>Sets the border corner radius on matching windows.</source>
         <translation>განსაზღვრავს საზღვრის კუთხის რადიუსს შესაბამის ფანჯრებზე.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="216"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
         <source>Sets the border color for matching windows while they are focused.</source>
         <translation>განსაზღვრავს საზღვრის ფერს შესაბამისი ფანჯრებისთვის, სანამ ისინი ფოკუსირებულია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="222"/>
         <source>Sets the border color for matching windows while they are not focused.</source>
         <translation>განსაზღვრავს საზღვრის ფერს შესაბამისი ფანჯრებისთვის, სანამ ისინი ფოკუსირებული არაა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
         <translation>შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის სხვა ზონების გადადების შეიდერს იყენებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="229"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
         <translation>შესაბამისი კონტექსტისთვის ზონების გადადებას ზონების მართკუთხედებსა და განლაგების გადახედვას შორის გადართავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების გამოკვეთილი ზონის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების არააქტიური ზონის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების ზონის საზღვრის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="240"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების გამოკვეთილი ზონის გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="243"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების არააქტიური ზონის გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="246"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების ზონის საზღვრის სისქეს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="249"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
         <translation>განსაზღვრავს გადადების ზონების კუთხის რადიუსს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="252"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="255"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
         <translation>აჩვენებს ან მალავს ზონების ნომრებს გადადებაზე შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="256"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
         <translation>განსაზღვრავს შუალედს ზონებს შორის შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="259"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
         <translation>განსაზღვრავს ერთგვაროვან შუალედს ეკრანის კიდის გარშემო შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="262"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
         <translation>შესაბამის კონტექსტს გადართავს ერთგვაროვან გარე შუალედსა და თითოეული მხრის ცალკეულ შუალედებს შორის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="265"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
         <source>Sets the top outer gap for the matched context.</source>
         <translation>განსაზღვრავს ზედა გარე შუალედს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="268"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
         <source>Sets the bottom outer gap for the matched context.</source>
         <translation>განსაზღვრავს ქვედა გარე შუალედს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="271"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
         <source>Sets the left outer gap for the matched context.</source>
         <translation>განსაზღვრავს მარცხენა გარე შუალედს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="274"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="277"/>
         <source>Sets the right outer gap for the matched context.</source>
         <translation>განსაზღვრავს მარჯვენა გარე შუალედს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="278"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
         <translation>ზღუდავს, რამდენ ფანჯარას ალაგებს ფილების ალგორითმი შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="281"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
         <source>Sets the master area split ratio for the matched context.</source>
         <translation>განსაზღვრავს მთავარი არის გაყოფის თანაფარდობას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
         <source>Sets how many windows the master area holds for the matched context.</source>
         <translation>განსაზღვრავს, რამდენ ფანჯარას იტევს მთავარი არე შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
         <translation>ირჩევს, სად შედის ახლად გახსნილი ფანჯრები ფილების დაწყობაში შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="309"/>
         <source>Sets how much of the strip newly opened columns take on the matched scrolling context.</source>
         <translation>განსაზღვრავს, ზოლის რა ნაწილს იკავებს ახლად გახსნილი სვეტები შესაბამის გადახვევის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="315"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="318"/>
         <source>Chooses whether new columns show their windows divided across the strip or tabbed on the matched context.</source>
         <translation>ირჩევს, აჩვენებენ თუ არა ახალი სვეტები თავიანთ ფანჯრებს ზოლის განივად გაყოფილს თუ ჩანართებით, შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="326"/>
         <source>Sets how much of their column newly opened windows take for the matched context.</source>
         <translation>განსაზღვრავს, თავიანთი სვეტის რა ნაწილს იკავებს ახლად გახსნილი ფანჯრები შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="334"/>
         <source>Keeps columns on the matched context at least as large as each window asks to be. Off lets a column go smaller, which the compositor then clamps on its own.</source>
         <translation>შესაბამის კონტექსტში სვეტებს სულ მცირე იმ ზომაზე ინარჩუნებს, რასაც თითოეული ფანჯარა ითხოვს. გამორთულის დროს სვეტს შეუძლია უფრო პატარა გახდეს, რასაც შემდეგ კომპოზიტორი თავად ზღუდავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="357"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="360"/>
         <source>Caps how far the strip may scroll on the matched context when the pointer moves onto a column that is partly off screen. Past the cap the pointer is ignored and focus stays put. At 100% nothing is ignored.</source>
         <translation>ზღუდავს შესაბამის კონტექსტში, რამდენად შორს შეუძლია ზოლს გადახვევა, როცა კურსორი ნაწილობრივ ეკრანის გარეთ მყოფ სვეტზე გადადის. ლიმიტს მიღმა კურსორი იგნორირდება და ფოკუსი ადგილზე რჩება. 100%-ზე არაფერი იგნორირდება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="66"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="69"/>
         <source>Keeps matching windows out of PlasmaZones entirely, so they get no placement and no decorations.</source>
         <translation>შესაბამის ფანჯრებს სრულიად PlasmaZones-ის მიღმა ტოვებს, ისე რომ ისინი არც განთავსდება და არც მოირთვება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="62"/>
         <source>Shows or hides the drag selector popup for the matched screen, desktop or activity. Off means dragging a window near the trigger edge offers no picker there. On offers it even when the global selector toggle for that screen is off.</source>
         <translation>აჩვენებს ან მალავს გადათრევის ამრჩევის ამომხტომს შესაბამისი ეკრანისთვის, სამუშაო მაგიდისთვის ან აქტივობისთვის. გამორთულის დროს ფანჯრის გამშვებ კიდესთან გადათრევა იქ ამრჩევს არ შემოგთავაზებთ. ჩართულის დროს ის ჩნდება მაშინაც, როცა ამ ეკრანის გლობალური ამრჩევის გადამრთველი გამორთულია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="91"/>
         <source>Snaps matching windows into the given zones when they open. Zones can be picked by number or by name, and a name finds that zone in whichever layout is active. Several zones span their combined area.</source>
         <translation>შესაბამის ფანჯრებს გახსნისას მითითებულ ზონებზე მიამაგრებს. ზონები შეიძლება აირჩეს ნომრით ან სახელით, ხოლო სახელი ამ ზონას პოულობს იმ განლაგებაში, რომელიც აქტიურია. რამდენიმე ზონა მათ საერთო ფართობს მოიცავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="103"/>
         <source>Controls whether a matching floated window returns to its remembered position and monitor when it reopens, during the session or after a logout. Overrides the restore-previous-position setting of whichever engine owns the screen.</source>
         <translation>განსაზღვრავს, ბრუნდება თუ არა შესაბამისი მოტივტივე ფანჯარა თავის დამახსოვრებულ მდებარეობასა და მონიტორზე ხელახლა გახსნისას, სესიის განმავლობაში ან გამოსვლის შემდეგ. გადაფარავს იმ ძრავის წინა მდებარეობის აღდგენის პარამეტრს, რომელსაც ეკრანი ეკუთვნის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="157"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="160"/>
         <source>Scales mouse wheel and touchpad scrolling speed inside matching windows. Below 100% slows it down and above 100% speeds it up.</source>
         <translation>აწესრიგებს თაგვის ბორბლისა და სენსორული პანელის გადახვევის სიჩქარეს შესაბამის ფანჯრებში. 100%-ზე ნაკლები უფრო ნელია, მეტი უფრო სწრაფი.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="179"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="182"/>
         <source>Dims matching windows to the given opacity. It takes effect only while the opacity and tint layer is on for the window, either from the global setting or from a Show opacity and tint rule. A window with its own decoration chain dims through that chain&apos;s pack parameters instead.</source>
         <translation>შესაბამის ფანჯრებს მითითებულ გაუმჭვირვალობამდე აბნელებს. ეს მოქმედებს მხოლოდ მაშინ, როცა ფანჯრისთვის გაუმჭვირვალობისა და ტონის ფენა ჩართულია, გლობალური პარამეტრიდან ან წესიდან „გაუმჭვირვალობისა და ტონის ჩვენება“. ფანჯარა, რომელსაც საკუთარი მორთულობის ჯაჭვი აქვს, ნაცვლად ამისა ამ ჯაჭვის პაკეტის პარამეტრებით ბნელდება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="290"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="293"/>
         <source>Chooses what happens to windows past the cap for the matched context. They can float, or the cap can be ignored.</source>
         <translation>ირჩევს, რა ემართება ზღვარს გადაცილებულ ფანჯრებს შესაბამის კონტექსტში. ისინი შეიძლება მოტივტივე გახდნენ, ან ზღვარი იგნორირდეს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="298"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
         <translation>ირჩევს, დაფილული ფანჯრის გადათრევა მას ფილებიდან გამოყოფს თუ დაწყობის შიგნით გაცვლის, შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="300"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="303"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
         <translation>გადაფარავს ფილების ალგორითმის საკუთარ პარამეტრებს შესაბამისი კონტექსტისთვის. მოქმედებს მხოლოდ მაშინ, როცა ეს ალგორითმი იქ აქტიურია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="310"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="313"/>
         <source>Chooses when the scrolling view re-centers on the focused column for the matched context.</source>
         <translation>ირჩევს, როდის ცენტრირდება გადახვევის ხედი ხელახლა ფოკუსირებულ სვეტზე შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="320"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
         <source>Chooses where a new window&apos;s column enters the strip for the matched context.</source>
         <translation>ირჩევს, სად შედის ახალი ფანჯრის სვეტი ზოლში შესაბამის კონტექსტში.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="326"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="329"/>
         <source>Centers a column on the matched context whenever it is the only one on the strip, whatever the centering policy says.</source>
         <translation>შესაბამის კონტექსტში სვეტს ცენტრში ათავსებს, როცა ის ზოლზე ერთადერთია, მიუხედავად იმისა, რას ამბობს ცენტრირების პოლიტიკა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="336"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="339"/>
         <source>Clips a column that hangs over the screen edge on the matched context so only the on-screen part is drawn. The column keeps its real size, so scrolling is unchanged.</source>
         <translation>შესაბამის კონტექსტში ჭრის სვეტს, რომელიც ეკრანის კიდეს სცილდება, ისე რომ მხოლოდ ხილული ნაწილი იხატება. სვეტი თავის რეალურ ზომას ინარჩუნებს, ამიტომ გადახვევა უცვლელი რჩება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="341"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="344"/>
         <source>Gives windows opening on the matched context keyboard focus. A per-window Focus when opened rule still wins over this.</source>
         <translation>შესაბამის კონტექსტში გახსნილ ფანჯრებს კლავიატურის ფოკუსს ანიჭებს. ფანჯრის ცალკეული წესი „ფოკუსირება გახსნისას“ ამას მაინც სჯობნის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
-        <source>Drops the outer gaps on the matched context while a single column is on the strip, so a lone window fills the screen.</source>
-        <translation>შესაბამის კონტექსტში გარე შუალედებს ხსნის, სანამ ზოლზე მხოლოდ ერთი სვეტია, ისე რომ მარტოხელა ფანჯარა ეკრანს ავსებს.</translation>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="349"/>
+        <source>Removes the outer gaps on the matched context while a single column is on the strip. The column keeps its own width, so it sits against one screen edge instead of growing to fill the screen.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="351"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="354"/>
         <source>Focuses whichever column the pointer moves over on the matched context, without a click. Covers scrolling screens only, so snapping and tiling screens keep following the global setting.</source>
         <translation>შესაბამის კონტექსტში ფოკუსირებას ახდენს იმ სვეტზე, რომელზეც კურსორი გადადის, დაწკაპუნების გარეშე. ეხება მხოლოდ გადახვევის ეკრანებს, ამიტომ მიმაგრებისა და ფილებად დაწყობის ეკრანები კვლავ გლობალურ პარამეტრს მიჰყვება.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="363"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="366"/>
         <source>Chooses how the matched context treats windows shown on all desktops. Anything other than treating them as normal keeps them floating instead of in a column.</source>
         <translation>ირჩევს, როგორ ეპყრობა შესაბამისი კონტექსტი ფანჯრებს, რომლებიც ყველა სამუშაო მაგიდაზე ჩანს. ჩვეულებრივ ფანჯრებად მოპყრობის გარდა ყველა ვარიანტი მათ სვეტში კი არა, მოტივტივედ ტოვებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="368"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="371"/>
         <source>Chooses which way the matched context&apos;s strip runs, overriding the Strip direction setting and any per-monitor choice. Match the screen shape resolves from the usable area, so the rule can hand a pinned monitor back to that option for one desktop or activity.</source>
         <comment>&apos;Match the screen shape&apos; must stay identical to the option label shown in the picker</comment>
         <translation>ირჩევს, რომელი მიმართულებით მიდის შესაბამისი კონტექსტის ზოლი, და გადაფარავს ზოლის მიმართულების პარამეტრსა და თითოეული მონიტორის არჩევანს. „ეკრანის ფორმის მიხედვით“ გამოთვლილია გამოსაყენებელი ფართობიდან, ამიტომ წესს შეუძლია მიმაგრებული მონიტორი ერთი სამუშაო მაგიდისთვის ან აქტივობისთვის ისევ ამ ვარიანტს დაუბრუნოს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="377"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="380"/>
         <source>Shows or hides the tab indicator on tabbed columns for the matched context.</source>
         <translation>აჩვენებს ან მალავს ჩანართის ინდიკატორს ჩანართებიან სვეტებზე შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="380"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="383"/>
         <source>Switches the tab indicator between a segment bar and titled chips for the matched context.</source>
         <translation>შესაბამისი კონტექსტისთვის ჩანართის ინდიკატორს სეგმენტების ზოლსა და დასათაურებულ ჩიპებს შორის გადართავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="385"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="388"/>
         <source>Chooses which column edge the tab indicator runs along for the matched context.</source>
         <translation>ირჩევს, სვეტის რომელი კიდის გასწვრივ გადის ჩანართის ინდიკატორი შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="388"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="391"/>
         <source>Hides the tab indicator when a tabbed column holds only one window, for the matched context.</source>
         <translation>მალავს ჩანართის ინდიკატორს, როცა ჩანართებიან სვეტში მხოლოდ ერთი ფანჯარაა, შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="393"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="396"/>
         <source>Reserves the tab indicator&apos;s space inside the column instead of drawing beside it, for the matched context.</source>
         <translation>შესაბამისი კონტექსტისთვის ჩანართის ინდიკატორის ადგილს სვეტის შიგნით იტოვებს, გვერდით ხატვის ნაცვლად.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="398"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="401"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
         <translation>განსაზღვრავს შუალედს ჩანართის ინდიკატორსა და ფანჯარას შორის შესაბამისი კონტექსტისთვის. უარყოფითი შუალედი მას ფანჯარაზე ხატავს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="403"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
         <source>Sets the tab indicator&apos;s thickness for the matched context.</source>
         <translation>განსაზღვრავს ჩანართის ინდიკატორის სისქეს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="406"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="409"/>
         <source>Sets how much of the column edge the tab indicator spans for the matched context.</source>
         <translation>განსაზღვრავს, სვეტის კიდის რა ნაწილს იკავებს ჩანართის ინდიკატორი შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="409"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="412"/>
         <source>Sets the gap between individual tabs for the matched context.</source>
         <translation>განსაზღვრავს შუალედს ცალკეულ ჩანართებს შორის შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="412"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="415"/>
         <source>Sets the corner radius of each tab for the matched context.</source>
         <translation>განსაზღვრავს თითოეული ჩანართის კუთხის რადიუსს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="415"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="418"/>
         <source>Sets the active tab color for the matched context.</source>
         <translation>განსაზღვრავს აქტიური ჩანართის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="418"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="421"/>
         <source>Sets the inactive tab color for the matched context.</source>
         <translation>განსაზღვრავს არააქტიური ჩანართების ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="421"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="424"/>
         <source>Sets the color of a tab whose window asks for attention, for the matched context.</source>
         <translation>განსაზღვრავს იმ ჩანართის ფერს, რომლის ფანჯარაც ყურადღებას ითხოვს, შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="424"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="427"/>
         <source>Sets the font the tab labels are drawn in for the matched context. Leave it empty to use the system font. A segment bar draws no labels, so it ignores this.</source>
         <translation>განსაზღვრავს შრიფტს, რომლითაც ჩანართის წარწერები იხატება შესაბამისი კონტექსტისთვის. დატოვეთ ცარიელი სისტემური შრიფტის გამოსაყენებლად. სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="429"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="432"/>
         <source>Sets how heavy the tab label text is for the matched context, from 100 for the thinnest weight up to 900 for the boldest. A segment bar draws no labels, so it ignores this.</source>
         <translation>განსაზღვრავს, რამდენად მსხვილია ჩანართის წარწერების ტექსტი შესაბამისი კონტექსტისთვის, 100-იდან (ყველაზე თხელი) 900-მდე (ყველაზე მსხვილი). სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="435"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="438"/>
         <source>Draws the tab labels in italic for the matched context. A segment bar draws no labels, so it ignores this.</source>
         <translation>შესაბამისი კონტექსტისთვის ჩანართის წარწერებს კურსივით ხატავს. სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="440"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="443"/>
         <source>Underlines the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
         <translation>შესაბამისი კონტექსტისთვის ჩანართის წარწერებს ხაზს უსვამს. სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="445"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="448"/>
         <source>Draws a line through the tab labels for the matched context. A segment bar draws no labels, so it ignores this.</source>
         <translation>შესაბამისი კონტექსტისთვის ჩანართის წარწერებს ხაზს უსვამს გადამკვეთად. სეგმენტების ზოლი წარწერებს არ ხატავს, ამიტომ ამას იგნორირებს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="450"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="453"/>
         <source>Recolors a matching window&apos;s own tab while it is the active one.</source>
         <translation>შესაბამისი ფანჯრის საკუთარ ჩანართს გადაუფერადებს, სანამ ის აქტიურია.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="453"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="456"/>
         <source>Recolors a matching window&apos;s own tab while another tab is active.</source>
         <translation>შესაბამისი ფანჯრის საკუთარ ჩანართს გადაუფერადებს, სანამ სხვა ჩანართია აქტიური.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="456"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="459"/>
         <source>Recolors a matching window&apos;s own tab while it asks for attention.</source>
         <translation>შესაბამისი ფანჯრის საკუთარ ჩანართს გადაუფერადებს, სანამ ის ყურადღებას ითხოვს.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="460"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="463"/>
         <source>Shows or hides the drop indicator during drag re-inserts for the matched context.</source>
         <translation>აჩვენებს ან მალავს დაგდების ინდიკატორს გადათრევით ხელახლა ჩასმისას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="463"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="466"/>
         <source>Sets the drop indicator&apos;s fill color for the matched context.</source>
         <translation>განსაზღვრავს დაგდების ინდიკატორის შევსების ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="466"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="469"/>
         <source>Sets the drop indicator&apos;s border color for the matched context.</source>
         <translation>განსაზღვრავს დაგდების ინდიკატორის საზღვრის ფერს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="469"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="472"/>
         <source>Sets the drop indicator&apos;s fill opacity for the matched context.</source>
         <translation>განსაზღვრავს დაგდების ინდიკატორის შევსების გაუმჭვირვალობას შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="472"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="475"/>
         <source>Sets the drop indicator&apos;s border thickness for the matched context.</source>
         <translation>განსაზღვრავს დაგდების ინდიკატორის საზღვრის სისქეს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="475"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="478"/>
         <source>Sets the drop indicator&apos;s corner radius for the matched context.</source>
         <translation>განსაზღვრავს დაგდების ინდიკატორის კუთხის რადიუსს შესაბამისი კონტექსტისთვის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="478"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="481"/>
         <source>Recolors the drop indicator&apos;s fill while a matching window is being dragged.</source>
         <translation>გადაუფერადებს დაგდების ინდიკატორის შევსებას, სანამ შესაბამის ფანჯარას გადაათრევენ.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="481"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="484"/>
         <source>Recolors the drop indicator&apos;s border while a matching window is being dragged.</source>
         <translation>გადაუფერადებს დაგდების ინდიკატორის საზღვარს, სანამ შესაბამის ფანჯარას გადაათრევენ.</translation>
     </message>
@@ -22223,7 +22244,7 @@
         <translation>გადახვევის ეკრანზე ფანჯრის გადათრევისას მიიტანეთ იგი მითითებულ ეკრანის კიდესთან, რათა გაიხსნას ამომხტომი მიმდინარე ზოლით. ჩამოაგდეთ ორ სვეტს შორის ახალი სვეტის ჩასასმელად, ჩანართებიან სვეტზე ფანჯრის ჩანართად დასამატებლად, ან სვეტის ზედა თუ ქვედა ნახევარზე იქ დასაწყობად.</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="1033"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="1043"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
         <translation>ზოლის ამრჩევის ამომხტომი</translation>
@@ -22583,8 +22604,8 @@
         <translation>ნიმუშების რიგის ნაგულისხმევზე დაბრუნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
-        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="120"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="893"/>
+        <location filename="../src/settings/search/searchcatalog_simple.cpp" line="124"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="25"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingStripDirectionCard.qml.cpp" line="53"/>
         <source>Strip direction</source>

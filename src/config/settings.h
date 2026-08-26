@@ -403,6 +403,8 @@ public:
         int scrollingStripAxis READ scrollingStripAxis WRITE setScrollingStripAxis NOTIFY scrollingStripAxisChanged)
     Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
                    setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
+    Q_PROPERTY(
+        bool scrollingSmartGaps READ scrollingSmartGaps WRITE setScrollingSmartGaps NOTIFY scrollingSmartGapsChanged)
     Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
                    scrollingCropStraddlersChanged)
     Q_PROPERTY(bool scrollingDragScrollEnabled READ scrollingDragScrollEnabled WRITE setScrollingDragScrollEnabled
@@ -1370,6 +1372,8 @@ public:
     void setScrollingStripAxis(int value);
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);
+    bool scrollingSmartGaps() const override;
+    void setScrollingSmartGaps(bool enabled);
     bool scrollingCropStraddlers() const override;
     void setScrollingCropStraddlers(bool crop);
     bool scrollingDragScrollEnabled() const override;
@@ -1508,12 +1512,12 @@ public:
     {
         return outerGapRight();
     }
-    // Smart gaps stays a forward: the gaps model is shared, so the tiling
-    // toggle governs both engines (IScrollSettings documents this).
-    bool scrollingSmartGaps() const override
-    {
-        return autotileSmartGaps();
-    }
+    // Smart gaps is NOT a forward. The gap VALUES are shared (mode-neutral
+    // Gaps group, forwarded above), but smart gaps is a per-mode behaviour
+    // living under each mode's own group — it used to read the tiling value
+    // for want of a scrolling home, which leaked a tiling behaviour into
+    // scrolling and defaulted it on there. Declared out-of-line with the
+    // other store-backed scrolling scalars.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Scrolling Behavior Settings (Scrolling.Behavior group)

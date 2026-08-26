@@ -131,6 +131,9 @@ P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCente
 P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey,
                  scrollingAlwaysCenterSingleColumnChanged)
 
+P_STORE_GET(bool, scrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, bool)
+P_STORE_SET_BOOL(setScrollingSmartGaps, scrollingBehaviorGroup, smartGapsKey, scrollingSmartGapsChanged)
+
 P_STORE_GET(bool, scrollingCropStraddlers, scrollingGroup, cropStraddlersKey, bool)
 P_STORE_SET_BOOL(setScrollingCropStraddlers, scrollingGroup, cropStraddlersKey, scrollingCropStraddlersChanged)
 
@@ -667,9 +670,15 @@ void Settings::setScrollingZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setScrollingZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
-        setScrollingZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
+    // Refused loudly rather than dropped. This facade exists for QML, which
+    // binds an index and then believes it wrote; a silent no-op leaves the
+    // property reporting its old value with nothing to explain the mismatch.
+    // Every sibling path either clamps or returns false to its caller.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorPosition::BottomRight)) {
+        qCWarning(lcConfig) << "scrolling: zone selector position" << value << "is out of range, ignoring";
+        return;
     }
+    setScrollingZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
 }
 
 ZoneSelectorSizeMode Settings::scrollingZoneSelectorSizeMode() const
@@ -695,9 +704,12 @@ void Settings::setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode value)
 }
 void Settings::setScrollingZoneSelectorSizeModeInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
-        setScrollingZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
+    // Refused loudly, matching the position facade above.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+        qCWarning(lcConfig) << "scrolling: zone selector size mode" << value << "is out of range, ignoring";
+        return;
     }
+    setScrollingZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
 }
 
 // ── Scrolling shortcuts ─────────────────────────────────────────────────────

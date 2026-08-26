@@ -656,6 +656,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_windowedFsLayerSnapshots.remove(cachedId);
             m_lastReportedMinSize.remove(cachedId);
             m_scrollCommandedRects.remove(cachedId);
+            m_scrollOfferedColumn.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         // Wired-window guard. The connections themselves die with the window, so

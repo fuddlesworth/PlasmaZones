@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 1800 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 2000 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
@@ -101,6 +101,12 @@ private Q_SLOTS:
     void applyPathEmitsOnChangeOnly();
     void orderedOpenFollowsAndConsumesSeed();
     void partiallyConsumedSeedGuardsReopens();
+    void modeTransitionFocusSeedAnchorsArrival();
+    void modeTransitionFocusSeedIsDrainedByItsBurst();
+    void modeTransitionFocusSeedDropsWhenScreenLeaves();
+    void modeTransitionFocusSeedDropsOnMidBurstContextSwitch();
+    void modeTransitionFocusSeedSurvivesAStraddlingBurst();
+    void perOutputDesktopSurvivesScrollingSetLeave();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
@@ -1673,6 +1679,201 @@ void TestScrollEngineSmoke::partiallyConsumedSeedGuardsReopens()
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b")}));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedAnchorsArrival()
+{
+    // A mode flip seeds POSITION and FOCUS together. Position alone left the
+    // strip pointed at whichever column the seed adopted first — insertWindowAt
+    // takes no focus — so the window the user was actually on could not pull
+    // the view onto itself, and a window opened just before the flip landed
+    // parked off-screen.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"),
+                                  {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")});
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|c"));
+
+    // The re-announce arrives as a burst, which is what defers the apply (and
+    // the focus restore with it) to the end.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    // Still on the first arrival until the burst closes: the restore is a
+    // burst-end step precisely because the seeded window is usually not last.
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|a"));
+    engine->endArrivalBurst();
+
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
+    // Position is untouched by the focus restore.
+    QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
+             (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedIsDrainedByItsBurst()
+{
+    // Named for what it actually pins: consumption by the burst that FOLLOWS
+    // the seed. That is the path that always worked. The two tests below cover
+    // the paths where the seed is never consumed at all, which is where it used
+    // to survive and re-anchor an unrelated later transition.
+    //
+    // A later burst on the same screen must leave focus where the user's own
+    // arrivals put it, or every subsequent flip would rewind the view to a
+    // transition the user has long since moved past.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setInitialWindowOrder(QStringLiteral("S1"), {QStringLiteral("app|a"), QStringLiteral("app|b")});
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|b"));
+
+    // Second burst, no fresh seed: the arrival keeps the focus it took.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedDropsWhenScreenLeaves()
+{
+    // The seed is scoped to the transition that captured it. Its only consumer
+    // is the arrival burst, so a screen seeded for a flip whose re-announce
+    // never produces one — an empty desktop, or arrivals filtered out — reaches
+    // no drain at all. Without a drop at the lifecycle edge the entry survives
+    // the screen leaving scrolling entirely, and the NEXT unrelated burst on
+    // that screen anchors the view on a window from a flip the user has long
+    // since moved past.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    // Seeded with a window that WILL be in the strip later. Naming an absent
+    // window would not discriminate: the burst-end restore drops a seed whose
+    // window the strip does not contain, so the defect would hide behind that
+    // guard rather than being caught.
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
+
+    // No burst: nothing consumes the seed. The screen then leaves scrolling.
+    engine->setActiveScreens({QStringLiteral("S2")});
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+
+    // A fresh, unrelated burst with no seed of its own. These arrivals take
+    // focus the ordinary way, so the LAST one owns it — there is no order seed
+    // here, which is what would otherwise route them through the no-focus
+    // insert. A surviving seed would override that at burst end and pull focus
+    // back to app|a, so the two outcomes are distinguishable.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|b"));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedDropsOnMidBurstContextSwitch()
+{
+    // A context switch landing mid-burst makes the deferred apply's strip no
+    // longer the one on screen, so the burst-end pass skips that key. The seed
+    // has to die there anyway: the transition it belongs to is over the moment
+    // the context moves, and nothing downstream of the skip revisits the entry
+    // — the switch-back retile does not consume seeds. Left armed, it waits for
+    // whatever burst comes next.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // The context moves out from under the burst before it closes.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->endArrivalBurst();
+
+    // Back on the original desktop, with its strip intact. A second burst
+    // there must anchor on its own arrival: the skipped seed is gone, not
+    // waiting.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedSurvivesAStraddlingBurst()
+{
+    // The seed is keyed by bare screen id; the burst's deferred applies are
+    // keyed by the whole context. One screen can therefore appear TWICE in a
+    // burst that straddles a context switch — once under the desktop the
+    // arrivals started on, once under the one they finished on. Only the
+    // matching key consumes the seed; the other takes the skip arm.
+    //
+    // The skip arm must not drop the seed out from under the key that is about
+    // to use it. Keys are walked in sorted order, so the stale one runs FIRST
+    // whenever its desktop sorts lower, which is exactly this arrangement.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+
+    engine->beginArrivalBurst();
+    // Arrival on desktop 1 — inserts a pending key under desktop 1.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    // The context moves, and the seed belongs to the desktop the burst ENDS on.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+    // Two more arrivals on desktop 2 — a second pending key for the same screen.
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+
+    // app|c arrived last and would own focus on its own; the seed names app|b,
+    // so a consumed seed is distinguishable from a dropped one.
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|b"));
+}
+
+void TestScrollEngineSmoke::perOutputDesktopSurvivesScrollingSetLeave()
+{
+    // A screen leaving the scrolling set releases this engine's OWNERSHIP of it
+    // but must keep its per-output desktop: that value is compositor truth the
+    // engine cannot re-derive, and the global desktop it would otherwise fall
+    // back to is written once at startup and never again under per-output
+    // desktops. Dropping it merged every output onto one desktop on re-entry.
+    //
+    // The per-output value differs from the global ON PURPOSE. With the two
+    // equal — which is what every other test in this file leaves them as — the
+    // fallback resolves to the same key and no assertion here can tell a
+    // preserved entry from a dropped one.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktop(1);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 3);
+
+    // A strip with a stacked column, so the structure that comes back is
+    // distinguishable from a default one-window-per-column rebuild.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
+
+    // Leave and re-enter WITHOUT re-pushing the per-output desktop. A real
+    // context switch re-pushes, which is why the existing round-trip tests pass
+    // either way; a plain engine-set flip does not.
+    engine->setActiveScreens({});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    // Leaving releases the windows, so the flip back re-announces them — which
+    // is what a real mode toggle does, and what lets the stash apply.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+
+    // The stash is keyed by context. With the per-output entry preserved the
+    // re-entry resolves the same key and the stacked column returns; had it
+    // been dropped, the key would fall back to the global desktop 1, the stash
+    // would not be found, and app|b would come back in its own column.
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
 }
 
 void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()

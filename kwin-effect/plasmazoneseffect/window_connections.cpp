@@ -6,6 +6,7 @@
 #include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/RetargetPolicy.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -15,6 +16,7 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 
 #include "tilinghandler/tilinghandler.h"
@@ -861,6 +863,112 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
                 if (!safeW) {
                     return;
+                }
+                // Body -1 — retarget a strip animation onto the rect the
+                // client actually committed.
+                //
+                // Only fires for a client that did not take the geometry it
+                // was handed. A programmatic moveResize commits synchronously,
+                // so for an ordinary window frameGeometry() already equals the
+                // animation's target by the time any leg is running and the
+                // isAnimatingToTarget test short-circuits. A client with a
+                // size constraint it enforces itself — an aspect ratio, a
+                // minimum bigger than its column — negotiates asynchronously
+                // and lands somewhere else, usually centred within the rect it
+                // was offered. The leg then drove toward the COLUMN rect while
+                // the commit sat centred inside it, so the window slid to its
+                // column's edge and snapped back on every step scroll.
+                //
+                // Measured, not predicted: constrainTileGeometry can pre-empt
+                // this for X11 (it applies the same constraint KWin will) but
+                // is a pass-through for Wayland, where the negotiated size is
+                // not knowable up front. Retargeting when the commit arrives
+                // needs no prediction and covers both.
+                //
+                // Scoped to strip members: this is the only path that
+                // relocates a window away from its committed rect, so it is
+                // the only one where a divergent commit desynchronises the
+                // leg from where the window will actually be.
+                if (m_windowAnimator->hasAnimation(safeW.data()) && scrollManagedOutputFor(safeW.data())) {
+                    const QRectF committed = safeW->frameGeometry();
+                    if (!committed.isEmpty() && !m_windowAnimator->isAnimatingToTarget(safeW.data(), committed)) {
+                        // PreservePosition: the leg keeps the pixels it is
+                        // already showing and bends toward the true rect.
+                        // Velocity carried across would re-scale to a
+                        // correction that is a few hundred pixels at most and
+                        // overshoot it.
+                        //
+                        // Result deliberately discarded, unlike the drag-snap
+                        // caller which starts a replacement leg on a
+                        // DegenerateReap. A reap here means the retarget landed
+                        // on the rect the window already occupies — the leg has
+                        // converged, which is the outcome this correction wants,
+                        // and reaping it runs the completion handler that ends
+                        // the leg cleanly. There is nothing to replace it with.
+                        static_cast<void>(m_windowAnimator->retargetWithResult(
+                            safeW.data(), committed, PhosphorAnimation::RetargetPolicy::PreservePosition));
+                    }
+                }
+                // Body -0.5 — centre a client that answered its column with
+                // a different size.
+                //
+                // The strip offers the full column rect the first time it
+                // sees a column SIZE, because until the client has answered
+                // there is nothing else to offer. A client that will not take
+                // that size commits its own at the column's top-left, so a
+                // freshly inserted window — or one that just went full width —
+                // hugs the top (or the left) until the next batch, which is
+                // the first placement able to offer the settled size centred.
+                //
+                // Correct it here instead of waiting: the commit that just
+                // arrived IS the answer, so the centred position is known now.
+                // Measured rather than predicted, like every other placement
+                // decision on this path — the alternative would be modelling
+                // the client's own size rule, which is not knowable up front.
+                //
+                // A pure move(), so it cannot renegotiate the size it just
+                // settled on and cannot be re-anchored by a queued configure.
+                // Converges in one step: the guard compares against the
+                // position it is about to install, so the synchronous
+                // frameGeometryChanged this emits re-enters and does nothing.
+                if (!m_daemonGate.inGeometryApply && !m_scrollOfferedColumn.isEmpty()
+                    && scrollManagedOutputFor(safeW.data())) {
+                    const QString scrollId = getWindowId(safeW.data());
+                    const auto colIt = m_scrollOfferedColumn.constFind(scrollId);
+                    if (colIt != m_scrollOfferedColumn.constEnd()) {
+                        const QRect live = safeW->frameGeometry().toRect();
+                        if (live.size() != colIt->size() && !live.size().isEmpty()) {
+                            // Same centring as the strip apply and the paint
+                            // resolver: the same toRect() rounding, and the
+                            // same clamp at zero, so a frame whose minimum
+                            // exceeds its column stays anchored at the column's
+                            // origin rather than shifting past its edge.
+                            //
+                            // isEmpty rather than isValid: QSize::isValid()
+                            // admits 0x0, which would centre a degenerate
+                            // mid-unmap commit by the whole column.
+                            const QPoint centred(colIt->x() + qMax(0, colIt->width() - live.width()) / 2,
+                                                 colIt->y() + qMax(0, colIt->height() - live.height()) / 2);
+                            if (live.topLeft() != centred && safeW->window()) {
+                                // Bracketed like every other geometry commit
+                                // in the tree. The move emits a synchronous
+                                // frameGeometryChanged, which re-enters this
+                                // signal's whole connection list from the top
+                                // — including the virtual-screen crossing
+                                // detector and the autotile reactive centring
+                                // pass, both connected ahead of this lambda.
+                                // Without the gate they treat a move the effect
+                                // itself made as a user-driven one.
+                                // Save/restore, not set/clear (nesting-safe).
+                                const bool prevInApply = m_daemonGate.inGeometryApply;
+                                m_daemonGate.inGeometryApply = true;
+                                const auto restoreGate = qScopeGuard([this, prevInApply] {
+                                    m_daemonGate.inGeometryApply = prevInApply;
+                                });
+                                safeW->window()->move(QPointF(centred));
+                            }
+                        }
+                    }
                 }
                 // Body 0 — deferred maximize-morph completion. The maximize
                 // state edge above arms this entry when it fires before the

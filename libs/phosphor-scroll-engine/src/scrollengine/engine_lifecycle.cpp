@@ -259,6 +259,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // openColumnPlacement=consume while its config-driven twin (the
     // IntoActiveColumn arm below) applied it.
     bool inserted = false;
+    // Which arm below actually placed the tile. Reported at the tail together
+    // with the resulting active window: the arms differ in whether they take
+    // focus and re-anchor the view (insertWindow does both, insertWindowAt and
+    // insertWindowIntoActiveColumn do neither), so an arrival that lands
+    // off-screen is diagnosable only by naming the arm that placed it.
+    const char* insertArm = "none";
     // Whether the tile came back out of the mode-round-trip stash. The height
     // commit at the tail reads it: a stash restore rebuilds the remembered
     // SHAPE, and the open rules' width verdicts are already dropped on that
@@ -278,6 +284,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
         inserted = true;
         restoredFromStash = true;
+        insertArm = "stash";
         consumePendingInitialOrder(screenId, windowId);
     }
     if (!inserted && openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
@@ -290,6 +297,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // open (the block below documents exactly that hazard).
             consumePendingInitialOrder(screenId, windowId);
             inserted = true;
+            insertArm = "consume-rule";
         }
     }
 
@@ -316,6 +324,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             }
             inserted = state->strip().insertWindowAt(columnIdx, windowId, width, display, params);
             if (inserted) {
+                insertArm = "order-seed";
                 state->strip().setWindowMinimumSize(windowId, minWidth, minHeight);
             }
             // Through the shared consume helper — it drops the screen's entry
@@ -429,6 +438,9 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
             inserted = state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
                                                                    minHeight);
+            if (inserted) {
+                insertArm = "into-active-column";
+            }
         }
         if (!inserted) {
             inserted = state->strip().insertWindow(
@@ -496,6 +508,14 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             m_states.removeWindow(windowId);
         }
     }
+    // Which arm placed the arrival, and whether it ended up as the strip's
+    // active window. The arms differ in whether they take focus and re-anchor
+    // (insertWindow does both; insertWindowAt and insertWindowIntoActiveColumn
+    // do neither), and an arrival that is not active cannot pull the view onto
+    // itself — which is how a freshly-opened window ends up parked off-screen.
+    qCDebug(lcScrollEngine) << "insertOpenedWindow:" << windowId << "arm=" << insertArm << "inserted=" << inserted
+                            << "active=" << state->strip().activeWindowId()
+                            << "viewDetached=" << state->strip().viewDetached() << "burstDepth=" << m_arrivalBurstDepth;
     return inserted;
 }
 
@@ -710,6 +730,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // qobject_cast on the settings object.
     const bool focusNew = openParams.focused ? *openParams.focused : effectiveFocusNewWindows(screenId);
     const bool arrivalTookFocus = focusNew && state->strip().activeWindowId() == windowId;
+    // Paired with the insertOpenedWindow report above: arrivalTookFocus is what
+    // decides whether the deferred/immediate applyLayout re-centres the view on
+    // the arrival, so a false here with focusNew true is the signal that the
+    // insert arm silently declined focus.
+    qCDebug(lcScrollEngine) << "windowOpened focus:" << windowId << "focusNew=" << focusNew
+                            << "arrivalTookFocus=" << arrivalTookFocus << "burstDepth=" << m_arrivalBurstDepth;
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {
         const ScrollLayoutParams params = layoutParamsForScreen(screenId);
@@ -787,15 +813,70 @@ void ScrollEngine::endArrivalBurst()
               [](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
                   return std::tie(a.screenId, a.desktop, a.activity) < std::tie(b.screenId, b.desktop, b.activity);
               });
+    // Which screens have a key in THIS burst that still matches their current
+    // context. The focus seed is keyed by bare screen id while these keys carry
+    // the whole context, so one screen can appear twice — arrivals straddling a
+    // mid-burst context switch insert under both the old key and the new one.
+    // The skip arm below drops the seed, and without this the stale key (which
+    // sorts first whenever its desktop is lower) would drop the seed out from
+    // under the matching key that is about to consume it.
+    QSet<QString> screensWithLiveKey;
+    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(keys)) {
+        if (key == currentKeyForScreen(key.screenId)) {
+            screensWithLiveKey.insert(key.screenId);
+        }
+    }
     for (const PhosphorEngine::PlacementStateKey& key : std::as_const(keys)) {
         // The screen may have left the scrolling set mid-burst (mode flip
         // races — applyLayout's own guards no-op that), and a context switch
         // mid-burst means the deferred apply's strip is no longer the one on
         // screen: skip it, the switch-back retile covers the mutated strip.
         if (key != currentKeyForScreen(key.screenId)) {
+            // The seed dies here, but ONLY when no live key for this screen is
+            // going to consume it. It was captured for the transition this
+            // burst belongs to, and that transition is over the moment the
+            // context moves — applying it to whatever arrives next would
+            // re-anchor a view the user has since moved. Dropped rather than
+            // left, because nothing downstream of this `continue` revisits the
+            // entry: the switch-back retile does not consume seeds, so a
+            // skipped drain leaves it armed for some later, unrelated burst.
+            if (!screensWithLiveKey.contains(key.screenId)) {
+                m_pendingInitialFocus.remove(key.screenId);
+            }
             continue;
         }
-        applyLayout(key.screenId, pending.value(key));
+        // Mode-transition focus restore, consumed here and nowhere else.
+        //
+        // The order seed positions each arrival with insertWindowAt, which
+        // takes focus only for the first column of an empty strip and otherwise
+        // re-clamps the anchor without re-anchoring on the arrival — right for
+        // seeding a whole strip, but it leaves the strip pointed at whichever
+        // column happened to be adopted first. The window the user was
+        // actually on then has no way to pull the view onto itself, and a
+        // window that opened just before the flip lands parked off-screen.
+        //
+        // Applied BEFORE applyLayout so the same pass's updateViewForFocus
+        // re-anchors on the restored focus, and forced through the focus
+        // verb (not a bare active-index write) so the latch clears with it —
+        // "a focus change re-attaches" is the strip's own contract.
+        //
+        // The seed is dropped whether or not it landed: a window that closed
+        // between the capture and the re-announce is gone for good, and
+        // leaving the entry armed would re-anchor some later, unrelated
+        // transition onto a view the user has since moved away from.
+        const QString seededFocus = m_pendingInitialFocus.take(key.screenId);
+        bool restoredFocus = false;
+        if (!seededFocus.isEmpty()) {
+            ScrollState* state = stateForKey(key, false);
+            if (state && state->strip().containsWindow(seededFocus)) {
+                state->strip().focusWindow(seededFocus, layoutParamsForScreen(key.screenId));
+                restoredFocus = true;
+            }
+        }
+        // A restored focus is a focus move in its own right, so the apply has
+        // to treat it as one — otherwise the arm that re-centres the view is
+        // skipped for exactly the case this restore exists to fix.
+        applyLayout(key.screenId, pending.value(key) || restoredFocus);
     }
 }
 
@@ -938,207 +1019,9 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     }
 }
 
-QSize ScrollEngine::windowMinimumSize(const QString& rawWindowId) const
-{
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    if (const ScrollState* state = stateForWindow(windowId)) {
-        if (state->strip().containsWindow(windowId)) {
-            // Verbatim, including one-axis clamps like 900x0: the strip
-            // answers (0, 0) only for a window it does not hold.
-            return state->strip().windowMinimumSize(windowId);
-        }
-    }
-    // A floated (or, via the effect's minimize-as-float model, minimized)
-    // window is not a strip tile, but its clamp is not unknown — the
-    // FloatRestore entry carries it. The cross-engine handoff queries this
-    // whatever state the window is in, and answering 0x0 hands the receiving
-    // engine an unclamped window.
-    const auto it = m_floatRestore.constFind(windowId);
-    // Unknown window: an INVALID QSize, deliberately, and a divergence from
-    // the sibling engines — AutotileEngine answers 0x0 for an unknown window,
-    // which is also what an unconstrained known window answers. The two cases
-    // are not the same thing here: the handoff asks this whatever state the
-    // window is in, and "I have never heard of it" has to be distinguishable
-    // from "it reported no minimum", or a receiving engine cannot tell a real
-    // 0x0 clamp from a missing answer. Callers that just want a clamp can
-    // treat both alike, since an invalid QSize's width/height are -1 and every
-    // clamp site takes a qMax against 0.
-    return it != m_floatRestore.constEnd() ? QSize(it->minWidth, it->minHeight) : QSize();
-}
-
-void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
-{
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    // While the window floats there is no tile to write to, and unfloat
-    // re-applies the captured clamp — so without this write-through the
-    // restore puts back whatever the client reported at float time.
-    if (const auto it = m_floatRestore.find(windowId); it != m_floatRestore.end()) {
-        // Clamped like seedFloatRestoreForOpen: a negative floor flows from
-        // here into insertWindowIntoColumnAt and on to Tile::minWidth/
-        // minHeight, and the relayout slack math is not written for one.
-        it->minWidth = qMax(0, minWidth);
-        it->minHeight = qMax(0, minHeight);
-    }
-    PhosphorEngine::PlacementStateKey key;
-    ScrollState* state = stateForWindow(windowId, &key);
-    if (!state) {
-        return;
-    }
-    // qMax(0, ...): same negative-floor contract as the FloatRestore write
-    // above and insertOpenedWindow's boundary clamp — a negative floor flows
-    // from here into Tile::minWidth/minHeight, and the relayout slack math
-    // is not written for one. (No live crash today; every consumer happens
-    // to guard, but this is exported LGPL API and the sibling paths all
-    // clamp at the boundary.)
-    const int clampedMinWidth = qMax(0, minWidth);
-    const int clampedMinHeight = qMax(0, minHeight);
-    const bool minChanged = state->strip().setWindowMinimumSize(windowId, clampedMinWidth, clampedMinHeight);
-    // Re-run insertOpenedWindow's oversized verdict on the updated clamp. The
-    // open path floats a window whose minimum no column slot can honour, but
-    // clients that pin their size hints AFTER mapping (a Wine game maps
-    // hintless, then pins min to its configured resolution) used to dodge
-    // that verdict on timing alone and stay tiled at a size the strip can
-    // never satisfy — exactly the stranded state the refused-ack latch in
-    // onWindowResized documents waiting on "something else" to heal.
-    // Evaluated whatever minChanged says: an adoption path can seat a tiled
-    // window with an already-oversized clamp, and the effect's idempotent
-    // re-report is then the only revisit this state ever gets.
-    // floatWindowInternal owns the whole transition (slot memory for the
-    // eventual unfloat, float-focus seeding, context-guarded apply,
-    // placementChanged), and the strip write above means the FloatRestore it
-    // captures carries the new clamp. The reverse transition is deliberately
-    // absent — a min that shrinks back below the work area does not
-    // auto-unfloat, because the float may have been rearranged meanwhile and
-    // the manual unfloat path already restores the remembered slot.
-    if (state->strip().containsWindow(windowId)) {
-        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
-        if (params.workArea.isValid()
-            && (clampedMinWidth > params.workArea.width() || clampedMinHeight > params.workArea.height())) {
-            qCInfo(lcScrollEngine) << "windowMinSizeUpdated:" << windowId << "min" << clampedMinWidth << "x"
-                                   << clampedMinHeight << "outgrew work area" << params.workArea.size() << "on"
-                                   << key.screenId << "— floating (open-time oversized policy)";
-            floatWindowInternal(state, key, windowId, key.screenId);
-            return;
-        }
-    }
-    // Background-context guard, the same one windowClosed and the float paths
-    // carry: a scheduled retile resolves the screen's CURRENT context, so a
-    // min-size report for a window on another desktop would relayout a strip
-    // this change did not touch. The model write still lands; the switch back
-    // retiles the mutated strip.
-    if (minChanged && key == currentKeyForScreen(key.screenId)) {
-        scheduleRetileForScreen(key.screenId);
-    }
-}
-
-void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldFrame, const QRect& newFrame,
-                                   const QString& screenId)
-{
-    Q_UNUSED(oldFrame)
-    // key.screenId is authoritative below; a mismatched caller value would
-    // retile the wrong strip.
-    Q_UNUSED(screenId)
-    const QString windowId = canonicalizeForLookup(rawWindowId);
-    // A window under a compositor interactive move: its frames are drag
-    // motion, not a size the user settled on. Reconciling them pinned the
-    // column's width/height intents to transient drag rects, and the
-    // refused-ack arm below re-emitted the slot rect against the move —
-    // the ~1 Hz mid-drag teleport fight. The daemon clears the mark before
-    // the drop settles, and the drop paths re-apply authoritative geometry.
-    if (!m_interactiveDragWindow.isEmpty() && windowId == m_interactiveDragWindow) {
-        return;
-    }
-    PhosphorEngine::PlacementStateKey key;
-    ScrollState* state = stateForWindow(windowId, &key);
-    if (!state || state->isFloating(windowId)) {
-        return;
-    }
-    // Background-context guard, as windowMinSizeUpdated and the float paths
-    // carry: a scheduled retile resolves the screen's CURRENT context, so a
-    // resize of a window on another desktop must not drive one. The model
-    // reconcile still happens — it is the persisted intent — and the switch
-    // back retiles.
-    const bool currentContext = key == currentKeyForScreen(key.screenId);
-    // Reconcile the column to the size the client/user actually settled on;
-    // only the owning column relayouts (a resize never reflows neighbours'
-    // widths — they just shift). Width intent is only rewritten when the
-    // WIDTH moved relative to the last applied rect — a vertical-only
-    // resize must not pin a Proportion/Preset column to pixels.
-    //
-    // With NO last-applied rect there is no baseline to compare against, and
-    // treating that as "both changed" pinned BOTH intents to pixels — so a
-    // purely vertical resize arriving in the window between an adoption
-    // (handoffReceive, the setWindowFloat adoption branch, floatWindowInternal)
-    // and its scheduled applyLayout converted a Proportion column to Fixed,
-    // which is exactly what the widthChanged gate exists to prevent. Reconcile
-    // nothing in that case and let the pending relayout establish the baseline.
-    const QRect lastApplied = m_lastAppliedRect.value(windowId);
-    if (!lastApplied.isValid()) {
-        if (currentContext) {
-            scheduleRetileForScreen(key.screenId);
-        }
-        return;
-    }
-    // Derived in ROLE terms against the same params the reconcile decodes the
-    // acked size with. Comparing physical width/height here while the
-    // reconcile reads main/cross would make each guard protect the intent it
-    // was not written for.
-    const ScrollLayoutParams resizeParams = layoutParamsForScreen(key.screenId);
-    const StripAxis resizeAxis = resizeParams.axis;
-    const bool mainChanged = resizeAxis.mainSize(lastApplied) != resizeAxis.mainSize(newFrame);
-    const bool crossChanged = resizeAxis.crossSize(lastApplied) != resizeAxis.crossSize(newFrame);
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)) {
-        // The reconcile WROTE persisted intent (the column's Fixed width, the
-        // tile's Fixed height — both serialized by serializeStripState), and
-        // placementChanged is the sole producer of DirtyScrollStrips. Without
-        // this emit a resize that is the session's last strip interaction is
-        // never saved and the column comes back at its old width.
-        // reconcileWindowSize returns true only on a genuine change, so
-        // emit-on-change holds.
-        Q_EMIT placementChanged(key.screenId);
-        if (currentContext) {
-            scheduleRetileForScreen(key.screenId);
-        }
-        return;
-    }
-    // The strip REFUSED the size (no-op ack): the window
-    // is now displaced from the engine's rect, but m_lastAppliedRect still
-    // holds it, so the emit-on-change gate would treat the corrective
-    // relayout as "nothing moved" and never re-issue the rect. Drop the
-    // memory and retile so the authoritative geometry is re-applied.
-    //
-    // EXCEPT when the displacement is the window's own minimum floor: a
-    // client pinned at a min the slot cannot honour (KWin clamps every
-    // commit to it) re-asserts the same oversized frame after every
-    // corrective re-apply, and the reconcile above keeps refusing because
-    // the Fixed intent already records that size — so the retile can never
-    // converge and the pair loops at the client's re-assert rate. The known
-    // floor is not a displacement to correct, so the SELF-DRIVING retile is
-    // skipped — but the gate memory is still dropped: the frame genuinely
-    // differs from the engine's rect, and keeping the memory would make the
-    // eventual healing relayout (a later min-size drop, a focus move, any
-    // scheduled retile) read as "nothing moved" and stay silent, stranding
-    // the window oversized forever. With the memory gone each such relayout
-    // re-emits once; the client re-asserts once; no retile is scheduled
-    // from here, so the pair advances only when something else drives a
-    // relayout instead of ping-ponging on its own.
-    if (lastApplied != newFrame) {
-        const QSize knownMin = state->strip().windowMinimumSize(windowId);
-        const bool pinnedAtMinW =
-            knownMin.width() > 0 && newFrame.width() == knownMin.width() && newFrame.width() > lastApplied.width();
-        const bool pinnedAtMinH =
-            knownMin.height() > 0 && newFrame.height() == knownMin.height() && newFrame.height() > lastApplied.height();
-        const bool widthExplained = lastApplied.width() == newFrame.width() || pinnedAtMinW;
-        const bool heightExplained = lastApplied.height() == newFrame.height() || pinnedAtMinH;
-        m_lastAppliedRect.remove(windowId);
-        if (widthExplained && heightExplained && lastApplied.topLeft() == newFrame.topLeft()) {
-            return;
-        }
-        if (currentContext) {
-            scheduleRetileForScreen(key.screenId);
-        }
-    }
-}
+// Minimum-size bookkeeping (windowMinimumSize / windowMinSizeUpdated) and the
+// client resize echo (onWindowResized) live in engine_minsize.cpp — split out
+// when this file crossed the size ceiling a FOURTH time.
 
 // The cross-engine handoff section (handoffRelease / handoffReceive and the
 // unified placement capture) lives in engine_handoff.cpp — split out when

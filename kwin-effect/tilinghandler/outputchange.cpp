@@ -148,8 +148,24 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // value, and the column would be drawn at its committed rect
                 // below the union of all outputs, i.e. invisible, until the
                 // user scrolled it. A stale commanded rect only disarms a
-                // counter-assert, which is invisible; a lost relocation is not.
+                // counter-assert, which is invisible. A lost relocation is not.
+                //
+                // The offered column IS dropped, on the opposite reasoning to
+                // the relocation hint: a stale one is read as a column the
+                // client has already answered, so the destination's first batch
+                // would skip offering it and hand the window whatever size it
+                // is holding. That mistake does not self-correct, because the
+                // offer looks settled. Re-offering the column costs one extra
+                // resize, which is the cheap direction here.
                 m_effect->m_scrollCommandedRects.remove(windowId);
+                m_effect->m_scrollOfferedColumn.remove(windowId);
+                // The autotile centring targets go too. This arm is a move
+                // BETWEEN scrolling screens, so whatever an earlier autotile
+                // placement armed is stale for both ends, and the centred
+                // record is what the strip apply's skip short-circuit reads —
+                // a survivor there silently downgrades a resize to a move.
+                m_tileTargetZones.remove(windowId);
+                m_centeredWaylandZones.remove(windowId);
             } else if (m_managedScreens.contains(trueSource)) {
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
@@ -175,9 +191,16 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // window, so it pairs with damage like every other remover.
                 m_windowedFsClearInFlight.remove(windowId);
                 m_effect->m_scrollCommandedRects.remove(windowId);
+                m_effect->m_scrollOfferedColumn.remove(windowId);
                 if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
+                // Same set the cross-mode branch sheds via
+                // cleanupAutotileTracking, which this branch reaches by another
+                // route: with neither side managed here, nothing owns the
+                // centring targets either.
+                m_tileTargetZones.remove(windowId);
+                m_centeredWaylandZones.remove(windowId);
             }
             m_effect->updateAllDecorations();
             return;

@@ -223,10 +223,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString scrollEdge;
         int viewDelta = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
         bool viewImmediate = false; ///< scrolling strip: user-driven continuous view motion — apply the delta outright
-        /// scrolling strip: where a PARKED column really sits. Converted to a
-        /// translation from this batch's rect at apply time and ADDED to the
-        /// window's committed frame by the paint path — not substituted for
-        /// it, which would erase the X11 constrain-and-centre offset.
+        /// scrolling strip: where a PARKED column really sits. Stored at apply
+        /// time as a ScrollVisualPlacement (this position plus the column
+        /// size); the paint path derives its own translation from that per
+        /// read, centring the committed frame inside the column rather than
+        /// substituting for it — which would erase the X11 constrain-and-centre
+        /// offset. See scrollVisualTranslationFor.
         QPoint visualPos;
         bool hasVisualPos = false;
         QString tabFrom; ///< scrolling strip: the tab this entry replaces in a tabbed column, else empty
@@ -458,7 +460,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         int viewDelta = 0;
         bool viewImmediate = false;
         /// Carried verbatim from Entry::visualPos — see its doc for how the
-        /// paint path consumes it (a delta ADDED to the commit).
+        /// paint path consumes it (stored as a placement, resolved per read).
         QPoint visualPos;
         bool hasVisualPos = false;
         QString tabFrom;
@@ -977,6 +979,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
+                // The other two strip companions go with it. Every other
+                // teardown funnel sheds all three together; this one shed only
+                // the relocation, so a window untiled by a rule change kept the
+                // column it was last OFFERED. On re-tile the apply then reads
+                // columnUnchanged against that stale offer, skips offering the
+                // column, and hands the client whatever size it is holding now
+                // — possibly one the user resized during the untiled interval.
+                // No damage pairing: neither is a paint input (the offered
+                // column feeds a move(), the commanded rect gates a
+                // counter-assert), unlike the relocation removed above.
+                m_effect->m_scrollCommandedRects.remove(wid);
+                m_effect->m_scrollOfferedColumn.remove(wid);
                 if (!win || win->isMinimized()) {
                     // A minimized (or vanished) window KEEPS its centering
                     // target: the re-tile on unminimize re-asserts it.
@@ -1310,6 +1324,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry
                              << "monocle=" << snap.isMonocle << "maximizeMode="
                              << (kwForLog ? maximizeModeName(kwForLog->maximizeMode()) : "no-window");
+            // Scroll-batch decision inputs, at debug. The animation arm a
+            // strip entry takes is chosen from these four plus the predicted
+            // commit, and none of them were observable — which is a problem
+            // for any window whose real frame diverges from the column rect
+            // (a Wayland client with an aspect or minimum-size constraint
+            // commits centred inside its column, and constrainTileGeometry
+            // predicts nothing for it: it returns early for non-X11).
+            if (!snap.scrollEdge.isEmpty() || snap.hasVisualPos || snap.viewDelta != 0) {
+                qCDebug(lcEffect) << "  scroll entry:" << snap.windowId << "edge=" << snap.scrollEdge
+                                  << "viewDelta=" << snap.viewDelta << "viewImmediate=" << snap.viewImmediate
+                                  << "hasVisualPos=" << snap.hasVisualPos << "visualPos=" << snap.visualPos
+                                  << "| live=" << snap.window->frameGeometry()
+                                  << "predicted=" << m_effect->constrainTileGeometry(snap.window, snap.geometry)
+                                  << "x11=" << snap.window->isX11Client();
+            }
             // A window can only be tile-managed by one screen at a time —
             // markWindowTiled enforces the single-owner sweep itself.
             markWindowTiled(snap.screenId, snap.windowId);
@@ -1533,17 +1562,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 && (!kwcForBail || kwcForBail->isRequestedFullScreen())
                 && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
             {
-                // Stored as the TRANSLATION from the batch's park rect to the
-                // strip position, not as the strip position itself. The paint
-                // path adds it to wherever the window is actually committed,
-                // which preserves the offset applyWindowGeometry's X11
-                // constrain-and-centre pass puts between the park rect and the
-                // committed frame — subtracting the committed frame from the
-                // strip position (the previous form) erased that offset and
-                // drew a fixed-size game at its column's top-left, the top of
-                // the screen, for the length of every park. For an
+                // Stored as the column's strip POSITION and SIZE, not as a
+                // precomputed translation from the batch's park rect. The paint
+                // path derives the translation per read, centring the window's
+                // committed frame inside the stored column, which preserves the
+                // offset applyWindowGeometry's X11 constrain-and-centre pass
+                // puts between the park rect and the committed frame. An
+                // earlier form subtracted the committed frame from the strip
+                // position up front and erased that offset, drawing a
+                // fixed-size game at its column's top-left for the length of
+                // every park. Deriving at read time also survives a park that
+                // did not land where it was requested, which a precomputed
+                // translation cannot — see ScrollVisualPlacement. For an
                 // unconstrained window the committed rect IS the park rect and
-                // the two forms are identical.
+                // every form agrees.
                 bool visualDeltaChanged = false;
                 if (snap.hasVisualPos && !fullscreenBailSkippedCommit) {
                     // Bounded on the way in, for the same reason viewDelta is
@@ -1554,20 +1586,37 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the committed rect at draw time AND folds into the
                     // backdrop capture, so a garbled pair would draw the column
                     // and its sample arbitrarily far off until the next batch.
-                    // The subtraction itself runs in qint64, per axis. Both
-                    // operands are unvalidated ints off the wire, so a plain
-                    // QPoint difference can overflow BEFORE the qBound the
-                    // protocol layer explicitly leans on ever sees the value —
-                    // and signed overflow is undefined, not a wrapped number
-                    // the clamp could then rescue. Widen, clamp, then narrow.
-                    const qint64 rawX = qint64(snap.visualPos.x()) - qint64(snap.geometry.x());
-                    const qint64 rawY = qint64(snap.visualPos.y()) - qint64(snap.geometry.y());
+                    // The clamp runs in qint64, per axis. The value is an
+                    // unvalidated int off the wire, so widening before the
+                    // qBound the protocol layer explicitly leans on keeps a
+                    // garbled pair from overflowing on the way in — signed
+                    // overflow is undefined, not a wrapped number the clamp
+                    // could then rescue. Widen, clamp, then narrow.
+                    //
+                    // The bound is StripViewAnimator's per-leg DELTA budget,
+                    // reused here as a sanity bound on an absolute strip
+                    // coordinate. The two are not the same quantity: a strip is
+                    // endless by design, so a far enough column's position can
+                    // legitimately exceed a budget meant for one leg's travel,
+                    // and it would be clamped rather than rejected. Reused
+                    // deliberately, because the value is a wire-garbling guard
+                    // rather than a layout limit and the animator re-clamps
+                    // against the same constant downstream — but do NOT widen
+                    // the constant to "fix" this without following that
+                    // downstream use and the test that pins its value.
                     constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
-                    const QPoint delta(static_cast<int>(qBound(-kMaxDelta, rawX, kMaxDelta)),
-                                       static_cast<int>(qBound(-kMaxDelta, rawY, kMaxDelta)));
+                    ScrollVisualPlacement placement;
+                    placement.stripPos =
+                        QPoint(static_cast<int>(qBound(-kMaxDelta, qint64(snap.visualPos.x()), kMaxDelta)),
+                               static_cast<int>(qBound(-kMaxDelta, qint64(snap.visualPos.y()), kMaxDelta)));
+                    // The column rect this tile was handed. The resolver reads
+                    // only its size, to centre a differently-sized commit
+                    // within it.
+                    placement.columnSize = snap.geometry.size();
                     const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
-                    visualDeltaChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
-                    m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
+                    visualDeltaChanged =
+                        (vit == m_effect->m_scrollVisualDelta.constEnd() || !(vit.value() == placement));
+                    m_effect->m_scrollVisualDelta.insert(snap.windowId, placement);
                 } else {
                     visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }
@@ -1636,6 +1685,84 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 }
                 QRect geo = snap.geometry;
 
+                // Size continuity for a strip client that will not take its
+                // column.
+                //
+                // Every placement offering the COLUMN size is a resize, and a
+                // client that enforces its own geometry re-derives a size from
+                // it each time. Its answer is not bit-stable — the same
+                // 1908x2052 column came back as 1908x1073 and then 1911x1074 —
+                // so the window resizes by a few pixels on every scroll step,
+                // and no placement can ever take the pure-move path that
+                // avoids KWin's configure re-anchor (see applyWindowGeometry).
+                //
+                // So stop re-asking. Once a client has answered for a given
+                // column SIZE, offer the size it actually holds, centred in the
+                // column. That is a pure move, which it cannot renegotiate, so
+                // the size stops drifting. The offer only changes when the
+                // COLUMN changes.
+                //
+                // Keyed on the column size, never on position — that is the
+                // whole point. An earlier attempt gated on the target being
+                // off-screen, which made a column scrolling in and out
+                // alternate between two sizes and resize its way across the
+                // strip. Position must not enter, because a column keeps its
+                // size wherever it sits.
+                //
+                // Inert for a window that accepts its column: the sizes match,
+                // so the offer is the column rect unchanged and every branch
+                // below sees exactly what it saw before.
+                // Null unless this batch is a plain strip entry that reaches
+                // the record below; see the capture site for why the two are
+                // separated.
+                QRect stripOfferedColumn;
+                if (isScrollingScreen(snap.screenId) && !snap.isMonocle && !snap.isWindowedFullscreen
+                    && snap.window->isWaylandClient()) {
+                    const QSize columnSize = geo.size();
+                    const QSize committedSize = snap.window->frameGeometry().toRect().size();
+                    const auto offeredIt = m_effect->m_scrollOfferedColumn.constFind(snap.windowId);
+                    // SIZE only. The column's position changes on every scroll
+                    // step while its size does not, and it is the size that
+                    // decides whether the client has answered for this column.
+                    const bool columnUnchanged =
+                        offeredIt != m_effect->m_scrollOfferedColumn.constEnd() && offeredIt->size() == columnSize;
+                    // The whole rect is captured: the commit-time correction
+                    // below needs the column's position to centre within it.
+                    //
+                    // CAPTURED here, RECORDED after the commit decision further
+                    // down. The entry means "this client has been offered this
+                    // column", and the batch has not offered anything yet — the
+                    // apply below can still be skipped as redundant, deferred
+                    // to windowFinishUserMovedResized mid-gesture, or bailed on
+                    // the non-member fullscreen path. Recording it here made the
+                    // NEXT batch read columnUnchanged against a column the
+                    // client was never sent, skip offering it, and hand back
+                    // whatever size the window happens to be holding — which
+                    // never self-corrects, because the offer looks answered.
+                    // The commanded-rect sibling already guards the same three
+                    // cases; this is the missing half of that pairing.
+                    stripOfferedColumn = geo;
+                    if (columnUnchanged && !committedSize.isEmpty() && committedSize != columnSize) {
+                        // Centred the same way the paint resolver centres
+                        // (scrollVisualTranslationFor), so the drawn and
+                        // committed positions agree: same toRect() rounding on
+                        // the size, and the same clamp at zero. The clamp is
+                        // what constrainTileGeometry already does for the X11
+                        // pre-centre — a frame whose minimum exceeds its column
+                        // stays anchored at the column's origin instead of
+                        // shifting past its edge.
+                        //
+                        // isEmpty rather than isValid: QSize::isValid() admits
+                        // 0x0, and a degenerate mid-unmap commit would then
+                        // centre the window by the whole column.
+                        geo = QRect(geo.x() + qMax(0, columnSize.width() - committedSize.width()) / 2,
+                                    geo.y() + qMax(0, columnSize.height() - committedSize.height()) / 2,
+                                    committedSize.width(), committedSize.height());
+                        qCDebug(lcEffect) << "scroll size continuity:" << snap.windowId << "column=" << columnSize
+                                          << "holding=" << committedSize << "offer=" << geo;
+                    }
+                }
+
                 // For Wayland windows being retiled to the same zone, skip the
                 // moveResize if the window was previously centered in this zone.
                 // This prevents flicker where the window jumps from its centered
@@ -1655,6 +1782,31 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                               << snap.windowId << "zone=" << geo;
                         }
                     }
+                }
+
+                // Record the strip offer now that the commit decision is known.
+                // Three ways this batch can fail to deliver the column it
+                // computed: the redundant-apply skip just above, a deferred
+                // commit mid-gesture (applyWindowGeometry hands those to
+                // windowFinishUserMovedResized), and the non-member fullscreen
+                // bail, which commits nothing at all. In each case the client
+                // has not been offered THIS column, so nothing is written — a
+                // recorded offer that never went out would be read as answered.
+                //
+                // Not written, and equally NOT removed. Any entry already there
+                // describes a column an earlier batch genuinely delivered and
+                // the client genuinely answered, and this batch failing to
+                // deliver says nothing about that. Removing it would re-offer
+                // the full column on the next batch and restart the size
+                // renegotiation this whole mechanism exists to end — every
+                // batch arriving during a drag or resize takes this path, so
+                // that would fire for the length of any gesture. Staleness is
+                // decided by the size comparison above, which a genuine column
+                // change fails on its own; membership loss is handled by the
+                // teardown removers.
+                if (!stripOfferedColumn.isNull() && !skipMoveResize && !snap.window->isUserMove()
+                    && !snap.window->isUserResize() && !fullscreenBailSkippedCommit) {
+                    m_effect->m_scrollOfferedColumn.insert(snap.windowId, stripOfferedColumn);
                 }
 
                 if (!skipMoveResize) {
@@ -2088,6 +2240,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // converges on stable absence with one damage on the transition
             // batch instead of an insert/remove repaint pair per batch.
 
+            // A strip entry never takes the reactive centring pass, whatever
+            // KIND of entry it is. The split below only reaches its removal arm
+            // for a non-monocle Wayland entry, so a MONOCLE batch on a
+            // scrolling screen — which the sibling block below documents as
+            // routine during a mode flip, while m_scrollingScreens arrives on
+            // its own D-Bus signal — matches neither arm and keeps whatever its
+            // earlier autotile placement armed. Shedding both maps here, before
+            // the split, covers every kind.
+            //
+            // m_centeredWaylandZones goes with m_tileTargetZones: the same
+            // autotile placement arms both, and it is the map the
+            // skipMoveResize short-circuit in the apply above actually reads,
+            // so a survivor there silently downgrades a strip resize to a move.
+            //
+            // Disjoint from the write arm below (that one runs only for a
+            // NON-scrolling screen), so this cannot delete an entry the
+            // autotile arm is about to install.
+            if (isScrollingScreen(snap.screenId)) {
+                m_tileTargetZones.remove(snap.windowId);
+                m_centeredWaylandZones.remove(snap.windowId);
+            }
+
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
                 // windowedFullscreen is excluded like monocle: KWin owns the
                 // committed frame during the fullscreen round-trip, and a
@@ -2109,7 +2283,35 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // apply would close the window entirely; it is left here
                 // because the reactive centring is deliberately re-entrant-
                 // driven and the reordering has not been exercised.
-                if (!snap.isWindowedFullscreen) {
+                if (isScrollingScreen(snap.screenId)) {
+                    // A STRIP entry never takes the reactive centring pass.
+                    //
+                    // That pass is an autotile repair: it re-centres a Wayland
+                    // client whose committed frame is smaller than its zone,
+                    // and then CLAMPS the result fully inside the output
+                    // containing the zone's centre. Both halves are wrong on a
+                    // strip. A strip column is routinely meant to sit off the
+                    // viewport — parked below every output, or straddling a
+                    // screen edge so the effect can crop it — and clamping it
+                    // back on screen is exactly the "window slides around the
+                    // edge instead of being cropped at it" symptom. It also
+                    // reaps the window's animation leg mid-flight and issues
+                    // its own moveResize, so the strip's placement and this
+                    // pass fight each other every frame.
+                    //
+                    // Only ever observable for a client whose commit diverges
+                    // from its column, because the pass no-ops when the frame
+                    // already fills the zone. A window that accepts its column
+                    // — nearly all of them — was never touched, which is why
+                    // this went unnoticed.
+                    //
+                    // Removed rather than merely not written: a window that
+                    // moves from an autotile screen to a scrolling one would
+                    // otherwise keep the entry its autotile placement armed.
+                    // The removal itself now happens before this split, so it
+                    // also covers the monocle and windowed-fullscreen kinds
+                    // that never reach here.
+                } else if (!snap.isWindowedFullscreen) {
                     m_tileTargetZones[snap.windowId] = snap.geometry;
                 }
             } else if (!snap.isMonocle && isScrollingScreen(snap.screenId)) {
@@ -2136,6 +2338,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                    // Defensive on this arm, not load-bearing: the offer is only
+                    // ever written for a Wayland client, and this is the X11
+                    // leg, so the entry is normally absent. Kept because the
+                    // Wayland arm now applies this same predicate at its own
+                    // record site, and the two should stay legible as one rule;
+                    // removing an absent key costs nothing.
+                    m_effect->m_scrollOfferedColumn.remove(snap.windowId);
                 } else {
                     m_effect->m_scrollCommandedRects.insert(snap.windowId,
                                                             {snap.window->frameGeometry().toRect(), 0, 0});
@@ -2155,6 +2364,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // reads scrolling for a few ticks while monocle batches are
                 // still in flight.
                 m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                m_effect->m_scrollOfferedColumn.remove(snap.windowId);
             }
         },
         onComplete, startedViewLegs || anyTabSwap || !immediateViewScreens.isEmpty());

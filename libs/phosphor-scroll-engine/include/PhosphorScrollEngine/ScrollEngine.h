@@ -444,6 +444,14 @@ public:
     QVector<VisibleTileWithRect> visibleTilesWithRects(const QString& screenId) const;
 
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
+    QString managedFocusedWindow(const QString& screenId) const override;
+    /// The desktop this engine has pinned this screen to, or 0. See the
+    /// interface doc for why the gate compares the PIN and not the resolved key.
+    int stickyPinnedDesktopForScreen(const QString& screenId) const override
+    {
+        return m_context.stickyPinnedDesktop(screenId);
+    }
+    void setInitialFocusedWindow(const QString& screenId, const QString& windowId) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
     // Layout capability (see IPlacementEngine's Layout capability section)
@@ -1208,8 +1216,15 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
-    /// Shared Tiling.Gaps/SmartGaps value (IScrollSettings forward).
-    bool m_smartGaps = true;
+    /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
+    /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
+    /// is false: tiling defaults this on because a sole window fills the screen
+    /// and gaps around it frame nothing, but a sole COLUMN sits at its own
+    /// width, so dropping the gaps only pins it to one edge with dead space
+    /// beside it. The seed matters for any engine that never receives an
+    /// IScrollSettings — refreshConfigFromSettings early-returns for those, so
+    /// the initializer governs for good.
+    bool m_smartGaps = false;
     /// Default height intent for fresh tiles (Auto = historical even split).
     WindowHeight m_defaultWindowHeight{};
     /// Where a fresh open's column enters the strip (config default; the
@@ -1289,6 +1304,14 @@ private:
     /// Kept beside, not inside, the list so consuming an id cannot shift the
     /// recorded positions of the ids still pending.
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
+    /// Focus seed for a mode transition, the companion to
+    /// m_pendingInitialOrder. Consumed at the END of the arrival burst rather
+    /// than per arrival: the seeded window is usually not the last to
+    /// re-announce, and every positional insert leaves the strip pointed at
+    /// whichever column it adopted first, so an eager apply is overwritten by
+    /// the arrivals that follow. Dropped on consumption, and on a seed
+    /// replacement, so it can never re-anchor a strip the user has since moved.
+    QHash<QString, QString> m_pendingInitialFocus;
     /// Snapshot @p state's strip as a stash entry: columns, focus, view
     /// anchor, captured axis, and the blueprint cursor with the blueprint
     /// identity it counts against. Empty columns list when the state is null

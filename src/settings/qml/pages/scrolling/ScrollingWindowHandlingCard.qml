@@ -14,8 +14,9 @@ import org.kde.kirigami as Kirigami
  * app-wide only like its two siblings; per-context insert position is a
  * rules job (the SetScrollInsertPosition context action).
  *
- * Smart gaps is deliberately absent: scrolling reads the shared
- * Tiling.Gaps/SmartGaps value, so the tiling toggle governs both engines.
+ * Smart gaps lives here rather than being borrowed from tiling: the gap
+ * VALUES are shared and mode-neutral, but whether a single column drops them
+ * is per-mode behaviour, and scrolling keeps its own under Scrolling.
  */
 SettingsCard {
     id: root
@@ -25,7 +26,7 @@ SettingsCard {
     collapsible: true
 
     // Adjust-step bounds, read once from ConfigDefaults via the controller.
-    readonly property var _stepConsts: settingsController.scrollingConstants()
+    readonly property var _scrollConsts: settingsController.scrollingConstants()
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -42,6 +43,22 @@ SettingsCard {
                 model: settingsController.valueOptions("Scrolling.Behavior", "InsertPosition")
                 storedValue: appSettings.scrollingInsertPosition
                 onActivated: appSettings.scrollingInsertPosition = currentValue
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
+            title: i18n("Smart gaps")
+            searchAnchor: "scrollingSmartGaps"
+            description: i18n("Remove the outer gaps while the strip holds a single column, so that column sits against the screen edge at its own width")
+
+            SettingsSwitch {
+                checked: appSettings.scrollingSmartGaps
+                accessibleName: i18n("Smart gaps")
+                onToggled: function (newValue) {
+                    appSettings.scrollingSmartGaps = newValue;
+                }
             }
         }
 
@@ -135,8 +152,8 @@ SettingsCard {
 
             SettingsSlider {
                 accessibleName: i18n("Column width adjustment step")
-                from: root._stepConsts.stepPercentMin
-                to: root._stepConsts.stepPercentMax
+                from: root._scrollConsts.stepPercentMin
+                to: root._scrollConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingColumnWidthStepPercent
                 formatValue: function (v) {
@@ -157,8 +174,8 @@ SettingsCard {
 
             SettingsSlider {
                 accessibleName: i18n("Window height adjustment step")
-                from: root._stepConsts.stepPercentMin
-                to: root._stepConsts.stepPercentMax
+                from: root._scrollConsts.stepPercentMin
+                to: root._scrollConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingWindowHeightStepPercent
                 formatValue: function (v) {
@@ -179,8 +196,8 @@ SettingsCard {
 
             SettingsSlider {
                 accessibleName: i18n("View scroll step")
-                from: root._stepConsts.stepPercentMin
-                to: root._stepConsts.stepPercentMax
+                from: root._scrollConsts.stepPercentMin
+                to: root._scrollConsts.stepPercentMax
                 stepSize: 1
                 value: appSettings.scrollingViewScrollStepPercent
                 formatValue: function (v) {

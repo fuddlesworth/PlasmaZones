@@ -222,6 +222,17 @@ public:
         return capturedWindowOrder(screenId);
     }
     QStringList capturedWindowOrder(const QString& screenId) const;
+    /// Capture half only. This engine paints no view of its own, so it has
+    /// nothing to restore on the way IN (setInitialFocusedWindow keeps the
+    /// interface's no-op default) — but a screen flipping OUT of autotile
+    /// still has to tell the incoming engine which window the user was on.
+    QString managedFocusedWindow(const QString& screenId) const override;
+    /// The desktop this engine has pinned this screen to, or 0. See the
+    /// interface doc for why the gate compares the PIN and not the resolved key.
+    int stickyPinnedDesktopForScreen(const QString& screenId) const override
+    {
+        return m_context.stickyPinnedDesktop(screenId);
+    }
     bool isModeSpecificFloated(const QString& windowId) const override
     {
         return isAutotileFloated(windowId);
@@ -643,6 +654,14 @@ public:
      * RECREATED id of a later re-subdivision.
      */
     void clearScreenScheduling(const QString& screenId);
+
+    /// Drop a screen's initial-order seed: the order, its generation counter and
+    /// its strict marker, which only ever live or die together.
+    ///
+    /// The seed is keyed by bare screen id but probed and consumed against the
+    /// screen's CONTEXT, so anything that moves the context invalidates it —
+    /// otherwise one desktop's saved order is applied to another's layout.
+    void clearPendingInitialOrder(const QString& screenId);
 
     /**
      * @brief Purge @p windowId from every pending initial order, with full
@@ -1822,9 +1841,10 @@ private:
     // order is removed (full consumption, per-window purge emptying it,
     // stale-window sweep, timeout reap, screen teardown) — an order retained
     // for a minimized placeholder keeps its strict flag with it. Entries seeded by
-    // setInitialWindowOrder (mode transition) are the strict ones; advisory
-    // entries reconstructed per-window from the placement store are NOT in this
-    // set — for those the saved position is honored only when it appends at the
+    // setInitialWindowOrder (mode transition) are the strict ones, and it is the
+    // only producer in the tree, so every entry is strict today. Advisory
+    // entries reconstructed per-window from the placement store would NOT be in
+    // this set — for those the saved position is honored only when it appends at the
     // current tail, otherwise insertPosition takes over. This is the behaviour
     // users expect from their "After existing" / "After focused" / "As main
     // window" preference for new windows.

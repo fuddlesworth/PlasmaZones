@@ -62,6 +62,16 @@ ContextChange ScreenContextTracker::setCurrentDesktopForScreen(const QString& sc
         // first push equal to the global changes nothing observable);
         // establishing is never a switch, so armSwitch stays false either
         // way.
+        //
+        // Not a missed arm in practice, and arming here would be actively
+        // wrong. The effect pushes a desktop for EVERY output at daemon
+        // (re)registration, bypassing its own dedup, so this branch is consumed
+        // for every screen at startup and every genuine user switch takes the
+        // arming branch below. Arming whenever the context was already
+        // established would make that re-sync report a spurious desktop switch
+        // for every screen on every daemon restart — which bumps the global
+        // stagger generation and flips a screen leaving the set from a
+        // reversible park to a destructive untrack.
         m_desktopContextEverSet = true;
         m_screenCurrentDesktop.insert(screenId, desktop);
         return {desktop != m_currentDesktop, false};
@@ -129,6 +139,15 @@ void ScreenContextTracker::pruneDesktop(int removedDesktop)
     // the stores they key into. A surviving in-range pin whose CONTENT
     // shifted heals on the next setCurrentDesktopForScreen push, which KWin
     // triggers when it relocates the screen off the removed desktop.
+    //
+    // Dropping a per-output entry here is safe, and NOT in tension with
+    // releaseScreenOwnership's argument that the same entry must survive a mode
+    // leave. The difference is what re-establishes it. On this path the daemon
+    // clamps every screen's desktop and pushes the new values BEFORE the count
+    // change propagates, so a dropped entry is rewritten immediately. On a mode
+    // leave nothing pushes at all, and the global desktop the lookup would fall
+    // back to is written once at startup — so there the drop is permanent and
+    // merges every output onto one desktop.
     for (auto it = m_screenDesktopOverride.begin(); it != m_screenDesktopOverride.end();) {
         if (it.value() == removedDesktop) {
             it = m_screenDesktopOverride.erase(it);

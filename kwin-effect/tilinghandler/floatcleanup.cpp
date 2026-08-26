@@ -168,6 +168,7 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     m_windowedFsClearInFlight.remove(windowId);
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollOfferedColumn.remove(windowId);
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
     // A floating window is no longer tile-managed on any screen — clear tiled
     // tracking. clearWindowTiledAllScreens re-resolves the window's rules when the
@@ -253,6 +254,7 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     m_windowedFsClearInFlight.remove(windowId);
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollOfferedColumn.remove(windowId);
     // A floating window is no longer tile-managed on any screen, and this
     // channel has no other writer of that fact (the passive slot's own
     // clearWindowSnapped covers the SNAP facts only). Left standing, IsTiled

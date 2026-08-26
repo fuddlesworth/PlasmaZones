@@ -66,6 +66,17 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
             continue;
         }
         const int desktop = currentDesktopForScreen(screenId);
+        // Same sticky-pin gate as the autotile twin, which carries the full
+        // reasoning: an engine-side pin can make the engine read one desktop's
+        // state while this capture files it under another's key. Compares the
+        // PIN specifically, so a screen the two sides merely label differently
+        // is not skipped. Skip rather than re-key; the pin does not survive the
+        // engine releasing the screen, so a pinned key is not where re-entry
+        // will look.
+        if (const int pinned = m_scrollEngine->stickyPinnedDesktopForScreen(screenId);
+            pinned != 0 && pinned != desktop) {
+            continue;
+        }
         // Stored UNCONDITIONALLY, empty included. An empty order must
         // overwrite a stale non-empty entry from an earlier toggle, or
         // re-entry resurrects windows that have since closed or left the
@@ -73,6 +84,10 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
         // its mode-toggle caller additionally pre-clears the toggled screen's
         // key, which this path has no equivalent of.)
         m_lastEngineOrders[TilingStateKey{screenId, desktop, activity}] = m_scrollEngine->managedWindowOrder(screenId);
+        // Focus travels with the order (the autotile twin does the same), so
+        // a scrolling→autotile→scrolling round trip hands the view back on
+        // the window the user left it on.
+        m_transitionFocusSeed.insert(screenId, m_scrollEngine->managedFocusedWindow(screenId));
     }
 }
 
@@ -143,6 +158,47 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (!order.isEmpty()) {
             m_scrollEngine->setInitialWindowOrder(screenId, order);
         }
+    }
+
+    // Focus seed, separate from the order loop above on purpose. The order is
+    // read out of the long-lived cache and is skipped for a context that has
+    // never been in scrolling; the focus comes from THIS pass's capture and is
+    // meaningful exactly when a screen just left the other engine — including
+    // the first time it enters scrolling, which the order loop `continue`s
+    // past. Without it the strip anchors on whichever column the seed adopted
+    // first and a window opened just before the flip lands parked off-screen.
+    //
+    // Drained (take) so a screen that flips again in a later pass cannot
+    // re-apply this one's focus.
+    //
+    // Runs over every entering screen, NOT the WTS-gated sequence the order
+    // loop uses. The order loop fails closed because filterEngineSeedOrder
+    // cannot run without a WTS and an unfiltered order would hand the strip a
+    // window that should have been restored floating. The focus seed has no
+    // such dependency: it comes from this pass's own capture, and the engine
+    // drops it if the named window is not in the strip. Seeding it on a
+    // degraded pass anchors the view on the window the user actually had
+    // focused, which is strictly better than anchoring on whichever column was
+    // adopted first.
+    //
+    // Called UNCONDITIONALLY, including with an empty string. Empty is not a
+    // no-op on the engine side: setInitialFocusedWindow treats it as "this
+    // transition captured no focus" and CLEARS any seed left armed by an
+    // earlier one. Guarding the call on non-empty made that arm unreachable
+    // from the only production caller, so the engine's own self-healing path
+    // was dead code.
+    // INVARIANT the two out-of-band callers rely on: both processPendingGeometryUpdates
+    // and the bring-up path call this function with the scroll engine's OWN
+    // activeScreens(), so enteringScreens is empty for them and this loop
+    // iterates nothing. That matters because those two reach here WITHOUT the
+    // updateEngineScreens re-entrancy latch, and the seed map is cleared only
+    // inside updateEngineScreens — so a caller passing a DERIVED set would
+    // drain seeds captured by an earlier pass and anchor the strip on a focus
+    // from a transition that is over. Nothing enforces the invariant; a new
+    // out-of-band caller must either pass activeScreens() or go through
+    // updateEngineScreens.
+    for (const QString& screenId : enteringScreens) {
+        m_scrollEngine->setInitialFocusedWindow(screenId, m_transitionFocusSeed.take(screenId));
     }
 
     // Four-tier precedence, collapsed daemon-side exactly like autotile's

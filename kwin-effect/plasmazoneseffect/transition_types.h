@@ -522,6 +522,49 @@ struct ShaderTransition
     std::unique_ptr<KWin::GLTexture> oldSnapshot;
 };
 
+/// Where a parked scrolling tile really belongs on the strip.
+///
+/// Held instead of a precomputed translation because the translation is only
+/// correct if the park LANDED where it was requested, and that is not
+/// something the effect can assume. A tile is parked by committing it below
+/// the union of every output. For a client whose committed size differs from
+/// the column it was handed, the park can silently fail: seen live with a
+/// Firefox Picture-in-Picture window (aspect-constrained, Wayland) parked to
+/// `(0,2176 1908x2052)` and committed at `(0,1087 1908x1073)`, its bottom edge
+/// pinned exactly to the screen bottom. A translation derived from the
+/// requested park rect then drew it 1089px off, which culled it from paint
+/// while its real frame still covered half the screen.
+///
+/// That observation is solid; the MECHANISM behind it is not established. The
+/// obvious candidate, KWin re-applying keep-on-screen containment on the
+/// renegotiated size, does not survive reading the xdg-shell commit path — the
+/// only keepInArea there is plasma-shell-surface-only, and neither the commit
+/// nor the ack path applies containment. Do not go looking for that call; what
+/// matters here is that the committed rect cannot be assumed to equal the
+/// requested one, whatever produces the difference.
+///
+/// X11 does not hit it: the effect constrains the size itself
+/// (constrainTileGeometry) and hands KWin an already-valid rect, so there is
+/// no renegotiation and the park lands. Storing the placement rather than the
+/// translation covers both without depending on which path a window took —
+/// and the resolver reproduces the old translation exactly whenever the
+/// commit did land, which is what preserves PR #906's pixel-verified X11
+/// behaviour.
+struct ScrollVisualPlacement
+{
+    /// The column's top-left ON THE STRIP (the batch's visualPos), in the
+    /// same absolute space the view offset is later added in.
+    QPoint stripPos;
+    /// The column rect this tile was handed. Only the size is read: it is
+    /// what a smaller committed frame is centred within.
+    QSize columnSize;
+
+    bool operator==(const ScrollVisualPlacement& o) const
+    {
+        return stripPos == o.stripPos && columnSize == o.columnSize;
+    }
+};
+
 /// First-frame suppression bookkeeping for a window that is about to be
 /// repositioned on open (snap-restore or autotile).
 ///

@@ -1712,19 +1712,26 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             //
             // Order matches the draw: relocate to the strip position first,
             // then add the view offset. The relocation is ADDITIVE (a
-            // translate by the stored strip-minus-park delta), mirroring the
-            // draw's `data += delta` — an absolute moveTopLeft here discarded
-            // whatever the animator term above contributed, so a parked column
-            // with a live per-window leg sampled its backdrop slice at the
-            // wrong x for the leg's duration.
+            // translate by the resolver's answer), mirroring the draw — an
+            // absolute moveTopLeft here discarded whatever the animator term
+            // above contributed, so a parked column with a live per-window leg
+            // sampled its backdrop slice at the wrong x for the leg's
+            // duration. The resolve rect is the COMMITTED frame on both sides:
+            // the draw passes w->frameGeometry() and translates `data`, so
+            // passing animatedFrame here would subtract the animator's own
+            // top-left and cancel the term this block just added, leaving the
+            // predictor pinned at the destination for the whole leg. It would
+            // also centre by the size a geometry leg is still interpolating,
+            // where the draw centres by the committed one.
             if (KWin::LogicalOutput* scrollOut = scrollManagedOutputFor(w)) {
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
-                if (const auto visualIt = m_scrollVisualDelta.constFind(windowId);
-                    visualIt != m_scrollVisualDelta.constEnd()) {
-                    // The stored strip-minus-park delta, matching the draw.
-                    animatedFrame.translate(visualIt->x(), visualIt->y());
+                if (const auto vit = m_scrollVisualDelta.constFind(windowId); vit != m_scrollVisualDelta.constEnd()) {
+                    // Resolved against the committed frame, matching the draw,
+                    // and off the entry this probe already found.
+                    const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
+                    animatedFrame.translate(translation.x(), translation.y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
             }
@@ -1829,14 +1836,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // never-parked column would be, which is what lets it be seen
             // travelling past during a scroll rather than blinking out the
             // moment it leaves the viewport.
-            if (!m_scrollVisualDelta.isEmpty()) {
-                const auto vit = m_scrollVisualDelta.constFind(windowId);
-                if (vit != m_scrollVisualDelta.constEnd()) {
-                    // The stored strip-minus-park delta, on top of wherever the
-                    // window is committed — see the member's contract for why
-                    // this is a delta and not an absolute position.
-                    data += QPointF(vit->x(), vit->y());
-                }
+            if (const auto vit = m_scrollVisualDelta.constFind(windowId); vit != m_scrollVisualDelta.constEnd()) {
+                // Resolved against the rect being drawn rather than added as a
+                // precomputed delta — see ScrollVisualPlacement for why the
+                // committed position cannot be assumed to sit at the park.
+                // One lookup: the entry found here is handed straight to the
+                // resolver rather than re-hashing the composite window id.
+                const QPoint translation = scrollVisualTranslationFor(*vit, w->frameGeometry());
+                data += QPointF(translation.x(), translation.y());
             }
             const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
             if (!viewOffset.isNull()) {

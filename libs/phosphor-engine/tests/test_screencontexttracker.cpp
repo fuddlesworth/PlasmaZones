@@ -20,6 +20,7 @@ private Q_SLOTS:
     void setCurrentActivity_arming();
     void stickyPin_takeAndHas();
     void removeScreen_dropsBothMaps();
+    void releaseScreenOwnership_keepsPerOutputDesktop();
     void removeScreensIf_byPredicate();
     void pruneDesktop_byValue();
 };
@@ -163,6 +164,35 @@ void TestScreenContextTracker::removeScreensIf_byPredicate()
     QVERIFY(t.hasStickyPin(QStringLiteral("keep")));
     QVERIFY(!t.hasStickyPin(QStringLiteral("drop")));
     QCOMPARE(t.screenDesktop(QStringLiteral("drop")), 1);
+}
+
+void TestScreenContextTracker::releaseScreenOwnership_keepsPerOutputDesktop()
+{
+    // A screen LEAVING an engine's mode set keeps its per-output desktop: that
+    // is compositor truth about the screen, not engine bookkeeping, and the
+    // engine cannot re-derive it. Only the sticky pin — which is the engine's
+    // own — is dropped.
+    //
+    // The regression this pins: the leave path used removeScreen, so
+    // screenDesktop() fell back to the GLOBAL desktop. The daemon sets that
+    // exactly once at startup (every later change arrives per-output), so a
+    // screen that left an engine and came back keyed every context to the
+    // startup desktop — merging all virtual desktops' state into one.
+    ScreenContextTracker t;
+    t.setCurrentDesktopForScreen(QStringLiteral("S1"), 4);
+    t.setStickyPin(QStringLiteral("S1"), 9);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("S1")).desktop, 9); // pin wins
+
+    t.releaseScreenOwnership(QStringLiteral("S1"));
+    QVERIFY(!t.hasStickyPin(QStringLiteral("S1")));
+    // The per-output desktop survives, so the key does NOT collapse onto the
+    // global desktop (1).
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 4);
+    QCOMPARE(t.currentKeyForScreen(QStringLiteral("S1")).desktop, 4);
+
+    // removeScreen stays the OUTPUT-removal verb and still drops both.
+    t.removeScreen(QStringLiteral("S1"));
+    QCOMPARE(t.screenDesktop(QStringLiteral("S1")), 1);
 }
 
 void TestScreenContextTracker::pruneDesktop_byValue()
