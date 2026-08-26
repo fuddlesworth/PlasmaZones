@@ -195,7 +195,7 @@ Item {
     /// hide it: a ShaderEffectSource with visible false is starved and its
     /// stages would never reach Ready, so hiding to wait for this would wait
     /// forever.
-    readonly property bool chainReady: decorationActive && _readyStageCount >= (decorationChain ? decorationChain.length : 0)
+    readonly property bool chainReady: decorationActive && _settledStageCount >= (decorationChain ? decorationChain.length : 0)
 
     /// At least one stage's shader failed to compile.
     ///
@@ -209,10 +209,10 @@ Item {
     /// Stages that have SETTLED — compiled, or failed to. Maintained by the
     /// delegates rather than derived, because Repeater.itemAt is not notifiable
     /// — a binding over it would not re-evaluate when a stage's status changed.
-    property int _readyStageCount: 0
+    property int _settledStageCount: 0
 
     /// Stages whose shader failed to compile. Same delegate-maintained
-    /// treatment as _readyStageCount, for the same reason.
+    /// treatment as _settledStageCount, for the same reason.
     property int _erroredStageCount: 0
 
     /// The shaderAnchor capture item inside (or equal to) the loaded content.
@@ -380,9 +380,9 @@ Item {
             // Output tap for the NEXT stage's sourceItem lookup.
             readonly property Item outputTap: tap
 
-            /// This stage's shader has compiled and is drawing.
+            /// This stage has SETTLED — its shader compiled, or failed to.
             ///
-            /// Counted into root._readyStageCount rather than read from outside,
+            /// Counted into root._settledStageCount rather than read from outside,
             /// because a Repeater's delegates are not reachable by a binding
             /// that would re-evaluate when one of them changed status. Both
             /// edges are handled: a stage that errors and later recompiles
@@ -396,17 +396,17 @@ Item {
             /// something is actually wrong.
             readonly property bool stageSettled: stageItem.status === SurfaceShaderItem.Ready || stageItem.status === SurfaceShaderItem.Error
             readonly property bool stageErrored: stageItem.status === SurfaceShaderItem.Error
-            onStageSettledChanged: root._readyStageCount += stage.stageSettled ? 1 : -1
+            onStageSettledChanged: root._settledStageCount += stage.stageSettled ? 1 : -1
             onStageErroredChanged: root._erroredStageCount += stage.stageErrored ? 1 : -1
             Component.onCompleted: {
                 if (stage.stageSettled)
-                    root._readyStageCount += 1;
+                    root._settledStageCount += 1;
                 if (stage.stageErrored)
                     root._erroredStageCount += 1;
             }
             Component.onDestruction: {
                 if (stage.stageSettled)
-                    root._readyStageCount -= 1;
+                    root._settledStageCount -= 1;
                 if (stage.stageErrored)
                     root._erroredStageCount -= 1;
             }

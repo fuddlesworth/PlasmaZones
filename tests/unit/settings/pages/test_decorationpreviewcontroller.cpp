@@ -476,6 +476,12 @@ private Q_SLOTS:
         // this whole slot exists to prevent, one level up. Sweep the directory
         // and require every file that touches `previewController.` to be either
         // listed above or deliberately excluded.
+        // ShaderBrowserDetailDialog genuinely calls through previewController
+        // for whichever route supplied it, per the note above. ShaderBrowserCard
+        // only PASSES the controller down to DecorationChainPreview and never
+        // calls through it, so it does not carry the token today — listed
+        // anyway, because a card that starts calling one directly belongs to
+        // the same route-agnostic exemption rather than to this guard.
         const QStringList excluded{settingsQml + QStringLiteral("/ShaderBrowserCard.qml"),
                                    settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml")};
         QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
@@ -486,7 +492,16 @@ private Q_SLOTS:
             }
             QFile f(path);
             QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(QStringLiteral("cannot read ") + path));
-            const QString src = QString::fromUtf8(f.readAll());
+            QString src = QString::fromUtf8(f.readAll());
+            // Comments stripped first, matching the real scrape below: a file
+            // that only MENTIONS previewController in a doc comment is not a
+            // caller, and failing it here would send whoever hits it looking
+            // for a call that does not exist.
+            static const QRegularExpression sweepBlockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                                QRegularExpression::DotMatchesEverythingOption);
+            static const QRegularExpression sweepLineCommentRe(QStringLiteral("(?<![:\"'])//[^\n]*"));
+            src.remove(sweepBlockCommentRe);
+            src.remove(sweepLineCommentRe);
             QVERIFY2(!src.contains(QLatin1String("previewController.")),
                      qPrintable(QStringLiteral("%1 calls previewController but is neither scraped nor "
                                                "documented as excluded — add it to one of the two lists")

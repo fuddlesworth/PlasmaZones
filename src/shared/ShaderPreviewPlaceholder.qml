@@ -9,10 +9,14 @@ import org.kde.kirigami as Kirigami
  * "Preview unavailable" stand-in for a live shader preview that is not showing
  * yet.
  *
- * Sibling of ShaderCompileErrorBanner: that one covers a preview that FAILED,
- * this one covers a preview that has not finished arriving. Shared so every
- * preview in the app says the same thing, in one translation entry, instead of
- * each browser route growing its own wording.
+ * Sibling of ShaderCompileErrorBanner, which reports a FAILED preview with the
+ * compiler's own message. This one covers a preview that has not finished
+ * arriving, and says so in one translation entry rather than each browser route
+ * growing its own wording.
+ *
+ * A host with no compiler message to show can also use it to report a failure,
+ * by overriding `text` — the decoration pane does, because its chain host
+ * publishes only a boolean and not the erroring stage's log.
  *
  * The host anchors this over its preview surface and drives `visible` from
  * whatever "not ready yet" means for it — a renderer that has not reached

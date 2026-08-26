@@ -268,10 +268,15 @@ ItemDelegate {
                 // here, unlike the detail dialog — at thumbnail size the empty
                 // slot reads better than text, and the baked-preview cards show
                 // none either.
+                // Stays up for a pack whose shader failed to compile, too. That
+                // SETTLES the chain, so `ready` goes true with nothing worth
+                // showing under it — and lifting the cover there would leave
+                // the grid claiming a pack renders while its own detail dialog
+                // says the shader did not compile.
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 1
-                    visible: root._liveDecorationPreview && (!decorationPreviewLoader.item || !decorationPreviewLoader.item.ready)
+                    visible: root._liveDecorationPreview && (!decorationPreviewLoader.item || !decorationPreviewLoader.item.ready || decorationPreviewLoader.item.hasError)
                     color: Kirigami.Theme.alternateBackgroundColor
                     radius: Kirigami.Units.smallSpacing
                 }

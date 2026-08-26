@@ -54,9 +54,12 @@ struct alignas(16) SurfaceUniforms
     // styling on this rather than on which runtime they are on.
     float uHasBackdrop; // float: 4 bytes at offset 104 (1 when the host bound a backdrop, else 0)
 
-    // The window's rule-resolved opacity on the compositor; the daemon has
-    // no rule opacity (qt_Opacity carries host opacity) so this pins to 1.
-    float uSurfaceOpacity; // float: 4 bytes at offset 108 (always 1 on the daemon)
+    // Legacy: a constant 1.0 on BOTH runtimes, kept so the layout and the
+    // pack-facing name survive. It no longer carries the window's
+    // rule-resolved opacity — that was the retired handlesOpacity contract —
+    // and a host fading a whole decoration does it through qt_Opacity. See
+    // kUSurfaceOpacity in SurfaceShaderContract.h.
+    float uSurfaceOpacity; // float: 4 bytes at offset 108 (constant 1.0)
 
     // Pack-declared parameters (float/int/bool → customParams, colours →
     // customColors), addressed by the registry-generated `p_<id>` preambles.

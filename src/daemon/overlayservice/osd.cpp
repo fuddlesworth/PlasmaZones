@@ -696,7 +696,7 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
     // uHasBackdrop at 0, and behaves exactly as it did before.
     //
     // Loaded once into a local so an unresolvable wallpaper writes the SAME
-    // invalid QVariant the no-backdrop arm and the two clear paths write. A
+    // invalid QVariant the no-backdrop arm and every hide/clear path write. A
     // valid QVariant holding a null QImage is not the same thing to the QML
     // side, which gates on the property being null or undefined, so it would
     // flip useWallpaper true with no pixels behind it.

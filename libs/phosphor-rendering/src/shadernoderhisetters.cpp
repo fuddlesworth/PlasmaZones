@@ -835,11 +835,15 @@ void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
         return;
     }
     m_shaderIncludePaths = paths;
-    // Same reasoning as setParamPreamble below: these paths are consumed while
-    // the source is expanded, and they are folded into the include fingerprint
-    // the bake cache keys on. Without forcing a reload the node keeps serving
-    // the source expanded against the OLD search path, so a pack that moved its
-    // shared includes would render from stale text.
+    // Belt-and-braces, NOT the mechanism that makes a path change take effect.
+    // Re-expansion happens in the owning ShaderEffect, which raises its own
+    // dirty flag and re-runs loadVertexShader / loadFragmentShader; those
+    // setters raise this one themselves. The node's flag only re-bakes the
+    // source it already holds, so it cannot re-expand anything on its own.
+    // Every caller today sets these paths immediately before such a reload, so
+    // this changes nothing for them — it is here so a future caller that sets
+    // them WITHOUT a reload still gets a re-bake rather than a silently stale
+    // pipeline.
     m_shaderDirty = true;
 }
 

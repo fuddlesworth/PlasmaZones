@@ -174,8 +174,11 @@ vec4 faintTintSlab(vec3 tint, float tintStrength, float mask) {
 float haloFalloff(float d, float reach, vec2 edgePx, float baseAlpha, float strength, float focusFloor) {
     // reach is caller-supplied and a zero would make this inf, then NaN through
     // exp(), and a NaN propagates through the whole composite rather than
-    // showing up as one bad pixel. Every other division in this file carries
-    // the same guard.
+    // showing up as one bad pixel. Defensive rather than live: both in-tree
+    // callers (glow, shadow) already floor it at 1.0, so this changes no
+    // output today. It does NOT make a zero reach wholly safe either — the
+    // smoothstep below still collapses to edge0 == edge1 there — so a caller
+    // that stops flooring needs both guarded, not just this one.
     float t = max(d, 0.0) / max(reach, 1e-3);
     float halo = exp(-4.0 * t * t);
     float edgeDist = min(min(edgePx.x, edgePx.y), min(uSurfaceSize.x - edgePx.x, uSurfaceSize.y - edgePx.y));

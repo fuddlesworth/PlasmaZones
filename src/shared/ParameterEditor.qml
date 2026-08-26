@@ -364,16 +364,28 @@ ColumnLayout {
             if (param.default !== undefined)
                 next[param.id] = param.default;
         }
-        // Carry the `<id>_svgSize` companion, exactly as computeRandomized
-        // does and for the same reason: this is a full-map replace, the key is
-        // not part of the parameter schema so no branch above can reproduce
-        // it, and every host assigns the result wholesale over its values map.
-        // Without this a reset silently reverts an SVG image param's render
-        // size — which the preset-load path already takes care to preserve.
-        if (root.currentValues) {
+        // Carry the `<id>_svgSize` companion for LOCKED image params only.
+        //
+        // This is a full-map replace and the key is not in the parameter
+        // schema, so nothing above reproduces it and a host assigning the
+        // result wholesale would drop it. But the carry is only correct where
+        // the IMAGE is preserved too: a locked param keeps its path (the
+        // preserved branch above), so its render size still belongs to it.
+        //
+        // An unlocked image param is reset to its default path, and pairing
+        // that with the previous image's size would leave "reset to defaults"
+        // holding a value that is not a default. Dropping the key is the
+        // reset: ParameterRow falls back to 1024 when it is absent.
+        //
+        // This is where computeDefaults DIVERGES from computeRandomized, which
+        // carries unconditionally — randomize preserves image params verbatim,
+        // so there the pair always stays matched.
+        if (root.currentValues && root.lockedParams) {
             for (var c = 0; c < root.parameters.length; c++) {
                 var cp = root.parameters[c];
                 if (!cp || cp.id === undefined || cp.type !== "image")
+                    continue;
+                if (root.lockedParams[cp.id] !== true)
                     continue;
 
                 var svgKey = cp.id + "_svgSize";

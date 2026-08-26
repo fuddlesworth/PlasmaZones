@@ -125,9 +125,10 @@ public:
     // ── Available packs ───────────────────────────────────────────────────
 
     /// Installed `SurfaceShaderEffect`s flattened to a QML-friendly list.
-    /// Each row: id / name / description / author / version / category /
-    /// isUserEffect / previewPath / providesBorder / providesOpacityTint /
-    /// parameters (a QVariantList of ParameterInfo maps).
+    /// Each row, in the order effectToMap inserts them: id / name /
+    /// description / author / version / category / isUserEffect /
+    /// providesBorder / providesOpacityTint / previewPath / parameters (a
+    /// QVariantList of ParameterInfo maps).
     Q_INVOKABLE QVariantList availableShaderEffects() const;
 
     // ── Surface taxonomy ──────────────────────────────────────────────────

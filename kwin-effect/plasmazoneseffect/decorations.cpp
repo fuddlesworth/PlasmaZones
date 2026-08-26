@@ -516,6 +516,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // client's content — interior-opaque by construction, so `true` is the
     // right answer there too.
     bool chainInteriorOpaque = true;
+    // Whether any pack in the chain actually contributed to the AND above.
+    // Only used to keep the diagnostic below off the vacuous case; the VALUE
+    // is deliberately true there, for the reason just given.
+    bool sawDrawingPack = false;
     // Theme colours for the pack flag resolver (below). Accent / inactive come
     // from the daemon-plumbed border colours (same source the plain-border layer
     // uses); background / foreground come from the compositor's palette, which
@@ -541,6 +545,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
         chainInteriorOpaque = chainInteriorOpaque && eff.interiorOpaque;
+        sawDrawingPack = true;
         QVariantMap packOverrides = allPackParams.value(packId).toMap();
         // Honour the pack's host-consumed theme flags (border useThemeNeutral /
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
@@ -562,10 +567,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
     wb.chainInteriorOpaque = chainInteriorOpaque;
-    // Non-empty, because chainInteriorOpaque is an AND over the drawing packs
-    // and so is vacuously true for a chain with none. Logging that would
-    // attribute a declaration to a chain that declared nothing.
-    if (chainInteriorOpaque && !chain.isEmpty()) {
+    // Gated on a pack having actually contributed. The VALUE is deliberately
+    // true for a chain whose packs are all registry-unknown (see where it is
+    // initialised); it is only the LOG that is uninformative there, because it
+    // would name a chain that declared nothing.
+    if (chainInteriorOpaque && sawDrawingPack) {
         // interiorOpaque comes verbatim from installable pack metadata (an
         // XDG_DATA_HOME boundary, "input validation at system boundaries"): a
         // third-party pack that declares it while thinning interior texels

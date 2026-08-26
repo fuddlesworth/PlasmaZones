@@ -195,9 +195,14 @@ struct PHOSPHORSURFACE_EXPORT SurfaceShaderEffect
 
     /// Buffer-pass shader paths (relative to effect dir). When non-empty
     /// and `isMultipass` is true, the host runs these as intermediate passes
-    /// before the main fragment shader: `src/shared/SurfaceDecoration.qml` on
-    /// the daemon (via `OverlayService::applyDecoration`) and the KWin effect
-    /// on the compositor. `composeStageMap()` is what forwards them.
+    /// before the main fragment shader.
+    ///
+    /// The two hosts reach them differently, which is why some of the buffer
+    /// fields below are daemon-only. The daemon's `SurfaceDecoration.qml`
+    /// (via `OverlayService::applyDecoration`) receives them through
+    /// `composeStageMap()`; the KWin effect reads this struct directly and
+    /// never calls that helper, so a field added only to composeStageMap
+    /// reaches the daemon and not the compositor.
     QStringList bufferShaderPaths;
 
     /// Enable per-pass feedback (last frame's buffer is sampleable as
