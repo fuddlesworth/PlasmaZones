@@ -662,6 +662,11 @@ SettingsFlickable {
                                 width: shaderFlow._cardWidth
                                 effect: modelData
                                 bridge: root.bridge
+                                // The page root IS the scrolling Flickable. The
+                                // card uses it to keep a live decoration
+                                // preview off every off-screen delegate — the
+                                // Flow/Repeater layout instantiates them all.
+                                viewport: root
                                 usagesRev: root._usagesRev
                                 usageChipTextFn: root.usageChipTextFn
                                 typeBadgeFn: function (e) {

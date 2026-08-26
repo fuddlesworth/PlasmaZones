@@ -54,13 +54,6 @@ Item {
     readonly property bool _isAudioPack: _info.audio === true
     readonly property bool _needsBackdrop: _info.needsBackdrop === true
 
-    /// The composed one-stage chain and its outer-margin request. Both
-    /// recompute when the user edits a parameter, which is what makes a padding
-    /// param (glow size, shadow spread) grow the preview's transparent room
-    /// live rather than only on reopen.
-    readonly property var _chain: (previewController && packId.length > 0 && active) ? (previewController.previewChain(packId, liveParams) || []) : []
-    readonly property real _outerPad: (previewController && packId.length > 0 && active) ? previewController.previewOuterPadding(packId, liveParams) : 0
-
     readonly property var _audioSpectrum: previewController ? previewController.audioSpectrum : []
 
     ColumnLayout {
@@ -81,29 +74,21 @@ Item {
             border.color: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
             clip: true
 
-            // The decorated subject. Centred with room to spare so an outer
-            // effect has somewhere to land: the chain host extends its canvas
-            // bottom/right by _outerPad, and the card's own PopupFrame capture
-            // ring provides the top/left halo room (the extension is trailing
-            // by design — placement comes from the item's coordinates, the FBO
-            // extension is offset inside it).
-            PZCommon.DecorationPreviewCard {
-                id: card
-
-                anchors.centerIn: parent
-                width: Math.min(parent.width - Kirigami.Units.gridUnit * 2 - root._outerPad, Kirigami.Units.gridUnit * 20)
-                height: Math.min(parent.height - Kirigami.Units.gridUnit * 2 - root._outerPad, Kirigami.Units.gridUnit * 13)
-                title: i18nc("@title sample window in the decoration preview", "Sample Window")
-                focusedLook: focusToggle.checked
-            }
-
-            // The real chain host, fed the real composed chain.
-            PZCommon.SurfaceDecoration {
+            // Shared with the browser card's inline thumbnail, so the two can
+            // never disagree about what a pack looks like. Fed the dialog's
+            // live parameter map, which is what makes a padding param (glow
+            // size, shadow spread) grow the transparent room as it is dragged
+            // rather than only on reopen.
+            DecorationChainPreview {
                 anchors.fill: parent
-                contentItem: card
-                decorationChain: root._chain
-                decorationOuterPadding: root._outerPad
+                anchors.margins: 1
+                previewController: root.previewController
+                packId: root.packId
+                params: root.liveParams
+                active: root.active
+                focusedLook: focusToggle.checked
                 audioSpectrum: root._audioSpectrum
+                cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
             }
         }
 

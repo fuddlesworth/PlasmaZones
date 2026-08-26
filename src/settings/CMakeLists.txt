@@ -511,6 +511,7 @@ qt_add_qml_module(plasmazones-settings
         # checkbox-filter-menu implementation (Layouts via LayoutFilterBar's
         # invisible instances, Rules + shader browser directly).
         qml/components/StayOpenMenuItem.qml
+        qml/pages/shaders/DecorationChainPreview.qml
         qml/pages/shaders/DecorationPreviewPane.qml
         qml/pages/shaders/ShaderBrowserDetailDialog.qml
         qml/pages/animations/CurveEditorDialog.qml

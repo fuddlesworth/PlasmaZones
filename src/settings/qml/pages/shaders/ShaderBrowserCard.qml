@@ -70,6 +70,35 @@ ItemDelegate {
     }
     readonly property string _typeBadge: (root.effect && root.typeBadgeFn) ? String(root.typeBadgeFn(root.effect)) : ""
 
+    /// The scrolling viewport this card lives in, supplied by the browser page.
+    /// Used only to decide whether the card is on screen. Null disables that
+    /// gating and treats the card as always visible, which is the right
+    /// degraded behaviour for a host that renders no live preview anyway.
+    property Flickable viewport: null
+
+    /// A decoration pack with no baked thumbnail: render the real chain in the
+    /// card. Gated on the bridge actually being the decoration one, so the
+    /// animation and overlay browsers are untouched.
+    readonly property bool _liveDecorationPreview: !!(root.bridge && root.bridge.previewController && root.bridge.previewKind === "decoration" && root.effect && !(root.effect.previewPath && root.effect.previewPath.length > 0))
+
+    /// Whether this card intersects the viewport, with one card-height of slack
+    /// either side so a preview is warm by the time it is scrolled into view.
+    ///
+    /// mapToItem registers no QML dependency, so contentY and height are read
+    /// FIRST: touching them is what makes this re-evaluate on scroll. Same
+    /// idiom SurfaceDecoration.qml uses for its anchor mapping.
+    readonly property bool _inViewport: {
+        if (!root.viewport)
+            return true;
+        const contentY = root.viewport.contentY;
+        const viewH = root.viewport.height;
+        if (viewH <= 0)
+            return false;
+        const pos = root.mapToItem(root.viewport.contentItem, 0, 0);
+        const slack = root.height;
+        return (pos.y + root.height) > (contentY - slack) && pos.y < (contentY + viewH + slack);
+    }
+
     signal showDetails(var effect)
 
     width: Kirigami.Units.gridUnit * 14
@@ -132,7 +161,11 @@ ItemDelegate {
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: width * 9 / 16
-                visible: _hasPreview
+                // A baked preview.png still wins where a pack ships one (that
+                // is how every overlay pack thumbnails, and how a third-party
+                // decoration pack can). Decoration packs ship none, so they get
+                // the live render instead of an empty slot.
+                visible: _hasPreview || root._liveDecorationPreview
                 radius: Kirigami.Units.smallSpacing
                 color: Kirigami.Theme.alternateBackgroundColor
                 border.width: 1
@@ -156,6 +189,35 @@ ItemDelegate {
                     asynchronous: true
                     cache: true
                     visible: status === Image.Ready
+                }
+
+                // Live decoration thumbnail. Decoration packs ship no baked
+                // preview.png, and unlike an overlay shader a surface pack has
+                // nothing to show without a subject to decorate, so the card
+                // renders the real chain over the stand-in card instead.
+                //
+                // In a Loader gated on _inViewport: the browser lays cards out
+                // in a Flow inside a Repeater, so EVERY delegate exists at once
+                // and an ungated binding would stand up a capture chain and a
+                // shader item for all installed packs simultaneously. The gate
+                // keeps that to the handful actually on screen and tears each
+                // one down again on scroll-away.
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    active: root._liveDecorationPreview && root._inViewport
+                    visible: active
+
+                    sourceComponent: DecorationChainPreview {
+                        previewController: root.bridge.previewController
+                        packId: root.effect ? (root.effect.id || "") : ""
+                        // Declared defaults: the card is a catalogue entry, so
+                        // it shows the pack as shipped. Parameter editing is the
+                        // detail dialog's job.
+                        params: ({})
+                        active: true
+                        cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
+                    }
                 }
             }
 
