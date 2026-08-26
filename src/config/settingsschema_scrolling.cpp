@@ -424,8 +424,9 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // ─── Scrolling behavior (Scrolling.Behavior) ─────────────────────────
     // Window-handling and focus knobs, the peers of Tiling.Behavior and
     // Snapping.Behavior.WindowHandling. Shared leaf key names under the
-    // scrolling group; smart gaps is deliberately absent (scrolling forwards
-    // the shared Tiling.Gaps/SmartGaps value, see IScrollSettings).
+    // scrolling group, smart gaps among them: scrolling owns its own SmartGaps
+    // rather than forwarding the tiling value, because whether a lone column
+    // drops its outer gaps is per-mode behaviour. See the entry below.
     schema.groups[CD::scrollingBehaviorGroup()] = {
         {CD::focusNewWindowsKey(), CD::scrollingFocusNewWindows(), QMetaType::Bool},
         {CD::triggersKey(), CD::scrollingDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},

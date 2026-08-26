@@ -569,7 +569,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"), PhosphorI18n::tr("edge"),
                 PhosphorI18n::tr("side")});
-    // Smart gaps is tiling-only and relocated to the Tiling → Window page.
+    // The TILING smart-gaps row, relocated to the Tiling → Window page.
+    // Scrolling has its own Scrolling.Behavior/SmartGaps key with its own row,
+    // registered under the Window handling section further down.
     addSetting(search, QStringLiteral("tiling-behavior"), QStringLiteral("smartGaps"), PhosphorI18n::tr("Smart gaps"),
                {PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"), PhosphorI18n::tr("spacing"),
                 PhosphorI18n::tr("smart"), PhosphorI18n::tr("single")});
@@ -851,6 +853,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("New window placement"),
                {PhosphorI18n::tr("insert"), PhosphorI18n::tr("position"), PhosphorI18n::tr("column"),
                 PhosphorI18n::tr("open")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingSmartGaps"),
+               PhosphorI18n::tr("Smart gaps"),
+               {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),
+                PhosphorI18n::tr("column"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("scroll")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingRespectMinimumSize"),
                PhosphorI18n::tr("Respect minimum size"),
                {PhosphorI18n::tr("minimum"), PhosphorI18n::tr("size"), PhosphorI18n::tr("resize")});
@@ -879,15 +885,19 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         PhosphorI18n::tr("View scroll step"),
         {PhosphorI18n::tr("step"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("view"), PhosphorI18n::tr("wheel")});
     // The Strip direction card, shared with scrolling-simple like the Focus
-    // card below, so the pair registers against both hosting page ids.
+    // card below. Only the scrolling-window half is registered here; the
+    // scrolling-simple twins live in searchcatalog_simple.cpp, so a row added
+    // to either card needs an entry in BOTH files or it is findable in one
+    // mode only.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("stripDirection"),
                PhosphorI18n::tr("Strip direction"));
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("stripAxis"), PhosphorI18n::tr("Direction"),
                {PhosphorI18n::tr("strip"), PhosphorI18n::tr("axis"), PhosphorI18n::tr("vertical"),
                 PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("portrait")});
-    // The Focus and view card, shared with scrolling-simple below: it absorbed
-    // the former View page's viewport rows, so those anchors resolve against
-    // both pages that host the card.
+    // The Focus and view card, shared with scrolling-simple, which absorbed the
+    // former View page's viewport rows. As above, only the scrolling-window
+    // half is registered here; the scrolling-simple twin lives in
+    // searchcatalog_simple.cpp.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingFocus"),
                PhosphorI18n::tr("Focus and view"));
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("centerFocusedColumn"),
@@ -897,10 +907,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("alwaysCenterSingleColumn"),
                PhosphorI18n::tr("Center a lone column"),
                {PhosphorI18n::tr("center"), PhosphorI18n::tr("single"), PhosphorI18n::tr("column")});
-    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingSmartGaps"),
-               PhosphorI18n::tr("Smart gaps"),
-               {PhosphorI18n::tr("gap"), PhosphorI18n::tr("smart"), PhosphorI18n::tr("single"),
-                PhosphorI18n::tr("column"), PhosphorI18n::tr("scroll")});
     addSetting(
         search, QStringLiteral("scrolling-window"), QStringLiteral("cropStraddlers"),
         PhosphorI18n::tr("Crop columns at the screen edge"),

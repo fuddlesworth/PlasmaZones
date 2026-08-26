@@ -51,7 +51,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Smart gaps")
             searchAnchor: "scrollingSmartGaps"
-            description: i18n("Remove the outer gaps while the strip holds a single column. Off by default, because a lone column sits at its own width rather than filling the screen.")
+            description: i18n("Remove the outer gaps while the strip holds a single column, so that column sits against the screen edge at its own width")
 
             SettingsSwitch {
                 checked: appSettings.scrollingSmartGaps

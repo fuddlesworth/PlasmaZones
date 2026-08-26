@@ -4,9 +4,12 @@
 // Per-ACTION descriptions for the rule editor — the action-side mirror of
 // fieldDescription() (ruleauthoring.cpp), surfaced as the hover tooltip on the
 // action row's info icon. One concise plain-prose line per registered action
-// type; the test canary (test_rule_controller) sweeps
-// ActionRegistry::registeredTypes() and fails on any type this ladder misses,
-// so adding an action without a description is a red test, not a silent blank.
+// type. The test canary (test_rule_controller) sweeps the USER-AUTHORABLE
+// registered types and fails on any of those this ladder misses, so adding an
+// authorable action without a description is a red test, not a silent blank.
+// Types whose descriptor sets userAuthorable=false are filtered out before that
+// list is built (buildActionTypeEntries, ruleauthoring_actions.cpp) and are NOT
+// covered by the canary. No descriptor in the tree sets it false today.
 //
 // Own translation unit rather than ruleauthoring_actions.cpp: the ladder
 // carries one entry per registered action type, and that file already sits at
@@ -344,8 +347,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetScrollSmartGaps) {
         return PhosphorI18n::tr(
-            "Drops the outer gaps on the matched context while a single column is on the strip, "
-            "so that column runs to the screen edges.");
+            "Removes the outer gaps on the matched context while a single column is on the strip. The column "
+            "keeps its own width, so it sits against one screen edge instead of growing to fill the screen.");
     }
     if (type == ActionType::SetScrollFocusFollowsMouse) {
         return PhosphorI18n::tr(
