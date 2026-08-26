@@ -158,9 +158,11 @@ inline void damagePaddedBand(const KWin::EffectWindow* w, int outerPadding)
     // geometry changes, not per frame. paddedBandRect itself stays the raw
     // geometry, because the change tracker records it and must keep comparing
     // like with like.
-    const KWin::LogicalOutput* const output = w->screen();
-    const qreal scale = output ? output->scale() : 1.0;
-    const qreal devicePx = 1.0 / qMax(scale, 0.001);
+    // windowSurfaceScale, not the window's own screen: it is the scale the
+    // canvas is actually pinned to, so it is the scale whose device grid the
+    // overshoot is measured against. They differ for a window straddling a
+    // mixed-DPI edge, where the canvas takes the higher of the two.
+    const qreal devicePx = 1.0 / qMax(windowSurfaceScale(w), 0.001);
     KWin::effects->addRepaint(
         KWin::RectF(paddedBandRect(w, outerPadding).adjusted(-devicePx, -devicePx, devicePx, devicePx)));
 }
