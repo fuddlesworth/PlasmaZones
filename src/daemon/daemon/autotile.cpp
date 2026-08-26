@@ -18,6 +18,7 @@
 #include <PhosphorContext/ContextResolver.h>
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -1303,6 +1304,26 @@ void Daemon::processPendingGeometryUpdates()
         return;
     }
     if (!m_screenManager || !m_layoutManager || !m_layoutComputeService || !m_overlayService) {
+        return;
+    }
+
+    // Hold the whole pass while a drag session is live. Plasma's floating
+    // panels dock themselves the moment a dragged window touches them and
+    // float again when it moves away — stock Plasma behaviour, unrelated to
+    // our overlay, and not ours to suppress. Every toggle changes the panel's
+    // exclusive zone, our sensor reflows, and the work area moves. Running
+    // the recompute on that pulls the zone rects out from under the cursor
+    // mid-drag, and the drop then resolves against a rect that moved after
+    // the user aimed at it.
+    //
+    // Re-arm rather than wire this to drop: the debounce then flushes one
+    // interval after the drag ends, which also lets the panel settle back to
+    // whichever state it lands in. Polling the flag keeps the deferral
+    // self-healing — a drag that ends without a clean endDrag (client crash,
+    // compositor-cancelled move) still releases the update on the next tick
+    // instead of stranding m_geometryUpdatePending forever.
+    if (m_windowDragAdaptor && m_windowDragAdaptor->isDragSessionActive()) {
+        m_geometryUpdateTimer.start();
         return;
     }
 

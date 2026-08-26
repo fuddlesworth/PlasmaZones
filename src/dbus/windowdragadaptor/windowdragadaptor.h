@@ -322,6 +322,25 @@ public:
     }
 
     /**
+     * True while a compositor drag session exists, whether or not the user
+     * has held an activation trigger yet — the broader question
+     * isDragInFlight() deliberately does not answer (see its note).
+     *
+     * The daemon's geometry-recompute debounce consults this. Plasma's
+     * floating panels dock themselves when a dragged window touches them and
+     * float again when it moves away, which is stock Plasma behaviour we
+     * cannot and should not suppress. Each toggle changes the panel's
+     * exclusive zone, so our layer-shell sensor reflows and the work area
+     * moves. Recomputing zone rects from that mid-drag drags the zones out
+     * from under the user's cursor, and the drop then resolves against a rect
+     * that moved after the user aimed at it.
+     */
+    bool isDragSessionActive() const
+    {
+        return !m_draggedWindowId.isEmpty() || !m_pendingSnapDragWindowId.isEmpty();
+    }
+
+    /**
      * Cancel any live drag-insert preview on either engine. The daemon's
      * context-change handlers route through these instead of hand-inlining
      * the two-engine sweep (a third engine would otherwise need every call
