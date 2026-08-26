@@ -61,6 +61,17 @@ class DecorationPreviewController : public QObject
     /// notice would go stale until the dialog was reopened.
     Q_PROPERTY(bool audioVisualizerEnabled READ audioVisualizerEnabled NOTIFY audioVisualizerEnabledChanged)
 
+    /// Bumped whenever something a composed preview depends on, but does not
+    /// pass as an argument, has changed: the theme colours previewChain
+    /// resolves against, and the registry it looks packs up in.
+    ///
+    /// A COUNTER rather than a bare signal, because the QML bindings are over
+    /// Q_INVOKABLE calls. QML records no dependency on a function call, so a
+    /// signal alone would re-evaluate nothing and the fix would read as applied
+    /// while doing nothing at all. Referencing this property inside those
+    /// bindings is what puts them in the dependency set.
+    Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewRevisionChanged)
+
 public:
     explicit DecorationPreviewController(PhosphorSurfaceShaders::SurfaceShaderRegistry* registry = nullptr,
                                          ISettings* settings = nullptr, QObject* parent = nullptr);
@@ -117,6 +128,15 @@ public:
     /// behaves the same way.
     Q_INVOKABLE bool audioVisualizerEnabled() const;
 
+    int previewRevision() const
+    {
+        return m_previewRevision;
+    }
+
+    /// Watches the application for a colour-scheme change, which moves the
+    /// palette every composed preview resolves against. Never consumes.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
     Q_INVOKABLE void startAudioCapture();
     Q_INVOKABLE void stopAudioCapture();
 
@@ -125,6 +145,7 @@ public:
 Q_SIGNALS:
     void audioSpectrumChanged();
     void audioVisualizerEnabledChanged();
+    void previewRevisionChanged();
 
 private:
     /// Stop the provider without clearing the standing capture request.
@@ -142,6 +163,11 @@ private:
     /// provider is running": capture can be legitimately suspended while the
     /// request stands (visualizer off, CAVA absent).
     bool m_captureRequested = false;
+
+    /// Backing counter for previewRevision. Only ever bumped, never reset: QML
+    /// cares that the value CHANGED, not what it is.
+    int m_previewRevision = 0;
+    void bumpPreviewRevision();
     QVector<float> m_spectrum;
 };
 

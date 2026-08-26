@@ -73,8 +73,16 @@ Item {
     /// where audio is actually running.
     property var audioSpectrum: []
 
-    readonly property var _chain: (active && previewController && packId.length > 0) ? (previewController.previewChain(packId, params) || []) : []
-    readonly property real _outerPad: (active && previewController && packId.length > 0) ? previewController.previewOuterPadding(packId, params) : 0
+    /// Read by every binding below that calls into the controller.
+    ///
+    /// Those are Q_INVOKABLE CALLS, and QML records no dependency on a function
+    /// call — only on the properties an expression touches. Without naming this
+    /// one, a theme change or a pack install would leave an open preview
+    /// showing its old composition until the dialog was reopened.
+    readonly property int _rev: previewController ? previewController.previewRevision : 0
+
+    readonly property var _chain: (active && previewController && packId.length > 0 && root._rev >= 0) ? (previewController.previewChain(packId, params) || []) : []
+    readonly property real _outerPad: (active && previewController && packId.length > 0 && root._rev >= 0) ? previewController.previewOuterPadding(packId, params) : 0
 
     /// Window-ish aspect the stand-in card always keeps, so the same pack reads
     /// identically in a browser thumbnail and in the detail pane. Matches
@@ -110,7 +118,7 @@ Item {
     readonly property string _wallpaper: (active && previewController) ? (previewController.wallpaperPath() || "") : ""
 
     /// Whether the browsed pack samples the scene behind the window.
-    readonly property bool _needsBackdrop: (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})).needsBackdrop === true : false
+    readonly property bool _needsBackdrop: (previewController && packId.length > 0 && root._rev >= 0) ? (previewController.packInfo(packId) || ({})).needsBackdrop === true : false
 
     /// The wallpaper decoded for the backdrop sampler. Only fetched for a pack
     /// that samples it — decoding a wallpaper per card otherwise would be pure

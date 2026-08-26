@@ -27,7 +27,29 @@ DecorationPreviewController::DecorationPreviewController(PhosphorSurfaceShaders:
     , m_registry(registry)
     , m_settings(settings)
 {
+    // Everything a composed preview depends on without being handed it as an
+    // argument. previewChain resolves theme colours per call and looks the pack
+    // up in the registry, so a colour-scheme change, a highlight-colour change
+    // or a pack installed while a preview is open all leave it showing stale
+    // output until the user reopens the dialog.
+    if (m_registry) {
+        connect(m_registry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
+                &DecorationPreviewController::bumpPreviewRevision);
+    }
+    if (auto* app = qGuiApp) {
+        // The palette is the fallback for both colours AND the source of the
+        // window background and foreground the theme-neutral resolver lerps
+        // between, so a colour-scheme switch moves a preview even when the
+        // user's own highlight/inactive overrides are set.
+        //
+        // Watched as an event rather than through QGuiApplication's
+        // paletteChanged signal, which Qt 6 deprecates in favour of exactly
+        // this event.
+        app->installEventFilter(this);
+    }
     if (m_settings) {
+        connect(m_settings, &ISettings::highlightColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
+        connect(m_settings, &ISettings::inactiveColorChanged, this, &DecorationPreviewController::bumpPreviewRevision);
         // Follow the setting for as long as a host wants capture. Without this
         // a user who turns the visualizer off mid-preview leaves the external
         // CAVA process running until the dialog closes, because the only stop
@@ -61,6 +83,22 @@ DecorationPreviewController::~DecorationPreviewController()
     if (m_audio && m_audio->isRunning()) {
         m_audio->stop();
     }
+}
+
+bool DecorationPreviewController::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event && event->type() == QEvent::ApplicationPaletteChange) {
+        bumpPreviewRevision();
+    }
+    // Never consumed: this is an observer on the application object, and
+    // swallowing a palette change would break every other consumer of it.
+    return QObject::eventFilter(watched, event);
+}
+
+void DecorationPreviewController::bumpPreviewRevision()
+{
+    ++m_previewRevision;
+    Q_EMIT previewRevisionChanged();
 }
 
 QVariantList DecorationPreviewController::previewChain(const QString& packId, const QVariantMap& friendlyParams) const

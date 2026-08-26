@@ -34,6 +34,7 @@
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QSet>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -315,6 +316,35 @@ private Q_SLOTS:
         QColor idle = params.value(QStringLiteral("customColor2")).value<QColor>();
         QCOMPARE(active.rgb(), highlight.rgb());
         QCOMPARE(idle.rgb(), inactive.rgb());
+    }
+
+    /// The preview revision moves when a composed preview's unstated inputs do.
+    ///
+    /// previewChain resolves theme colours per call and looks the pack up in
+    /// the registry, but the QML bindings that call it pass neither as an
+    /// argument, so nothing would tell them to recompose. QML records no
+    /// dependency on a Q_INVOKABLE call either, which is why this is a counter
+    /// they can read rather than a bare signal — a signal alone would leave the
+    /// preview stale while looking, in the diff, entirely fixed.
+    void preview_revision_moves_when_the_theme_colours_change()
+    {
+        StubSettings settings;
+        DecorationPreviewController c(&m_registry, &settings);
+        QSignalSpy spy(&c, &DecorationPreviewController::previewRevisionChanged);
+        QVERIFY(spy.isValid());
+
+        const int before = c.previewRevision();
+        settings.setHighlightColor(QColor(0x10, 0x20, 0x30));
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.previewRevision() != before);
+
+        settings.setInactiveColor(QColor(0x40, 0x50, 0x60));
+        QCOMPARE(spy.count(), 2);
+
+        // A no-op write must not churn the preview: ISettings only signals on a
+        // real change, and this rides that.
+        settings.setInactiveColor(QColor(0x40, 0x50, 0x60));
+        QCOMPARE(spy.count(), 2);
     }
 
     /// The wallpaper stand-in accessors must be total.
