@@ -63,6 +63,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
+// Note the asymmetry with REGISTER_CONCRETE_STRING below, which DOES check the
+// variant's type: the keys registered through this interface-virtual form are
+// free-text (names, paths, colour tokens) whose setters validate or normalise
+// their own input, while the concrete form carries the shortcut chords and the
+// preset lists, where a coerced empty string silently unbinds something.
 #define REGISTER_STRING_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -415,8 +420,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // non-Settings backend keeps the keys), so they register through the
     // interface rather than in the concrete block below. No LayoutMode /
     // GridColumns / MaxRows twin: the strip popup is one card row along the
-    // strip. The int/bool keys go through the shared macros, which now refuse
-    // a payload they cannot parse rather than coercing it.
+    // strip. The int keys go through the shared macros, which now refuse a
+    // payload they cannot parse rather than coercing it. The bool keys still
+    // coerce, through QVariant::toBool(), which has no failure mode to check —
+    // hardening those means deciding which payloads may legitimately mean true,
+    // which is a separate question from parsing a number.
     //
     // They used to coerce, on the argument that "the config schema's clampInt
     // one layer down bounds anything a coerced 0 could write". That argument

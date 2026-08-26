@@ -141,6 +141,14 @@ public:
         }
         m_screenDesktopOverride.insert(screenId, desktop);
     }
+    /// The sticky-pin desktop for a screen, or 0 when it is not pinned.
+    ///
+    /// Non-consuming, unlike takeStickyPin. 0 is unambiguous as "not pinned"
+    /// because setStickyPin rejects anything below 1.
+    int stickyPinnedDesktop(const QString& screenId) const
+    {
+        return m_screenDesktopOverride.value(screenId, 0);
+    }
     /// Remove and return the sticky-pin desktop for a screen (default-constructed
     /// int == 0 when absent, mirroring QHash::take).
     int takeStickyPin(const QString& screenId)

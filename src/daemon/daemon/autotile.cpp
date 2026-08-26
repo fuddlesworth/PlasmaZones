@@ -324,21 +324,27 @@ void Daemon::updateEngineScreens()
         // guarantees this key is the one being torn down, so an empty order here
         // genuinely means "nothing was tiled at toggle-off" rather than "we asked
         // the wrong context".
-        // The engine may be reading a DIFFERENT desktop than the one this
-        // capture is about to file under: a screen whose members are sticky
-        // carries an engine-side pin that outranks the compositor's per-output
-        // desktop in the engine's own lookup, and the daemon's
-        // currentDesktopForScreen has no pin term. Filing the pinned desktop's
-        // order under the live desktop's key records a pairing that never
-        // existed, which is the same corruption shape the state-existence gate
-        // above exists to prevent — that gate misses it, because the state it
-        // finds is the pinned one.
+        // A screen whose members are all sticky carries an engine-side PIN that
+        // outranks the compositor's per-output desktop inside the engine's own
+        // lookup, and currentDesktopForScreen has no pin term. Filing the
+        // pinned desktop's order under the live desktop's key records a pairing
+        // that never existed — the same corruption shape the state-existence
+        // gate above guards against, which misses this one because the state it
+        // finds IS the pinned one.
         //
-        // Skipped rather than re-keyed. The pin is dropped the moment the
-        // engine releases the screen, so filing under it would store the order
-        // where the re-entry lookup never looks: a wrong-order bug traded for a
+        // Compares the PIN, not the engine's resolved desktop. The two views can
+        // also differ merely by labelling — a virtual sub-screen resolves
+        // through its parent for the daemon and not for the tracker — and that
+        // is harmless, because each side is self-consistent: the daemon writes
+        // and reads this map with its own key throughout. Gating on the resolved
+        // desktop would skip those captures for no reason.
+        //
+        // Skipped rather than re-keyed. The pin is dropped the moment the engine
+        // releases the screen, so filing under it would store the order where
+        // the re-entry lookup never looks: a wrong-order bug traded for a
         // no-order one, on exactly the sticky case.
-        if (m_autotileEngine->managedDesktopForScreen(screenId) != desktop) {
+        if (const int pinned = m_autotileEngine->stickyPinnedDesktopForScreen(screenId);
+            pinned != 0 && pinned != desktop) {
             continue;
         }
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
@@ -383,7 +389,7 @@ void Daemon::updateEngineScreens()
     // A wrong or stale id degrades to today's behaviour rather than misfiring:
     // the engine drops a seed naming a window its strip does not contain, and
     // drains it either way.
-    if (m_windowTrackingAdaptor) {
+    if (m_windowTrackingAdaptor && m_scrollEngine) {
         const QString focusedId = m_windowTrackingAdaptor->lastActiveWindowId();
         if (!focusedId.isEmpty()) {
             const QString focusedScreen = m_windowTrackingAdaptor->lastActiveScreenName();

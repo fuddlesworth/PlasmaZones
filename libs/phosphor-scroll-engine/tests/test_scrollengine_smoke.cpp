@@ -105,6 +105,7 @@ private Q_SLOTS:
     void modeTransitionFocusSeedIsDrainedByItsBurst();
     void modeTransitionFocusSeedDropsWhenScreenLeaves();
     void modeTransitionFocusSeedDropsOnMidBurstContextSwitch();
+    void modeTransitionFocusSeedSurvivesAStraddlingBurst();
     void perOutputDesktopSurvivesScrollingSetLeave();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
@@ -1801,6 +1802,37 @@ void TestScrollEngineSmoke::modeTransitionFocusSeedDropsOnMidBurstContextSwitch(
     QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
 }
 
+void TestScrollEngineSmoke::modeTransitionFocusSeedSurvivesAStraddlingBurst()
+{
+    // The seed is keyed by bare screen id; the burst's deferred applies are
+    // keyed by the whole context. One screen can therefore appear TWICE in a
+    // burst that straddles a context switch — once under the desktop the
+    // arrivals started on, once under the one they finished on. Only the
+    // matching key consumes the seed; the other takes the skip arm.
+    //
+    // The skip arm must not drop the seed out from under the key that is about
+    // to use it. Keys are walked in sorted order, so the stale one runs FIRST
+    // whenever its desktop sorts lower, which is exactly this arrangement.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+
+    engine->beginArrivalBurst();
+    // Arrival on desktop 1 — inserts a pending key under desktop 1.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    // The context moves, and the seed belongs to the desktop the burst ENDS on.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+    // Two more arrivals on desktop 2 — a second pending key for the same screen.
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+
+    // app|c arrived last and would own focus on its own; the seed names app|b,
+    // so a consumed seed is distinguishable from a dropped one.
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|b"));
+}
+
 void TestScrollEngineSmoke::perOutputDesktopSurvivesScrollingSetLeave()
 {
     // A screen leaving the scrolling set releases this engine's OWNERSHIP of it
@@ -1814,18 +1846,34 @@ void TestScrollEngineSmoke::perOutputDesktopSurvivesScrollingSetLeave()
     // fallback resolves to the same key and no assertion here can tell a
     // preserved entry from a dropped one.
     QObject owner;
-    ScrollEngine* engine = makeEngine(&owner);
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->setCurrentDesktop(1);
     engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 3);
-    QCOMPARE(engine->managedDesktopForScreen(QStringLiteral("S1")), 3);
 
-    // Leave and re-enter WITHOUT re-pushing the per-output desktop. The daemon
-    // does re-push on a real context switch, which is why the existing
-    // round-trip tests pass either way; a plain engine-set flip does not.
-    engine->setActiveScreens({QStringLiteral("S2")});
-    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+    // A strip with a stacked column, so the structure that comes back is
+    // distinguishable from a default one-window-per-column rebuild.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
 
-    QCOMPARE(engine->managedDesktopForScreen(QStringLiteral("S1")), 3);
+    // Leave and re-enter WITHOUT re-pushing the per-output desktop. A real
+    // context switch re-pushes, which is why the existing round-trip tests pass
+    // either way; a plain engine-set flip does not.
+    engine->setActiveScreens({});
+    engine->setActiveScreens({QStringLiteral("S1")});
+    // Leaving releases the windows, so the flip back re-announces them — which
+    // is what a real mode toggle does, and what lets the stash apply.
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+
+    // The stash is keyed by context. With the per-output entry preserved the
+    // re-entry resolves the same key and the stacked column returns; had it
+    // been dropped, the key would fall back to the global desktop 1, the stash
+    // would not be found, and app|b would come back in its own column.
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
+    QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
 }
 
 void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()

@@ -414,21 +414,26 @@ public:
         Q_UNUSED(screenId)
         return {};
     }
-    /// Which desktop this engine's own state lookup for @p screenId resolves
-    /// to, or 0 when the engine keeps no per-screen context.
+    /// The desktop this engine has PINNED @p screenId to, or 0 when it has not
+    /// pinned it (which is the normal case, and the default here).
     ///
-    /// Exists so a CALLER can tell whether the engine is reading the same
-    /// context the caller thinks it is. The two can genuinely differ: an engine
-    /// may pin a screen to a desktop of its own (sticky members), and that pin
-    /// outranks the compositor's per-output desktop in the engine's resolution
-    /// but is invisible to anyone outside it. A capture that files its result
-    /// under the caller's desktop while the engine read the pinned one records
-    /// a state pairing that never existed.
+    /// A pin is an engine-private override for a screen whose windows are all
+    /// sticky: it outranks the compositor's per-output desktop inside the
+    /// engine's own key resolution, and is invisible from outside. That makes it
+    /// the one way a capture can read one desktop's state while filing the
+    /// result under another's key, recording a pairing that never existed.
+    ///
+    /// Reports the PIN specifically, not the engine's resolved desktop, so a
+    /// caller comparing against its own desktop cannot be tripped by the two
+    /// merely LABELLING a screen differently — an engine and a caller can hold
+    /// consistent but differently-numbered views of the same screen (a virtual
+    /// sub-screen resolves through its parent for one and not the other), and
+    /// that costs nothing as long as each is self-consistent.
     ///
     /// Meant for a comparison gate, not for re-keying: the pin is dropped when
     /// the engine releases the screen, so filing by the pinned desktop would
     /// store under a key the re-entry lookup never consults.
-    virtual int managedDesktopForScreen(const QString& screenId) const
+    virtual int stickyPinnedDesktopForScreen(const QString& screenId) const
     {
         Q_UNUSED(screenId)
         return 0;

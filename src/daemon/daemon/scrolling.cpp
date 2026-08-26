@@ -66,13 +66,15 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
             continue;
         }
         const int desktop = currentDesktopForScreen(screenId);
-        // Same sticky-pin gate as the autotile twin: if the engine's own lookup
-        // resolves a different desktop than the one we are about to file under
-        // — which a sticky-member pin can cause, invisibly from out here — then
-        // capturing would pair one desktop's order with another's key. Skip
-        // rather than re-key; the pin does not survive the engine releasing the
-        // screen, so a pinned key is not where re-entry will look.
-        if (m_scrollEngine->managedDesktopForScreen(screenId) != desktop) {
+        // Same sticky-pin gate as the autotile twin, which carries the full
+        // reasoning: an engine-side pin can make the engine read one desktop's
+        // state while this capture files it under another's key. Compares the
+        // PIN specifically, so a screen the two sides merely label differently
+        // is not skipped. Skip rather than re-key; the pin does not survive the
+        // engine releasing the screen, so a pinned key is not where re-entry
+        // will look.
+        if (const int pinned = m_scrollEngine->stickyPinnedDesktopForScreen(screenId);
+            pinned != 0 && pinned != desktop) {
             continue;
         }
         // Stored UNCONDITIONALLY, empty included. An empty order must

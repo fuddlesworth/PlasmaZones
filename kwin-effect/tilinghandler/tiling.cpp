@@ -1790,16 +1790,23 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // commit mid-gesture (applyWindowGeometry hands those to
                 // windowFinishUserMovedResized), and the non-member fullscreen
                 // bail, which commits nothing at all. In each case the client
-                // has not been offered this column, so the entry is dropped
-                // rather than written — a stale one would be read as answered.
-                if (!stripOfferedColumn.isNull()) {
-                    const bool offerNotDelivered = skipMoveResize || snap.window->isUserMove()
-                        || snap.window->isUserResize() || fullscreenBailSkippedCommit;
-                    if (offerNotDelivered) {
-                        m_effect->m_scrollOfferedColumn.remove(snap.windowId);
-                    } else {
-                        m_effect->m_scrollOfferedColumn.insert(snap.windowId, stripOfferedColumn);
-                    }
+                // has not been offered THIS column, so nothing is written — a
+                // recorded offer that never went out would be read as answered.
+                //
+                // Not written, and equally NOT removed. Any entry already there
+                // describes a column an earlier batch genuinely delivered and
+                // the client genuinely answered, and this batch failing to
+                // deliver says nothing about that. Removing it would re-offer
+                // the full column on the next batch and restart the size
+                // renegotiation this whole mechanism exists to end — every
+                // batch arriving during a drag or resize takes this path, so
+                // that would fire for the length of any gesture. Staleness is
+                // decided by the size comparison above, which a genuine column
+                // change fails on its own; membership loss is handled by the
+                // teardown removers.
+                if (!stripOfferedColumn.isNull() && !skipMoveResize && !snap.window->isUserMove()
+                    && !snap.window->isUserResize() && !fullscreenBailSkippedCommit) {
+                    m_effect->m_scrollOfferedColumn.insert(snap.windowId, stripOfferedColumn);
                 }
 
                 if (!skipMoveResize) {

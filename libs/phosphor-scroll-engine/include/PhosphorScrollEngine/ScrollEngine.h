@@ -445,11 +445,11 @@ public:
 
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     QString managedFocusedWindow(const QString& screenId) const override;
-    /// The desktop managedWindowOrder / managedFocusedWindow actually read for
-    /// this screen, sticky pin included. See the interface doc.
-    int managedDesktopForScreen(const QString& screenId) const override
+    /// The desktop this engine has pinned this screen to, or 0. See the
+    /// interface doc for why the gate compares the PIN and not the resolved key.
+    int stickyPinnedDesktopForScreen(const QString& screenId) const override
     {
-        return currentKeyForScreen(screenId).desktop;
+        return m_context.stickyPinnedDesktop(screenId);
     }
     void setInitialFocusedWindow(const QString& screenId, const QString& windowId) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;

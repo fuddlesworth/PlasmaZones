@@ -813,21 +813,36 @@ void ScrollEngine::endArrivalBurst()
               [](const PhosphorEngine::PlacementStateKey& a, const PhosphorEngine::PlacementStateKey& b) {
                   return std::tie(a.screenId, a.desktop, a.activity) < std::tie(b.screenId, b.desktop, b.activity);
               });
+    // Which screens have a key in THIS burst that still matches their current
+    // context. The focus seed is keyed by bare screen id while these keys carry
+    // the whole context, so one screen can appear twice — arrivals straddling a
+    // mid-burst context switch insert under both the old key and the new one.
+    // The skip arm below drops the seed, and without this the stale key (which
+    // sorts first whenever its desktop is lower) would drop the seed out from
+    // under the matching key that is about to consume it.
+    QSet<QString> screensWithLiveKey;
+    for (const PhosphorEngine::PlacementStateKey& key : std::as_const(keys)) {
+        if (key == currentKeyForScreen(key.screenId)) {
+            screensWithLiveKey.insert(key.screenId);
+        }
+    }
     for (const PhosphorEngine::PlacementStateKey& key : std::as_const(keys)) {
         // The screen may have left the scrolling set mid-burst (mode flip
         // races — applyLayout's own guards no-op that), and a context switch
         // mid-burst means the deferred apply's strip is no longer the one on
         // screen: skip it, the switch-back retile covers the mutated strip.
         if (key != currentKeyForScreen(key.screenId)) {
-            // The seed still dies here. It was captured for the transition
-            // this burst belongs to, and that transition is over the moment
-            // the context moves — applying it to whatever context arrives
-            // next would re-anchor a view the user has since moved. Taken
-            // rather than left, because nothing downstream of this `continue`
-            // ever revisits the entry: the switch-back retile does not consume
-            // seeds, so a skipped drain leaves it armed indefinitely for some
-            // later, unrelated burst to pick up.
-            m_pendingInitialFocus.remove(key.screenId);
+            // The seed dies here, but ONLY when no live key for this screen is
+            // going to consume it. It was captured for the transition this
+            // burst belongs to, and that transition is over the moment the
+            // context moves — applying it to whatever arrives next would
+            // re-anchor a view the user has since moved. Dropped rather than
+            // left, because nothing downstream of this `continue` revisits the
+            // entry: the switch-back retile does not consume seeds, so a
+            // skipped drain leaves it armed for some later, unrelated burst.
+            if (!screensWithLiveKey.contains(key.screenId)) {
+                m_pendingInitialFocus.remove(key.screenId);
+            }
             continue;
         }
         // Mode-transition focus restore, consumed here and nowhere else.

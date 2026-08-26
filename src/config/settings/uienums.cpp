@@ -183,9 +183,15 @@ void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
-        setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
+    // Refused loudly rather than dropped, matching the scrolling twin. These
+    // facades exist for QML, which binds an index and then believes it wrote; a
+    // silent no-op leaves the property reporting its old value with nothing to
+    // explain the mismatch.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorPosition::BottomRight)) {
+        qCWarning(lcConfig) << "snapping: zone selector position" << value << "is out of range, ignoring";
+        return;
     }
+    setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
 }
 
 ZoneSelectorLayoutMode Settings::zoneSelectorLayoutMode() const
