@@ -445,6 +445,12 @@ public:
 
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
     QString managedFocusedWindow(const QString& screenId) const override;
+    /// The desktop managedWindowOrder / managedFocusedWindow actually read for
+    /// this screen, sticky pin included. See the interface doc.
+    int managedDesktopForScreen(const QString& screenId) const override
+    {
+        return currentKeyForScreen(screenId).desktop;
+    }
     void setInitialFocusedWindow(const QString& screenId, const QString& windowId) override;
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 

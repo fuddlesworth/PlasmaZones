@@ -66,6 +66,15 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
             continue;
         }
         const int desktop = currentDesktopForScreen(screenId);
+        // Same sticky-pin gate as the autotile twin: if the engine's own lookup
+        // resolves a different desktop than the one we are about to file under
+        // — which a sticky-member pin can cause, invisibly from out here — then
+        // capturing would pair one desktop's order with another's key. Skip
+        // rather than re-key; the pin does not survive the engine releasing the
+        // screen, so a pinned key is not where re-entry will look.
+        if (m_scrollEngine->managedDesktopForScreen(screenId) != desktop) {
+            continue;
+        }
         // Stored UNCONDITIONALLY, empty included. An empty order must
         // overwrite a stale non-empty entry from an earlier toggle, or
         // re-entry resurrects windows that have since closed or left the
@@ -176,6 +185,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // earlier one. Guarding the call on non-empty made that arm unreachable
     // from the only production caller, so the engine's own self-healing path
     // was dead code.
+    // INVARIANT the two out-of-band callers rely on: both processPendingGeometryUpdates
+    // and the bring-up path call this function with the scroll engine's OWN
+    // activeScreens(), so enteringScreens is empty for them and this loop
+    // iterates nothing. That matters because those two reach here WITHOUT the
+    // updateEngineScreens re-entrancy latch, and the seed map is cleared only
+    // inside updateEngineScreens — so a caller passing a DERIVED set would
+    // drain seeds captured by an earlier pass and anchor the strip on a focus
+    // from a transition that is over. Nothing enforces the invariant; a new
+    // out-of-band caller must either pass activeScreens() or go through
+    // updateEngineScreens.
     for (const QString& screenId : enteringScreens) {
         m_scrollEngine->setInitialFocusedWindow(screenId, m_transitionFocusSeed.take(screenId));
     }

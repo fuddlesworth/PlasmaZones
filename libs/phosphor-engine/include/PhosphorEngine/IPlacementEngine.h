@@ -414,6 +414,25 @@ public:
         Q_UNUSED(screenId)
         return {};
     }
+    /// Which desktop this engine's own state lookup for @p screenId resolves
+    /// to, or 0 when the engine keeps no per-screen context.
+    ///
+    /// Exists so a CALLER can tell whether the engine is reading the same
+    /// context the caller thinks it is. The two can genuinely differ: an engine
+    /// may pin a screen to a desktop of its own (sticky members), and that pin
+    /// outranks the compositor's per-output desktop in the engine's resolution
+    /// but is invisible to anyone outside it. A capture that files its result
+    /// under the caller's desktop while the engine read the pinned one records
+    /// a state pairing that never existed.
+    ///
+    /// Meant for a comparison gate, not for re-keying: the pin is dropped when
+    /// the engine releases the screen, so filing by the pinned desktop would
+    /// store under a key the re-entry lookup never consults.
+    virtual int managedDesktopForScreen(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return 0;
+    }
     /// Hand the incoming engine the focus captured from the outgoing one.
     ///
     /// Advisory, and consumed at the END of the arrival burst rather than per

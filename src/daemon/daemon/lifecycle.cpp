@@ -948,6 +948,14 @@ void Daemon::stop()
     // between the stop and that pass walks the strip at all, so a dead
     // session's caps must not be what answers that.
     m_scrollFfmMaxScrollPercent.clear();
+    // The mode-transition focus seed. Pass-scoped by design — the next
+    // updateEngineScreens clears it at the top of its capture phase before any
+    // read — so this is symmetry rather than a live fix, in a block whose whole
+    // purpose is that symmetry. It matters more now that one of its three write
+    // arms is fed from adaptor state rather than from a departing engine: that
+    // arm's source outlives the stop, so leaving a seed behind here would carry
+    // a dead session's focus into the next one's first flip.
+    m_transitionFocusSeed.clear();
     // m_lastEngineOrders is the one per-context cache this block deliberately
     // LEAVES ALONE. It is not change-gate state: it holds the window order
     // captured when a context left a tiling engine, and a stop() does not close

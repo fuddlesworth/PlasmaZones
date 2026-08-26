@@ -227,6 +227,12 @@ public:
     /// interface's no-op default) — but a screen flipping OUT of autotile
     /// still has to tell the incoming engine which window the user was on.
     QString managedFocusedWindow(const QString& screenId) const override;
+    /// The desktop capturedWindowOrder / managedFocusedWindow actually read for
+    /// this screen, sticky pin included. See the interface doc.
+    int managedDesktopForScreen(const QString& screenId) const override
+    {
+        return currentKeyForScreen(screenId).desktop;
+    }
     bool isModeSpecificFloated(const QString& windowId) const override
     {
         return isAutotileFloated(windowId);

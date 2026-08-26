@@ -549,9 +549,10 @@ private:
     /// The windows every capped scrolling screen refuses to focus-follow onto
     /// right now, gathered across screens. Empty whenever no screen caps.
     QStringList scrollFocusScrollBlockedWindows() const;
-    /// Shared capture phase: store leaving-scrolling screens' column order
-    /// into m_lastEngineOrders BEFORE either engine seeds (see
-    /// updateEngineScreens' capture-all → seed-all ordering).
+    /// Shared capture phase: store leaving-scrolling screens' column order into
+    /// m_lastEngineOrders and their focused window into m_transitionFocusSeed,
+    /// BEFORE either engine seeds (see updateEngineScreens' capture-all →
+    /// seed-all ordering).
     void captureScrollingOrders(const QSet<QString>& scrollingScreens);
     void initializeUnifiedController();
     void connectLayoutSignals();
@@ -719,7 +720,8 @@ private:
      * sets in one walk, and pushes them through the shared
      * capture-all → seed-all → apply-all phase (captureScrollingOrders /
      * updateScrollingScreens run in the same pass so a same-flip
-     * autotile↔scrolling transition replays window order deterministically).
+     * autotile↔scrolling transition replays window order AND the focused
+     * window deterministically).
      */
     void updateEngineScreens();
 
@@ -1436,12 +1438,26 @@ private:
     // and the autotile capture/seed) — a same-pass flip replays one
     // engine's order into the other. Keyed by TilingStateKey (not plain
     // screen name) so cross-desktop toggles don't overwrite each other.
+    //
+    // Its focus half is m_transitionFocusSeed, declared just below: the same
+    // two capture sites write both, and the two together are what makes a
+    // same-pass flip reproduce the strip the user was looking at rather than
+    // only its column order. The lifetimes deliberately differ — see there.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
 
-    /// Focus captured from an engine a screen is LEAVING, for the engine it is
-    /// entering in the SAME updateEngineScreens pass. Cleared at the top of
-    /// that pass's capture phase and drained by the seed phase, so unlike
-    /// m_lastEngineOrders it needs no pruning and is never persisted.
+    /// Focus for a screen entering an engine, captured in the SAME
+    /// updateEngineScreens pass. Three write arms: the two engines a screen can
+    /// be LEAVING report their own focus, and a screen arriving from snapping —
+    /// which is in neither engine, and whose engine keeps no focus memory —
+    /// takes the compositor's focused window from the window-tracking adaptor
+    /// when that window is on the screen in question.
+    ///
+    /// Cleared at the top of that pass's capture phase, and drained by the
+    /// SCROLLING seed phase. Entries captured for a screen bound anywhere else
+    /// are simply discarded by the next pass's clear: autotile deliberately
+    /// implements no seed side, because it paints no view of its own to anchor.
+    /// So unlike m_lastEngineOrders this needs no pruning and is never
+    /// persisted, though stop() clears it for symmetry with its siblings.
     ///
     /// Pass-scoped deliberately, not as a shortcut. The order cache is
     /// long-lived by design — a screen re-entering an engine much later still
