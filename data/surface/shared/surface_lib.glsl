@@ -149,10 +149,15 @@ struct SurfaceSlab {
 };
 SurfaceSlab surfaceSlabOpen(vec2 uv, float cornerRadiusPx) {
     SurfaceSlab s;
-    s.window = surfaceTexel(uv);
     s.px = surfacePixel(uv);
     s.fs = frameSdf(s.px, cornerRadiusPx);
     s.mask = frameMask(s.fs.d);
+    // The window sample is clipped to the same rounded frame as the pane. The
+    // capture is square-cornered (the pack owns the corner radius), so an
+    // unmasked window pokes its square corners past the rounded slab at any
+    // contentOpacity below 1 — and at 1.0 the radius parameter does nothing.
+    // Premultiplied, so one multiply rounds both colour and coverage.
+    s.window = surfaceTexel(uv) * s.mask;
     return s;
 }
 
