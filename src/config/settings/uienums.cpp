@@ -217,9 +217,12 @@ void Settings::setZoneSelectorLayoutMode(ZoneSelectorLayoutMode value)
 }
 void Settings::setZoneSelectorLayoutModeInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
-        setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(value));
+    // Refused loudly, matching the sibling facades.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
+        qCWarning(lcConfig) << "snapping: zone selector layout mode" << value << "is out of range, ignoring";
+        return;
     }
+    setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(value));
 }
 
 P_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
@@ -256,9 +259,12 @@ void Settings::setZoneSelectorSizeMode(ZoneSelectorSizeMode value)
 }
 void Settings::setZoneSelectorSizeModeInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
-        setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
+    // Refused loudly, matching the sibling facades and the scrolling twin.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+        qCWarning(lcConfig) << "snapping: zone selector size mode" << value << "is out of range, ignoring";
+        return;
     }
+    setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
 }
 
 P_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
