@@ -95,6 +95,10 @@ Kirigami.Dialog {
     // a fresh item has no inherited Error/errorLog, so the placeholder covers the
     // load and the compile-error banner can only reflect the shader in view.
     property bool _rendererActive: false
+    // Drives the decoration pane's Loader, the same way _rendererActive drives
+    // the zone renderer's. Written ONLY by _teardownPanes / _armPanes — see
+    // the shared-lifecycle contract below.
+    property bool _decorationArmed: false
     // Animated clock for the preview shader.
     property real _previewITime: 0
     property real _previewTimeDelta: 0
@@ -145,42 +149,79 @@ Kirigami.Dialog {
         _liveParams = p;
         _lockedParams = {};
         _recompute();
-        // Tear the old renderer down here; ARMING the new one is onOpened's
-        // job (see _armZoneRenderer). Only the teardown belongs this early.
-        _rendererActive = false;
-        // Unless we are ALREADY open, which is the case onOpened will not cover
-        // — a caller resetting mid-session would otherwise tear the renderer
-        // down and leave nothing to bring it back. Deferred so the Loader gets
-        // a tick to destroy the old item before the new one is created, which
-        // is what keeps the previous shader's Error state from surviving.
+        // Both panes now rebuild through the shared lifecycle below, and only
+        // through it. Neither pane may manage its own lifetime: every regression
+        // this dialog has had came from one pane's teardown or arm living
+        // somewhere the other pane's didn't.
+        _teardownPanes();
+        _armPanes();
+    }
+
+    // ── The ONE preview lifecycle, shared by both panes ────────────────────
+    //
+    // One reused dialog serves two preview panes, and three regressions in a
+    // row came from arming or tearing one of them down in a place the other
+    // did not know about. So the lifecycle now lives here, in one pair of
+    // functions, and the panes' Loaders gate on flags that ONLY these
+    // functions write.
+    //
+    // The contract:
+    //
+    //   - TEARDOWN is synchronous and unconditional, in _resetPreview. It
+    //     cannot rely on `visible` dropping: a QQC2 Popup keeps `visible`
+    //     true until its EXIT transition finishes, so reopening on another
+    //     pack while the close animation still runs never deactivated a
+    //     `visible`-gated Loader — the old pack's pane survived into the new
+    //     open and its stale composition showed until the recompose caught
+    //     up. That was the stale / unavailable / preview flicker.
+    //
+    //   - ARM is per pane, because the two build differently and that
+    //     difference is exactly what kept breaking:
+    //
+    //       decoration — armed a TICK after teardown (Qt.callLater, so the
+    //       Loader actually destroys the old item first). Its chain composes
+    //       asynchronously and its pane covers itself until ready, so it can
+    //       and should build during the enter transition: deferring it to
+    //       `opened` is what made the card arrive bare and decorate late.
+    //
+    //       zone — armed from onOpened, after the enter transition. Creating
+    //       a ZoneShaderItem compiles and links a shader synchronously, so
+    //       arming it before the popup is on screen spends the compile on a
+    //       window nobody can see: the dialog appeared only once the preview
+    //       was finished and the placeholder phase never happened.
+    //
+    // Net effect, identical for both browsers: popup appears, "Preview
+    // unavailable" covers, preview reveals when ready. If you are about to
+    // move one of these lines, the contract test in
+    // test_animations_qml_contracts.cpp names the symptom you are about to
+    // reintroduce.
+    function _teardownPanes() {
+        _rendererActive = false; // zone
+        _decorationArmed = false; // decoration
+    }
+    function _armPanes() {
+        Qt.callLater(function () {
+            root._decorationArmed = root.visible && root._decorationPreview;
+        });
+        // The zone arm normally waits for onOpened. A reset while ALREADY
+        // open (a mid-session caller, or a fast pack switch on a dialog whose
+        // `opened` never dropped) re-arms here instead, since onOpened will
+        // not fire again.
         if (opened)
             Qt.callLater(_armZoneRenderer);
     }
-
-    /// Arm the zone renderer, from onOpened and nowhere else.
-    ///
-    /// Deliberately NOT done in _resetPreview alongside the state reset, even
-    /// though both concern the same preview. The two want opposite timing:
-    ///
-    ///   - The state (parameters, shaderInfo, clock) must be right BEFORE the
-    ///     panes are built, because the decoration pane's Loader activates on
-    ///     `visible` and composes immediately from whatever it finds. Resetting
-    ///     after that gave it the previous pack's parameters and made it
-    ///     compose twice, which was the preview / unavailable / preview flicker.
-    ///
-    ///   - Arming this renderer is the EXPENSIVE half: it creates a
-    ///     ZoneShaderItem that compiles and links a shader. Doing that before
-    ///     the popup is visible spends it on a window nobody can see yet, so
-    ///     the dialog appeared only once the compile had finished — no
-    ///     placeholder, just a pause and then a finished preview.
-    ///
-    /// onOpened runs after the enter transition, so the popup is on screen with
-    /// the placeholder showing, and the compile happens where the user can see
-    /// it is happening. The Loader has been inactive since _resetPreview, so
-    /// this genuinely recreates the item and no previous shader's Error state
-    /// survives.
     function _armZoneRenderer() {
         root._rendererActive = root.opened && root._zonePreview;
+    }
+
+    // A pack switch on a still-visible dialog (open B while A's exit
+    // transition runs — `visible` has not dropped, and aboutToShow is not
+    // guaranteed to re-fire on a popup that never finished closing). Without
+    // this, the previous pack's pane lives on under the new effect until its
+    // bindings recompose: the stale frame at the front of the flicker.
+    onEffectChanged: {
+        if (visible && _livePreview)
+            _resetPreview();
     }
     function _recompute() {
         // Zone-only. A decoration pack's params reach its shader inside the
@@ -227,10 +268,11 @@ Kirigami.Dialog {
             previewController.startAudioCapture();
     }
     onClosed: {
-        // Tear the renderer down on close so its (possibly Error) state can't
-        // survive on the reused dialog and flash on the next shader's open —
-        // the next _resetPreview rebuilds it fresh.
-        _rendererActive = false;
+        // Tear BOTH panes down on close so no (possibly Error) state survives
+        // on the reused dialog and flashes on the next shader's open — the
+        // next _resetPreview rebuilds them fresh. Through the shared lifecycle,
+        // not by writing one pane's flag here and forgetting the other's.
+        _teardownPanes();
         if (previewController)
             previewController.stopAudioCapture();
     }
@@ -667,7 +709,15 @@ Kirigami.Dialog {
                 Loader {
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
-                    active: root.visible && root._decorationPreview
+                    // _decorationArmed, not bare `visible`: `visible` alone
+                    // cannot tear this down on a fast pack switch, because a
+                    // Popup keeps it true until the exit transition ends — the
+                    // previous pack's pane survived into the next open and its
+                    // stale composition led the flicker. The armed flag drops
+                    // synchronously in _resetPreview and comes back a tick
+                    // later, so every open gets a FRESH pane that starts
+                    // covered. See the shared-lifecycle contract up top.
+                    active: root.visible && root._decorationPreview && root._decorationArmed
                     visible: active
 
                     sourceComponent: DecorationPreviewPane {

@@ -883,6 +883,39 @@ private Q_SLOTS:
         // `visible` re-admits the broken ordering without moving the call.
         QVERIFY2(src.contains(QLatin1String("_rendererActive = root.opened")),
                  "_armZoneRenderer must gate on `opened`, not `visible`");
+
+        // ── The DECORATION half of the same shared lifecycle ──────────────
+        //
+        // The decoration pane's Loader must gate on the armed flag, not on
+        // `visible` alone: a Popup keeps `visible` true until its exit
+        // transition finishes, so a `visible`-only gate never tears the pane
+        // down on a fast pack switch and the previous pack's stale
+        // composition leads the open (stale / unavailable / preview).
+        QVERIFY2(src.contains(QLatin1String("root._decorationArmed")),
+                 "the decoration pane's Loader must gate on _decorationArmed — `visible` alone cannot "
+                 "tear it down on a fast pack switch, so the previous pack's stale composition shows first");
+
+        // Teardown of BOTH panes is one shared function, and the reset path
+        // must go through it. One pane's flag written somewhere the other's
+        // is not is how every one of these regressions started.
+        QVERIFY2(src.contains(QLatin1String("function _teardownPanes")),
+                 "_teardownPanes must exist: both panes tear down through one function");
+        const int teardownAt = src.indexOf(QLatin1String("function _teardownPanes"));
+        const QString teardownBody = src.mid(teardownAt, src.indexOf(QLatin1String("}"), teardownAt) - teardownAt);
+        QVERIFY2(teardownBody.contains(QLatin1String("_rendererActive = false"))
+                     && teardownBody.contains(QLatin1String("_decorationArmed = false")),
+                 "_teardownPanes must drop BOTH panes' flags");
+        QVERIFY2(!src.contains(QLatin1String("active: root.visible && root._decorationPreview\n")),
+                 "the decoration Loader has lost its _decorationArmed gate");
+
+        // A pack switch on a still-visible dialog must reset: aboutToShow is
+        // not guaranteed to re-fire on a popup that never finished closing.
+        const int effectChanged = src.indexOf(QLatin1String("onEffectChanged:"));
+        QVERIFY2(effectChanged >= 0, "onEffectChanged handler not found");
+        const QString effectChangedBody = src.mid(effectChanged, 200);
+        QVERIFY2(effectChangedBody.contains(QLatin1String("_resetPreview")),
+                 "onEffectChanged must reset the preview while visible, or a fast pack switch keeps "
+                 "the previous pack's pane alive under the new effect");
     }
 };
 
