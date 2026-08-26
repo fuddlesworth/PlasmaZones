@@ -105,13 +105,24 @@ ItemDelegate {
         const viewH = root.viewport.height;
         if (viewH <= 0)
             return false;
-        // The card's own position matters as much as the scroll offset: a
-        // section expanding, the Flow re-wrapping on a resize, or a filter
-        // change all move a card without moving contentY.
+        // The card's own position matters as much as the scroll offset: the
+        // Flow re-wrapping on a resize or a filter change moves a card without
+        // moving contentY.
         const selfY = root.y;
         const selfX = root.x;
         void selfY;
         void selfX;
+        // And so does an ANCESTOR moving, which the card's own y does not
+        // record: a section collapsing above this one slides every later card
+        // up the page while both root.y (its offset inside its own Flow) and
+        // contentY stay exactly where they were. Walking up to the viewport
+        // and touching each ancestor's y and height is what makes those
+        // moves re-evaluate this; without it the cards a collapse pulls into
+        // view stay covered, showing empty slots until the user scrolls.
+        for (let a = root.parent; a && a !== root.viewport.contentItem; a = a.parent) {
+            void a.y;
+            void a.height;
+        }
         const pos = root.mapToItem(root.viewport.contentItem, 0, 0);
         const slack = root.height;
         return (pos.y + root.height) > (contentY - slack) && pos.y < (contentY + viewH + slack);

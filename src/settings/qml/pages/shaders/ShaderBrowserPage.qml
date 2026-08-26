@@ -152,6 +152,14 @@ SettingsFlickable {
         return result;
     }
     readonly property bool _hasTypeAxis: _allTypes.length > 1
+    /// Whether the settings app is frontmost.
+    ///
+    /// A live decoration card runs a capture chain and a shader item per stage,
+    /// and an animated pack ticks them every frame. None of that is worth
+    /// spending while the user is looking at another window, and the window
+    /// staying exposed means nothing else stops it. The detail dialog gates its
+    /// own preview on the same condition.
+    readonly property bool _appActive: Qt.application.state === Qt.ApplicationActive
     // ── Group / sort options (data-driven; dispatched by option id) ─────
     // The Type option only appears when the type axis is live. Grouping and
     // sorting dispatch on the option `id`, never a raw index, so a model that
@@ -674,7 +682,12 @@ SettingsFlickable {
                                 // so the cards inside still map into the
                                 // viewport. _bodyLive is what actually tracks
                                 // whether the body is worth rendering.
-                                previewLive: groupCard._bodyLive
+                                // ...and _appActive stops an animated pack
+                                // ticking once per frame in every visible card
+                                // while the settings window is backgrounded but
+                                // still exposed. The detail dialog gates its own
+                                // preview the same way.
+                                previewLive: groupCard.bodyLive && root._appActive
                                 usagesRev: root._usagesRev
                                 usageChipTextFn: root.usageChipTextFn
                                 typeBadgeFn: function (e) {

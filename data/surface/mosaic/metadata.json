@@ -3,7 +3,7 @@
     "name": "Mosaic",
     "description": "The scene behind the window pixelated into coarse cells instead of blurred, the privacy-glass look. Nothing behind the window is readable but its colours still show through. It shows through wherever the window itself is translucent, and the Content opacity parameter sets how much of the window content stays visible over the mosaic.",
     "author": "PlasmaZones",
-    "version": "1.1",
+    "version": "1.2",
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
@@ -16,7 +16,7 @@
             "min": 4,
             "max": 48,
             "description": "Size of the mosaic cells (px), larger cells hide more",
-            "group": "Blur"
+            "group": "Mosaic"
         },
         {
             "id": "cornerRadius",

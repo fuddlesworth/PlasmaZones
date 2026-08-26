@@ -716,15 +716,21 @@ void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& b
 
 void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings, DepthAccess access) const
 {
-    if (!m_useDepthBuffer || !m_depthTexture || !m_depthSampler) {
-        return;
-    }
-    // A pass that writes the depth attachment must not also sample it — see
-    // DepthAccess. Substitute the dummy so binding 12 stays populated for a
-    // buffer shader that pulls in depth.glsl regardless.
+    // Binding 12 stays POPULATED whether or not a depth buffer is in play,
+    // the same discipline appendWallpaperBinding follows for binding 11 and
+    // the user-texture slots follow for 7-10. data/overlays/shared/depth.glsl
+    // declares the sampler unconditionally for any pack that includes it, so a
+    // pack that includes it without also setting "depthBuffer": true would
+    // otherwise present resource bindings that do not match its own SPIR-V —
+    // a pipeline-create failure with nothing naming the cause, rather than a
+    // graceful degrade to an empty depth read.
+    //
+    // A pass that WRITES the depth attachment must not also sample it (see
+    // DepthAccess), which is the other route to the same substitution.
     const bool writes = access == DepthAccess::WrittenThisPass;
-    QRhiTexture* tex = writes ? m_dummyChannelTexture.get() : m_depthTexture.get();
-    QRhiSampler* sam = writes ? m_dummyChannelSampler.get() : m_depthSampler.get();
+    const bool haveDepth = m_useDepthBuffer && m_depthTexture && m_depthSampler;
+    QRhiTexture* tex = (writes || !haveDepth) ? m_dummyChannelTexture.get() : m_depthTexture.get();
+    QRhiSampler* sam = (writes || !haveDepth) ? m_dummyChannelSampler.get() : m_depthSampler.get();
     if (!tex || !sam) {
         return;
     }

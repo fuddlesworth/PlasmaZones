@@ -40,7 +40,7 @@ Item {
     /// pane never touches the page controller itself — the dialog owns that
     /// relationship, which is why this file is not a shader-browser route
     /// file (see everyBridgeCallFromTheShaderBrowserIsReachable).
-    required property var previewController
+    required property QtObject previewController
     /// The browsed pack's id.
     required property string packId
     /// Live (transient) friendly parameter map from the dialog's editor.

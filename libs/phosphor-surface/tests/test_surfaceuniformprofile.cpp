@@ -316,14 +316,30 @@ private Q_SLOTS:
         // No flags → no regions.
         QVERIFY(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{}).empty());
 
-        // Any flag → matrix {0,64} + scene {64, 672-64}.
-        auto r = profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{false, false, true, false});
+        // Any relevant flag → matrix {0,64} + scene {64, 672-64}.
+        //
+        // Designated rather than positional: UboDirtyFlags is four bools, so
+        // inserting or reordering one silently retargets a positional
+        // initializer at a different flag with no compile error.
+        auto r = profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{.sceneData = true});
         QCOMPARE(static_cast<int>(r.size()), 2);
         QCOMPARE(r[0].offset, 0);
         QCOMPARE(r[0].size, 64);
         QCOMPARE(r[1].offset, static_cast<int>(offsetof(SurfaceUniforms, qt_Opacity)));
         QCOMPARE(r[1].size,
                  static_cast<int>(sizeof(SurfaceUniforms)) - static_cast<int>(offsetof(SurfaceUniforms, qt_Opacity)));
+
+        // Each contributing flag on its own, so dropping any one of them from
+        // the predicate is caught. Asserted individually because the combined
+        // case above passes on a predicate that consults only one of the three.
+        QCOMPARE(static_cast<int>(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{.time = true}).size()), 2);
+        QCOMPARE(static_cast<int>(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{.timeHi = true}).size()), 2);
+
+        // appFields is deliberately NOT consulted: this profile has no
+        // app-fields region, so an appFields-only signal carries nothing it
+        // uploads. Pinned, because adding it to the predicate would make every
+        // such signal re-upload the whole struct and nothing else would notice.
+        QVERIFY(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{.appFields = true}).empty());
     }
 
     void full_upload_regions_cover_struct()

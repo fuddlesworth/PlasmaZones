@@ -3,7 +3,7 @@
     "name": "Glass",
     "description": "A pane of glass over the scene behind the window. The backdrop is blurred and bends toward the edges like a bevelled lens, with slight colour fringing and a soft rim light. It shows through wherever the window itself is translucent, and the Content opacity parameter sets how much of the window content stays visible over the glass.",
     "author": "PlasmaZones",
-    "version": "1.1",
+    "version": "1.2",
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,
@@ -62,7 +62,7 @@
             "min": 4,
             "max": 96,
             "description": "How far the lens bevel reaches in from the edge (px)",
-            "group": "Shape"
+            "group": "Refraction"
         },
         {
             "id": "fringing",

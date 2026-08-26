@@ -70,6 +70,17 @@ Item {
     /// `enabled`), so a value derived from the ramp would drop them out of the
     /// layout while the card was still visibly sliding.
     property bool _bodyLive: true
+    /// Public read of `_bodyLive`, for a host that has to know whether this
+    /// card's body is worth rendering.
+    ///
+    /// The shader browser reads it to decide whether the live previews inside a
+    /// section should run at all: a collapsed section clips its body to zero
+    /// height without unloading it, so the cards inside still map into the
+    /// viewport and would otherwise keep their capture chains alive. Exposed
+    /// under a public name because a rename of the underscore-private would
+    /// degrade that read to `undefined` — falsy, and therefore every preview
+    /// silently off, with no error anywhere.
+    readonly property alias bodyLive: root._bodyLive
     /// How far open the body is: 0 shut, 1 fully open. The collapse animates
     /// THIS, and the body's height stays a live binding on it times the content's
     /// implicit height.

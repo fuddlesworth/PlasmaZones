@@ -297,8 +297,16 @@ private Q_SLOTS:
 
         // The crop helper, by contract, clamps instead. Pinned so the divergence
         // is deliberate rather than discovered later.
+        //
+        // Asserted as the exact rect rather than as "empty or non-negative":
+        // that weaker form held for an empty result and for any crop with a
+        // non-negative x, including one that ignored subGeom altogether, so it
+        // could not actually tell the clamping apart from the overhang it is
+        // here to contrast against. The wallpaper and screen are the same size
+        // and aspect, so the cover is the whole image and the clamped rect is
+        // the visible remainder of the 400px surface: 300px from each edge.
         const QRect crop = ShaderRegistry::computeWallpaperCropRect(wp, phys, sub);
-        QVERIFY(crop.isEmpty() || crop.x() >= 0);
+        QCOMPARE(crop, QRect(0, 0, 300, 300));
     }
 
     /// A surface covering the whole screen maps to the whole cover region.

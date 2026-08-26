@@ -25,6 +25,7 @@
 #include <QTest>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -288,6 +289,41 @@ private Q_SLOTS:
         gated.stopAudioCapture();
     }
 
+    /// Toggling the visualizer setting republishes, and does not start capture
+    /// on its own.
+    ///
+    /// Two separate obligations in one handler, neither previously exercised.
+    /// The republish is what drives the pane's "turn the visualizer on" notice,
+    /// so it has to fire whether or not a preview is open. The start is gated
+    /// on a standing capture request instead, because this controller outlives
+    /// any one dialog and reacting to the setting alone would spawn an external
+    /// CAVA process for a preview nobody is looking at.
+    ///
+    /// Neither leg needs CAVA to exist: nothing here ever requests capture, so
+    /// the guard is what is being pinned, not the provider.
+    void toggling_the_visualizer_setting_republishes_without_starting_capture()
+    {
+        StubSettings settings;
+        settings.setEnableAudioVisualizer(false);
+        DecorationPreviewController c(&m_registry, &settings);
+        QVERIFY(!c.audioVisualizerEnabled());
+
+        QSignalSpy spy(&c, &DecorationPreviewController::audioVisualizerEnabledChanged);
+        QVERIFY(spy.isValid());
+
+        settings.setEnableAudioVisualizer(true);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(c.audioVisualizerEnabled());
+        // Nothing asked for a spectrum, so turning the setting on must not have
+        // started one.
+        QVERIFY(c.audioSpectrumVariant().value<QVector<float>>().isEmpty());
+
+        settings.setEnableAudioVisualizer(false);
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!c.audioVisualizerEnabled());
+        QVERIFY(c.audioSpectrumVariant().value<QVector<float>>().isEmpty());
+    }
+
     /// A theme-reactive pack previews in the USER's colours, not the palette's.
     ///
     /// previewChain resolves useSystemAccent / useThemeNeutral against the
@@ -305,7 +341,12 @@ private Q_SLOTS:
         settings.setInactiveColor(inactive);
 
         DecorationPreviewController c(&m_registry, &settings);
-        const QVariantMap stage = c.previewChain(QStringLiteral("accented"), {}).first().toMap();
+        // Size first: QList::first() on an empty list is undefined behaviour,
+        // so a regression that made previewChain return nothing would turn this
+        // slot into a crash rather than a readable failure.
+        const QVariantList chain = c.previewChain(QStringLiteral("accented"), {});
+        QCOMPARE(chain.size(), 1);
+        const QVariantMap stage = chain.first().toMap();
         const QVariantMap params = stage.value(QStringLiteral("params")).toMap();
 
         // The pack declares activeColor / inactiveColor, so the resolver's
@@ -390,10 +431,16 @@ private Q_SLOTS:
     {
         DecorationPreviewController c(&m_registry, nullptr);
 
-        const QVariantMap plain = c.previewChain(QStringLiteral("border"), {}).first().toMap();
+        // Size-checked before first() for the same reason as the theme slot
+        // above: an empty chain is undefined behaviour here, not a failure.
+        const QVariantList plainChain = c.previewChain(QStringLiteral("border"), {});
+        QCOMPARE(plainChain.size(), 1);
+        const QVariantMap plain = plainChain.first().toMap();
         QCOMPARE(plain.value(QStringLiteral("multipass")).toBool(), false);
 
-        const QVariantMap frost = c.previewChain(QStringLiteral("frost"), {}).first().toMap();
+        const QVariantList frostChain = c.previewChain(QStringLiteral("frost"), {});
+        QCOMPARE(frostChain.size(), 1);
+        const QVariantMap frost = frostChain.first().toMap();
         QCOMPARE(frost.value(QStringLiteral("multipass")).toBool(), true);
         QCOMPARE(frost.value(QStringLiteral("bufferShaderPaths")).toStringList().size(), 2);
 
@@ -423,6 +470,28 @@ private Q_SLOTS:
         const QString settingsQml = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
         const QStringList files{settingsQml + QStringLiteral("/DecorationChainPreview.qml"),
                                 settingsQml + QStringLiteral("/DecorationPreviewPane.qml")};
+
+        // A hardcoded list rots: a new decoration QML file that talks to
+        // previewController would simply go unchecked, which is the failure
+        // this whole slot exists to prevent, one level up. Sweep the directory
+        // and require every file that touches `previewController.` to be either
+        // listed above or deliberately excluded.
+        const QStringList excluded{settingsQml + QStringLiteral("/ShaderBrowserCard.qml"),
+                                   settingsQml + QStringLiteral("/ShaderBrowserDetailDialog.qml")};
+        QDirIterator sweep(settingsQml, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+        while (sweep.hasNext()) {
+            const QString path = sweep.next();
+            if (files.contains(path) || excluded.contains(path)) {
+                continue;
+            }
+            QFile f(path);
+            QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(QStringLiteral("cannot read ") + path));
+            const QString src = QString::fromUtf8(f.readAll());
+            QVERIFY2(!src.contains(QLatin1String("previewController.")),
+                     qPrintable(QStringLiteral("%1 calls previewController but is neither scraped nor "
+                                               "documented as excluded — add it to one of the two lists")
+                                    .arg(path)));
+        }
 
         // Comments are stripped before scraping so a commented-out call cannot
         // stand in for a real one, and a `//` inside a string cannot swallow

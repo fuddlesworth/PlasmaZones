@@ -37,7 +37,7 @@ Item {
     clip: true
 
     /// DecorationPreviewController, handed down by the host.
-    required property var previewController
+    required property QtObject previewController
     /// The pack to render.
     required property string packId
     /// Friendly parameter map. Empty means the pack's declared defaults, which
