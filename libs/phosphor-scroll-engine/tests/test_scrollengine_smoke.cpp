@@ -102,7 +102,10 @@ private Q_SLOTS:
     void orderedOpenFollowsAndConsumesSeed();
     void partiallyConsumedSeedGuardsReopens();
     void modeTransitionFocusSeedAnchorsArrival();
-    void modeTransitionFocusSeedIsDrained();
+    void modeTransitionFocusSeedIsDrainedByItsBurst();
+    void modeTransitionFocusSeedDropsWhenScreenLeaves();
+    void modeTransitionFocusSeedDropsOnMidBurstContextSwitch();
+    void perOutputDesktopSurvivesScrollingSetLeave();
     void orderedOpenForwardArrivalsKeepSeedOrder();
     void floatedOpenConsumesSeed();
     void tileFlaggedFloatingBySiblingEngineSyncsClear();
@@ -1707,10 +1710,14 @@ void TestScrollEngineSmoke::modeTransitionFocusSeedAnchorsArrival()
              (QStringList{QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 }
 
-void TestScrollEngineSmoke::modeTransitionFocusSeedIsDrained()
+void TestScrollEngineSmoke::modeTransitionFocusSeedIsDrainedByItsBurst()
 {
-    // The seed is consumed by the burst that follows it and never re-applied:
-    // a later burst on the same screen must leave focus where the user's own
+    // Named for what it actually pins: consumption by the burst that FOLLOWS
+    // the seed. That is the path that always worked. The two tests below cover
+    // the paths where the seed is never consumed at all, which is where it used
+    // to survive and re-anchor an unrelated later transition.
+    //
+    // A later burst on the same screen must leave focus where the user's own
     // arrivals put it, or every subsequent flip would rewind the view to a
     // transition the user has long since moved past.
     QObject owner;
@@ -1729,6 +1736,96 @@ void TestScrollEngineSmoke::modeTransitionFocusSeedIsDrained()
     engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
     engine->endArrivalBurst();
     QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedDropsWhenScreenLeaves()
+{
+    // The seed is scoped to the transition that captured it. Its only consumer
+    // is the arrival burst, so a screen seeded for a flip whose re-announce
+    // never produces one — an empty desktop, or arrivals filtered out — reaches
+    // no drain at all. Without a drop at the lifecycle edge the entry survives
+    // the screen leaving scrolling entirely, and the NEXT unrelated burst on
+    // that screen anchors the view on a window from a flip the user has long
+    // since moved past.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    // Seeded with a window that WILL be in the strip later. Naming an absent
+    // window would not discriminate: the burst-end restore drops a seed whose
+    // window the strip does not contain, so the defect would hide behind that
+    // guard rather than being caught.
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|a"));
+
+    // No burst: nothing consumes the seed. The screen then leaves scrolling.
+    engine->setActiveScreens({QStringLiteral("S2")});
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+
+    // A fresh, unrelated burst with no seed of its own. These arrivals take
+    // focus the ordinary way, so the LAST one owns it — there is no order seed
+    // here, which is what would otherwise route them through the no-focus
+    // insert. A surviving seed would override that at burst end and pull focus
+    // back to app|a, so the two outcomes are distinguishable.
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|b"));
+}
+
+void TestScrollEngineSmoke::modeTransitionFocusSeedDropsOnMidBurstContextSwitch()
+{
+    // A context switch landing mid-burst makes the deferred apply's strip no
+    // longer the one on screen, so the burst-end pass skips that key. The seed
+    // has to die there anyway: the transition it belongs to is over the moment
+    // the context moves, and nothing downstream of the skip revisits the entry
+    // — the switch-back retile does not consume seeds. Left armed, it waits for
+    // whatever burst comes next.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->setInitialFocusedWindow(QStringLiteral("S1"), QStringLiteral("app|b"));
+
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // The context moves out from under the burst before it closes.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    engine->endArrivalBurst();
+
+    // Back on the original desktop, with its strip intact. A second burst
+    // there must anchor on its own arrival: the skipped seed is gone, not
+    // waiting.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->beginArrivalBurst();
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
+    engine->endArrivalBurst();
+    QCOMPARE(engine->managedFocusedWindow(QStringLiteral("S1")), QStringLiteral("app|c"));
+}
+
+void TestScrollEngineSmoke::perOutputDesktopSurvivesScrollingSetLeave()
+{
+    // A screen leaving the scrolling set releases this engine's OWNERSHIP of it
+    // but must keep its per-output desktop: that value is compositor truth the
+    // engine cannot re-derive, and the global desktop it would otherwise fall
+    // back to is written once at startup and never again under per-output
+    // desktops. Dropping it merged every output onto one desktop on re-entry.
+    //
+    // The per-output value differs from the global ON PURPOSE. With the two
+    // equal — which is what every other test in this file leaves them as — the
+    // fallback resolves to the same key and no assertion here can tell a
+    // preserved entry from a dropped one.
+    QObject owner;
+    ScrollEngine* engine = makeEngine(&owner);
+    engine->setCurrentDesktop(1);
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 3);
+    QCOMPARE(engine->managedDesktopForScreen(QStringLiteral("S1")), 3);
+
+    // Leave and re-enter WITHOUT re-pushing the per-output desktop. The daemon
+    // does re-push on a real context switch, which is why the existing
+    // round-trip tests pass either way; a plain engine-set flip does not.
+    engine->setActiveScreens({QStringLiteral("S2")});
+    engine->setActiveScreens({QStringLiteral("S1"), QStringLiteral("S2")});
+
+    QCOMPARE(engine->managedDesktopForScreen(QStringLiteral("S1")), 3);
 }
 
 void TestScrollEngineSmoke::orderedOpenForwardArrivalsKeepSeedOrder()
