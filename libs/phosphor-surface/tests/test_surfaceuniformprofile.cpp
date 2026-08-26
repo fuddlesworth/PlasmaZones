@@ -77,6 +77,9 @@ SurfaceUniforms makeReference(const PhosphorShaders::UboFrameState& s)
     // node raises this when that binding is live. Still pinned is the rule
     // opacity — qt_Opacity carries host opacity. Mirrors fill().
     u.uHasBackdrop = s.hasBackdrop;
+    for (std::size_t i = 0; i < std::size(u.uBackdropRect); ++i) {
+        u.uBackdropRect[i] = s.backdropRect[i];
+    }
     u.uSurfaceOpacity = 1.0f;
     for (int i = 0; i < 8; ++i) {
         for (int c = 0; c < 4; ++c) {
@@ -129,11 +132,11 @@ private:
     }
 
 private Q_SLOTS:
-    void baseSize_is_656()
+    void baseSize_is_672()
     {
         SurfaceUniformProfile profile;
         QCOMPARE(profile.baseSize(), static_cast<int>(sizeof(SurfaceUniforms)));
-        QCOMPARE(profile.baseSize(), 656);
+        QCOMPARE(profile.baseSize(), 672);
     }
 
     void golden_bytes_match_reference()
@@ -200,7 +203,7 @@ private Q_SLOTS:
     /// struct they are meant to police.
     void std140_offsets_are_pinned()
     {
-        QCOMPARE(static_cast<int>(sizeof(SurfaceUniforms)), 656);
+        QCOMPARE(static_cast<int>(sizeof(SurfaceUniforms)), 672);
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, qt_Opacity)), 64);
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceScale)), 68);
         QCOMPARE(static_cast<int>(offsetof(SurfaceUniforms, uSurfaceFocused)), 72);
@@ -242,6 +245,45 @@ private Q_SLOTS:
         QVERIFY(readFloatAt(profile, base + 12) < 0.0f);
     }
 
+    /// The backdrop placement rect reaches the UBO.
+    ///
+    /// A daemon or preview host binds ONE desktop-sized wallpaper to every
+    /// surface it decorates, so this is what tells each which part of it lies
+    /// behind that surface. Stuck at the default every surface would sample the
+    /// whole desktop squeezed into its own box — visible, but easy to mistake
+    /// for the pack simply looking wrong.
+    void backdrop_rect_reaches_the_ubo()
+    {
+        PhosphorShaders::UboFrameState state = makeFixedState();
+        SurfaceUniformProfile profile;
+
+        // The default is the whole texture, which is what a compositor host
+        // (whose capture already covers the window) and a host with no
+        // placement to offer both want.
+        profile.fill(state);
+        const int base = static_cast<int>(offsetof(SurfaceUniforms, uBackdropRect));
+        QCOMPARE(readFloatAt(profile, base), 0.0f);
+        QCOMPARE(readFloatAt(profile, base + 4), 0.0f);
+        QCOMPARE(readFloatAt(profile, base + 8), 1.0f);
+        QCOMPARE(readFloatAt(profile, base + 12), 1.0f);
+
+        // A narrowed slice: a surface sitting in the lower-right quadrant.
+        state.backdropRect[0] = 0.5f;
+        state.backdropRect[1] = 0.25f;
+        state.backdropRect[2] = 0.5f;
+        state.backdropRect[3] = 0.75f;
+        profile.fill(state);
+        QCOMPARE(readFloatAt(profile, base), 0.5f);
+        QCOMPARE(readFloatAt(profile, base + 4), 0.25f);
+        QCOMPARE(readFloatAt(profile, base + 8), 0.5f);
+        QCOMPARE(readFloatAt(profile, base + 12), 0.75f);
+
+        // And the whole block still matches the reference with it set, so the
+        // appended member cannot be landing on a neighbour's bytes.
+        const SurfaceUniforms reference = makeReference(state);
+        QCOMPARE(std::memcmp(profile.data(), &reference, sizeof(SurfaceUniforms)), 0);
+    }
+
     void no_app_fields()
     {
         SurfaceUniformProfile profile;
@@ -263,7 +305,7 @@ private Q_SLOTS:
         // No flags → no regions.
         QVERIFY(profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{}).empty());
 
-        // Any flag → matrix {0,64} + scene {64, 656-64}.
+        // Any flag → matrix {0,64} + scene {64, 672-64}.
         auto r = profile.dirtyRegions(PhosphorShaders::UboDirtyFlags{false, false, true, false});
         QCOMPARE(static_cast<int>(r.size()), 2);
         QCOMPARE(r[0].offset, 0);

@@ -156,7 +156,12 @@ layout(std140, binding = 0) uniform SurfaceUniforms {
                                  //   normalized by uSurfaceSize
     vec4 iTextureResolution[4];  // offset 592 (64) — user texture sizes (.xy;
                                  //   slot N feeds uTexture<N+1>)
-};                               // total 656 bytes, no trailing pad
+    vec4 uBackdropRect;          // offset 656 (16) — the sub-rect of the bound
+                                 //   backdrop this surface should sample, in
+                                 //   normalized texture coords (xy = min,
+                                 //   zw = size). (0,0,1,1) means the whole
+                                 //   texture. See surface_backdrop.glsl.
+};                               // total 672 bytes, no trailing pad
 
 layout(binding = 7) uniform sampler2D uTexture0;
 // User-declared image textures (metadata `textures`), bindings 8-10 — the

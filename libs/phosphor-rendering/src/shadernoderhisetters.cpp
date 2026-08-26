@@ -207,6 +207,19 @@ void ShaderNodeRhi::setSurfaceSize(float width, float height)
     }
 }
 
+void ShaderNodeRhi::setBackdropRect(float x, float y, float w, float h)
+{
+    if (m_backdropRect[0] == x && m_backdropRect[1] == y && m_backdropRect[2] == w && m_backdropRect[3] == h) {
+        return;
+    }
+    m_backdropRect[0] = x;
+    m_backdropRect[1] = y;
+    m_backdropRect[2] = w;
+    m_backdropRect[3] = h;
+    m_uniformsDirty = true;
+    m_sceneDataDirty = true;
+}
+
 void ShaderNodeRhi::setSurfaceFrameTopLeft(float x, float y)
 {
     if (m_surfaceFrameTopLeft[0] != x || m_surfaceFrameTopLeft[1] != y) {

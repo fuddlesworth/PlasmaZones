@@ -169,5 +169,11 @@ Item {
         // ignores the backdrop, and handing one over regardless would upload a
         // wallpaper-sized texture per card for nothing.
         backdropTexture: root._needsBackdrop ? root._backdrop : null
+        // The ground Image below fills this same item with the very wallpaper
+        // bound above, so the card refracts the part of it that is genuinely
+        // behind it and the pane reads as one continuous surface. Without this
+        // the card would sample the whole desktop shrunk into itself while the
+        // ground behind it showed the wallpaper at a different scale.
+        backdropSourceArea: Qt.rect(0, 0, width, height)
     }
 }

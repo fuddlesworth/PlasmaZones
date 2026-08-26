@@ -232,6 +232,14 @@ public:
     void setSurfaceScale(float scale);
     void setSurfaceFocused(bool focused);
     void setSurfaceSize(float width, float height);
+    /// The slice of the bound backdrop this surface samples, normalized
+    /// texture coords (xy = min, zw = size). Defaults to the whole texture.
+    ///
+    /// Only a host that binds ONE shared image across many surfaces needs this
+    /// — a daemon or preview host handing every surface the same desktop
+    /// wallpaper. The compositor's capture already covers the window's own
+    /// canvas, so it leaves the default alone.
+    void setBackdropRect(float x, float y, float w, float h);
     void setSurfaceFrameTopLeft(float x, float y);
     void setSurfaceFrameSize(float width, float height);
 
@@ -659,6 +667,7 @@ private:
     float m_surfaceScale = 1.0f;
     bool m_surfaceFocused = false;
     float m_surfaceSize[2] = {0.0f, 0.0f};
+    float m_backdropRect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
     float m_surfaceFrameTopLeft[2] = {0.0f, 0.0f};
     float m_surfaceFrameSize[2] = {0.0f, 0.0f};
 

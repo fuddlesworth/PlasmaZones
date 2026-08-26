@@ -7,6 +7,7 @@
 
 #include <plasmazones_rendering_export.h>
 #include <QPointF>
+#include <QRectF>
 #include <QSizeF>
 
 QT_BEGIN_NAMESPACE
@@ -34,7 +35,7 @@ namespace PlasmaZones {
  * consumer escape-hatch int slots. The ONLY thing that differs from the base
  * render path is the UBO: the node is created with a
  * PhosphorSurfaceShaders::SurfaceUniformProfile so it uploads the leaner
- * 656-byte surface UBO instead of the overlay UBO. createShaderNode() supplies
+ * 672-byte surface UBO instead of the overlay UBO. createShaderNode() supplies
  * that profile to a stock PhosphorRendering::ShaderNodeRhi — there is no
  * SurfaceShaderItem-specific node subclass.
  *
@@ -67,6 +68,15 @@ class PLASMAZONES_RENDERING_EXPORT SurfaceShaderItem : public PhosphorRendering:
     /** Frame (content) size in device px. Maps to UboFrameState::surfaceFrameSize. */
     Q_PROPERTY(
         QSizeF surfaceFrameSize READ surfaceFrameSize WRITE setSurfaceFrameSize NOTIFY surfaceFrameSizeChanged FINAL)
+
+    /** The screen area the bound wallpaper covers, in the same space as
+     * `backdropSurfaceRect`. Empty disables backdrop placement. */
+    Q_PROPERTY(QRectF backdropScreenRect READ backdropScreenRect WRITE setBackdropScreenRect NOTIFY
+                   backdropScreenRectChanged FINAL)
+    /** This surface's rect within `backdropScreenRect`. Empty disables backdrop
+     * placement, which falls back to sampling the wallpaper whole. */
+    Q_PROPERTY(QRectF backdropSurfaceRect READ backdropSurfaceRect WRITE setBackdropSurfaceRect NOTIFY
+                   backdropSurfaceRectChanged FINAL)
 
 public:
     explicit SurfaceShaderItem(QQuickItem* parent = nullptr);
@@ -117,12 +127,26 @@ public:
     }
     void setSurfaceFrameSize(const QSizeF& size);
 
+    QRectF backdropScreenRect() const
+    {
+        return m_backdropScreenRect;
+    }
+    void setBackdropScreenRect(const QRectF& rect);
+
+    QRectF backdropSurfaceRect() const
+    {
+        return m_backdropSurfaceRect;
+    }
+    void setBackdropSurfaceRect(const QRectF& rect);
+
 Q_SIGNALS:
     void surfaceScaleChanged();
     void surfaceFocusedChanged();
     void surfaceSizeChanged();
     void surfaceFrameTopLeftChanged();
     void surfaceFrameSizeChanged();
+    void backdropScreenRectChanged();
+    void backdropSurfaceRectChanged();
 
 protected:
     /**
@@ -130,7 +154,7 @@ protected:
      *
      * Returns a stock PhosphorRendering::ShaderNodeRhi constructed with a
      * PhosphorSurfaceShaders::SurfaceUniformProfile, so the shared render engine
-     * uploads the 656-byte surface UBO. No node subclass — the profile is the
+     * uploads the 672-byte surface UBO. No node subclass — the profile is the
      * only difference from the base/overlay path.
      */
     PhosphorRendering::ShaderNodeRhi* createShaderNode() override;
@@ -155,6 +179,20 @@ private:
     QSizeF m_surfaceSize;
     QPointF m_surfaceFrameTopLeft;
     QSizeF m_surfaceFrameSize;
+
+    /// Backdrop placement inputs. Both empty by default, which is what keeps a
+    /// host that supplies neither sampling the wallpaper whole, exactly as
+    /// before this existed.
+    QRectF m_backdropScreenRect;
+    QRectF m_backdropSurfaceRect;
+
+    /// Push the resolved backdrop sub-rect down to @p node.
+    ///
+    /// Resolved rather than stored: the answer depends on the wallpaper's pixel
+    /// size as well as the two rects, and the image arrives independently of
+    /// them, so computing it at sync time is the only point where all three are
+    /// known to be current.
+    void syncBackdropRect(PhosphorRendering::ShaderNodeRhi* node) const;
 };
 
 } // namespace PlasmaZones

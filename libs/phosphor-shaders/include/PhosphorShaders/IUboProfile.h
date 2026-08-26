@@ -169,6 +169,15 @@ struct UboFrameState
     float surfaceFrameTopLeft[2] = {};
     /// Frame size in device px.
     float surfaceFrameSize[2] = {};
+    /// The slice of the bound backdrop this surface samples, in normalized
+    /// texture coords (xy = min, zw = size).
+    ///
+    /// Defaults to the whole texture, which is right for the compositor (its
+    /// capture already covers this window's canvas) and is the degraded answer
+    /// for a host that knows of no placement. A daemon or preview host hands
+    /// every surface the SAME desktop wallpaper, so it narrows this to the part
+    /// lying behind each one.
+    float backdropRect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
 };
 
 /// Pluggable UBO concern for the shared shader render engine.

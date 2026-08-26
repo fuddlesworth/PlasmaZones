@@ -47,9 +47,10 @@ struct alignas(16) SurfaceUniforms
     float uSurfaceFrameTopLeft[2]; // vec2: 8 bytes at offset 88
     float uSurfaceFrameSize[2]; // vec2: 8 bytes at offset 96
 
-    // 1.0 when the host provides a backdrop capture (compositor branch's
-    // uBackdrop sampler); ALWAYS 0.0 on the daemon, whose surfaces have no
-    // scene behind them. needsBackdrop packs gate their styling on this.
+    // 1.0 when the host bound something behind the surface: the captured scene
+    // on the compositor, or the desktop wallpaper as a stand-in on a daemon or
+    // preview host. 0.0 when nothing was bound. needsBackdrop packs gate their
+    // styling on this rather than on which runtime they are on.
     float uHasBackdrop; // float: 4 bytes at offset 104 (1 when the host bound a backdrop, else 0)
 
     // The window's rule-resolved opacity on the compositor; the daemon has
@@ -85,9 +86,24 @@ struct alignas(16) SurfaceUniforms
     // texture bound at slot i (slot N feeds uTexture<N+1>, bindings 8-10 on
     // the daemon). The node resolves these live, same as the overlay UBO.
     float iTextureResolution[4][4]; // vec4[4]: 64 bytes at offset 592
-}; // total 656 bytes
 
-static_assert(sizeof(SurfaceUniforms) == 656, "SurfaceUniforms must be exactly 656 bytes (surface UBO contract)");
+    // The sub-rect of the bound backdrop this surface samples, in normalized
+    // texture coords (xy = min, zw = size). (0, 0, 1, 1) is the whole texture.
+    //
+    // The compositor captures its backdrop over the window's own canvas, so its
+    // branch needs no such mapping (it has its own uBackdropRect for a
+    // different job: clamping to the VALID part of the capture). A daemon or
+    // preview host instead binds one big shared image — the desktop wallpaper —
+    // for every surface, so each one has to be told which part of it lies
+    // behind it. Without that, every surface samples the whole desktop squeezed
+    // into its own box.
+    //
+    // APPENDED deliberately: every member above keeps its offset, so the pinned
+    // static_asserts and the GLSL block's stated offsets are all still true.
+    float uBackdropRect[4]; // vec4: 16 bytes at offset 656
+}; // total 672 bytes
+
+static_assert(sizeof(SurfaceUniforms) == 672, "SurfaceUniforms must be exactly 672 bytes (surface UBO contract)");
 
 static_assert(offsetof(SurfaceUniforms, qt_Matrix) == 0, "SurfaceUniforms::qt_Matrix must remain at std140 offset 0");
 static_assert(offsetof(SurfaceUniforms, qt_Opacity) == 64,
@@ -118,5 +134,7 @@ static_assert(offsetof(SurfaceUniforms, iAudioSpectrumSize) == 560,
 static_assert(offsetof(SurfaceUniforms, iMouse) == 576, "SurfaceUniforms::iMouse must remain at std140 offset 576");
 static_assert(offsetof(SurfaceUniforms, iTextureResolution) == 592,
               "SurfaceUniforms::iTextureResolution must remain at std140 offset 592");
+static_assert(offsetof(SurfaceUniforms, uBackdropRect) == 656,
+              "SurfaceUniforms::uBackdropRect must remain at std140 offset 656");
 
 } // namespace PhosphorSurfaceShaders

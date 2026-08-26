@@ -386,6 +386,10 @@ Window {
             contentItem: osdLoader.item
             decorationChain: osdSlot.decorationChain
             decorationOuterPadding: osdSlot.decorationOuterPadding
+            // The slot spans the screen, so its own rect is the area the
+            // wallpaper backdrop covers. Without it a glass or blur pack would
+            // refract the whole desktop squeezed into the card.
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: osdSlot.audioSpectrum
         }
     }
@@ -696,6 +700,7 @@ Window {
             contentItem: zoneSelectorLoader.item
             decorationChain: zoneSelectorSlot.decorationChain
             decorationOuterPadding: zoneSelectorSlot.decorationOuterPadding
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: zoneSelectorSlot.audioSpectrum
         }
     }

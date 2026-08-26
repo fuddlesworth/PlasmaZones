@@ -65,6 +65,15 @@ void SurfaceUniformProfile::fill(const PhosphorShaders::UboFrameState& state)
     // Derived by the node from the live binding rather than passed down by a
     // host, so this gate can never claim a backdrop the shader cannot sample.
     m_u.uHasBackdrop = state.hasBackdrop;
+    // Which slice of that stand-in lies behind THIS surface. A daemon host
+    // binds one desktop-sized image to every surface it decorates, so without
+    // this each would sample the whole desktop squeezed into its own box. The
+    // host's default is the whole texture, which is what the compositor wants
+    // (its capture already covers this window's canvas) and what a host with no
+    // placement to offer degrades to.
+    for (std::size_t i = 0; i < std::size(m_u.uBackdropRect); ++i) {
+        m_u.uBackdropRect[i] = state.backdropRect[i];
+    }
     // No rule opacity on the daemon — qt_Opacity carries host opacity.
     m_u.uSurfaceOpacity = 1.0f;
 

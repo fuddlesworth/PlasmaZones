@@ -39,12 +39,13 @@ uniform vec4 uBackdropRect;
 // on. Whether there is anything real here is uHasBackdrop's job, never the
 // binding's presence.
 //
-// No uBackdropRect counterpart: the compositor needs one because a padded
-// canvas can hang off the edge of an output and those texels are never
-// blitted. A wallpaper image has no invalid region, so the whole texture is
-// valid and samples need no clamping. Note this rect answers only "which texels
-// are real", not "which part of the desktop is behind THIS surface" — the
-// stand-in is currently sampled across the surface's own canvas uv.
+// uBackdropRect means something DIFFERENT here, and it is a UBO member rather
+// than a loose uniform (see surface_uniforms.glsl). The compositor's answers
+// "which texels of this window's own capture are real", because a padded canvas
+// can hang off an output and those texels are never blitted. The daemon's
+// answers "which part of this shared image lies behind THIS surface", because
+// every surface is handed the same desktop-sized wallpaper. Without it each one
+// samples the whole desktop squeezed into its own box.
 layout(binding = 11) uniform sampler2D uBackdrop;
 #endif
 
@@ -65,10 +66,16 @@ vec4 backdropTexel(vec2 uv) {
     if (uHasBackdrop < 0.5) {
         return vec4(0.0);
     }
-    // Sampled with the incoming uv directly, matching surfaceTexel: the daemon
-    // delivers a Y-down vTexCoord against Qt-RHI's top-origin texture, so the
-    // wallpaper lands upright without a flip here.
-    return texture(uBackdrop, uv);
+    // Mapped through the surface's slice of the shared image, so a pack
+    // refracts the part of the desktop actually behind it at the desktop's own
+    // scale, instead of the whole thing squashed into this surface's box. The
+    // host supplies (0, 0, 1, 1) when it has no placement to offer, which
+    // reduces this to sampling the texture whole.
+    //
+    // No flip: the daemon delivers a Y-down vTexCoord against Qt-RHI's
+    // top-origin texture, and the rect is expressed in that same top-down
+    // space, so the wallpaper lands upright the way surfaceTexel does.
+    return texture(uBackdrop, uBackdropRect.xy + uv * uBackdropRect.zw);
 #endif
 }
 

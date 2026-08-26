@@ -86,6 +86,9 @@ void ShaderNodeRhi::syncBaseUniforms(QRhi* rhi)
     state.surfaceFrameTopLeft[1] = m_surfaceFrameTopLeft[1];
     state.surfaceFrameSize[0] = m_surfaceFrameSize[0];
     state.surfaceFrameSize[1] = m_surfaceFrameSize[1];
+    for (std::size_t i = 0; i < std::size(state.backdropRect); ++i) {
+        state.backdropRect[i] = m_backdropRect[i];
+    }
 
     // Custom params
     for (int i = 0; i < kMaxCustomParams; ++i) {

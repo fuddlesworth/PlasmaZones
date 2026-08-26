@@ -132,6 +132,9 @@ Item {
             contentItem: snapAssistLoader.item
             decorationChain: snapAssistSlot.decorationChain
             decorationOuterPadding: snapAssistSlot.decorationOuterPadding
+            // Screen-spanning slot, so its rect is the area the wallpaper
+            // backdrop covers — see PassiveOverlayShell's OSD slot.
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: snapAssistSlot.audioSpectrum
         }
     }
@@ -260,6 +263,7 @@ Item {
             contentItem: layoutPickerLoader.item
             decorationChain: layoutPickerSlot.decorationChain
             decorationOuterPadding: layoutPickerSlot.decorationOuterPadding
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: layoutPickerSlot.audioSpectrum
         }
     }
@@ -352,6 +356,7 @@ Item {
             contentItem: cheatsheetLoader.item
             decorationChain: cheatsheetSlot.decorationChain
             decorationOuterPadding: cheatsheetSlot.decorationOuterPadding
+            backdropSourceArea: Qt.rect(0, 0, width, height)
             audioSpectrum: cheatsheetSlot.audioSpectrum
         }
     }

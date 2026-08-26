@@ -156,6 +156,20 @@ Item {
     /// value for the window this item lives in.
     readonly property real surfaceScale: Screen.devicePixelRatio
 
+    /// The area the bound `backdropTexture` covers, in this item's coordinates.
+    ///
+    /// Only meaningful for a host that binds ONE image across many surfaces —
+    /// a daemon or preview host handing every surface the same desktop
+    /// wallpaper. Each surface has to be told which part of that image lies
+    /// behind it, or all of them sample the whole desktop squeezed into their
+    /// own box. Left empty (the default) the backdrop is sampled whole, which
+    /// is what the compositor wants: its capture already covers this window's
+    /// canvas rather than the entire screen.
+    ///
+    /// A host whose root item IS the full screen can simply bind
+    /// `Qt.rect(0, 0, width, height)`.
+    property rect backdropSourceArea: Qt.rect(0, 0, 0, 0)
+
     /// Whether any decoration is active. Gates the capture + shader items so an
     /// undecorated card pays nothing and draws its native card.
     readonly property bool decorationActive: (decorationChain ? decorationChain.length : 0) > 0 && shaderAnchorItem !== null
@@ -352,6 +366,14 @@ Item {
                 // backdrop, mirroring how each sees the same canvas.
                 wallpaperTexture: root.backdropTexture ? root.backdropTexture : undefined
                 useWallpaper: root.backdropTexture !== null && root.backdropTexture !== undefined
+
+                // Which slice of that shared backdrop lies behind THIS stage.
+                // Both rects are in the host's coordinate space, so the item
+                // can cover-fit the image over the area and cut this stage's
+                // rect out of it. Passing an empty source area (the default)
+                // leaves the item sampling the backdrop whole.
+                backdropScreenRect: root.backdropSourceArea
+                backdropSurfaceRect: Qt.rect(stageItem.x, stageItem.y, stageItem.width, stageItem.height)
 
                 // Anchor rect mapped into the host's coordinate space (the
                 // delegate fills the host, so its coordinates coincide). The
