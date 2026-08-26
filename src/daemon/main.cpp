@@ -26,10 +26,9 @@
 #include <QFile>
 #include <QGuiApplication>
 #include <QIcon>
-#include <QLibrary>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QQuickWindow>
+#include <QSocketNotifier>
 #include <QThread>
 #include <QTimer>
 #include <QtQml/qqml.h>
@@ -38,22 +37,40 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <fcntl.h>
 #include <signal.h>
+#include <unistd.h>
 
 // Import static QML module for shared components
 Q_IMPORT_QML_PLUGIN(org_plasmazones_commonPlugin)
 
 using namespace PlasmaZones;
 
-static Daemon* g_daemon = nullptr;
+namespace {
 
-void signalHandler(int /*signal*/)
+// Self-pipe for signal delivery. The handler may only touch async-signal-safe
+// calls, so it writes one byte here and returns; the real shutdown runs on the
+// main thread from a QSocketNotifier slot.
+//
+// This is not a style preference. Daemon::stop() acquires QMutexes, frees heap,
+// makes blocking D-Bus round trips (unregisterObject / unregisterService), tears
+// down QFileSystemWatchers and joins a QThreadPool with waitForDone(500). Running
+// that from signal context is a real deadlock: under --log-file the installed
+// message handler takes logMutex, so a signal arriving while any thread already
+// holds it wedges the process on the first log line stop() emits.
+int g_signalPipe[2] = {-1, -1};
+
+extern "C" void signalHandler(int signum)
 {
-    if (g_daemon) {
-        g_daemon->stop();
-    }
-    QCoreApplication::quit();
+    const unsigned char byte = static_cast<unsigned char>(signum);
+    // write() is async-signal-safe. A full pipe means a wakeup is already
+    // queued, so a dropped byte changes nothing; the result is deliberately
+    // ignored rather than logged (logging here is what we are avoiding).
+    const ssize_t written = ::write(g_signalPipe[1], &byte, 1);
+    static_cast<void>(written);
 }
+
+} // namespace
 
 int main(int argc, char* argv[])
 {
@@ -131,17 +148,28 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
+    const PlasmaZones::ConfigDefaults::RenderingBootConfig renderingConfig =
+        PlasmaZones::ConfigDefaults::readRenderingConfigFromDisk();
     {
-        const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
+        const QString& backend = renderingConfig.backend;
         useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
         if (!useVulkan && backend == QLatin1String("vulkan")) {
             qCCritical(PlasmaZones::lcDaemon) << "Vulkan library not found — falling back to OpenGL."
                                               << "Install vulkan-icd-loader or equivalent for your distro.";
         }
+        // The parenthetical reports the probe OUTCOME, not the config string:
+        // a configured "vulkan" whose library failed to load is already on
+        // OpenGL at this point (probeAndSetGraphicsApi set it during the probe).
         qCInfo(PlasmaZones::lcDaemon) << "Rendering backend:" << backend
                                       << (useVulkan                                ? "(Vulkan)"
+                                              : backend == QLatin1String("vulkan") ? "(OpenGL fallback)"
                                               : backend == QLatin1String("opengl") ? "(OpenGL)"
                                                                                    : "(Qt default)");
+        // GL device choice happens when Mesa opens the DRI screen during
+        // platform init, so DRI_PRIME must be exported before the app object.
+        // Applied on the Vulkan path too: it only steers the GL loader, and
+        // covers the case where Vulkan falls back to OpenGL below.
+        PlasmaZones::applyOpenGlGpuPreference(renderingConfig.gpuDevice);
     }
 
     QGuiApplication app(argc, argv);
@@ -151,7 +179,7 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
+        if (PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, renderingConfig.gpuDevice)) {
             qCInfo(PlasmaZones::lcDaemon) << "Vulkan instance created successfully";
         } else {
             qCCritical(PlasmaZones::lcDaemon)
@@ -159,10 +187,17 @@ int main(int argc, char* argv[])
                 << "Check that Vulkan drivers are installed and match the running kernel module"
                 << "(a GPU driver upgrade without a reboot leaves a userspace/kernel version skew that"
                 << "breaks device enumeration).";
-            useVulkan = false;
         }
     }
 #endif
+
+    // Publish the GPU-preference env var names this process exported (and the
+    // ones it cleared, with values) so spawn sites in plasmazones_core (e.g.
+    // LayoutAdaptor::launchEditor) can scrub and restore child environments
+    // without a link dependency on this target.
+    app.setProperty(PlasmaZones::PGpuExportedVarsProperty, PlasmaZones::exportedGpuPreferenceVariables());
+    app.setProperty(PlasmaZones::PGpuClearedVarsProperty, PlasmaZones::clearedGpuPreferenceVariables());
+
     PlasmaZones::loadTranslations(&app);
 
     // Register D-Bus struct types for typed signal/method exchange
@@ -212,7 +247,7 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PhosphorI18n::tr("Window tiling and zone management"));
+    parser.setApplicationDescription(PhosphorI18n::tr("Window snapping, tiling and scrolling"));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -264,16 +299,49 @@ int main(int argc, char* argv[])
     const QString serviceName = QString(PhosphorProtocol::Service::Name);
     QDBusConnection bus = QDBusConnection::sessionBus();
 
+    // A missing session bus and an already-owned name both make registerService
+    // return false, and they need opposite exits: no bus is a hard failure that
+    // systemd should retry, a taken name is a duplicate start that must NOT
+    // trigger Restart=on-failure. registerService cannot distinguish them (it
+    // reports the disconnect as QDBusError::Disconnected and an owned name as a
+    // bare false with no error set), so ask the connection directly first.
+    if (!bus.isConnected()) {
+        qCCritical(PlasmaZones::lcDaemon) << "Cannot connect to the session D-Bus:" << bus.lastError().message()
+                                          << "— the daemon places every window over D-Bus and cannot run without it."
+                                          << "Check that DBUS_SESSION_BUS_ADDRESS is set and the bus is running.";
+        return 1;
+    }
+
     if (!bus.registerService(serviceName)) {
         if (parser.isSet(replaceOption)) {
-            // Ask existing instance to quit, then retry with exponential backoff
-            QDBusInterface existing(serviceName, QStringLiteral("/Daemon"), serviceName);
+            // Ask the incumbent to quit, then wait for the name to come free.
+            //
+            // The object path and interface must be the ones the daemon actually
+            // exports: ControlAdaptor is Qt-parented to the Daemon, which is
+            // registered at Service::ObjectPath, so the shutdown verb lives at
+            // org.plasmazones.Control.quit on /PlasmaZones. Addressing anything
+            // else silently no-ops — isValid() comes back false, no call is sent,
+            // and the retry loop below just burns its budget while the old
+            // instance keeps the name.
+            QDBusInterface existing(serviceName, QString(PhosphorProtocol::Service::ObjectPath),
+                                    QString(PhosphorProtocol::Service::Interface::Control), bus);
             if (existing.isValid()) {
-                existing.call(QStringLiteral("Quit"));
+                // asyncCall, NOT call(): the incumbent this flag exists to
+                // displace is often a wedged one, and a wedged event loop never
+                // dispatches the method, so a blocking call would sit on the
+                // default 25s reply timeout before the wait loop below even
+                // starts. Nothing reads the reply — the retry loop is what
+                // actually detects that the name came free.
+                existing.asyncCall(QStringLiteral("quit"));
+            } else {
+                qCWarning(PlasmaZones::lcDaemon)
+                    << "--replace: the running instance did not answer on" << PhosphorProtocol::Service::ObjectPath
+                    << "-" << existing.lastError().message() << "- waiting for it to exit anyway";
             }
             bool registered = false;
+            // 100, 200, 400, then 800ms x7 — 6.3s total.
             for (int attempt = 0; attempt < 10; ++attempt) {
-                QThread::msleep(100 * (1 << qMin(attempt, 3))); // 100, 200, 400, 800ms...
+                QThread::msleep(100 * (1 << qMin(attempt, 3)));
                 if (bus.registerService(serviceName)) {
                     registered = true;
                     break;
@@ -289,21 +357,77 @@ int main(int argc, char* argv[])
         }
     }
 
-    // Set up signal handling for clean shutdown
-    signal(SIGINT, signalHandler);
-    signal(SIGTERM, signalHandler);
-    signal(SIGHUP, signalHandler);
+    // Set up signal handling for clean shutdown.
+    //
+    // Installed BEFORE the Daemon is constructed so the whole startup window is
+    // covered, and correct there because the handler only writes to a pipe: a
+    // signal arriving while init() is still running leaves its byte buffered and
+    // the notifier fires as soon as exec() starts, so the shutdown is honoured
+    // instead of being lost. The old handler called quit() directly, which is a
+    // no-op on a loop that has not started, and then let startup continue into
+    // exec() with stop() already applied.
+    // O_CLOEXEC so the fds do not leak into the processes the daemon spawns
+    // (the settings app via QProcess::startDetached, the editor via
+    // LayoutAdaptor). O_NONBLOCK so a hypothetically full pipe makes the
+    // handler's write() fail rather than block inside signal context, which is
+    // the one thing this whole mechanism exists to avoid.
+    if (::pipe2(g_signalPipe, O_CLOEXEC | O_NONBLOCK) == 0) {
+        auto* signalNotifier = new QSocketNotifier(g_signalPipe[0], QSocketNotifier::Read, &app);
+        QObject::connect(signalNotifier, &QSocketNotifier::activated, &app, [](QSocketDescriptor socket) {
+            unsigned char signum = 0;
+            const ssize_t got = ::read(static_cast<int>(socket), &signum, 1);
+            if (got != 1) {
+                return;
+            }
+            // Warning, not info: plasmazones.* info is off without --debug, and
+            // the reason the daemon exited should be in the ordinary journal.
+            qCWarning(PlasmaZones::lcDaemon) << "Received signal" << signum << "- shutting down";
+            // Hand the signals back to the kernel before quitting. Everything
+            // after exec() returns — Daemon::stop() with its blocking D-Bus
+            // round trips and 500ms thread-pool join, then the window teardown —
+            // runs with no event loop reading this pipe, so a second SIGTERM in
+            // that window would be written and never acted on, leaving SIGKILL
+            // as the only way out. Restoring the default disposition makes the
+            // first signal graceful and a second one terminate immediately,
+            // which is what an operator pressing Ctrl-C twice expects.
+            signal(SIGINT, SIG_DFL);
+            signal(SIGTERM, SIG_DFL);
+            signal(SIGHUP, SIG_DFL);
+            QCoreApplication::quit();
+        });
+        signal(SIGINT, signalHandler);
+        signal(SIGTERM, signalHandler);
+        signal(SIGHUP, signalHandler);
+    } else {
+        // Without the pipe there is no safe way to hop out of signal context, so
+        // leave the default dispositions in place: an abrupt terminate on SIGTERM
+        // is worse than a graceful stop but far better than a handler that
+        // deadlocks the process mid-teardown.
+        qCWarning(PlasmaZones::lcDaemon)
+            << "Failed to create the signal self-pipe:" << strerror(errno)
+            << "- falling back to default signal handling, so shutdown will not be graceful";
+    }
 
     // Migrate INI config to JSON if needed (one-time on upgrade).
     // The editor and settings app also call ensureJsonConfig() in case they start
     // before the daemon.  Concurrent calls produce identical JSON from the same INI,
     // and QSaveFile's atomic rename prevents partial writes.  The .bak rename of the
     // old INI may fail for the second caller (non-fatal — logged as a warning).
-    PlasmaZones::ConfigMigration::ensureJsonConfig();
+    //
+    // Load-bearing HERE specifically, and it must stay ahead of the Daemon
+    // constructor: the daemon injects its own backend (createDefaultConfigBackend()
+    // in daemon.cpp's member-init list), so it takes the Settings ctor overload
+    // that does NOT route through migrateAndCreateOwnedBackend(). Only the
+    // backend-owning overloads migrate on construction. Drop this call and the
+    // daemon opens an unmigrated config.
+    if (!PlasmaZones::ConfigMigration::ensureJsonConfig()) {
+        qCWarning(PlasmaZones::lcDaemon)
+            << "Config migration reported a failure — continuing with whatever the backend can load,"
+            << "which may mean defaults for settings the old config held";
+    }
 
     // Create and start daemon
     Daemon daemon;
-    g_daemon = &daemon;
 
     if (!daemon.init()) {
         qCCritical(PlasmaZones::lcDaemon) << "Failed to initialize daemon";
@@ -316,7 +440,6 @@ int main(int argc, char* argv[])
     int result = app.exec();
 
     daemon.stop();
-    g_daemon = nullptr;
 
     // Close all remaining windows before QGuiApplication teardown.
     // The NVIDIA Vulkan ICD (driver 595.x+) crashes in vkDestroyInstance during

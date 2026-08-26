@@ -24,6 +24,7 @@
 #include <QLatin1String>
 #include <QList>
 #include <QString>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -92,6 +93,21 @@ void assignBandPrioritiesToZeroRules(QList<PhosphorRules::Rule>& rules);
 void appendAnimationRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonArray& stash);
 void appendExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonObject& stash);
 void appendSteamDefaultRule(QList<PhosphorRules::Rule>& rules);
+/// The premade Steam rule's fixed identity. Shared by the seeder above and the
+/// repair in configmigration_v4finalize.cpp so both agree on which stored rule
+/// is ours.
+QUuid steamDefaultRuleId();
+/// Stamp the current premade-Steam name / match / action onto @p rule, leaving
+/// id, enabled and priority alone. See the definition for the match rationale.
+void applySteamDefaultRuleShape(PhosphorRules::Rule& rule);
+/// True when @p rule still carries the retired seeded MATCH and ACTION
+/// verbatim — the `WindowClass Contains "steam"` + blanket `Exclude` pair that
+/// swept up every Steam-launched game. The repair only rewrites rules this
+/// returns true for, so an edit to either half is never clobbered. The name is
+/// deliberately NOT part of the check: a user who only renamed the rule still
+/// has the broken match, so they are repaired (and re-stamped with the current
+/// name) rather than left with the bug.
+bool isRetiredSteamRuleShape(const PhosphorRules::Rule& rule);
 void appendAnimationExclusionRulesFromStash(QList<PhosphorRules::Rule>& rules, const QJsonObject& stash);
 void appendLayoutAppRulesAsSnapToZone(QList<PhosphorRules::Rule>& rules, const QString& layoutsDir);
 

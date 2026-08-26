@@ -108,6 +108,59 @@ private Q_SLOTS:
         QCOMPARE(osds.include, QStringList{QStringLiteral("osd")});
     }
 
+    void shellOwnsItsSubtreeAndNothingElse()
+    {
+        // Pinned because the failure is silent and total: with no entry in the
+        // table, animationPageScope falls through to the WholeTree branch, and a
+        // Reset on the Shell page would then clear every animation override in
+        // the tree rather than the three rows the page shows.
+        const AnimationPageScope shell = animationPageScope(QStringLiteral("animations-shell"));
+        QCOMPARE(shell.kind, AnimationPageScope::EventSubtree);
+        QCOMPARE(shell.include, QStringList{QStringLiteral("shell")});
+        QVERIFY(shell.exclude.isEmpty());
+
+        // The cascade parent the page's "All Shell Surfaces" row writes to, and
+        // both legs, are in scope — so Reset reaches what the page can set.
+        QVERIFY(animationPathInScope(QStringLiteral("shell"), shell));
+        QVERIFY(animationPathInScope(QStringLiteral("shell.appletPopup"), shell));
+        QVERIFY(animationPathInScope(QStringLiteral("shell.appletPopup.show"), shell));
+        QVERIFY(animationPathInScope(QStringLiteral("shell.appletPopup.hide"), shell));
+
+        // And nothing outside it. `global` matters most: the shell shader subtree
+        // is isolated from that node, so a Shell Reset reaching it would clear a
+        // pack the page never had any part in.
+        for (const char* path :
+             {"global", "window.appearance.open", "panel.slideIn", "osd.show", "shellfish", "shellfish.show"}) {
+            QVERIFY2(!animationPathInScope(QLatin1String(path), shell), path);
+        }
+    }
+
+    void scrollingOwnsItsRootDespiteShowingNoCardForIt()
+    {
+        // The one page whose scope is WIDER than the rows it displays.
+        // AnimationsScrollingPage lists `scrolling.view` and
+        // `scrolling.tabSwitch` but no row for the bare `scrolling` root —
+        // a cascade parent card over so few children is noise (the Desktop
+        // page states the same rule). The scope still covers the bare root so
+        // this page's Reset can clear an override a motion set or preset
+        // wrote there, which no other page would reach.
+        //
+        // Pinned because the obvious "fix" for the asymmetry is to exclude the
+        // root, and that would silently empty the page: the exclude list is
+        // subtree-matched, so it would take both leaf rows with it.
+        const AnimationPageScope scrolling = animationPageScope(QStringLiteral("animations-scrolling"));
+        QCOMPARE(scrolling.kind, AnimationPageScope::EventSubtree);
+        QCOMPARE(scrolling.include, QStringList{QStringLiteral("scrolling")});
+        QVERIFY(scrolling.exclude.isEmpty());
+
+        QVERIFY(animationPathInScope(QStringLiteral("scrolling"), scrolling));
+        QVERIFY(animationPathInScope(QStringLiteral("scrolling.view"), scrolling));
+        QVERIFY(animationPathInScope(QStringLiteral("scrolling.tabSwitch"), scrolling));
+        // And it claims nothing outside its own subtree.
+        QVERIFY(!animationPathInScope(QStringLiteral("window.movement"), scrolling));
+        QVERIFY(!animationPathInScope(QStringLiteral("desktop.switch"), scrolling));
+    }
+
     void motionExcludesTheDragCarveOut()
     {
         // THE fragile case: Motion owns window.movement minus .move, and

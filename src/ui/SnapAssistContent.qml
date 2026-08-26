@@ -33,8 +33,12 @@ Item {
     property bool shaderAnchor: true
     property var emptyZones: []
     property var candidates: []
-    property int screenWidth: 1920
-    property int screenHeight: 1080
+    // compositorHandle → provider URL map, pushed separately from
+    // `candidates` so a late-arriving thumbnail re-evaluates only the Image
+    // bindings reading the map. Re-pushing the candidates list per thumbnail
+    // destroyed and rebuilt every card delegate (hover reset, dropped
+    // in-flight presses, O(N²) churn during the arrival burst).
+    property var thumbnails: ({})
     // Zone appearance defaults — C++ side overwrites from settings.
     // highlightColor is unused in-file but declared for the
     // writeColorSettings push contract symmetry (all slots receive the trio).
@@ -45,7 +49,10 @@ Item {
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
     property int borderRadius: Kirigami.Units.gridUnit
-    // Layout constants
+    // Layout constants. cardScaleBase, iconSizeRatio and minIconSize have a
+    // C++ twin in PhosphorProtocol/ServiceConstants.h
+    // (snapAssistThumbnailBoxPx): the kwin-effect sizes its captures from
+    // them, so change both together.
     readonly property real cardScaleBase: 0.35
     readonly property real cardWidthMultiplier: 2.2
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 6
@@ -72,6 +79,7 @@ Item {
             onClicked: root.dismissRequested()
             Accessible.name: i18n("Dismiss snap assist overlay")
             Accessible.role: Accessible.Button
+            Accessible.onPressAction: root.dismissRequested()
         }
     }
 
@@ -86,11 +94,11 @@ Item {
 
             property var zone: modelData
 
-            x: zone ? zone.x : 0
-            y: zone ? zone.y : 0
-            width: zone ? zone.width : 0
-            height: zone ? zone.height : 0
-            visible: zone && zone.zoneId && root.candidates.length > 0
+            x: zoneContainer.zone ? zoneContainer.zone.x : 0
+            y: zoneContainer.zone ? zoneContainer.zone.y : 0
+            width: zoneContainer.zone ? zoneContainer.zone.width : 0
+            height: zoneContainer.zone ? zoneContainer.zone.height : 0
+            visible: zoneContainer.zone && zoneContainer.zone.zoneId && root.candidates.length > 0
 
             Rectangle {
                 id: zoneBg
@@ -98,12 +106,12 @@ Item {
                 // Shared contract with ZoneOverlayContent.hasCustomColors() and
                 // RenderNodeOverlayContent's useCustom: only true, 1, or "true"
                 // enable per-zone colors (raw truthiness would accept "false").
-                readonly property bool useCustom: zone !== null && zone !== undefined && (zone.useCustomColors === true || zone.useCustomColors === 1 || (typeof zone.useCustomColors === "string" && zone.useCustomColors.toLowerCase() === "true"))
-                readonly property color fillColor: useCustom && zone.inactiveColor ? zone.inactiveColor : root.inactiveColor
-                readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : root.inactiveOpacity
-                readonly property color strokeColor: useCustom && zone.borderColor ? zone.borderColor : root.borderColor
-                readonly property int strokeWidth: useCustom && zone.borderWidth !== undefined ? zone.borderWidth : root.borderWidth
-                readonly property int cornerRadius: useCustom && zone.borderRadius !== undefined ? zone.borderRadius : root.borderRadius
+                readonly property bool useCustom: zoneContainer.zone !== null && zoneContainer.zone !== undefined && (zoneContainer.zone.useCustomColors === true || zoneContainer.zone.useCustomColors === 1 || (typeof zoneContainer.zone.useCustomColors === "string" && zoneContainer.zone.useCustomColors.toLowerCase() === "true"))
+                readonly property color fillColor: zoneBg.useCustom && zoneContainer.zone.inactiveColor ? zoneContainer.zone.inactiveColor : root.inactiveColor
+                readonly property real fillOpacity: zoneBg.useCustom && zoneContainer.zone.inactiveOpacity !== undefined ? zoneContainer.zone.inactiveOpacity : root.inactiveOpacity
+                readonly property color strokeColor: zoneBg.useCustom && zoneContainer.zone.borderColor ? zoneContainer.zone.borderColor : root.borderColor
+                readonly property int strokeWidth: zoneBg.useCustom && zoneContainer.zone.borderWidth !== undefined ? zoneContainer.zone.borderWidth : root.borderWidth
+                readonly property int cornerRadius: zoneBg.useCustom && zoneContainer.zone.borderRadius !== undefined ? zoneContainer.zone.borderRadius : root.borderRadius
 
                 anchors.fill: parent
                 radius: zoneBg.cornerRadius
@@ -172,6 +180,10 @@ Item {
 
                         property var candidate: modelData
                         property bool hovered: cardMouse.containsMouse
+                        // Empty string = no thumbnail (icon fallback). The
+                        // map lookup re-evaluates whenever C++ re-pushes
+                        // `thumbnails`, without touching this delegate.
+                        readonly property string thumbnailUrl: (candidateCard.candidate && root.thumbnails && root.thumbnails[candidateCard.candidate.compositorHandle]) ? root.thumbnails[candidateCard.candidate.compositorHandle] : ""
 
                         width: candidateFlow.cardWidth + Kirigami.Units.smallSpacing * 2
                         height: cardContent.height + Kirigami.Units.smallSpacing * 2
@@ -205,17 +217,26 @@ Item {
                                 height: width
 
                                 Image {
+                                    id: thumbImage
+
                                     anchors.fill: parent
-                                    visible: !!(candidate && candidate.thumbnail)
+                                    // Gate on load status too: a URL whose
+                                    // cache entry was evicted or whose GPU
+                                    // import failed loads as Image.Error —
+                                    // without the status check the empty
+                                    // Image stayed visible and the card
+                                    // showed a blank square instead of the
+                                    // icon fallback.
+                                    visible: candidateCard.thumbnailUrl !== "" && thumbImage.status !== Image.Error
                                     fillMode: Image.PreserveAspectFit
-                                    source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
+                                    source: candidateCard.thumbnailUrl
                                     cache: true
                                 }
 
                                 Kirigami.Icon {
                                     anchors.fill: parent
-                                    visible: !(candidate && candidate.thumbnail)
-                                    source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
+                                    visible: candidateCard.thumbnailUrl === "" || thumbImage.status === Image.Error
+                                    source: candidateCard.candidate ? (candidateCard.candidate.icon || "application-x-executable") : "application-x-executable"
                                 }
                             }
 
@@ -227,7 +248,7 @@ Item {
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 2
                                 elide: Text.ElideRight
-                                text: candidate ? (candidate.caption || "") : ""
+                                text: candidateCard.candidate ? (candidateCard.candidate.caption || "") : ""
                                 font.pixelSize: candidateFlow.fontPixelSize
                                 color: Kirigami.Theme.textColor
                             }
@@ -240,9 +261,9 @@ Item {
                             hoverEnabled: root.visible
                             cursorShape: Qt.PointingHandCursor
                             Accessible.role: Accessible.Button
-                            Accessible.name: candidate && candidate.caption ? i18n("Snap %1 to this zone", candidate.caption) : i18n("Snap window to this zone")
+                            Accessible.name: candidateCard.candidate && candidateCard.candidate.caption ? i18n("Snap %1 to this zone", candidateCard.candidate.caption) : i18n("Snap window to this zone")
                             onClicked: {
-                                const wId = candidate ? candidate.windowId : "";
+                                const wId = candidateCard.candidate ? candidateCard.candidate.windowId : "";
                                 const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : "";
                                 if (!zoneContainer.zone || !wId || !zoneId) {
                                     root.dismissRequested();

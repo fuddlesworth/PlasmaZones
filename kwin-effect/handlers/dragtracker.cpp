@@ -3,14 +3,13 @@
 
 #include "dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 DragTracker::DragTracker(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
@@ -113,6 +112,12 @@ void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
     }
 }
 
+/// Silent state wipe: clears the tracked window WITHOUT emitting dragStopped.
+/// ZERO callers today. Kept as the teardown a destructor or a hard
+/// compositor-loss path would want, where there is no live consumer left to
+/// receive the signal — but a caller that reaches for it during a NORMAL drag
+/// would strand every downstream consumer waiting on dragStopped. Use
+/// forceEnd() for that.
 void DragTracker::reset()
 {
     m_draggedWindow = nullptr;

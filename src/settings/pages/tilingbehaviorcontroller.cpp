@@ -58,6 +58,16 @@ QVariantList TilingBehaviorController::defaultAutotileDragInsertTriggers() const
     return TriggerUtils::convertTriggersForQml(ConfigDefaults::autotileDragInsertTriggers());
 }
 
+int TilingBehaviorController::triggerGraceMsMin() const
+{
+    return ConfigDefaults::triggerGraceMsMin();
+}
+
+int TilingBehaviorController::triggerGraceMsMax() const
+{
+    return ConfigDefaults::triggerGraceMsMax();
+}
+
 void TilingBehaviorController::setAlwaysReinsertIntoStack(bool enabled)
 {
     if (alwaysReinsertIntoStack() == enabled) {

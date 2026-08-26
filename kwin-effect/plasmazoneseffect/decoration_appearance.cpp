@@ -10,9 +10,10 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "shader_resolve.h"
 #include "window_query.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effectwindow.h>
 
@@ -21,6 +22,7 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include <QColor>
+#include <QLoggingCategory>
 #include <QString>
 
 #include <optional>
@@ -29,10 +31,15 @@ namespace PlasmaZones {
 
 namespace {
 
-// Resolve a config-default border-colour string against the live system colour
-// its `accent` sentinel maps to. Mirrors resolveWindowAppearance's rule colour
-// path: the sentinel yields @p systemColor (nullopt when that colour is not yet
-// known), an empty string contributes nothing, anything else parses as hex.
+// Resolve a config-default appearance-colour string (border slots AND the
+// tint slot) against the live system colour its `accent` sentinel maps to.
+// Mirrors resolveWindowAppearance's rule colour path: the sentinel yields
+// @p systemColor (nullopt when that colour is not yet known), an empty string
+// contributes nothing, anything else parses as hex. A CURRENT daemon resolves
+// its empty follow-the-theme sentinel before the value crosses D-Bus, so this
+// normally sees only concrete hex; the accent branch stays for an older
+// daemon that still marshals the token (the rule path has its own, separate
+// accent resolution in shader_resolve.cpp).
 std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QColor& systemColor)
 {
     if (value.isEmpty()) {
@@ -42,7 +49,15 @@ std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QCol
         return systemColor.isValid() ? std::optional<QColor>(systemColor) : std::nullopt;
     }
     const QColor color(value);
-    return color.isValid() ? std::optional<QColor>(color) : std::nullopt;
+    if (!color.isValid()) {
+        // Unreachable from a current daemon (the store validator snaps any
+        // garbage to the sentinel before it can be marshalled), so a hit
+        // here means an out-of-spec peer — say so instead of rendering the
+        // outcome indistinguishable from a deliberate theme-follow.
+        qCWarning(lcEffect) << "Discarding unparseable appearance colour" << value;
+        return std::nullopt;
+    }
+    return color;
 }
 
 } // namespace
@@ -64,7 +79,7 @@ bool PlasmaZonesEffect::windowMatchesAppearanceScope(const QString& scope, KWin:
         // synchronously before the async windowStateChanged that fills that cache
         // lands, so reading it here would miss a just-snapped window's default
         // border until the next full sweep. The autotile half is already symmetric.
-        return isWindowMarkedSnapped(windowId) || m_autotileHandler->isTiledWindow(windowId);
+        return isWindowMarkedSnapped(windowId) || m_tilingHandler->isTiledWindow(windowId);
     }
     if (scope == WAS::Normal) {
         return windowTypeFor(w) == PhosphorProtocol::WindowType::Normal && !windowIsTransient(w);

@@ -258,6 +258,26 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
     }
 }
 
+/// Whether a stored QVariantMap/QVariantList key holds a value the read
+/// path can recover: a native JSON object/array, or the legacy
+/// string-encoded form that still parses to the right shape (which
+/// readVariantAs deliberately accepts). Anything else is the corrupt case
+/// the absent-vs-malformed contract exists for.
+bool storedBlobIsWellFormed(const IGroup& g, const QString& key, QMetaType::Type expectedType)
+{
+    const QJsonValue rawJson = g.readJson(key);
+    const bool wantsObject = expectedType == QMetaType::QVariantMap;
+    if (wantsObject ? rawJson.isObject() : rawJson.isArray()) {
+        return true;
+    }
+    const QString rawString = g.readString(key);
+    if (rawString.isEmpty()) {
+        return false;
+    }
+    const QJsonDocument parsed = QJsonDocument::fromJson(rawString.toUtf8());
+    return wantsObject ? parsed.isObject() : parsed.isArray();
+}
+
 } // namespace
 
 // ─── Store ───────────────────────────────────────────────────────────────────
@@ -278,6 +298,19 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
     // pair — sees one consistent type either way.
     for (auto groupIt = d->schema.groups.begin(); groupIt != d->schema.groups.end(); ++groupIt) {
         for (auto& def : groupIt.value()) {
+            // A declared expectedType paired with an INVALID default is its
+            // own hazard under sparse persistence: the canonical-default
+            // compare in write() can never be true against an invalid
+            // QVariant, so such a key silently opts out of the prune and its
+            // stored value freezes forever. Warn loudly; the read side still
+            // behaves (readVariantAs dispatches on expectedType).
+            if (def.expectedType != QMetaType::UnknownType && !def.defaultValue.isValid()) {
+                qWarning(
+                    "PhosphorConfig::Store: schema KeyDef [%s.%s] declares expectedType %d with an invalid "
+                    "defaultValue — the key can never be pruned to absence by sparse persistence.",
+                    qPrintable(groupIt.key()), qPrintable(def.key), int(def.expectedType));
+                continue;
+            }
             if (def.expectedType == QMetaType::UnknownType || !def.defaultValue.isValid()
                 || def.defaultValue.typeId() == int(def.expectedType)) {
                 continue;
@@ -369,6 +402,11 @@ bool Store::sync()
     return d->backend->sync();
 }
 
+bool Store::commit()
+{
+    return d->backend->commit();
+}
+
 QVariant Store::readVariant(const QString& group, const QString& key) const
 {
     const KeyDef* def = d->schema.findKey(group, key);
@@ -404,26 +442,72 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         qWarning("PhosphorConfig::Store: write to %s/%s with type %s, schema expected %s", qPrintable(group),
                  qPrintable(key), QMetaType(coerced.typeId()).name(), QMetaType(def->expectedType).name());
     }
+    // Sparse persistence: a value equal to the schema default is stored as
+    // ABSENCE, never as an explicit key. A persisted default freezes the
+    // value at whatever the default was on the day it was written, so a
+    // later default retune never reaches a store carrying that stamp. The
+    // read path answers absence with the schema default, so no consumer can
+    // tell the difference. Scope honestly: this prevents NEW freezes and
+    // prunes stamps that still equal the CURRENT default — a stamp of an
+    // OLD default differs from the current one and survives as if it were a
+    // customization, which only a user-level reset clears.
+    //
+    // Compared against the validator-canonicalized default: defaults are
+    // authored canonical, but the validator is the single source of truth
+    // for canonical form and a non-canonical default spelling must not
+    // defeat the equality.
+    const QVariant canonicalDefault = def->validator ? def->validator(def->defaultValue) : def->defaultValue;
     {
         auto g = d->backend->group(group);
-        // Skip the write (and the changed() emission) when the on-disk value
-        // already exactly matches what we'd write. The comparison is against
-        // the RAW disk value, not validator-coerced: this lets a canonicalising
-        // flush loop overwrite a non-canonical disk value (e.g. " a , b "
-        // re-written as "a,b") instead of being short-circuited by the
-        // validator on both sides agreeing on the same canonical form.
-        //
-        // Unlike reset() / resetGroup(), this path does NOT skip writing on
-        // (absent && coerced == default) — a consumer's save path that purges
-        // stale keys relies on write() materialising every declared key onto
-        // disk so the purge can run from a fully-populated baseline.
-        if (g->hasKey(key)) {
-            const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
-            if (current == coerced) {
+        const bool present = g->hasKey(key);
+        if (coerced == canonicalDefault) {
+            if (!present) {
+                // Reads already answer the default; nothing to store or announce.
                 return;
             }
+            const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
+            // A present-but-MALFORMED structured blob also reads back as the
+            // default, so this delete destroys the corrupt bytes. That is a
+            // legitimate repair, but never a silent one. "Malformed" matches
+            // the read path's recovery exactly: a legacy JSON-ENCODED STRING
+            // that still parses to the right shape is recovered by
+            // readVariantAs and is not corrupt, so it must not warn.
+            if (def->expectedType == QMetaType::QVariantMap || def->expectedType == QMetaType::QVariantList) {
+                if (!storedBlobIsWellFormed(*g, key, def->expectedType)) {
+                    qWarning("PhosphorConfig::Store: discarding malformed stored blob for %s/%s while pruning",
+                             qPrintable(group), qPrintable(key));
+                }
+            }
+            g->deleteKey(key);
+            // Compare OBSERVABLE values: the stored value reads through the
+            // validator, so a raw value the validator snaps to the default
+            // was never observable as anything else and its prune must stay
+            // silent too (Store.h: changed() fires when the observable value
+            // moves).
+            const QVariant observedCurrent = def->validator ? def->validator(current) : current;
+            if (observedCurrent == coerced) {
+                // Pruning a frozen default (a stored value that still reads
+                // as the current default): the observable value is
+                // unchanged, so the file slims down without a changed()
+                // emission.
+                return;
+            }
+        } else {
+            // Skip the write (and the changed() emission) when the on-disk
+            // value already exactly matches what we'd write. The comparison is
+            // against the RAW disk value, not validator-coerced: this lets a
+            // canonicalising flush loop overwrite a non-canonical disk value
+            // (e.g. " a , b " re-written as "a,b") instead of being
+            // short-circuited by the validator on both sides agreeing on the
+            // same canonical form.
+            if (present) {
+                const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
+                if (current == coerced) {
+                    return;
+                }
+            }
+            writeVariantTo(*g, key, coerced);
         }
-        writeVariantTo(*g, key, coerced);
     }
     Q_EMIT changed(group, key);
 }
@@ -441,11 +525,13 @@ void Store::reset(const QString& group, const QString& key)
         auto g = d->backend->group(group);
         if (!g->hasKey(key)) {
             // Key isn't on disk, so the read path already returns the default.
-            // Skipping the write avoids stamping a default-valued key and
-            // dirtying the backend on otherwise-idempotent reset() calls.
+            // Skipping the delete avoids dirtying the backend on
+            // otherwise-idempotent reset() calls.
             return;
         }
-        writeVariantTo(*g, key, def->defaultValue);
+        // Delete rather than stamp the default: default-equal values are
+        // stored as absence (see write()), and reset IS "back to default".
+        g->deleteKey(key);
     }
     Q_EMIT changed(group, key);
 }
@@ -465,12 +551,13 @@ void Store::resetGroup(const QString& group)
         auto g = d->backend->group(group);
         for (const KeyDef& def : *it) {
             // Skip absent keys for the same reason as reset() — otherwise
-            // resetGroup() on a pristine install stamps every default to disk
-            // with no observable behavior change but a full file rewrite.
+            // resetGroup() on a pristine install dirties the backend with no
+            // observable behavior change.
             if (!g->hasKey(def.key)) {
                 continue;
             }
-            writeVariantTo(*g, def.key, def.defaultValue);
+            // Delete rather than stamp the default — see reset().
+            g->deleteKey(def.key);
             resetKeys.append(def.key);
         }
     }
@@ -493,7 +580,14 @@ QJsonObject Store::exportToJson() const
         QJsonObject groupObj;
         auto g = d->backend->group(git.key());
         for (const KeyDef& def : git.value()) {
-            const QVariant value = readVariantAs(*g, def.key, def.defaultValue, def.expectedType);
+            QVariant value = readVariantAs(*g, def.key, def.defaultValue, def.expectedType);
+            // Mirror readVariant: the export must carry the same OBSERVABLE
+            // values the app runs with, so a stored out-of-range value (hand
+            // edit, foreign import) exports clamped, matching the baseline
+            // captureBaseline records — not the raw disk bytes.
+            if (def.validator) {
+                value = def.validator(value);
+            }
             groupObj[def.key] = QJsonValue::fromVariant(value);
         }
         out[git.key()] = groupObj;
@@ -557,7 +651,14 @@ QJsonObject Store::defaultsToJson() const
     for (auto git = d->schema.groups.constBegin(); git != d->schema.groups.constEnd(); ++git) {
         QJsonObject groupObj;
         for (const KeyDef& def : git.value()) {
-            groupObj[def.key] = QJsonValue::fromVariant(coerced(def));
+            QVariant value = coerced(def);
+            // Same validator hop exportToJson applies, so the two snapshots
+            // stay field-for-field comparable even for a KeyDef whose
+            // default spelling is not its own canonical form.
+            if (def.validator) {
+                value = def.validator(value);
+            }
+            groupObj[def.key] = QJsonValue::fromVariant(value);
         }
         out[git.key()] = groupObj;
     }
@@ -619,12 +720,40 @@ bool Store::importFromJson(const QJsonObject& snapshot)
                     value = converted;
                 }
             }
-            // Deliberately no pre-compare here: write() itself reads back and
-            // short-circuits an unchanged existing value, so a compare at this
-            // level would just duplicate that work. A genuinely changed value
-            // marks the backend dirty, which staging relies on — a later
-            // composite setter's refreshCleanBackendFromDisk sees the dirty
-            // flag and will not clobber staged values with a disk reparse.
+            // Pre-compare against the OBSERVABLE value: under sparse
+            // persistence a frozen default is present on disk yet reads as
+            // the default, and handing it straight to write() would silently
+            // PRUNE it — a file mutation with no observable change that
+            // still marks the backend dirty and disarms the composite
+            // setters' refreshCleanBackendFromDisk stale-guard for the rest
+            // of the session. Pruning is the save flush loop's job; an
+            // import writes only observable changes, and a genuinely changed
+            // value still marks the backend dirty, which staging relies on.
+            //
+            // Structured keys carry one exception: a present-but-MALFORMED
+            // blob ALSO reads back as the default through readVariant, and
+            // skipping would leave the corrupt bytes in place (the typed
+            // read<QVariantMap/List> path answers EMPTY for them, not the
+            // default, so they are observably broken). Fall through to
+            // write(), whose prune branch repairs them with a warning.
+            const bool structuredKey =
+                def.expectedType == QMetaType::QVariantMap || def.expectedType == QMetaType::QVariantList;
+            bool mayShortCircuit = true;
+            if (structuredKey) {
+                auto g = d->backend->group(git.key());
+                mayShortCircuit = !g->hasKey(def.key) || storedBlobIsWellFormed(*g, def.key, def.expectedType);
+            }
+            if (mayShortCircuit) {
+                // Accepted trade: this skip also declines to re-spell a
+                // NON-CANONICAL stored value whose validated form matches
+                // (write()'s raw compare would have rewritten it). The next
+                // save() flush loop canonicalizes it anyway, and an import
+                // must not dirty the backend for a spelling-only change.
+                const QVariant incoming = def.validator ? def.validator(value) : value;
+                if (incoming == readVariant(git.key(), def.key)) {
+                    continue;
+                }
+            }
             write(git.key(), def.key, value);
         }
     }

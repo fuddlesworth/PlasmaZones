@@ -22,13 +22,17 @@
 #include <QSet>
 #include <QTest>
 #include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include "config/configbackends.h"
+#include <PhosphorConfig/JsonBackend.h>
 
 #include "config/settings.h"
 #include "config/configdefaults.h"
@@ -207,6 +211,15 @@ private Q_SLOTS:
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
+        // The four release graces, deliberately given FOUR DISTINCT values.
+        // They all share one key spelling ("ReleaseGraceMs") and are told apart
+        // only by their group, so writing the same number to all four would
+        // pass even if two of them aliased each other onto one group.
+        settings.setDragActivationGraceMs(110);
+        settings.setZoneSpanGraceMs(120);
+        settings.setAutotileDragInsertGraceMs(130);
+        settings.setScrollingDragInsertGraceMs(140);
+        settings.setSnapAssistGraceMs(160);
 
         settings.save();
 
@@ -239,11 +252,31 @@ private Q_SLOTS:
             QCOMPARE(behavior->readBool(ConfigDefaults::toggleActivationKey(), false), true);
             QCOMPARE(behavior->readBool(ConfigDefaults::focusNewWindowsKey(), false), true);
             QCOMPARE(behavior->readBool(ConfigDefaults::focusFollowsMouseKey(), false), true);
+            QCOMPARE(behavior->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 110);
         }
 
         {
             auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
             QCOMPARE(zoneSpan->readBool(ConfigDefaults::toggleActivationKey(), false), true);
+            // Its own value, not the parent group's 110. Snapping.Behavior and
+            // Snapping.Behavior.ZoneSpan hold the same key name, and on disk the
+            // parent's scalar sits as a sibling of the ZoneSpan child object.
+            QCOMPARE(zoneSpan->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 120);
+        }
+
+        {
+            auto snapAssist = backend->group(ConfigDefaults::snappingBehaviorSnapAssistGroup());
+            QCOMPARE(snapAssist->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 160);
+        }
+
+        {
+            auto tiling = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            QCOMPARE(tiling->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 130);
+        }
+
+        {
+            auto scrolling = backend->group(ConfigDefaults::scrollingBehaviorGroup());
+            QCOMPARE(scrolling->readInt(ConfigDefaults::releaseGraceMsKey(), 0), 140);
         }
 
         {
@@ -306,39 +339,20 @@ private Q_SLOTS:
 
     /**
      * A reload that leaves the effective (palette-derived) values unchanged
-     * must stay silent. Pins the system-colors regression where load()'s
-     * palette re-derive routed through the public color setters, firing each
-     * color NOTIFY twice and settingsChanged several times per themed reload
-     * even when no value changed.
-     *
-     * The on-disk highlight color is deliberately made stale before load():
-     * with useSystemColors on, the mid-load derive silently restores the
-     * palette color, so no signal may fire. Without the load-suppression
-     * guard the derive would route the palette value through the public
-     * setter (disk value != palette value, so the same-value early-return
-     * cannot mask the regression) and emit highlightColorChanged +
-     * settingsChanged mid-load.
+     * must stay silent. The zone colours follow the palette by default (empty
+     * theme-fallback sentinel, resolved in the getters), so a themed reload
+     * carries no colour writes at all; a reload of unchanged on-disk state
+     * must fire neither a colour NOTIFY nor settingsChanged.
      */
     void testLoad_noSignal_whenUnchanged()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
-        QVERIFY(settings.useSystemColors()); // default: themed reload path
-        settings.save(); // commit the constructor-derived state to disk
+        QCOMPARE(settings.highlightColorRaw(), QString()); // default: follows the palette
+        settings.save(); // commit the default state to disk
 
-        const QColor derivedHighlight = settings.highlightColor();
-
-        // Hand-write a stale highlight color to disk so load()'s reparse sees
-        // a value that differs from the palette-derived one.
-        const QColor staleHighlight(1, 2, 3);
-        QVERIFY(staleHighlight != derivedHighlight);
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
-            g->writeColor(ConfigDefaults::highlightKey(), staleHighlight);
-            backend->sync();
-        }
+        const QColor resolvedHighlight = settings.highlightColor();
 
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
@@ -347,12 +361,154 @@ private Q_SLOTS:
 
         settings.load();
 
-        // The derive restored the palette color over the stale disk value...
-        QCOMPARE(settings.highlightColor(), derivedHighlight);
+        // The reload kept the palette-resolved colour...
+        QCOMPARE(settings.highlightColor(), resolvedHighlight);
         // ...without any signal traffic.
         QCOMPARE(spy.count(), 0);
         QCOMPARE(highlightSpy.count(), 0);
         QCOMPARE(fontColorSpy.count(), 0);
+
+        // The pinned leg gives the guard teeth beyond the trivially-default
+        // case: a CONCRETE stored colour reloaded from unchanged disk state
+        // must be equally silent, which is what actually exercises the
+        // same-value early-return against a non-default value.
+        settings.setHighlightColorRaw(QStringLiteral("#ff123456"));
+        settings.save();
+        highlightSpy.clear();
+        spy.clear();
+        settings.load();
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff123456"));
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+    }
+
+    /**
+     * A pinned zone colour must survive save() → fresh Settings → read-back:
+     * the four keys moved from QMetaType::QColor to QMetaType::QString with
+     * a new validator underneath them, so the stored JSON type and the
+     * read-side coercion both changed and nothing else round-trips them.
+     */
+    void testSave_load_pinnedZoneColorsRoundTrip()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+            settings.setInactiveColorRaw(QStringLiteral("#40223344"));
+            settings.setBorderColorRaw(QStringLiteral("#c8334455"));
+            settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+            settings.save();
+        }
+
+        Settings fresh;
+        QCOMPARE(fresh.highlightColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(fresh.inactiveColorRaw(), QStringLiteral("#40223344"));
+        QCOMPARE(fresh.borderColorRaw(), QStringLiteral("#c8334455"));
+        QCOMPARE(fresh.labelFontColorRaw(), QStringLiteral("#ffddeeff"));
+        // The resolved getters serve the pins, not palette-derived values.
+        QCOMPARE(fresh.highlightColor(), QColor(QStringLiteral("#80112233")));
+        QCOMPARE(fresh.labelFontColor(), QColor(QStringLiteral("#ffddeeff")));
+    }
+
+    /**
+     * The scrolling drop indicator's two colours are the same theme-fallback
+     * pair as the zone quartet, so they owe the same four guarantees: the raw
+     * accessor owns the stored sentinel, the resolved getter never serves an
+     * invalid colour, the QColor setter pins through the raw key, and an
+     * INVALID QColor un-pins rather than storing opaque black.
+     */
+    void testDropIndicatorColorsResolveAndPin()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        // Following the palette: the resolved value is the live Highlight
+        // forced opaque. Read from qGuiApp rather than compared against a
+        // literal — a hardcoded colour here would be a second source of truth
+        // for the resolution rule. The alpha is forced on the EXPECTATION too,
+        // because this file does not control the process palette: a platform
+        // theme shipping a translucent Highlight is exactly what the forcing
+        // exists for, so comparing against the raw palette colour would fail
+        // this test in the one environment the production code handles. The
+        // forcing itself is pinned against a deliberately translucent palette
+        // by dropIndicatorFollowsPaletteOpaquely in
+        // test_settings_system_palette_tracking.cpp, which owns palette state.
+        QColor expected = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
+        expected.setAlpha(255);
+        QCOMPARE(settings.scrollingDropIndicatorColor(), expected);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), expected);
+        const QColor livePaletteHighlight = expected;
+
+        settings.setScrollingDropIndicatorColor(QColor(QStringLiteral("#80112233")));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(QStringLiteral("#80112233")));
+
+        settings.setScrollingDropIndicatorColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColor(), livePaletteHighlight);
+
+        // The border's own pin and un-pin, not just the fill's: the two go
+        // through separate macro invocations, so a setter wired to the wrong
+        // raw key would survive a fill-only check.
+        settings.setScrollingDropIndicatorBorderColor(QColor(QStringLiteral("#ff445566")));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QStringLiteral("#ff445566"));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        settings.setScrollingDropIndicatorBorderColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+
+        // Junk in a hand-edited config. The load-bearing assertion is that the
+        // SCHEMA VALIDATOR snapped it to the sentinel on the way in: asserting
+        // only that the getter still returns something valid proves nothing,
+        // because resolveThemeColor's unparseable branch would answer the same
+        // way even with the validator gone.
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("not-a-colour"));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+    }
+
+    /**
+     * The no-palette fallback colour is spelled twice — ConfigDefaults for the
+     * config layer, isettings_detail for the interface's own default bodies —
+     * because the dependency runs config→core and neither is constexpr, so no
+     * static_assert can pin them. This is that pin, and both spellings' doc
+     * comments name it.
+     */
+    void dropIndicatorFallbackMatchesInterfaceDefault()
+    {
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor(),
+                 isettings_detail::opaqueDropIndicatorFallback());
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor().alpha(), 255);
+    }
+
+    /**
+     * reset() must return the theme-fallback colour keys to the empty sentinel
+     * (the schema default), after which the resolved getters follow the palette
+     * again. The drop indicator's pair is included because reset() only reaches
+     * a group listed in managedGroupNames(), and a group left off that list
+     * fails exactly here and nowhere else.
+     */
+    void testReset_returnsThemeFallbackColorsToSentinel()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+        settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+        settings.setScrollingDropIndicatorColorRaw(QStringLiteral("#ff778899"));
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("#ffaabbcc"));
+        settings.reset();
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
+        QVERIFY(settings.labelFontColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorBorderColor().isValid());
     }
 
     /**
@@ -396,6 +552,45 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * setDefaultLayoutId accepts the reserved no-layout word ("no default at
+     * all" — the library card's Clear Default) even though it is not a UUID,
+     * while any other malformed id keeps the no-op protection. Regression
+     * guard: the UUID normalizer used to degrade the word to empty and hit
+     * the malformed-input guard, making the sentinel silently unwritable.
+     */
+    void testSetDefaultLayoutId_acceptsSentinel_rejectsOtherNonUuids()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        const QString realId = QUuid::createUuid().toString();
+        settings.setDefaultLayoutId(realId);
+        QCOMPARE(settings.defaultLayoutId(), realId);
+
+        // A malformed non-UUID stays a no-op (typo protection).
+        settings.setDefaultLayoutId(QStringLiteral("not-a-uuid"));
+        QCOMPARE(settings.defaultLayoutId(), realId);
+
+        // The reserved word is stored verbatim and emits. Spelled as a literal
+        // on purpose: the setter compares against PhosphorZones::NoSnappingLayout,
+        // so this doubles as an exact-spelling pin that fails loudly if the
+        // constant is ever respelled without the config surface following.
+        QSignalSpy spy(&settings, &Settings::defaultLayoutIdChanged);
+        settings.setDefaultLayoutId(QStringLiteral("none"));
+        QCOMPARE(settings.defaultLayoutId(), QStringLiteral("none"));
+        QCOMPARE(spy.count(), 1);
+
+        // And it survives a save / reload round trip. This is the value the
+        // daemon's default-layout provider reads at the NEXT start, so an
+        // in-memory-only pin would miss a persistence path that dropped it —
+        // sparse persistence deletes default-equal keys, and the sentinel is
+        // not the default, so it must be written.
+        settings.save();
+        Settings reloaded;
+        QCOMPARE(reloaded.defaultLayoutId(), QStringLiteral("none"));
     }
 
     /**
@@ -588,16 +783,21 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // Inject stale keys into several v2 groups
+        // Inject stale keys into several v2 groups, and SEED the three
+        // declared keys whose sparse-absence is asserted below with their
+        // current defaults — an unseeded key was never present, so !hasKey
+        // on it cannot distinguish "pruned" from "never there".
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
                 g->writeString(QStringLiteral("ObsoleteActivationKey"), QStringLiteral("stale"));
+                g->writeBool(ConfigDefaults::toggleActivationKey(), ConfigDefaults::toggleActivation());
             }
             {
                 auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
                 g->writeBool(QStringLiteral("OldDisplayToggle"), true);
+                g->writeBool(ConfigDefaults::showNumbersKey(), ConfigDefaults::showNumbers());
             }
             {
                 auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
@@ -606,6 +806,10 @@ private Q_SLOTS:
             {
                 auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
                 g->writeString(QStringLiteral("RemovedAutotileSetting"), QStringLiteral("gone"));
+            }
+            {
+                auto g = backend->group(ConfigDefaults::tilingGroup());
+                g->writeBool(ConfigDefaults::enabledKey(), ConfigDefaults::autotileEnabled());
             }
             backend->sync();
         }
@@ -624,6 +828,12 @@ private Q_SLOTS:
                         ->hasKey(QStringLiteral("DeprecatedThemeIndex")));
             QVERIFY(backend->group(ConfigDefaults::tilingAlgorithmGroup())
                         ->hasKey(QStringLiteral("RemovedAutotileSetting")));
+            // The three seeded default-valued keys are genuinely present too,
+            // so the absence assertions after save() prove the PRUNE ran.
+            QVERIFY(
+                backend->group(ConfigDefaults::snappingBehaviorGroup())->hasKey(ConfigDefaults::toggleActivationKey()));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(ConfigDefaults::showNumbersKey()));
+            QVERIFY(backend->group(ConfigDefaults::tilingGroup())->hasKey(ConfigDefaults::enabledKey()));
         }
 
         // Load picks up the stale keys from disk (but ignores them in members)
@@ -639,15 +849,25 @@ private Q_SLOTS:
             auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoleteActivationKey")),
                      "Stale key in Snapping.Behavior group must be purged by save()");
-            // Valid key must survive
-            QVERIFY2(g->hasKey(ConfigDefaults::toggleActivationKey()),
-                     "Valid key ToggleActivation must survive save()");
+            // Persistence is sparse: an untouched key still at its default is
+            // stored as ABSENCE, never as a stamped default — a stamped
+            // default would freeze the value against future default retunes.
+            QVERIFY2(!g->hasKey(ConfigDefaults::toggleActivationKey()),
+                     "Default-valued ToggleActivation must be stored as absence after save()");
+        }
+        {
+            // A modified (non-default) key survives save(). AdjacentThreshold
+            // is declared in Snapping.Gaps, not Snapping.Behavior.
+            auto g = backend->group(ConfigDefaults::snappingGapsGroup());
+            QVERIFY2(g->hasKey(ConfigDefaults::adjacentThresholdKey()),
+                     "Modified key AdjacentThreshold must survive save()");
         }
         {
             auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("OldDisplayToggle")),
                      "Stale key in Snapping.Effects group must be purged by save()");
-            QVERIFY2(g->hasKey(ConfigDefaults::showNumbersKey()), "Valid key ShowNumbers must survive save()");
+            QVERIFY2(!g->hasKey(ConfigDefaults::showNumbersKey()),
+                     "Default-valued ShowNumbers must be stored as absence after save()");
         }
         {
             auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
@@ -665,8 +885,45 @@ private Q_SLOTS:
         }
         {
             auto g = backend->group(ConfigDefaults::tilingGroup());
-            QVERIFY2(g->hasKey(ConfigDefaults::enabledKey()), "Valid key Enabled must survive save()");
+            QVERIFY2(!g->hasKey(ConfigDefaults::enabledKey()),
+                     "Default-valued Tiling Enabled must be stored as absence after save()");
         }
+    }
+
+    /**
+     * save() prunes a FROZEN default: a stored value equal to the current
+     * schema default, stamped by an older version whose save materialised
+     * every declared key. Left in place it would shadow any future default
+     * retune (the retuned scrolling shortcut chords were invisible to every
+     * install with such a config). The observable value must not change.
+     */
+    void testSave_prunesFrozenDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        // The key is seeded into its DECLARED group (Snapping.Gaps), so its
+        // removal can only come from write()'s default-prune — a stale-key
+        // purge never touches a declared key in its own group.
+        const int defaultThreshold = ConfigDefaults::adjacentThreshold();
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(ConfigDefaults::snappingGapsGroup());
+            g->writeInt(ConfigDefaults::adjacentThresholdKey(), defaultThreshold);
+            backend->sync();
+        }
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(
+                backend->group(ConfigDefaults::snappingGapsGroup())->hasKey(ConfigDefaults::adjacentThresholdKey()));
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY2(!backend->group(ConfigDefaults::snappingGapsGroup())->hasKey(ConfigDefaults::adjacentThresholdKey()),
+                 "A stored value equal to the current default must be pruned by save()");
+        QCOMPARE(settings.adjacentThreshold(), defaultThreshold);
     }
 
     /**
@@ -917,6 +1174,77 @@ private Q_SLOTS:
         QCOMPARE(changedSpy.count(), 0);
     }
 
+    /**
+     * The two commit-failure invariants that carry settings.cpp's strongest
+     * data-integrity comments, driven through a backend whose commit()
+     * always fails:
+     *   - save() must NOT advance the baseline (isKeyModified stays true, so
+     *     the unsaved edit remains discardable and the next save retries);
+     *   - reset() must return false and keep the previous COMMITTED values.
+     *     When an unsaved edit was staged, its discard is announced with one
+     *     NOTIFY round (the observable value moved back to the committed
+     *     one); with nothing staged, nothing observably changed and nothing
+     *     may fire.
+     */
+    void testCommitFailure_saveKeepsBaselineAndResetRollsBack()
+    {
+        class FailingCommitBackend : public PhosphorConfig::JsonBackend
+        {
+        public:
+            using PhosphorConfig::JsonBackend::JsonBackend;
+            bool failCommits = false;
+            bool commit() override
+            {
+                return failCommits ? false : PhosphorConfig::JsonBackend::commit();
+            }
+        };
+
+        IsolatedConfigGuard guard;
+        FailingCommitBackend backend(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        Settings settings(&backend, nullptr, nullptr, nullptr);
+
+        // A committed non-default value to reset back to later.
+        settings.setAdjacentThreshold(77);
+        QVERIFY(settings.save());
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+
+        // save() under a failing commit: false, and the baseline must not
+        // move — the staged edit still reads as modified.
+        backend.failCommits = true;
+        settings.setAdjacentThreshold(99);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+        QCOMPARE(settings.adjacentThreshold(), 99);
+
+        // reset() under a failing commit with an UNSAVED edit staged (99 over
+        // the committed 77): false, the edit is discarded back to the
+        // committed value, and that discard is ANNOUNCED — the observable
+        // value moved 99 -> 77, and a silent revert would leave QML painting
+        // the dropped edit.
+        QSignalSpy thresholdSpy(&settings, &Settings::adjacentThresholdChanged);
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.adjacentThreshold(), 77);
+        QCOMPARE(thresholdSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+
+        // Same failure with NO unsaved edit: nothing observably changes, so
+        // nothing may fire (a spurious settingsChanged is a daemon retile
+        // for nothing).
+        thresholdSpy.clear();
+        changedSpy.clear();
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.adjacentThreshold(), 77);
+        QCOMPARE(thresholdSpy.count(), 0);
+        QCOMPARE(changedSpy.count(), 0);
+
+        // And the retry works once commits succeed again.
+        backend.failCommits = false;
+        settings.setAdjacentThreshold(99);
+        QVERIFY(settings.save());
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+    }
+
     /// defaultConfigJson delegates to the store's defaults snapshot, so it is
     /// field-for-field comparable with exportConfigToJson — the invariant the
     /// profiles delta engine diffs across.
@@ -928,32 +1256,27 @@ private Q_SLOTS:
 
         const QJsonObject defaults = settings.defaultConfigJson();
         const QJsonObject exported = settings.exportConfigToJson();
-        QCOMPARE(defaults.keys(), exported.keys());
+        // Non-emptiness, not key-set equality: both serializers walk the SAME
+        // schema, so their key sets cannot structurally differ and comparing
+        // them has no failure mode. What CAN silently break is a schema that
+        // lost its groups, which the value loop below would then vacuously
+        // pass over.
+        QVERIFY(!exported.keys().isEmpty());
         QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
-        // The palette-derived keys are the one legitimate divergence: with
-        // UseSystem on (the default), load() runs applySystemColorScheme and
-        // writes the live palette's highlight/inactive/border/font colours
-        // into the store, so a fresh export carries THOSE, not the schema
-        // defaults. Everything else must be value-identical — any other
-        // difference is one serializer coercing what the other does not,
-        // the exact drift the delegation to Store::defaultsToJson prevents.
-        const QSet<QString> paletteDerived{
-            QStringLiteral("Snapping.Zones.Colors/Highlight"),
-            QStringLiteral("Snapping.Zones.Colors/Inactive"),
-            QStringLiteral("Snapping.Zones.Colors/Border"),
-            QStringLiteral("Snapping.Zones.Labels/FontColor"),
-        };
+        // Every key must be value-identical: the zone colours now store the
+        // empty theme-fallback sentinel (their schema default) rather than
+        // palette-derived snapshots, so a fresh export has NO legitimate
+        // divergence from the defaults blob. Any difference is one serializer
+        // coercing what the other does not, the exact drift the delegation to
+        // Store::defaultsToJson prevents.
         for (const QString& group : exported.keys()) {
             if (group == QStringLiteral("_version")) {
                 continue;
             }
             const QJsonObject defaultGroup = defaults.value(group).toObject();
             const QJsonObject exportedGroup = exported.value(group).toObject();
-            QCOMPARE(defaultGroup.keys(), exportedGroup.keys());
+            QVERIFY(!exportedGroup.keys().isEmpty());
             for (const QString& key : exportedGroup.keys()) {
-                if (paletteDerived.contains(group + QLatin1Char('/') + key)) {
-                    continue;
-                }
                 QVERIFY2(
                     defaultGroup.value(key) == exportedGroup.value(key),
                     qPrintable(QStringLiteral("%1/%2: default %3 != fresh export %4")

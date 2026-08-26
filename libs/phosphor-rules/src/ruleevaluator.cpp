@@ -75,6 +75,12 @@ const QList<int>& RuleEvaluator::priorityOrder() const
 
 ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
 {
+    return resolveFiltered(query, {});
+}
+
+ResolvedActions RuleEvaluator::resolveFiltered(const WindowQuery& query,
+                                               const std::function<bool(const Rule&)>& admit) const
+{
     ResolvedActions result;
 
     const QList<Rule>& rules = m_ruleSet.rules();
@@ -92,14 +98,26 @@ ResolvedActions RuleEvaluator::resolve(const WindowQuery& query) const
         if (!rule.enabled) {
             continue;
         }
+        if (admit && !admit(rule)) {
+            continue;
+        }
         if (!rule.match.evaluate(query)) {
             continue;
         }
-        // A matching rule's actions accumulate per slot. A terminal Exclude
-        // action stops the entire walk.
+        // A matching rule's actions accumulate per slot. A terminal action in
+        // this evaluator's scope (any terminal action when no scope is set)
+        // stops the entire walk.
         bool terminate = false;
         for (const RuleAction& action : rule.actions) {
             if (registry.isTerminal(action)) {
+                // An out-of-scope terminal action is inert HERE: it neither
+                // fills a slot (its slot id exists for registry completeness
+                // only) nor stops the walk, so the rule's remaining actions
+                // and every lower-priority rule still apply. The evaluator
+                // bound to that action's own exclusion slice still honours it.
+                if (m_terminalScope && !m_terminalScope->contains(action.type)) {
+                    continue;
+                }
                 result.markExcluded();
                 terminate = true;
                 break;
@@ -124,6 +142,19 @@ bool RuleEvaluator::hasAnyMatch(const WindowQuery& query) const
 {
     for (const Rule& rule : m_ruleSet.rules()) {
         if (rule.enabled && rule.match.evaluate(query)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool RuleEvaluator::hasAnyMatchFiltered(const WindowQuery& query, const std::function<bool(const Rule&)>& admit) const
+{
+    for (const Rule& rule : m_ruleSet.rules()) {
+        // Match first, admit second: `evaluate` is the cheap common rejection
+        // and `admit` walks the rule's actions, so testing admission first
+        // would pay that walk for every rule in the set on every query.
+        if (rule.enabled && rule.match.evaluate(query) && (!admit || admit(rule))) {
             return true;
         }
     }
@@ -215,6 +246,12 @@ void RuleEvaluator::evictCache(quint64 currentRevision) const
 
 ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const WindowQuery& query) const
 {
+    return resolveCachedFiltered(windowId, query, {});
+}
+
+ResolvedActions RuleEvaluator::resolveCachedFiltered(const QString& windowId, const WindowQuery& query,
+                                                     const std::function<bool(const Rule&)>& admit) const
+{
     const quint64 revision = m_ruleSet.revision();
 
     const auto it = m_cache.constFind(windowId);
@@ -222,7 +259,7 @@ ResolvedActions RuleEvaluator::resolveCached(const QString& windowId, const Wind
         return it->actions;
     }
 
-    ResolvedActions result = resolve(query);
+    ResolvedActions result = resolveFiltered(query, admit);
     m_cache.insert(windowId, CacheEntry{revision, m_cacheInsertSeq++, result});
     evictCache(revision);
     return result;

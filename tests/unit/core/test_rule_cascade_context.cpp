@@ -8,10 +8,16 @@
  * Split out from test_rule_cascade_fidelity.cpp. Where that suite pins the
  * engine-mode / layout assignment cascade, this one covers the non-assignment
  * context resolvers that share the same priority-wins, per-slot-composition
- * model: gaps, orientation / active-layout stamping, autotile tiling params,
- * overlay shader / style / appearance overrides, context locks, and the
- * per-mode gap routing through the context `Mode` field. The shared harness
- * lives in RuleCascadeFixture.h.
+ * model: gaps (including the per-monitor override), orientation and
+ * active-layout stamping (including the scrolling template's prefixed
+ * ActiveLayout stamp), autotile tiling params, scrolling context params, and
+ * the exactContextEntry pair pinning the settings UI's explicit-versus-resolved
+ * discriminator, including its deliberate blindness to a rule's enabled flag.
+ *
+ * The overlay, lock, per-mode gap routing, negation-polarity and specificity
+ * halves live in the sibling test_rule_cascade_overlay_lock.cpp, split off at
+ * the overlay banner when this file passed the 1150-line ceiling. Both halves
+ * share the harness in RuleCascadeFixture.h.
  */
 
 #include <QColor>
@@ -21,6 +27,12 @@
 #include <QTest>
 #include <QUuid>
 #include <limits>
+
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
+#include <PhosphorZones/Zone.h>
 
 #include "RuleCascadeFixture.h"
 
@@ -59,8 +71,10 @@ private Q_SLOTS:
         // Higher-priority rule sets ONLY zone padding; lower-priority rule sets
         // ONLY the outer gap. Different slots → both must apply (no shadowing),
         // and neither carries an engine-mode action.
+        // A distinctive inner gap: 0 would be indistinguishable from a
+        // default-constructed int if the slot were ever filled by accident.
         const PWR::Rule pad = gapRule(QStringLiteral("pad"), 400, QStringLiteral("DP-1"),
-                                      {intGapAction(PWR::ActionType::SetInnerGap, 0)});
+                                      {intGapAction(PWR::ActionType::SetInnerGap, 7)});
         const PWR::Rule gap = gapRule(QStringLiteral("gap"), 300, QStringLiteral("DP-1"),
                                       {intGapAction(PWR::ActionType::SetOuterGap, 12)});
         QVERIFY(f.store->setAllRules({pad, gap}));
@@ -68,10 +82,21 @@ private Q_SLOTS:
         const PhosphorZones::ContextGapOverride resolved =
             f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
         QVERIFY(resolved.innerGap.has_value());
-        QCOMPARE(*resolved.innerGap, 0);
+        QCOMPARE(*resolved.innerGap, 7);
         QVERIFY(resolved.outerGap.has_value()); // separate slot — composes, not shadowed
         QCOMPARE(*resolved.outerGap, 12);
         QVERIFY(!resolved.usePerSideOuterGap.has_value());
+
+        // An explicit ZERO is a real override, not an absent one: the optional
+        // has to carry it through, or "no gaps on this screen" reads as unset
+        // and the global default comes back instead.
+        const PWR::Rule zeroPad = gapRule(QStringLiteral("zero-pad"), 400, QStringLiteral("DP-1"),
+                                          {intGapAction(PWR::ActionType::SetInnerGap, 0)});
+        QVERIFY(f.store->setAllRules({zeroPad, gap}));
+        const PhosphorZones::ContextGapOverride zeroed =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(zeroed.innerGap.has_value());
+        QCOMPARE(*zeroed.innerGap, 0);
 
         // A context the rules do not pin → no override (cascade falls through).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
@@ -126,8 +151,10 @@ private Q_SLOTS:
     // The gap/lock/overlay resolvers stamp the screen's resolved active-layout id
     // (via assignmentIdForScreen). A rule matching Field::ActiveLayout must fire
     // only when that id matches — and the resolver must NOT recurse (reaching
-    // assignmentIdForScreen must never re-enter the gap resolver). The test
-    // completing at all proves the no-recursion contract.
+    // assignmentIdForScreen must never re-enter the gap resolver). Unbounded
+    // recursion here would hang or blow the stack, so the test completing is
+    // evidence against that specific failure. It says nothing about a bounded
+    // re-entry, which is not observable from here.
     void testContextActiveLayout_stampedAndGatesRule()
     {
         RegistryFixture f = makeRegistryFixture();
@@ -165,6 +192,79 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString()).isEmpty());
     }
 
+    // ─── The scrolling TEMPLATE rides the ActiveLayout stamp, prefixed ────────
+    // A Scrolling context stamps "scrolling:<templateUuid>" (parity with
+    // autotile's "autotile:<algo>"), so a rule can target one specific
+    // template; the bare sentinel now means "scrolling with no template".
+    void testContextActiveLayout_scrollingTemplateStamp()
+    {
+        // The store is declared BEFORE the fixture so it outlives the registry
+        // that borrows it: locals are destroyed in reverse, and a registry torn
+        // down while still holding a pointer into a dead store is a dangling
+        // read in whatever the destructor touches.
+        PhosphorZones::ScrollingTemplateStore store;
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setScrollingTemplateStore(&store);
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Template");
+        templ.presetColumnWidths = {0.5};
+        const QString templId = store.saveTemplate(templ).toString();
+
+        const auto gapRuleForActiveLayout = [](const QString& id) {
+            PWR::RuleAction gapAction;
+            gapAction.type = QString(PWR::ActionType::SetInnerGap);
+            gapAction.params.insert(QString(PWR::ActionParam::Value), 21);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = QStringLiteral("template gap");
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, id);
+            r.actions = {gapAction};
+            return r;
+        };
+        const auto innerGapOn = [&f](const QString& screenId) {
+            return f.registry->resolveContextGaps(screenId, 0, QString());
+        };
+
+        // Scrolling context, no template yet: the BARE sentinel matches.
+        // The gap rules are added/removed individually — the ASSIGNMENT lives
+        // in the same rule store, so a setAllRules would wipe it.
+        f.registry->assignLayoutById(QStringLiteral("DP-1"), 0, QString(),
+                                     QString(PhosphorLayout::LayoutId::ScrollingId));
+        const PWR::Rule bareRule = gapRuleForActiveLayout(QString(PhosphorLayout::LayoutId::ScrollingId));
+        QVERIFY(f.store->addRule(bareRule));
+        const PhosphorZones::ContextGapOverride onBare = innerGapOn(QStringLiteral("DP-1"));
+        QVERIFY(onBare.innerGap.has_value());
+        QCOMPARE(*onBare.innerGap, 21);
+
+        // Assign the template: the stamp becomes the PREFIXED form — the bare
+        // rule stops matching, the prefixed rule fires. Every write here goes
+        // through the rule store, so the gap cache's revision compare
+        // refreshes it on its own.
+        f.registry->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), templId);
+        QVERIFY(!innerGapOn(QStringLiteral("DP-1")).innerGap.has_value());
+        QVERIFY(f.store->removeRule(bareRule.id));
+        const PWR::Rule prefixedRule = gapRuleForActiveLayout(PhosphorLayout::LayoutId::makeScrollingId(templId));
+        QVERIFY(f.store->addRule(prefixedRule));
+        const PhosphorZones::ContextGapOverride onTemplate = innerGapOn(QStringLiteral("DP-1"));
+        QVERIFY(onTemplate.innerGap.has_value());
+        QCOMPARE(*onTemplate.innerGap, 21);
+
+        // Clearing the template restores the bare stamp: the prefixed rule
+        // goes inert again.
+        f.registry->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), QString());
+        QVERIFY(!innerGapOn(QStringLiteral("DP-1")).innerGap.has_value());
+
+        // Inertness alone would also hold if the stamp had gone empty rather
+        // than back to the bare sentinel, so re-add the bare rule and require
+        // it to fire again. This is what pins the revert to the SENTINEL.
+        QVERIFY(f.store->addRule(bareRule));
+        const PhosphorZones::ContextGapOverride onCleared = innerGapOn(QStringLiteral("DP-1"));
+        QVERIFY(onCleared.innerGap.has_value());
+        QCOMPARE(*onCleared.innerGap, 21);
+    }
+
     // ─── An ActiveLayout-referencing rule must NOT drive the assignment ───────
     // The assignment resolver leaves Field::ActiveLayout unstamped (it IS the
     // resolver's output — stamping would recurse). An assignment rule whose match
@@ -173,7 +273,8 @@ private Q_SLOTS:
     // `ActiveLayout Equals X` leaf never matches the unstamped placeholder, but a
     // `None{ActiveLayout Equals X}` ("active layout is NOT X") would spuriously
     // match the empty placeholder and force a wrong assignment without the guard.
-    // The resolve also completing at all proves the no-recursion contract.
+    // The resolve completing is likewise evidence only against UNBOUNDED
+    // recursion (which would hang or blow the stack), not against re-entry.
     void testActiveLayoutRuleExcludedFromAssignment()
     {
         RegistryFixture f = makeRegistryFixture();
@@ -193,7 +294,7 @@ private Q_SLOTS:
         screenPinned.match =
             PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
         screenPinned.actions =
-            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"), QString());
         QVERIFY(f.store->setAllRules({screenPinned}));
         QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).mode,
                  PhosphorZones::AssignmentEntry::Autotile);
@@ -209,7 +310,8 @@ private Q_SLOTS:
             r.enabled = true;
             r.priority = 500;
             r.match = match;
-            r.actions = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"));
+            r.actions =
+                CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QStringLiteral("dwindle"), QString());
             return r;
         };
 
@@ -282,6 +384,93 @@ private Q_SLOTS:
         QVERIFY(f.store->setAllRules({defaultAssignmentRule(
             PWR::MatchExpression::makeLeaf(PWR::Field::ActiveLayout, PWR::Operator::Equals, someLayout), true)}));
         QVERIFY(f.registry->isDefaultAssignmentSuppressedForContext(QStringLiteral("DP-1"), 0, QString()));
+    }
+
+    // ─── exactContextEntry discriminates EXPLICIT from RESOLVED ──────────────
+    // exactContextEntry is the settings UI's explicit-vs-resolved discriminator:
+    // it reports only what THIS exact (screen, desktop, activity) tuple has a
+    // rule for, and never what the tuple merely inherits. The Monitors page
+    // relies on the distinction — re-pinning a cascade default as if it were
+    // explicit would freeze an inherited value into a rule the user never
+    // authored. The cascade resolver (assignmentEntryForScreen) is the foil in
+    // each case below: it answers, and exactContextEntry must not.
+    void testExactContextEntry_explicitOnly_notCascadeOrDefault()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        // A global snap default, so every unpinned context still RESOLVES to
+        // something — otherwise the negative assertions would pass vacuously.
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        // One explicit context rule on the MONITOR axis: (DP-1, no desktop, no
+        // activity), so its match is a bare ScreenId leaf that every desktop on
+        // DP-1 inherits.
+        const PWR::Rule assign = CRB::makeAssignmentRule(
+            QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
+            QStringLiteral("{explicit-layout}"), QString(), 301, QString());
+        QVERIFY(f.store->setAllRules({assign}));
+
+        // (1) The exact tuple → the stored entry comes back.
+        const PhosphorZones::AssignmentEntry exact =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(exact.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(exact.snappingLayout, QStringLiteral("{explicit-layout}"));
+        QVERIFY(f.registry->hasExplicitAssignment(QStringLiteral("DP-1"), 0, QString()));
+
+        // (2) A tuple that only INHERITS the value through the cascade. Desktop
+        // 5 on the same screen resolves to the monitor rule's layout, but
+        // nothing is stored AT (DP-1, 5, "") — the canonical desktop-axis shape
+        // that tuple names is a different match than the bare ScreenId leaf —
+        // so exactContextEntry must report an empty entry.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 5, QString()).snappingLayout,
+                 QStringLiteral("{explicit-layout}"));
+        const PhosphorZones::AssignmentEntry inherited =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 5, QString());
+        QVERIFY(!inherited.isValid());
+        QVERIFY(inherited.snappingLayout.isEmpty());
+        QVERIFY(inherited.tilingAlgorithm.isEmpty());
+        QVERIFY(!f.registry->hasExplicitAssignment(QStringLiteral("DP-1"), 5, QString()));
+
+        // (3) A tuple that resolves only through the global DEFAULT tier — a
+        // different screen entirely. The resolver answers with the provider's
+        // id; exactContextEntry stays empty.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-2"), 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
+        const PhosphorZones::AssignmentEntry defaulted =
+            f.registry->exactContextEntry(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(!defaulted.isValid());
+        QVERIFY(defaulted.snappingLayout.isEmpty());
+        QVERIFY(!f.registry->hasExplicitAssignment(QStringLiteral("DP-2"), 0, QString()));
+    }
+
+    // exactContextEntry is deliberately BLIND to the rule's enabled flag: it
+    // reports stored intent, not the effective cascade result, because the
+    // settings UI must keep rendering a pin the user switched off. The cascade
+    // resolver is the opposite — the evaluator skips disabled rules — so the
+    // two must DISAGREE for a disabled pin. That disagreement is the contract.
+    void testExactContextEntry_disabledRuleStillReportsStoredEntry()
+    {
+        RegistryFixture f = makeRegistryFixture();
+        f.registry->setDefaultLayoutIdProvider([]() {
+            return QStringLiteral("{provider-snap-default}");
+        });
+
+        PWR::Rule assign = CRB::makeAssignmentRule(QStringLiteral("layout DP-1"), QStringLiteral("DP-1"), 0, QString(),
+                                                   QStringLiteral("snapping"), QStringLiteral("{explicit-layout}"),
+                                                   QString(), 301, QString());
+        assign.enabled = false;
+        QVERIFY(f.store->setAllRules({assign}));
+
+        // Stored intent survives the disable.
+        const PhosphorZones::AssignmentEntry exact =
+            f.registry->exactContextEntry(QStringLiteral("DP-1"), 0, QString());
+        QCOMPARE(exact.snappingLayout, QStringLiteral("{explicit-layout}"));
+
+        // The cascade does not: the disabled rule is skipped and the global
+        // default tier answers instead.
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 QStringLiteral("{provider-snap-default}"));
     }
 
     // ─── Context autotile-parameter resolution (max / split / master) ────────
@@ -360,6 +549,180 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
+    // ── Context scrolling-parameter resolution (width / centering / display / axis) ──
+    // resolveContextScrollingParams is a per-slot read like its tiling sibling:
+    // independent SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+    // SetScrollDefaultColumnDisplay rules compose, and an unpinned screen resolves
+    // to an all-unset (empty) params struct.
+    void testContextScrollingParams_perSlotComposition()
+    {
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto scrollRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // Separate rules fill separate slots — all compose (per-slot read).
+        const PWR::Rule cw = scrollRule(QStringLiteral("cw"), 400, QStringLiteral("DP-1"),
+                                        {valueAction(PWR::ActionType::SetScrollDefaultColumnWidth, 0.75)});
+        // Centering carries a wire token → the centering int.
+        const PWR::Rule cf = scrollRule(
+            QStringLiteral("cf"), 300, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetCenterFocusedColumn, QString(PWR::CenterFocusedColumnToken::OnOverflow))});
+        // Column display carries a wire token → the display int.
+        const PWR::Rule cd = scrollRule(
+            QStringLiteral("cd"), 200, QStringLiteral("DP-1"),
+            {valueAction(PWR::ActionType::SetScrollDefaultColumnDisplay, QString(PWR::ColumnDisplayToken::Tabbed))});
+        // The strip axis carries a wire token → the Scrolling.StripAxis
+        // config int (the INTENT space, not the engine's ScrollAxis).
+        const PWR::Rule ax =
+            scrollRule(QStringLiteral("ax"), 100, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetScrollStripAxis, QString(PWR::StripAxisToken::Vertical))});
+        QVERIFY(f.store->setAllRules({cw, cf, cd, ax}));
+
+        const PhosphorZones::ContextScrollingParams p =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(p.defaultColumnWidth.has_value());
+        QCOMPARE(*p.defaultColumnWidth, 0.75);
+        QVERIFY(p.centerFocusedColumn.has_value());
+        QCOMPARE(*p.centerFocusedColumn, 2); // "onOverflow" → 2
+        QVERIFY(p.defaultColumnDisplay.has_value());
+        QCOMPARE(*p.defaultColumnDisplay, 1); // "tabbed" → 1
+        QVERIFY(p.stripAxis.has_value());
+        QCOMPARE(*p.stripAxis, 2); // "vertical" → 2
+
+        // A screen the rules do not pin → all-unset (the engine then keeps its
+        // config-derived parameters for that screen).
+        QVERIFY(f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
+
+        // The focus-follows-mouse scroll cap, pinned ALONE on its own screen
+        // rather than folded into the composed rule above. The resolver reaches
+        // its slots through a filtered walk whose admission set is written by
+        // hand, and a slot missing from that set is skipped with the whole rule
+        // it rides: a cap folded in beside four admitted siblings would resolve
+        // on THEIR admission and prove nothing. A rule whose only action is the
+        // cap is the shape the settings UI produces for a single-action rule,
+        // and it is the shape that fails when the set is wrong.
+        const PWR::Rule capOnly = scrollRule(QStringLiteral("cap"), 500, QStringLiteral("DP-3"),
+                                             {valueAction(PWR::ActionType::SetScrollFocusFollowsMouseMaxScroll, 0.4)});
+        QVERIFY(f.store->setAllRules({capOnly}));
+        const PhosphorZones::ContextScrollingParams capParams =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-3"), 0, QString());
+        QVERIFY(capParams.focusFollowsMouseMaxScroll.has_value());
+        QCOMPARE(*capParams.focusFollowsMouseMaxScroll, 0.4);
+        QVERIFY(!capParams.isEmpty());
+    }
+
+    // ─── Context scrolling params: the tab LABEL FONT slots ────────────────
+    // The five font slots are the only part of the tab-indicator family whose
+    // resolved value can legitimately be EMPTY, and the empty case is the one
+    // carrying the meaning: it is a rule walking one screen back to the system
+    // font after a global family was picked. So what is pinned here is not
+    // "the value arrives" but "the value arrives ENGAGED while holding an
+    // empty string". An isEmpty() tidy in the resolver's readString would
+    // leave the optional disengaged and the screen would silently keep the
+    // global family.
+    void testContextScrollingParams_tabIndicatorFontSlots()
+    {
+        // Re-declared rather than shared with the sibling above: both helpers
+        // are function-local there. That is this file's own precedent
+        // (intGapAction and valueAction each appear twice already).
+        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
+            return a;
+        };
+        const auto scrollRule = [&](const QString& name, int priority, const QString& screenId,
+                                    const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // A font-ONLY rule. Nothing else about the indicator is touched, which
+        // is what makes the hasTabIndicatorOverrides() assertion mean
+        // something: the font slots have to count towards it on their own.
+        const PWR::Rule fr =
+            scrollRule(QStringLiteral("font"), 500, QStringLiteral("DP-1"),
+                       {valueAction(PWR::ActionType::SetTabIndicatorFontFamily, QStringLiteral("Noto Sans")),
+                        valueAction(PWR::ActionType::SetTabIndicatorFontWeight, 400),
+                        valueAction(PWR::ActionType::SetTabIndicatorFontItalic, true),
+                        // FALSE, not absent. A bool slot has to survive as a
+                        // VALUE, or "turn underline off for this screen" is
+                        // indistinguishable from "say nothing about underline".
+                        valueAction(PWR::ActionType::SetTabIndicatorFontUnderline, false),
+                        valueAction(PWR::ActionType::SetTabIndicatorFontStrikeout, true)});
+        QVERIFY(f.store->setAllRules({fr}));
+
+        const PhosphorZones::ContextScrollingParams p =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(!p.isEmpty());
+        QVERIFY(p.hasTabIndicatorOverrides());
+        QVERIFY(p.tabIndicatorFontFamily.has_value());
+        QCOMPARE(*p.tabIndicatorFontFamily, QStringLiteral("Noto Sans"));
+        QVERIFY(p.tabIndicatorFontWeight.has_value());
+        QCOMPARE(*p.tabIndicatorFontWeight, 400);
+        QVERIFY(p.tabIndicatorFontItalic.has_value());
+        QCOMPARE(*p.tabIndicatorFontItalic, true);
+        QVERIFY(p.tabIndicatorFontUnderline.has_value());
+        QCOMPARE(*p.tabIndicatorFontUnderline, false);
+        QVERIFY(p.tabIndicatorFontStrikeout.has_value());
+        QCOMPARE(*p.tabIndicatorFontStrikeout, true);
+
+        // ── the empty family ──
+        // QString(), never QVariant(): QJsonValue::fromVariant turns a bare
+        // QVariant into Null, the descriptor REJECTS Null, and the whole rule
+        // would then be dropped at the store — this pin would quietly become a
+        // no-op row that still passed.
+        const PWR::Rule er = scrollRule(QStringLiteral("empty"), 400, QStringLiteral("DP-2"),
+                                        {valueAction(PWR::ActionType::SetTabIndicatorFontFamily, QString())});
+        QVERIFY(f.store->setAllRules({fr, er}));
+        const PhosphorZones::ContextScrollingParams e =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(e.hasTabIndicatorOverrides());
+        QVERIFY(e.tabIndicatorFontFamily.has_value()); // ENGAGED…
+        QVERIFY(e.tabIndicatorFontFamily->isEmpty()); // …and holding the empty string.
+
+        // A screen no rule pins resolves to all-unset, so the daemon leaves
+        // that screen's font on the global setting.
+        const PhosphorZones::ContextScrollingParams none =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-3"), 0, QString());
+        QVERIFY(none.isEmpty());
+        QVERIFY(!none.hasTabIndicatorOverrides());
+
+        // An out-of-range weight never reaches a screen. NOTE THE MECHANISM,
+        // because it is not the one it looks like: Rule::isValid() runs every
+        // action of a rule through the registry, so setAllRules drops this rule
+        // whole at the STORE boundary and the resolver's own 100..900 bound is
+        // never consulted. Both guards agree on the outcome the user sees —
+        // the screen keeps the global weight — which is what this pins.
+        const PWR::Rule br = scrollRule(QStringLiteral("bad"), 300, QStringLiteral("DP-4"),
+                                        {valueAction(PWR::ActionType::SetTabIndicatorFontWeight, 9999)});
+        QVERIFY(f.store->setAllRules({fr, er, br}));
+        QVERIFY(!f.registry->resolveContextScrollingParams(QStringLiteral("DP-4"), 0, QString())
+                     .tabIndicatorFontWeight.has_value());
+    }
+
     // ─── Per-monitor gap rule overrides the baseline for that screen only ────
     // A per-monitor gap override is authored by the Appearance page as a NORMAL
     // (non-managed) screen-scoped rule: match `ScreenId == screen`, carrying the
@@ -419,424 +782,33 @@ private Q_SLOTS:
         // EXCLUDED, so there is NO context override — the cascade falls through
         // to the global default tier (the baseline's value, surfaced elsewhere).
         QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
-    }
 
-    // ─── Context overlay-property resolution (OverlayShader / OverlayStyle) ──
-    // resolveContextOverlay is a per-slot read across all matching context
-    // rules (mirrors resolveContextGaps): independent shader / style rules
-    // compose, and the style wire token maps to the OverlayDisplayMode int.
+        // The exclusion is keyed on MANAGED-and-catch-all, not on catch-all
+        // alone: a user's own catch-all gap rule is an ordinary context override
+        // and must surface on every screen, DP-2 included. Without this arm a
+        // guard that dropped all catch-alls would look correct.
+        PWR::Rule userCatchAll;
+        userCatchAll.id = QUuid::createUuid();
+        userCatchAll.name = QStringLiteral("My gaps everywhere");
+        userCatchAll.enabled = true;
+        userCatchAll.managed = false;
+        // Below the per-monitor rule's 310, so the DP-1 arm below is about the
+        // per-monitor override winning and not about specificity ordering
+        // (which testPerScreenGapBeatsPerModeGap covers on its own).
+        userCatchAll.priority = 300;
+        userCatchAll.match = PWR::MatchExpression{}; // catch-all All{}
+        userCatchAll.actions = {intGapAction(PWR::ActionType::SetInnerGap, 9)};
+        QVERIFY(f.store->setAllRules({baseline, perScreen, userCatchAll}));
 
-    void testContextOverlay_perSlotComposition()
-    {
-        const auto overlayRule = [](const QString& name, int priority, const QString& screenId,
-                                    const QList<PWR::RuleAction>& actions) {
-            PWR::Rule r;
-            r.id = QUuid::createUuid();
-            r.name = name;
-            r.enabled = true;
-            r.priority = priority;
-            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
-            r.actions = actions;
-            return r;
-        };
-        const auto shaderAction = [](const QString& id) {
-            PWR::RuleAction a;
-            a.type = QString(PWR::ActionType::OverrideOverlayShader);
-            a.params.insert(QString(PWR::ActionParam::EffectId), id);
-            return a;
-        };
-        const auto styleAction = [](const QString& token) {
-            PWR::RuleAction a;
-            a.type = QString(PWR::ActionType::OverrideOverlayStyle);
-            a.params.insert(QString(PWR::ActionParam::Value), token);
-            return a;
-        };
-
-        RegistryFixture f = makeRegistryFixture();
-        // One rule sets ONLY the overlay shader; a separate rule sets ONLY the
-        // overlay style. Different slots → both compose (no shadowing).
-        const PWR::Rule sh = overlayRule(QStringLiteral("sh"), 400, QStringLiteral("DP-1"),
-                                         {shaderAction(QStringLiteral("plasma-glow"))});
-        const PWR::Rule st = overlayRule(QStringLiteral("st"), 300, QStringLiteral("DP-1"),
-                                         {styleAction(QString(PWR::OverlayStyleToken::Preview))});
-        QVERIFY(f.store->setAllRules({sh, st}));
-
-        const PhosphorZones::ContextOverlayOverride resolved =
-            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
-        QVERIFY(resolved.shaderId.has_value());
-        QCOMPARE(*resolved.shaderId, QStringLiteral("plasma-glow"));
-        QVERIFY(resolved.style.has_value());
-        QCOMPARE(*resolved.style, 1); // "preview" → OverlayDisplayMode::LayoutPreview
-
-        // A context the rules do not pin → no override (falls through to layout).
-        QVERIFY(f.registry->resolveContextOverlay(QStringLiteral("DP-2"), 0, QString()).isEmpty());
-
-        // The "rectangles" token maps to OverlayDisplayMode::ZoneRectangles (0).
-        const PWR::Rule rect = overlayRule(QStringLiteral("rect"), 500, QStringLiteral("HDMI-1"),
-                                           {styleAction(QString(PWR::OverlayStyleToken::Rectangles))});
-        QVERIFY(f.store->setAllRules({rect}));
-        const PhosphorZones::ContextOverlayOverride r2 =
-            f.registry->resolveContextOverlay(QStringLiteral("HDMI-1"), 0, QString());
-        QVERIFY(r2.style.has_value());
-        QCOMPARE(*r2.style, 0);
-        QVERIFY(!r2.shaderId.has_value());
-
-        // shaderParams round-trip: a shader override carrying a params object
-        // resolves it into ContextOverlayOverride::shaderParams (the headline
-        // shader-uniform-override feature). The nested object is stored as JSON
-        // and decoded via toObject().toVariantMap().
-        const auto shaderWithParams = [](const QString& id, const QJsonObject& params) {
-            PWR::RuleAction a;
-            a.type = QString(PWR::ActionType::OverrideOverlayShader);
-            a.params.insert(QString(PWR::ActionParam::EffectId), id);
-            a.params.insert(QString(PWR::ActionParam::Params), params);
-            return a;
-        };
-        QJsonObject uniforms;
-        uniforms.insert(QStringLiteral("intensity"), 0.5);
-        const PWR::Rule shp = overlayRule(QStringLiteral("shp"), 600, QStringLiteral("DVI-1"),
-                                          {shaderWithParams(QStringLiteral("plasma-glow"), uniforms)});
-        QVERIFY(f.store->setAllRules({shp}));
-        const PhosphorZones::ContextOverlayOverride r3 =
-            f.registry->resolveContextOverlay(QStringLiteral("DVI-1"), 0, QString());
-        QVERIFY(r3.shaderId.has_value());
-        QCOMPARE(*r3.shaderId, QStringLiteral("plasma-glow"));
-        QCOMPARE(r3.shaderParams.value(QStringLiteral("intensity")).toDouble(), 0.5);
-    }
-
-    // ─── Context overlay-APPEARANCE resolution (SetOverlay* colours / opacities
-    //     / border dimensions / zone-number visibility) ────────────────────────
-    // The appearance actions layer over the global Snapping.Zones.* config: each
-    // fills its own optional on ContextOverlayOverride, and an unmatched context
-    // leaves them all unset so the consumer falls through to config.
-    void testContextOverlay_appearanceOverrides()
-    {
-        const auto valueAction = [](QLatin1StringView type, const QVariant& value) {
-            PWR::RuleAction a;
-            a.type = QString(type);
-            a.params.insert(QString(PWR::ActionParam::Value), QJsonValue::fromVariant(value));
-            return a;
-        };
-        PWR::Rule r;
-        r.id = QUuid::createUuid();
-        r.name = QStringLiteral("overlay appearance");
-        r.enabled = true;
-        r.priority = 400;
-        r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
-        r.actions = {
-            valueAction(PWR::ActionType::SetOverlayHighlightColor, QStringLiteral("#FF112233")),
-            valueAction(PWR::ActionType::SetOverlayInactiveColor, QStringLiteral("#80445566")),
-            valueAction(PWR::ActionType::SetOverlayBorderColor, QStringLiteral("#FFEEDDCC")),
-            valueAction(PWR::ActionType::SetOverlayActiveOpacity, 0.5),
-            valueAction(PWR::ActionType::SetOverlayInactiveOpacity, 0.25),
-            valueAction(PWR::ActionType::SetOverlayBorderWidth, 3),
-            valueAction(PWR::ActionType::SetOverlayBorderRadius, 12),
-            valueAction(PWR::ActionType::SetOverlayShowZoneNumbers, false),
-        };
-
-        RegistryFixture f = makeRegistryFixture();
-        QVERIFY(f.store->setAllRules({r}));
-
-        const PhosphorZones::ContextOverlayOverride resolved =
-            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
-        QVERIFY(resolved.highlightColor.has_value());
-        QCOMPARE(*resolved.highlightColor, QColor(QStringLiteral("#FF112233")));
-        QVERIFY(resolved.inactiveColor.has_value());
-        QCOMPARE(*resolved.inactiveColor, QColor(QStringLiteral("#80445566")));
-        QVERIFY(resolved.borderColor.has_value());
-        QCOMPARE(*resolved.borderColor, QColor(QStringLiteral("#FFEEDDCC")));
-        QVERIFY(resolved.activeOpacity.has_value());
-        QCOMPARE(*resolved.activeOpacity, 0.5);
-        QVERIFY(resolved.inactiveOpacity.has_value());
-        QCOMPARE(*resolved.inactiveOpacity, 0.25);
-        QVERIFY(resolved.borderWidth.has_value());
-        QCOMPARE(*resolved.borderWidth, 3);
-        QVERIFY(resolved.borderRadius.has_value());
-        QCOMPARE(*resolved.borderRadius, 12);
-        QVERIFY(resolved.showZoneNumbers.has_value());
-        QCOMPARE(*resolved.showZoneNumbers, false);
-
-        // An unpinned context leaves every appearance field unset (config wins).
-        QVERIFY(f.registry->resolveContextOverlay(QStringLiteral("DP-2"), 0, QString()).isEmpty());
-    }
-
-    // ─── Context lock resolution (ActionSlot::Locked) ─────────────────────
-    // resolveContextLocked reads the boolean Locked slot off a matching
-    // context rule. Mode-agnostic, never persisted — the daemon's
-    // isContextLocked ORs it over the manual lock store.
-
-    void testContextLock_resolution()
-    {
-        const auto lockRule = [](const QString& name, PWR::Field field, const QVariant& value, bool locked) {
-            PWR::RuleAction a;
-            a.type = QString(PWR::ActionType::LockContext);
-            a.params.insert(QString(PWR::ActionParam::Value), locked);
-            PWR::Rule r;
-            r.id = QUuid::createUuid();
-            r.name = name;
-            r.enabled = true;
-            r.priority = 400;
-            r.match = PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value);
-            r.actions = {a};
-            return r;
-        };
-
-        RegistryFixture f = makeRegistryFixture();
-        // A monitor lock (value = true) on DP-1, and an activity lock scoped to
-        // "work". An explicit value = false lock on DP-3 must NOT lock.
-        const PWR::Rule lockMonitor =
-            lockRule(QStringLiteral("lock DP-1"), PWR::Field::ScreenId, QStringLiteral("DP-1"), true);
-        const PWR::Rule lockActivity =
-            lockRule(QStringLiteral("lock work"), PWR::Field::Activity, QStringLiteral("work-uuid"), true);
-        const PWR::Rule unlockMonitor =
-            lockRule(QStringLiteral("unlock DP-3"), PWR::Field::ScreenId, QStringLiteral("DP-3"), false);
-        // A desktop-scoped lock: fires on virtual desktop 2 regardless of
-        // screen/activity, proving the desktop axis of the context match.
-        const PWR::Rule lockDesktop = lockRule(QStringLiteral("lock desktop 2"), PWR::Field::VirtualDesktop, 2, true);
-        // A mixed (context + window-property) lock rule: All{ScreenId == DP-4,
-        // AppId == firefox} carrying a LockContext action at a far-above band.
-        // Against the windowless context query the AppId leaf evaluates false,
-        // so the All{} fails and DP-4 must NOT lock — symmetric to the
-        // assignment-path mixed-rule inertness proof (testMixedRule* above).
-        PWR::RuleAction mixedLockAction;
-        mixedLockAction.type = QString(PWR::ActionType::LockContext);
-        mixedLockAction.params.insert(QString(PWR::ActionParam::Value), true);
-        PWR::Rule mixedLock;
-        mixedLock.id = QUuid::createUuid();
-        mixedLock.name = QStringLiteral("mixed lock DP-4");
-        mixedLock.enabled = true;
-        mixedLock.priority = 999;
-        mixedLock.match = PWR::MatchExpression::makeAll(
-            {PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-4")),
-             PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::Equals, QStringLiteral("firefox"))});
-        mixedLock.actions = {mixedLockAction};
-        QVERIFY(f.store->setAllRules({lockMonitor, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
-
-        // DP-1 is locked regardless of desktop/activity (screen-only match).
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 3, QStringLiteral("anything")));
-        // The activity lock fires only inside "work".
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("work-uuid")));
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-2"), 0, QStringLiteral("play-uuid")));
-        // The desktop lock fires on desktop 2 (any screen, no activity) and
-        // not on other desktops.
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 2, QString()));
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 1, QString()));
-        // value = false resolves to not-locked (explicit no-op overlay).
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-3"), 0, QString()));
-        // The mixed rule's AppId leaf can't match a windowless query → DP-4 not
-        // locked, even though its band (999) would dominate if it leaked.
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-4"), 0, QString()));
-        // A context no rule pins → not locked.
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("HDMI-1"), 0, QString()));
-
-        // Disabling the lock rule drops the lock (revision-invalidated cache):
-        // DP-1 was primed locked above, so a stale cache would keep returning
-        // true here — the post-mutation false proves the revision bump evicts.
-        PWR::Rule disabled = lockMonitor;
-        disabled.enabled = false;
-        QVERIFY(f.store->setAllRules({disabled, lockActivity, unlockMonitor, lockDesktop, mixedLock}));
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
-        // The eviction is a whole-cache drop, not a zeroing: a lock left intact
-        // (lockDesktop, also primed above) must still resolve true after the
-        // revision bump rebuilds the cache.
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 2, QString()));
-    }
-
-    // ─── Context lock — slot conflict resolution ──────────────────────────
-    // When two LockContext rules pin the SAME context with opposing values,
-    // the single Locked slot is won by the highest-priority rule (then list
-    // order on a tie), exactly like the layout slot (testTieBreakIsListOrder).
-    // The value itself does not bias the contest — proven by running it both
-    // directions so neither "true always wins" nor "false always wins" passes.
-
-    void testContextLock_priorityResolution()
-    {
-        const auto lockRuleAt = [](const QString& name, const QString& screenId, bool locked, int priority) {
-            PWR::RuleAction a;
-            a.type = QString(PWR::ActionType::LockContext);
-            a.params.insert(QString(PWR::ActionParam::Value), locked);
-            PWR::Rule r;
-            r.id = QUuid::createUuid();
-            r.name = name;
-            r.enabled = true;
-            r.priority = priority;
-            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
-            r.actions = {a};
-            return r;
-        };
-
-        RegistryFixture f = makeRegistryFixture();
-        // DP-9: higher-priority rule says NOT locked → wins over a lower one
-        // that says locked.
-        const PWR::Rule dp9High = lockRuleAt(QStringLiteral("dp9 unlock"), QStringLiteral("DP-9"), false, 500);
-        const PWR::Rule dp9Low = lockRuleAt(QStringLiteral("dp9 lock"), QStringLiteral("DP-9"), true, 400);
-        // DP-10: the inverse — higher-priority rule says locked → wins.
-        const PWR::Rule dp10High = lockRuleAt(QStringLiteral("dp10 lock"), QStringLiteral("DP-10"), true, 500);
-        const PWR::Rule dp10Low = lockRuleAt(QStringLiteral("dp10 unlock"), QStringLiteral("DP-10"), false, 400);
-        // DP-11: equal priority, lock=true first — first-listed rule wins.
-        const PWR::Rule dp11First = lockRuleAt(QStringLiteral("dp11 a"), QStringLiteral("DP-11"), true, 400);
-        const PWR::Rule dp11Second = lockRuleAt(QStringLiteral("dp11 b"), QStringLiteral("DP-11"), false, 400);
-        // DP-12: the inverse tie-break — lock=false first at the same priority.
-        // Run both directions so the tie-break is proven to be list-order, not
-        // value-bias: a "true always wins on a tie" bug would pass DP-11 alone.
-        const PWR::Rule dp12First = lockRuleAt(QStringLiteral("dp12 a"), QStringLiteral("DP-12"), false, 400);
-        const PWR::Rule dp12Second = lockRuleAt(QStringLiteral("dp12 b"), QStringLiteral("DP-12"), true, 400);
-        QVERIFY(
-            f.store->setAllRules({dp9High, dp9Low, dp10High, dp10Low, dp11First, dp11Second, dp12First, dp12Second}));
-
-        // Highest priority wins regardless of the value it carries.
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-9"), 0, QString()));
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-10"), 0, QString()));
-        // Equal priority → first-listed wins, in both directions.
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-11"), 0, QString()));
-        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-12"), 0, QString()));
-    }
-
-    // ─── Context lock composes with a layout/engine assignment ────────────
-    // LockContext is terminal=false and fills the dedicated Locked slot, so a
-    // lock-only rule must co-exist with a separate context-assignment rule on
-    // the SAME context: the lock surfaces via resolveContextLocked AND the
-    // layout still surfaces via assignmentEntryForScreen. Neither slot shadows
-    // the other — the whole reason the action is non-terminal.
-
-    void testContextLock_composesWithAssignment()
-    {
-        RegistryFixture f = makeRegistryFixture();
-
-        // A lock-only rule (Locked slot) and a separate layout-assignment rule
-        // (engine/layout slots), both pinned to DP-7 (screen-only match).
-        PWR::RuleAction lockAction;
-        lockAction.type = QString(PWR::ActionType::LockContext);
-        lockAction.params.insert(QString(PWR::ActionParam::Value), true);
-        PWR::Rule lock;
-        lock.id = QUuid::createUuid();
-        lock.name = QStringLiteral("lock DP-7");
-        lock.enabled = true;
-        lock.priority = 400;
-        lock.match =
-            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-7"));
-        lock.actions = {lockAction};
-
-        const PWR::Rule assign =
-            CRB::makeAssignmentRule(QStringLiteral("layout DP-7"), QStringLiteral("DP-7"), 0, QString(),
-                                    QStringLiteral("snapping"), QStringLiteral("{ctx-layout}"), QString(), 301);
-        QVERIFY(f.store->setAllRules({lock, assign}));
-
-        // The lock surfaces (Locked slot) ...
-        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-7"), 1, QString()));
-        // ... and the layout assignment still surfaces (engine/layout slots),
-        // unshadowed by the non-terminal lock rule.
-        const PhosphorZones::AssignmentEntry entry =
-            f.registry->assignmentEntryForScreen(QStringLiteral("DP-7"), 1, QString());
-        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
-        QCOMPARE(entry.snappingLayout, QStringLiteral("{ctx-layout}"));
-    }
-
-    // ─── Per-mode gap rule resolves only for its mode ─────────────────────
-    // A `Mode Equals "tiling"` gap rule is context-only (Mode is a context
-    // field), so it participates in the gap cascade. resolveContextGaps must
-    // pick up its inner gap when the asking engine is tiling, and ignore it
-    // when the asking engine is snapping — the whole point of routing per-mode
-    // gaps through the context `Mode` field instead of window-property IsTiled.
-
-    void testPerModeGapRuleResolvesForMatchingModeOnly()
-    {
-        RegistryFixture f = makeRegistryFixture();
-
-        PWR::RuleAction gapAction;
-        gapAction.type = QString(PWR::ActionType::SetInnerGap);
-        gapAction.params.insert(QString(PWR::ActionParam::Value), 14);
-        PWR::Rule tilingGap;
-        tilingGap.id = QUuid::createUuid();
-        tilingGap.name = QStringLiteral("Tiling inner gap");
-        tilingGap.enabled = true;
-        tilingGap.priority = 500;
-        tilingGap.match =
-            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
-        tilingGap.actions = {gapAction};
-        QVERIFY(tilingGap.match.isContextOnly());
-        QVERIFY(f.store->setAllRules({tilingGap}));
-
-        // Tiling engine asks → the per-mode gap applies.
-        const PhosphorZones::ContextGapOverride tiled =
-            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("tiling"));
-        QVERIFY(tiled.innerGap.has_value());
-        QCOMPARE(*tiled.innerGap, 14);
-
-        // Snapping engine asks → the Mode leaf is a non-match, so no override.
-        const PhosphorZones::ContextGapOverride snapped =
-            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString(), QStringLiteral("snapping"));
-        QVERIFY(!snapped.innerGap.has_value());
-
-        // No mode supplied (mode-agnostic caller) → also a non-match.
-        const PhosphorZones::ContextGapOverride none =
-            f.registry->resolveContextGaps(QStringLiteral("DP-9"), 1, QString());
-        QVERIFY(!none.innerGap.has_value());
-    }
-
-    // ─── Per-monitor gap beats a global per-mode gap (specificity, not priority) ─
-    // A per-monitor (ScreenId-pinned) gap override and a global per-mode
-    // (Mode-pinned) gap rule can both match the same window/slot. A hand-authored
-    // per-mode gap rule can even carry a HIGHER raw priority (500) than a
-    // per-screen rule (300). resolveContextGaps must therefore order the slot by
-    // MATCH SPECIFICITY (ScreenId-pinned > Mode-pinned), so the per-monitor
-    // override wins despite its lower priority, while a slot the per-monitor rule
-    // does NOT carry still falls through to the per-mode rule. (Appearance/gaps are
-    // config-backed now, so migration creates no gap rules; these are authored
-    // directly to pin the cascade contract.)
-    void testPerScreenGapBeatsPerModeGap()
-    {
-        const auto intGapAction = [](QLatin1StringView type, int value) {
-            PWR::RuleAction a;
-            a.type = QString(type);
-            a.params.insert(QString(PWR::ActionParam::Value), value);
-            return a;
-        };
-
-        RegistryFixture f = makeRegistryFixture();
-
-        // Global per-mode gap rule: higher raw priority, carries both inner and
-        // outer gap.
-        PWR::Rule perMode;
-        perMode.id = QUuid::createUuid();
-        perMode.name = QStringLiteral("Tiling gaps");
-        perMode.enabled = true;
-        perMode.priority = 500; // the per-mode rule's priority — deliberately higher
-        perMode.match =
-            PWR::MatchExpression::makeLeaf(PWR::Field::Mode, PWR::Operator::Equals, QStringLiteral("tiling"));
-        perMode.actions = {intGapAction(PWR::ActionType::SetInnerGap, 14),
-                           intGapAction(PWR::ActionType::SetOuterGap, 30)};
-
-        // Per-monitor override for DP-1: lower raw priority, carries ONLY inner gap.
-        PWR::Rule perScreen;
-        perScreen.id = QUuid::createUuid();
-        perScreen.name = QStringLiteral("Gaps (DP-1)");
-        perScreen.enabled = true;
-        perScreen.priority = 300; // the per-monitor rule's priority — deliberately lower
-        perScreen.match =
-            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
-        perScreen.actions = {intGapAction(PWR::ActionType::SetInnerGap, 20)};
-
-        QVERIFY(f.store->setAllRules({perMode, perScreen}));
-
-        // DP-1 in tiling mode: both rules match the inner-gap slot. The
-        // ScreenId-pinned rule is more specific, so its value (20) wins even
-        // though the Mode-pinned rule has the higher priority (500 > 300).
-        const PhosphorZones::ContextGapOverride dp1 =
-            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("tiling"));
-        QVERIFY(dp1.innerGap.has_value());
-        QCOMPARE(*dp1.innerGap, 20);
-        // The outer-gap slot is carried only by the per-mode rule, so it still
-        // surfaces from there (per-slot composition is preserved).
-        QVERIFY(dp1.outerGap.has_value());
-        QCOMPARE(*dp1.outerGap, 30);
-
-        // DP-2 in tiling mode: no per-monitor rule, so the per-mode gap applies.
-        const PhosphorZones::ContextGapOverride dp2 =
-            f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString(), QStringLiteral("tiling"));
-        QVERIFY(dp2.innerGap.has_value());
-        QCOMPARE(*dp2.innerGap, 14);
+        const PhosphorZones::ContextGapOverride dp2User =
+            f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString());
+        QVERIFY(dp2User.innerGap.has_value());
+        QCOMPARE(*dp2User.innerGap, 9);
+        // DP-1 still prefers its per-monitor rule over the user catch-all.
+        const PhosphorZones::ContextGapOverride dp1User =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(dp1User.innerGap.has_value());
+        QCOMPARE(*dp1User.innerGap, 20);
     }
 };
 

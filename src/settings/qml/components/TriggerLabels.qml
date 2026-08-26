@@ -7,6 +7,7 @@
 pragma Singleton
 
 import QtQuick
+import org.kde.kirigami as Kirigami
 
 /**
  * @brief User-facing labels for an activation trigger.
@@ -76,6 +77,13 @@ QtObject {
             "label": i18n("Extra 5")
         }
     ]
+
+    /// Width every trigger editor asks for in a SettingsRow control slot.
+    ///
+    /// That slot is a plain Row positioner, so Layout.* is ignored there and
+    /// each host has to state a width. Three cards were carrying the same
+    /// literal, which is the duplication this singleton exists to stop.
+    readonly property int editorPreferredWidth: Kirigami.Units.gridUnit * 16
 
     /// "Alt + Right" for the given bitmasks, or @p emptyText when neither is
     /// set. Modifiers lead, then mouse buttons, matching the editor's ordering.

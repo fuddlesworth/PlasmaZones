@@ -422,8 +422,8 @@ void SurfaceAnimator::Private::runLeg(PhosphorLayer::Surface* surface, QQuickIte
     QStringList animIncludePaths;
     if (!shaderEffectId.isEmpty() && m_shaderRegistry) {
         resolvedShaderEff = m_shaderRegistry->effect(shaderEffectId);
-        // A compositor-only pack (desktop / geometry / move classes) is
-        // authored against the kwin classic-GL dialect with no daemon
+        // A compositor-only pack (desktop / geometry / move / strip classes)
+        // is authored against the kwin classic-GL dialect with no daemon
         // branch: attaching it would fail the strict SPIR-V bake at first
         // paint and stall the leg. This is reachable through a picker-legal
         // config — the picker is permissive on ambiguous rows (e.g. the

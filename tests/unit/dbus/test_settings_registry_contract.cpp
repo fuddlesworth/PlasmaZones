@@ -35,8 +35,11 @@
  */
 
 #include <QTest>
+#include <QColor>
+#include <QDBusVariant>
 #include <QDir>
 #include <QDirIterator>
+#include <QMetaProperty>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -180,8 +183,10 @@ private Q_SLOTS:
     /**
      * The Decorations.Performance keys specifically, spelled out. The scrape above
      * would catch a regression on these too, but naming them pins the exact bug that
-     * shipped: all three were absent from the registry, and PauseWhenIdle's default
-     * of true was being inverted to false on every startup.
+     * shipped: the original trio (AnimateFocusedOnly, PauseWhenIdle, IdleTimeoutSec)
+     * was absent from the registry, and PauseWhenIdle's default of true was being
+     * inverted to false on every startup. BlurScaleMultiplier joined the group later
+     * and rides the same wire, so it is pinned here too.
      */
     void testDecorationPerformanceKeysAreRegistered()
     {
@@ -189,6 +194,7 @@ private Q_SLOTS:
         QVERIFY(keys.contains(QStringLiteral("decorationAnimateFocusedOnly")));
         QVERIFY(keys.contains(QStringLiteral("decorationPauseWhenIdle")));
         QVERIFY(keys.contains(QStringLiteral("decorationIdleTimeoutSec")));
+        QVERIFY(keys.contains(QStringLiteral("decorationBlurScaleMultiplier")));
     }
 
     /**
@@ -210,6 +216,19 @@ private Q_SLOTS:
         const QVariant on = m_adaptor->getSetting(QStringLiteral("decorationPauseWhenIdle")).variant();
         QCOMPARE(on.typeId(), QMetaType::Bool);
         QCOMPARE(on.toBool(), true);
+
+        // AnimateFocusedOnly joined the default-true risk class in PR #872 and
+        // the effect pulls it over this identical getter path
+        // (daemon_settings.cpp), so pin its polarity round-trip the same way.
+        m_settings->setDecorationAnimateFocusedOnly(false);
+        const QVariant afoOff = m_adaptor->getSetting(QStringLiteral("decorationAnimateFocusedOnly")).variant();
+        QCOMPARE(afoOff.typeId(), QMetaType::Bool);
+        QCOMPARE(afoOff.toBool(), false);
+
+        m_settings->setDecorationAnimateFocusedOnly(true);
+        const QVariant afoOn = m_adaptor->getSetting(QStringLiteral("decorationAnimateFocusedOnly")).variant();
+        QCOMPARE(afoOn.typeId(), QMetaType::Bool);
+        QCOMPARE(afoOn.toBool(), true);
     }
 
     /**
@@ -255,6 +274,173 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("These shortcut settings exist on Settings but are absent from "
                                            "SettingsAdaptor's getter registry: %1")
                                 .arg(missing.join(QStringLiteral(", ")))));
+    }
+
+    /**
+     * Every scrolling setting must be registered, by REFLECTION for the same
+     * reason the shortcut quad above is.
+     *
+     * Scrolling settings have no external fetch site either: the engine reads
+     * them in-process through IScrollSettings and the overlay through
+     * ISettings, both against the DAEMON's own Settings. The D-Bus surface
+     * exists so the settings APP's writes reach that instance at all. Miss a
+     * registration and the control looks completely wired — it writes the
+     * settings app's store, the page shows the new value, Reset and Discard
+     * work — while the daemon never hears about it and nothing on screen
+     * changes. That is what happened to the whole Scrolling.TabIndicator
+     * family: twelve of its thirteen keys were dead, and every other test
+     * passed.
+     *
+     * Q_PROPERTY reflection closes it with no list to maintain.
+     */
+    void testEveryScrollingPropertyIsRegistered()
+    {
+        const QMetaObject* mo = m_settings->metaObject();
+        QStringList missing;
+        QStringList unwritable;
+        QStringList transposed;
+        int checked = 0;
+        // From 0, not propertyOffset(), for the shortcut scan's reason: a
+        // scrolling property declared on the ISettings base would otherwise be
+        // skipped silently.
+        for (int i = 0; i < mo->propertyCount(); ++i) {
+            const QString name = QString::fromLatin1(mo->property(i).name());
+            // The *Shortcut properties are covered by the scan above; skipping
+            // them here keeps a shortcut miss reported by exactly one test.
+            //
+            // The name-contains arm catches the scrolling keys that do NOT lead
+            // with the family prefix: defaultScrollingTemplate reads as a
+            // "default*" key and a prefix-only scan skips it, even though it is
+            // the setting that decides which template a screen resolves when
+            // nothing else names one.
+            const bool isScrollingKey =
+                name.startsWith(QLatin1String("scrolling")) || name.contains(QLatin1String("ScrollingTemplate"));
+            if (!isScrollingKey || name.endsWith(QLatin1String("Shortcut"))) {
+                continue;
+            }
+            ++checked;
+            const QVariant viaBus = m_adaptor->getSetting(name).variant();
+            if (!viaBus.isValid()) {
+                missing.append(name);
+                continue;
+            }
+            // The getter existing is only half the contract, and it is the
+            // WRONG half for the failure this test is named after: m_getters
+            // and m_setters are populated independently, so a key with a getter
+            // and no setter passes a presence check while staying write-dead —
+            // which is exactly "the settings app writes it and the daemon never
+            // sees it". Assert the write path too.
+            // Writing the value back that was just read: a no-op for state, so
+            // this cannot perturb the other cases. It exercises setter
+            // REGISTRATION only, not the validator — setSetting's equality
+            // guard returns true before the setter is entered for a same-value
+            // write. Registry presence is the failure this test is named after,
+            // and validator behaviour has its own coverage in
+            // test_scrolling_settings.
+            if (!m_adaptor->setSetting(name, QDBusVariant(viaBus))) {
+                unwritable.append(name);
+            }
+            // And that the registered accessor is the RIGHT one. A copy-paste
+            // that registers key A's name against key B's accessor satisfies
+            // both maps and still reports the wrong value forever; comparing
+            // against the Q_PROPERTY read is what catches a transposition.
+            //
+            // PERTURB FIRST. Every property here holds its schema default
+            // under the isolated config, and this family is full of keys that
+            // SHARE one — the three tab colours are all empty, the two tab
+            // bools are both false, the two step percentages are both 10. A
+            // transposition inside any of those sets is invisible against
+            // defaults, so write something distinct through the property,
+            // compare, then put it back.
+            const QMetaProperty prop = mo->property(i);
+            const QVariant original = prop.read(m_settings);
+            QVariant perturbed;
+            switch (original.metaType().id()) {
+            case QMetaType::Bool:
+                perturbed = !original.toBool();
+                break;
+            case QMetaType::Int:
+                perturbed = original.toInt() + 1;
+                break;
+            case QMetaType::Double:
+                perturbed = original.toDouble() + 1.0;
+                break;
+            case QMetaType::QString:
+                perturbed = QVariant(original.toString() + QStringLiteral("zz"));
+                break;
+            case QMetaType::QStringList: {
+                // scrollingTemplateOrder is the one QStringList property this
+                // scan reaches (the snapping/tiling orders match neither name
+                // filter). Without this arm it would compare its empty default
+                // against another empty-defaulting key's, so a registration
+                // against the wrong accessor would be invisible. The write
+                // goes through the Q_PROPERTY setter, whose canonicalCommaList
+                // validator preserves any non-empty distinct entry; a braced
+                // UUID is used anyway so the value is a plausible one.
+                QStringList l = original.toStringList();
+                l.append(QStringLiteral("{00000000-0000-0000-0000-0000000000ff}"));
+                perturbed = QVariant(l);
+                break;
+            }
+            case QMetaType::QColor:
+                // A colour no default resolves to, with a non-opaque alpha so
+                // an alpha-dropping comparison (QColor::name() omits it, the
+                // bus carries #AARRGGBB) fails loudly here.
+                //
+                // What this arm does NOT establish: the restore below writes
+                // the RESOLVED colour back through the QColor setter, which
+                // PINS the raw key. Property iteration is metaobject
+                // declaration order and both QColor properties are declared
+                // before both Raw ones, so by the time the loop reaches
+                // scrollingDropIndicatorColorRaw its "original" is that pin,
+                // not the sentinel — and the QString perturbation appends "zz",
+                // which the schema validator rejects back to empty. Both raws
+                // therefore compare empty-to-empty and a transposition between
+                // them is invisible HERE. That swap is caught instead by
+                // everyRawSetterWritesItsOwnKey in
+                // test_settings_system_palette_tracking.cpp, which writes valid
+                // colours the validator preserves.
+                perturbed = QVariant::fromValue(QColor(0x12, 0x34, 0x56, 0x80));
+                break;
+            default:
+                break;
+            }
+            // Only compare when the perturbation actually took: a setter that
+            // clamps or validates may refuse it, and then this key is simply
+            // back to the default-valued comparison it had before.
+            if (perturbed.isValid() && prop.isWritable()) {
+                prop.write(m_settings, perturbed);
+            }
+            const QVariant direct = prop.read(m_settings);
+            const QVariant perturbedViaBus = m_adaptor->getSetting(name).variant();
+            // A colour key crosses the bus as its #AARRGGBB spelling, so the
+            // comparison is between COLOURS, not between a colour and a string
+            // (QColor's own toString drops the alpha and would never match).
+            const bool agrees = direct.metaType().id() == QMetaType::QColor
+                ? QColor(perturbedViaBus.toString()) == direct.value<QColor>()
+                : perturbedViaBus == direct;
+            if (direct.isValid() && !agrees) {
+                transposed.append(
+                    QStringLiteral("%1 (bus=%2 property=%3)").arg(name, perturbedViaBus.toString(), direct.toString()));
+            }
+            if (prop.isWritable()) {
+                prop.write(m_settings, original);
+            }
+        }
+        QVERIFY2(checked > 0, "Reflection found no scrolling properties: the scan itself is broken.");
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("These scrolling settings exist on Settings but are absent from "
+                                           "SettingsAdaptor's GETTER registry, so the settings app can write "
+                                           "them and the daemon will never see it: %1")
+                                .arg(missing.join(QStringLiteral(", ")))));
+        QVERIFY2(unwritable.isEmpty(),
+                 qPrintable(QStringLiteral("These scrolling settings are readable over the bus but have no SETTER "
+                                           "registered, so a write from the settings app is silently dropped: %1")
+                                .arg(unwritable.join(QStringLiteral(", ")))));
+        QVERIFY2(transposed.isEmpty(),
+                 qPrintable(QStringLiteral("These scrolling settings are registered against the WRONG accessor — the "
+                                           "bus value disagrees with the Q_PROPERTY: %1")
+                                .arg(transposed.join(QStringLiteral(", ")))));
     }
 
     /**

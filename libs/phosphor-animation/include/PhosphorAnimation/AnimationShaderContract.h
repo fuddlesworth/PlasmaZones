@@ -448,6 +448,17 @@ inline constexpr const char* kIHasSurfaceLayer = "iHasSurfaceLayer";
 /// the fade completes.
 inline constexpr const char* kIHasOldWindow = "iHasOldWindow";
 
+/// `float iOldWindowOpacity` — COMPOSITOR PATH ONLY. The OLD side's own
+/// resolved opacity, applied by `oldColor()` in old_content.glsl. Equal to
+/// `iWindowOpacity` for every self-cross-fade (the old content is the same
+/// window's past, so the same SetOpacity verdict covers both sides). It
+/// exists for the tab class, where `uOldWindow` holds a DIFFERENT window —
+/// the outgoing tab — and dimming its capture by the ARRIVING window's
+/// opacity dimmed the wrong side whenever a SetOpacity rule distinguished
+/// the two tabs of one column. 1.0 when the snapshot already carries its
+/// opacity baked in (the decorated-composite seed).
+inline constexpr const char* kIOldWindowOpacity = "iOldWindowOpacity";
+
 /// `vec2 iMoveVelocity` — COMPOSITOR PATH ONLY. Spring-smoothed window
 /// velocity in logical px/s during a HELD interactive move transition
 /// (holdUntilRelease; an interactive resize starts no shader transition).

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorRendering/ShaderNodeLiveness.h>
 #include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
@@ -21,7 +22,9 @@
 #include <QPointer>
 #include <array>
 #include <atomic>
+#include <functional>
 #include <memory>
+#include <mutex>
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
@@ -104,6 +107,8 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
                    bufferShaderPathsChanged FINAL)
     Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    Q_PROPERTY(
+        bool halfFloatBuffers READ halfFloatBuffers WRITE setHalfFloatBuffers NOTIFY halfFloatBuffersChanged FINAL)
     Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
     Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
     Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
@@ -299,8 +304,10 @@ public:
     /// thread-safe per Qt docs: each call constructs its own
     /// QSvgRenderer / QImage instance with no shared mutable state)
     /// and call `setUserTexture(slot, image)` on the GUI thread to
-    /// install the result. Bitmap formats are loaded via `QImage` and
-    /// carry the same synchronous-IO caveat but no rasterisation cost.
+    /// install the result. Bitmap formats are decoded via `QImageReader`
+    /// under the same `kMaxSvgPixelBytes` budget — an oversized file is
+    /// downscaled during decode with a warning, never materialised at
+    /// full resolution — and carry the same synchronous-IO caveat.
     ///
     /// **Subclass contract.** Overrides MUST chain to
     /// `ShaderEffect::setShaderParams(params)` (or replicate the full
@@ -311,8 +318,10 @@ public:
     virtual void setShaderParams(const QVariantMap& params);
 
     /// Static helper that loads a user-texture file (PNG/JPG/etc. via
-    /// QImage; SVG/SVGZ via QSvgRenderer rasterised at @p svgMaxDim
-    /// max-axis with the same byte-budget guard as `setShaderParams`).
+    /// QImageReader, downscaled during decode when the file exceeds the
+    /// `kMaxSvgPixelBytes` budget; SVG/SVGZ via QSvgRenderer rasterised
+    /// at @p svgMaxDim max-axis with the same byte-budget guard as
+    /// `setShaderParams`).
     /// Thread-safe: each invocation constructs its own QSvgRenderer /
     /// QImage instance — callers may invoke from a worker thread (e.g.
     /// `QtConcurrent::run`) to off-load the cost from the GUI thread.
@@ -375,6 +384,12 @@ public:
         return m_bufferScale;
     }
     void setBufferScale(qreal scale);
+
+    bool halfFloatBuffers() const
+    {
+        return m_halfFloatBuffers;
+    }
+    void setHalfFloatBuffers(bool enable);
 
     QString bufferWrap() const
     {
@@ -642,6 +657,28 @@ public:
     /** Force reload of shader from source (callable from QML). */
     Q_INVOKABLE void reloadShader();
 
+    /**
+     * Release the render node's RHI resources (buffer FBOs, pipelines,
+     * uploaded textures) while the item sits idle, without destroying the
+     * node, the item, or the window. Safe to call from the GUI thread: the
+     * release runs as a scheduled render job on the scene-graph thread, the
+     * only thread allowed to touch the node. Everything re-creates lazily
+     * through the ensure* paths on the next painted frame (the same recovery
+     * the device-loss path exercises), so the cost of calling this on a
+     * window that immediately resumes is one warm-up frame, not a teardown.
+     * Note the call itself always requests one composited frame of the
+     * window (QQuickWindow::update()): that frame is what dispatches the
+     * release on an otherwise idle window and what flushes any park state
+     * the caller latched alongside.
+     *
+     * Intended for long-lived, kept-alive windows whose content goes
+     * invisible for long stretches (the daemon's idle-quiesced overlays):
+     * an invisible item never reaches updatePaintNode, so without this its
+     * full-screen render targets stay pinned in (shared, on an iGPU) memory
+     * for the window's whole lifetime.
+     */
+    Q_INVOKABLE void releaseIdleGraphicsResources();
+
 Q_SIGNALS:
     void iTimeChanged();
     void iTimeDeltaChanged();
@@ -659,6 +696,7 @@ Q_SIGNALS:
     void bufferShaderPathsChanged();
     void bufferFeedbackChanged();
     void bufferScaleChanged();
+    void halfFloatBuffersChanged();
     void bufferWrapChanged();
     void bufferWrapsChanged();
     void bufferFilterChanged();
@@ -669,17 +707,23 @@ Q_SIGNALS:
     void wallpaperTextureChanged();
     void useWallpaperChanged();
     void useDepthBufferChanged();
-    /// Emitted when status() transitions. May be raised on the render
-    /// thread under Qt's threaded render loop (setStatus is called from
-    /// updatePaintNode). Connect with Qt::AutoConnection or
-    /// Qt::QueuedConnection only — Qt::DirectConnection from a slot on
-    /// another thread will run that slot on the render thread, which is
-    /// almost always wrong (V4 / QML JS / most app code is GUI-thread-
-    /// only).
+    /// Emitted when status() transitions. Always delivered on the object's
+    /// (GUI) thread: setStatus is called from updatePaintNode on the render
+    /// thread under Qt's threaded loop, and notifyOnGuiThread marshals the
+    /// emission there via a queued call — so any connection type is safe,
+    /// including DirectConnection. Consequence of the marshalling: when a
+    /// transition originates in the sync phase, delivery is asynchronous
+    /// relative to the m_status write, and two rapid transitions can
+    /// coalesce from a handler's point of view (both handlers run with the
+    /// final status). Handlers MUST gate on the current status() value and
+    /// must not assume one delivery per transition.
     void statusChanged();
-    /// Emitted from setError(), which runs on the RENDER thread (from
-    /// updatePaintNode) — the same hazard statusChanged() documents above. A
-    /// DirectConnection here would run QML JS off the GUI thread.
+    /// Emitted from setError(). Same delivery contract as statusChanged():
+    /// marshalled to the object's thread by notifyOnGuiThread, so any
+    /// connection type is safe, and a handler should read errorLog() rather
+    /// than assume one delivery per write (the log itself is written
+    /// synchronously under its mutex before the notify is posted, so the
+    /// handler always observes the updated value).
     void errorLogChanged();
 
 protected:
@@ -707,10 +751,11 @@ protected:
     qreal effectiveResolutionScale() const;
 
     /**
-     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) to a render node.
+     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper,
+     *        user textures, uniform extension) to a render node.
      *
-     * Does NOT sync user textures, uniform extension, or shader source — these differ
-     * between ShaderEffect and subclasses (e.g. ZoneShaderItem).
+     * Does NOT sync shader source — that load is owned by updatePaintNode's
+     * needLoad branch (and differs between ShaderEffect and subclasses).
      *
      * Called from updatePaintNode(); subclasses that override updatePaintNode should call
      * this instead of duplicating the property sync.
@@ -754,11 +799,13 @@ protected:
      * MUST register its node here (and register nullptr when it deletes the
      * node) or the base teardown silently no-ops and a render-thread access
      * between item destruction and node deletion walks a freed item.
+     *
+     * Registration takes a share of the node's liveness block, so the base no
+     * longer has to guess whether a tracked node is still alive — see
+     * ShaderNodeLiveness. Re-registering the same node every frame (the
+     * documented usage) is an early-out, not a refcount churn.
      */
-    void registerRenderNode(ShaderNodeRhi* node)
-    {
-        m_renderNode.store(node, std::memory_order_release);
-    }
+    void registerRenderNode(ShaderNodeRhi* node);
 
     void setError(const QString& error);
     void setStatus(Status newStatus);
@@ -847,6 +894,7 @@ private:
     QStringList m_bufferShaderPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    bool m_halfFloatBuffers = true;
     QString m_bufferWrap = QStringLiteral("clamp");
     QStringList m_bufferWraps;
     QString m_bufferFilter = QStringLiteral("linear");
@@ -942,17 +990,57 @@ private:
     QString m_errorLog;
 
     // ── Render node tracking ─────────────────────────────────────────
-    /// Atomic because the sceneGraphAboutToStop handler is a DirectConnection
-    /// that reads and dereferences this ON THE RENDER THREAD, while the
-    /// windowChanged handler nulls it on the GUI thread. The disconnect that
-    /// precedes that null write is thread-safe, but Qt does not promise it
-    /// BLOCKS an in-flight direct-connection slot, so the ordering alone is not
-    /// enough to make the plain pointer safe. Every access is a simple
-    /// load/store, so the atomic costs nothing measurable.
-    std::atomic<ShaderNodeRhi*> m_renderNode{nullptr};
+    /// Share of the tracked node's liveness block (ShaderNodeLiveness), or
+    /// null when no node is registered. The node nulls itself inside the block
+    /// when the scene graph deletes it, so this is the one place that can
+    /// answer "is the tracked node still alive?" without guessing — and,
+    /// because every use holds the block's mutex, the answer cannot go stale
+    /// between the check and the call.
+    ///
+    /// Guarded by m_renderNodeMutex rather than made atomic: registration runs
+    /// on the render thread during the sync phase, while the destructor and
+    /// the idle-release job reach it from the GUI and render threads at
+    /// arbitrary times, and a shared_ptr swap is not a single atomic store.
+    std::shared_ptr<ShaderNodeLiveness> m_renderNodeLink;
+    /// Serialises reads and writes of m_renderNodeLink. Held only long enough
+    /// to copy the shared_ptr out; the node call itself happens under the
+    /// block's own mutex, after this one has been released. The two are never
+    /// held simultaneously — see withTrackedNode() for why.
+    mutable std::mutex m_renderNodeMutex;
+    /// Take a share of the tracked liveness block. Null when nothing is
+    /// registered. Never dereference the node without holding the block's
+    /// mutex — see withTrackedNode().
+    std::shared_ptr<ShaderNodeLiveness> trackedNodeLink() const;
+    /// Run @p fn on the tracked node while holding its liveness mutex, so the
+    /// scene graph cannot delete the node mid-call. No-op when no node is
+    /// tracked or the node has already been deleted.
+    void withTrackedNode(const std::function<void(ShaderNodeRhi*)>& fn) const;
     // QPointer defends against reparent/teardown storms where the window is
     // destroyed out from under us before windowChanged(nullptr) fires.
     QPointer<QQuickWindow> m_connectedWindow;
+    /// Liveness token for render jobs queued via releaseIdleGraphicsResources.
+    /// A QPointer is not documented thread-safe against concurrent destruction
+    /// (a NoStage job can sit queued for an unbounded interval and pass a
+    /// QPointer null-check just as ~QObject begins on the GUI thread). The
+    /// job captures this shared_ptr by value, takes the mutex, and bails when
+    /// the pointer is null; the destructor takes the same mutex and nulls the
+    /// pointer as its FIRST statement, before any member teardown. Because
+    /// the job holds the lock across its node access, a destructor that
+    /// begins mid-job blocks until the job finishes — this CLOSES the
+    /// destruction race (an earlier atomic-only token merely narrowed it to
+    /// the destructor body). Contention is one uncontended lock per idle
+    /// grace.
+    struct SelfToken
+    {
+        std::mutex mutex;
+        ShaderEffect* effect = nullptr;
+    };
+    std::shared_ptr<SelfToken> m_selfToken = std::make_shared<SelfToken>();
+
+    /// Emit @p signal on the GUI thread regardless of the calling thread.
+    /// setStatus/setError run in the sync phase on the render thread; a
+    /// direct emit there hands DirectConnection consumers the wrong thread.
+    void notifyOnGuiThread(void (ShaderEffect::*signal)());
 
     // ── Thread-safe dirty flags for main -> render thread sync ───────
     std::atomic<bool> m_shaderDirty{false};

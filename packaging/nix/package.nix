@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # packaging/nix/package.nix — PlasmaZones build recipe for Nix/nixpkgs
@@ -136,6 +137,19 @@ stdenv.mkDerivation (finalAttrs: {
     # <vulkan/vulkan.h> unconditionally, so the daemon won't configure without
     # these. Only headers are needed — no runtime lib.
     vulkan-headers
+
+    # ── Kirigami (build-time AND runtime, both builds) ────────────────────────
+    # Unconditional on purpose. src/settings/CMakeLists.txt opens with
+    # find_package(KF6Kirigami REQUIRED) and links KF6::Kirigami, and
+    # src/CMakeLists.txt adds the settings subdirectory unconditionally — it is
+    # not behind USE_KDE_FRAMEWORKS. So this is a hard configure-time dependency
+    # of EVERY build, portable one included; gating it on withKdeFrameworks made
+    # `.override { withKdeFrameworks = false; }` fail at CMake configure.
+    # It is also a runtime QML dependency: this attribute is the wrapper
+    # derivation, so wrapQtAppsHook puts it on QML_IMPORT_PATH and it brings
+    # qqc2-desktop-style, Kirigami's own runtime style dependency. kcmutils
+    # propagates only qtdeclarative, so it does not arrive transitively.
+    kdePackages.kirigami
   ]
   ++ lib.optionals withKdeFrameworks [
     # ── KDE Frameworks 6 ─────────────────────────────────────────────────────
@@ -143,17 +157,7 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.kcoreaddons       # KCoreAddons: KPluginFactory, KAboutData, etc.
     kdePackages.kcmutils          # KCMUtils: KDE System Settings module support
     kdePackages.kglobalaccel      # KGlobalAccel: system-wide keyboard shortcuts
-
-    # Kirigami: a pure *runtime* QML dependency. Nothing in the CMake build
-    # looks for it (there is no find_package(KF6 ... Kirigami)) and QML imports
-    # are not resolved at build time, so leaving it out still produces a
-    # green `nix build` — the settings app and editor then fail at startup on
-    # `import org.kde.kirigami`, which every one of their QML files does. It
-    # belongs in buildInputs so wrapQtAppsHook puts it on QML_IMPORT_PATH.
-    # kcmutils propagates only qtdeclarative, so it does not arrive
-    # transitively. This attribute is the wrapper derivation that also
-    # propagates qqc2-desktop-style, Kirigami's own runtime style dependency.
-    kdePackages.kirigami
+    kdePackages.kcolorscheme      # KColorScheme: the KWin effect resolves the tab pills' theme colours
 
     # ── KWin (for the C++ effect plugin) ─────────────────────────────────────
     # The kwin-effect/ subdirectory compiles a plugin that is loaded directly
@@ -228,27 +232,34 @@ stdenv.mkDerivation (finalAttrs: {
   #
   # For KDE specifically, the KCM (System Settings module) also needs
   # kbuildsycoca6 to be run *after install* on the user's machine to register
-  # the new .desktop service file. This is a runtime step, not a build step —
-  # the NixOS module / Home Manager module in flake.nix handles it via a
-  # `system.userActivationScripts` entry or post-activation hook.
+  # the new .desktop service file. This is a runtime step, not a build step.
+  # Both modules do it: the NixOS module via system.userActivationScripts, the
+  # Home Manager module via a home.activation entry.
 
   # ── Metadata ──────────────────────────────────────────────────────────────
   meta = with lib; {
-    description = "FancyZones-style window tiling and autotiling for KDE Plasma";
+    description = "Window snapping, tiling and scrolling for KDE Plasma";
     longDescription = ''
-      PlasmaZones brings Windows PowerToys FancyZones-style zone management
-      to KDE Plasma. Define zones on your screen, then drag windows into them
-      to snap and resize. Supports autotiling with 24 algorithms, a visual
-      layout editor, GLSL shader effects on zone overlays, per-monitor and
-      per-virtual-desktop layouts, and full KDE integration via a KWin effect
-      plugin and System Settings module.
+      PlasmaZones gives every monitor on KDE Plasma one of three window
+      placement modes. Snapping drops windows into zones you drew, the way
+      FancyZones does on Windows. Tiling places them automatically with a
+      bundled Luau algorithm. Scrolling arranges them as columns on
+      an endless strip, modeled on the niri compositor, so opening a window
+      never resizes the ones already open.
+
+      It ships a visual layout editor, GLSL shader effects on zone overlays,
+      window decoration packs and animations, per-application window rules,
+      per-monitor and per-virtual-desktop assignments, and full KDE
+      integration via a KWin effect plugin and System Settings module.
 
       The daemon (plasmazonesd) runs as a systemd user service and communicates
       over D-Bus. The settings app (plasmazones-settings) and layout editor are
       standalone Qt applications.
     '';
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
-    license = licenses.gpl3Plus;
+    # GPL-3.0-or-later for the app, daemon, editor, settings and KCM;
+    # LGPL-2.1-or-later for the bundled Phosphor component libraries.
+    license = with licenses; [ gpl3Plus lgpl21Plus ];
     maintainers = [ ];   # Add your nixpkgs handle here when submitting upstream
     platforms = [ "x86_64-linux" "aarch64-linux" ];
 

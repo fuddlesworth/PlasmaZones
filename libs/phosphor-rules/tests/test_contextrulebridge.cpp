@@ -5,11 +5,12 @@
  * @file test_contextrulebridge.cpp
  * @brief Unit tests for the header-only ContextRuleBridge.
  *
- * Exercises every bridge function: makeContextMatch (single-leaf collapse vs
+ * Exercises the bridge functions: makeContextMatch (single-leaf collapse vs
  * makeAll vs catch-all), makeAssignmentActions / makeAssignmentRule
- * (three-action losslessness + empty-field omission + caller-supplied
- * priority), makeDisableRule, and the makeContextMatch → contextDimsOf /
- * disableRuleMode round-trips.
+ * (assignment-slot losslessness across all four slots + empty-field omission
+ * + caller-supplied priority), makeDisableRule, the makeContextMatch →
+ * contextDimsOf / disableRuleMode round-trips, and the axis classifiers
+ * including the strict Activity / Combined pair the batch APIs key on.
  */
 
 #include <QTest>
@@ -90,8 +91,12 @@ private Q_SLOTS:
     void testMakeAssignmentActions_threeActionLossless()
     {
         const QList<RuleAction> actions = CRB::makeAssignmentActions(
-            QStringLiteral("snapping"), QStringLiteral("layout-a"), QStringLiteral("algo-b"));
-        // Mode + layout + algorithm — both layout fields survive a mode flip.
+            QStringLiteral("snapping"), QStringLiteral("layout-a"), QStringLiteral("algo-b"), QString());
+        // Mode + layout + algorithm: the snapping layout and the tiling
+        // algorithm both survive a mode flip. The scrolling-template leg of the
+        // same losslessness invariant is covered by
+        // testMakeAssignmentActions_scrollingTemplateAction below, which is why
+        // this case passes an empty template and expects three actions.
         QCOMPARE(actions.size(), 3);
         QCOMPARE(modeToken(actions), QStringLiteral("snapping"));
         QCOMPARE(actionCount(actions, ActionType::SetSnappingLayout), 1);
@@ -100,32 +105,74 @@ private Q_SLOTS:
 
     void testMakeAssignmentActions_autotileModeToken()
     {
-        const QList<RuleAction> actions = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString());
+        const QList<RuleAction> actions =
+            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString(), QString());
         QCOMPARE(modeToken(actions), QStringLiteral("autotile"));
     }
 
     void testMakeAssignmentActions_emptyFieldsOmitted()
     {
-        // Mode-only entry — both layout fields empty → a single action.
-        const QList<RuleAction> modeOnly = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString());
+        // Mode-only entry — all three payload fields empty → a single action.
+        const QList<RuleAction> modeOnly =
+            CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString(), QString());
         QCOMPARE(modeOnly.size(), 1);
         QCOMPARE(modeOnly.first().type, QString(ActionType::SetEngineMode));
 
         // Layout but no algorithm.
         const QList<RuleAction> layoutOnly =
-            CRB::makeAssignmentActions(QStringLiteral("snapping"), QStringLiteral("layout-a"), QString());
+            CRB::makeAssignmentActions(QStringLiteral("snapping"), QStringLiteral("layout-a"), QString(), QString());
         QCOMPARE(layoutOnly.size(), 2);
         QCOMPARE(actionCount(layoutOnly, ActionType::SetSnappingLayout), 1);
         QCOMPARE(actionCount(layoutOnly, ActionType::SetTilingAlgorithm), 0);
     }
 
+    void testMakeAssignmentActions_scrollingTemplateAction()
+    {
+        // The four-field lossless set: mode + snapping layout + algorithm +
+        // scrolling template, each in its own action.
+        const QList<RuleAction> actions =
+            CRB::makeAssignmentActions(QStringLiteral("scrolling"), QStringLiteral("layout-a"),
+                                       QStringLiteral("algo-b"), QStringLiteral("template-c"));
+        QCOMPARE(actions.size(), 4);
+        QCOMPARE(modeToken(actions), QStringLiteral("scrolling"));
+        QCOMPARE(actionCount(actions, ActionType::SetScrollingTemplate), 1);
+        for (const RuleAction& action : actions) {
+            if (action.type == QString(ActionType::SetScrollingTemplate)) {
+                QCOMPARE(action.params.value(ActionParam::LayoutId).toString(), QStringLiteral("template-c"));
+            }
+        }
+
+        // An empty template emits no action — the pre-template
+        // three-action shape is unchanged.
+        const QList<RuleAction> withoutTemplate = CRB::makeAssignmentActions(
+            QStringLiteral("scrolling"), QStringLiteral("layout-a"), QStringLiteral("algo-b"), QString());
+        QCOMPARE(withoutTemplate.size(), 3);
+        QCOMPARE(actionCount(withoutTemplate, ActionType::SetScrollingTemplate), 0);
+    }
+
     // ─── makeAssignmentRule ───────────────────────────────────────────────
+
+    void testMakeAssignmentRule_carriesScrollingTemplate()
+    {
+        // The explicit trailing template argument forwards into a
+        // SetScrollingTemplate action.
+        const Rule rule = CRB::makeAssignmentRule(
+            QStringLiteral("Scrolling rule"), QStringLiteral("DP-1"), 2, QStringLiteral("act-x"),
+            QStringLiteral("scrolling"), QStringLiteral("layout-a"), QString(), 350, QStringLiteral("template-c"));
+        QVERIFY(rule.isValid());
+        QCOMPARE(actionCount(rule.actions, ActionType::SetScrollingTemplate), 1);
+        for (const RuleAction& action : rule.actions) {
+            if (action.type == QString(ActionType::SetScrollingTemplate)) {
+                QCOMPARE(action.params.value(ActionParam::LayoutId).toString(), QStringLiteral("template-c"));
+            }
+        }
+    }
 
     void testMakeAssignmentRule_isValidAndContextOnly()
     {
         const Rule rule = CRB::makeAssignmentRule(QStringLiteral("Exact rule"), QStringLiteral("DP-1"), 2,
                                                   QStringLiteral("act-x"), QStringLiteral("snapping"),
-                                                  QStringLiteral("layout-a"), QStringLiteral("algo-b"), 350);
+                                                  QStringLiteral("layout-a"), QStringLiteral("algo-b"), 350, QString());
         QVERIFY(rule.isValid());
         QVERIFY(!rule.id.isNull());
         QVERIFY(rule.match.isContextOnly());
@@ -139,7 +186,7 @@ private Q_SLOTS:
     {
         const Rule rule =
             CRB::makeAssignmentRule(QStringLiteral("Display default"), QStringLiteral("HDMI-1"), 0, QString(),
-                                    QStringLiteral("autotile"), QString(), QString(), CRB::kContextBandBase);
+                                    QStringLiteral("autotile"), QString(), QString(), CRB::kContextBandBase, QString());
         QVERIFY(rule.isValid());
         QCOMPARE(rule.priority, CRB::kContextBandBase);
         QCOMPARE(rule.actions.size(), 1);
@@ -203,7 +250,7 @@ private Q_SLOTS:
         // succeeds with only the screen pinned and the Mode leaf ignored.
         const MatchExpression m = MatchExpression::makeAll({
             MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
-            MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+            MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QString(ModeToken::Tiling)),
         });
         QString sid;
         int desk = 0;
@@ -302,6 +349,43 @@ private Q_SLOTS:
         QCOMPARE(desk, 0);
     }
 
+    void testContextDimsOf_refusesMalformedVirtualDesktopValue()
+    {
+        // The value guard, sibling of the three duplicate-leaf guards.
+        // QVariant::toInt() turns "abc" into 0 and 0 is the bridge's "no
+        // desktop pinned" reading, so without the guard a hand-edited rule
+        // would silently reclassify from the Desktop axis to the Monitor one
+        // and the batch writers would rewrite it against the wrong key.
+        for (const QVariant& bad : {QVariant(QStringLiteral("abc")), QVariant(0), QVariant(-3), QVariant(QString())}) {
+            const MatchExpression m = MatchExpression::makeAll({
+                MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+                MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, bad),
+            });
+            QString sid = QStringLiteral("stale");
+            int desk = 4;
+            QString act = QStringLiteral("stale");
+            QVERIFY2(!CRB::contextDimsOf(m, sid, desk, act), qPrintable(bad.toString()));
+            // Refusal clears every out-param, not just the desktop, so a
+            // caller that ignores the bool cannot read a half-decoded tuple.
+            QVERIFY(sid.isEmpty());
+            QCOMPARE(desk, 0);
+            QVERIFY(act.isEmpty());
+        }
+
+        // Discriminator: the same shape with a strictly-positive desktop
+        // decodes, so the refusals above are the value and not the two-leaf
+        // All{} wrapper.
+        const MatchExpression good = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2),
+        });
+        QString sid;
+        int desk = 0;
+        QString act;
+        QVERIFY(CRB::contextDimsOf(good, sid, desk, act));
+        QCOMPARE(desk, 2);
+    }
+
     void testContextDimsOf_returnTrueOnSuccess()
     {
         // The non-duplicate happy path must return true so callers that care
@@ -344,7 +428,7 @@ private Q_SLOTS:
         // An assignment rule carries no DisableEngine action — nullopt.
         const Rule assign = CRB::makeAssignmentRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QString(),
                                                     QStringLiteral("snapping"), QStringLiteral("layout-a"), QString(),
-                                                    CRB::kContextBandBase);
+                                                    CRB::kContextBandBase, QString());
         QVERIFY(!CRB::disableRuleMode(assign).has_value());
     }
 
@@ -402,14 +486,14 @@ private Q_SLOTS:
         // can't slip in on a single-dimension lookup. The retired
         // provider-default rule no longer exists, so only the Monitor/Combined
         // axes are covered here.
-        const Rule monitorOnly = CRB::makeAssignmentRule(QStringLiteral("Monitor"), QStringLiteral("DP-1"), 0,
-                                                         QString(), QStringLiteral("snapping"),
-                                                         QStringLiteral("layout-a"), QString(), CRB::kContextBandBase);
+        const Rule monitorOnly = CRB::makeAssignmentRule(
+            QStringLiteral("Monitor"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
+            QStringLiteral("layout-a"), QString(), CRB::kContextBandBase, QString());
         QCOMPARE(monitorOnly.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 0, QString()));
 
         const Rule exact = CRB::makeAssignmentRule(QStringLiteral("Exact"), QStringLiteral("DP-1"), 2,
                                                    QStringLiteral("act-x"), QStringLiteral("autotile"), QString(),
-                                                   QStringLiteral("algo-b"), CRB::kContextBandBase);
+                                                   QStringLiteral("algo-b"), CRB::kContextBandBase, QString());
         QCOMPARE(exact.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 2, QStringLiteral("act-x")));
 
         // Disable rule — the helper must carry the mode token so the
@@ -474,6 +558,36 @@ private Q_SLOTS:
         // negative on a mismatched desktop number.
         QVERIFY(CRB::matchIsExactContext(combined, QStringLiteral("DP-1"), 3, QStringLiteral("act-x")));
         QVERIFY(!CRB::matchIsExactContext(combined, QStringLiteral("DP-1"), 4, QStringLiteral("act-x")));
+    }
+
+    /// The STRICT pair the batch readers/writers use. The broad
+    /// matchIsExactContextActivity above admits Combined as well, so these two
+    /// are what keep the Activity batch API ((screen, activity) → layout) from
+    /// projecting a desktop-pinned Combined rule through a key that cannot
+    /// represent it. Combined is therefore the discriminating negative for
+    /// Strict, and Activity the discriminating negative for Combined.
+    void testMatchIsExactContextStrictAndCombined()
+    {
+        const MatchExpression monitor = CRB::makeContextMatch(QStringLiteral("DP-1"), 0, QString());
+        const MatchExpression desktop = CRB::makeContextMatch(QStringLiteral("DP-1"), 3, QString());
+        const MatchExpression activity = CRB::makeContextMatch(QStringLiteral("DP-1"), 0, QStringLiteral("act-x"));
+        const MatchExpression combined = CRB::makeContextMatch(QStringLiteral("DP-1"), 3, QStringLiteral("act-x"));
+
+        QVERIFY(CRB::matchIsExactContextActivityStrict(activity));
+        QVERIFY(!CRB::matchIsExactContextActivityStrict(combined));
+        QVERIFY(!CRB::matchIsExactContextActivityStrict(desktop));
+        QVERIFY(!CRB::matchIsExactContextActivityStrict(monitor));
+
+        QVERIFY(CRB::matchIsExactContextCombined(combined));
+        QVERIFY(!CRB::matchIsExactContextCombined(activity));
+        QVERIFY(!CRB::matchIsExactContextCombined(desktop));
+        QVERIFY(!CRB::matchIsExactContextCombined(monitor));
+
+        // The two strict families are disjoint, which is the property the
+        // batch round-trip relies on: no rule is claimed by both.
+        for (const MatchExpression& m : {monitor, desktop, activity, combined}) {
+            QVERIFY(!(CRB::matchIsExactContextActivityStrict(m) && CRB::matchIsExactContextCombined(m)));
+        }
     }
 };
 

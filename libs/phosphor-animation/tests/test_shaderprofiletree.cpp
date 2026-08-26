@@ -242,7 +242,10 @@ private Q_SLOTS:
 
     // ─── resolveShaderWithDefault: built-in per-event default ───
 
-    void testDefaultShaderForPathSnapEvents()
+    // Named for the whole predicate rather than for the snap legs alone: it
+    // grew past them long ago and now pins the three opt-in classes' absence
+    // of a default too, which is the load-bearing half.
+    void testDefaultShaderEffectIdForPath()
     {
         // Snap events default to window-morph; others to none.
         QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
@@ -260,6 +263,12 @@ private Q_SLOTS:
         // fresh configs.
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopSwitch).isEmpty());
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::DesktopPeek).isEmpty());
+        // The strip pass carries no built-in default either: a full-output
+        // capture-and-repaint on every scroll stays opt-in, so a fresh config
+        // scrolls with the plain translation until the user picks a strip
+        // pack.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ScrollingView).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Scrolling).isEmpty());
     }
 
     void testDefaultShaderForPathOverlayEvents()
@@ -438,9 +447,17 @@ private Q_SLOTS:
     void testShaderPathResolvesInIsolation()
     {
         // The isolation predicate is the SSOT shared by resolve() and the
-        // settings shadowing-children walk: exactly the interactive-drag
-        // leaf, never its parent, siblings, or unrelated paths.
+        // settings shadowing-children walk: the interactive-drag leaf and the
+        // scrolling tab swap, never their parents, siblings, or unrelated
+        // paths.
         QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMove));
+        // The tab leaf's membership is what keeps a strip-class pack set on
+        // `scrolling` from being inherited by a leaf whose applicability gate
+        // would then refuse it at install — the leaf would animate nothing
+        // while settings showed an inherited "current shader" that never
+        // runs. Dropping the membership compiles and passes everything else,
+        // which is exactly why it is pinned here.
+        QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingTabSwitch));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMovement));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowSnapIn));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowOpen));
@@ -452,6 +469,110 @@ private Q_SLOTS:
         // resolves in isolation (AnimationsDesktopsPage.qml). Pin it here.
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopPeek));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::DesktopSwitch));
+        // The strip leaf too. It is the class most easily confused with
+        // `move` (both are continuous motion), and move IS the isolated one,
+        // so a fix that generalised the predicate from the move leaf to "the
+        // continuous classes" would take the strip leaf's inheritance with
+        // it.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingView));
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::Scrolling));
+    }
+
+    // The other half of the same property: because the strip leaf is NOT
+    // isolated, a shader set on the `scrolling` root cascades down to it.
+    // That is what makes the picker's ambiguous-row policy a policy rather
+    // than a proof, and what the settings page's parent-row decision rests
+    // on, so pin the cascade itself rather than only the predicate.
+    void testScrollingRootCascadesToView()
+    {
+        ShaderProfileTree tree;
+        ShaderProfile root;
+        root.effectId = QStringLiteral("strip-motion-blur");
+        tree.setOverride(PP::Scrolling, root);
+
+        const ShaderProfile resolved = tree.resolve(PP::ScrollingView);
+        QVERIFY(resolved.effectId.has_value());
+        QCOMPARE(*resolved.effectId, QStringLiteral("strip-motion-blur"));
+    }
+
+    void testShellSubtreeTakesNothingFromAboveItsRoot()
+    {
+        // The whole point of the shell root: the surfaces under it belong to
+        // plasmashell, so what the user chose for their own windows must never
+        // start playing on the system tray. Both routes in are pinned, because
+        // the resolver needs two separate edits to close them and each one
+        // passes every other test on its own — the baseline (the tree's global
+        // default) and the `global` NODE, which is a real chain member the
+        // user can assign a pack to.
+        ShaderProfileTree tree;
+        ShaderProfile baseline;
+        baseline.effectId = QStringLiteral("dissolve");
+        tree.setBaseline(baseline);
+        ShaderProfile globalNode;
+        globalNode.effectId = QStringLiteral("slide");
+        tree.setOverride(PP::Global, globalNode);
+
+        QVERIFY(tree.resolve(PP::Shell).effectiveEffectId().isEmpty());
+        QVERIFY(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId().isEmpty());
+        QVERIFY(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId().isEmpty());
+        // And nothing about the isolation leaks onto the window family, which
+        // still inherits both. Both halves need their own tree: on the tree above
+        // the `global` node shadows the baseline, so that assertion alone observes
+        // only the node and would still pass if the baseline had been cut for
+        // everyone.
+        QCOMPARE(tree.resolve(PP::WindowOpen).effectiveEffectId(), QStringLiteral("slide"));
+
+        ShaderProfileTree baselineOnly;
+        baselineOnly.setBaseline(baseline);
+        QCOMPARE(baselineOnly.resolve(PP::WindowOpen).effectiveEffectId(), QStringLiteral("dissolve"));
+        // The same tree also pins the baseline-drop edit on its own, with no
+        // `global` node present for the chain trim to be doing the work instead.
+        QVERIFY(baselineOnly.resolve(PP::Shell).effectiveEffectId().isEmpty());
+        QVERIFY(baselineOnly.resolve(PP::ShellAppletPopupShow).effectiveEffectId().isEmpty());
+    }
+
+    void testShellRootCascadesWithinItsOwnSubtree()
+    {
+        // Isolation is not the same as no inheritance. Inside the subtree the
+        // ordinary cascade holds, which is what makes the page's "All Shell
+        // Surfaces" row mean anything: set a pack there and both legs take it,
+        // then a leg can override it. shaderPathResolvesInIsolation (the
+        // leaf-only predicate) would have killed exactly this, which is why
+        // the shell family needed the subtree form instead.
+        ShaderProfileTree tree;
+        ShaderProfile root;
+        root.effectId = QStringLiteral("dissolve");
+        tree.setOverride(PP::Shell, root);
+
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId(), QStringLiteral("dissolve"));
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId(), QStringLiteral("dissolve"));
+
+        ShaderProfile leg;
+        leg.effectId = QStringLiteral("pixelate");
+        tree.setOverride(PP::ShellAppletPopupHide, leg);
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupShow).effectiveEffectId(), QStringLiteral("dissolve"));
+        QCOMPARE(tree.resolve(PP::ShellAppletPopupHide).effectiveEffectId(), QStringLiteral("pixelate"));
+    }
+
+    void testShellIsolationRootIsTheSharedDefinition()
+    {
+        // The predicate resolve() uses, exposed for the shadowing-aware
+        // consumers so a second copy of "where does inheritance start" cannot
+        // drift from the resolver. Every path in the subtree answers the root
+        // itself, and nothing outside it answers at all — including the
+        // character-prefix near-miss, which is the failure this boundary test
+        // exists for.
+        QCOMPARE(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::Shell), PP::Shell);
+        QCOMPARE(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::ShellAppletPopup), PP::Shell);
+        QCOMPARE(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::ShellAppletPopupShow), PP::Shell);
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::WindowOpen).isEmpty());
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(PP::Global).isEmpty());
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(QString()).isEmpty());
+        QVERIFY(PhosphorAnimationShaders::shaderPathIsolationRoot(QStringLiteral("shellfish")).isEmpty());
+        // The shell paths are NOT leaf-isolated: the two predicates answer
+        // different questions and a "simplification" that folded them would
+        // break the cascade the test above pins.
+        QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ShellAppletPopupShow));
     }
 };
 

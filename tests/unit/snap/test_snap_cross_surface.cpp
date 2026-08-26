@@ -551,7 +551,7 @@ void TestSnapCrossSurface::move_autotileNeighbourOutput_defersInsteadOfSnapping(
         PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
     SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
     resolver.setCrossSurfaceResolver(&cross);
-    resolver.setNeighbourAutotileProvider([](const QString& screenId) {
+    resolver.setNeighbourTilingProvider([](const QString& screenId) {
         return screenId == QStringLiteral("DP-2");
     });
 
@@ -584,7 +584,7 @@ void TestSnapCrossSurface::swap_autotileNeighbourOutput_defersInsteadOfSnapping(
         PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
     SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
     resolver.setCrossSurfaceResolver(&cross);
-    resolver.setNeighbourAutotileProvider([](const QString& screenId) {
+    resolver.setNeighbourTilingProvider([](const QString& screenId) {
         return screenId == QStringLiteral("DP-2");
     });
 
@@ -616,7 +616,7 @@ void TestSnapCrossSurface::focus_autotileNeighbourOutput_stillCrosses()
         PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("test-snap-cross")));
     SnapNavigationTargetResolver resolver(&wts, layoutManager.get(), &adj, {});
     resolver.setCrossSurfaceResolver(&cross);
-    resolver.setNeighbourAutotileProvider([](const QString& screenId) {
+    resolver.setNeighbourTilingProvider([](const QString& screenId) {
         return screenId == QStringLiteral("DP-2");
     });
 

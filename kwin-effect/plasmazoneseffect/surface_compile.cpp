@@ -10,6 +10,7 @@
 
 #include "plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
@@ -43,8 +44,6 @@
 #include <vector>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 using ShaderInternal::injectKwinDefineAfterVersion;
 using ShaderInternal::kCustomColorsElementNames;

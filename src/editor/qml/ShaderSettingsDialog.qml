@@ -150,6 +150,7 @@ Kirigami.Dialog {
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,
+            "halfFloatBuffers": info.halfFloatBuffers !== undefined ? info.halfFloatBuffers : true,
             "bufferWrap": info.bufferWrap || "clamp",
             "bufferWraps": info.bufferWraps || [],
             "bufferFilter": info.bufferFilter || "linear",
@@ -295,6 +296,8 @@ Kirigami.Dialog {
             return noneShaderId;
 
         var shaders = editorController.availableShaders;
+        if (!shaders)
+            return noneShaderId;
         // Sort alphabetically so the pick is deterministic across registry orderings.
         var arr = [];
         for (var i = 0; i < shaders.length; i++) {
@@ -359,6 +362,13 @@ Kirigami.Dialog {
             }
         } else {
             previewAnimationTimer.stop();
+            // Stop CAVA too: the capture is a child process with an FFT loop,
+            // and leaving it running behind a backgrounded editor burns CPU
+            // for a preview that is no longer ticking. stopAudioCapture is
+            // isRunning()-guarded, so the no-audio case is a safe no-op, and
+            // the active branch above restarts it on focus regain.
+            if (editorController)
+                editorController.stopAudioCapture();
         }
     }
     onClosed: {
@@ -416,7 +426,7 @@ Kirigami.Dialog {
             root.previewLastTime = now;
             root.previewITime += delta;
             root.previewTimeDelta = delta;
-            root.previewFrame = (root.previewFrame + 1) % 1e+09;
+            root.previewFrame = (root.previewFrame + 1) % 1000000000;
         }
     }
 
@@ -745,12 +755,16 @@ Kirigami.Dialog {
                     text: i18nc("@action:button", "Defaults")
                     icon.name: "edit-undo"
                     visible: root.shaderParams.length > 0
+                    Accessible.name: i18nc("@action:button", "Defaults")
+                    Accessible.description: i18n("Reset every shader parameter to its default value")
                     onClicked: root.resetToDefaults()
                 }
 
                 Button {
                     text: i18nc("@action:button", "Apply")
                     icon.name: "dialog-ok-apply"
+                    Accessible.name: i18nc("@action:button", "Apply")
+                    Accessible.description: i18n("Apply the shader settings and close the dialog")
                     onClicked: {
                         root.applyChanges();
                         root.close();
@@ -775,9 +789,11 @@ Kirigami.Dialog {
             clip: true
 
             Rectangle {
-                // shaderSource is set imperatively from updateLocalShaderPreview()
-                // via Qt.callLater — NOT via binding — to guarantee it runs after
-                // all other config properties have been applied.
+                // The whole shader config (shaderSource included) lands on the
+                // renderer as ONE object literal built in `cfg` below, so all
+                // properties apply atomically and ordering is not a concern;
+                // updateLocalShaderPreview only refreshes the cached info the
+                // literal reads, debounced by debouncePreviewUpdate.
 
                 id: previewBackground
 
@@ -858,6 +874,7 @@ Kirigami.Dialog {
                                 "bufferShaderPaths": previewBackground.cfg.bufferShaderPaths || [],
                                 "bufferFeedback": previewBackground.cfg.bufferFeedback || false,
                                 "bufferScale": previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1,
+                                "halfFloatBuffers": previewBackground.cfg.halfFloatBuffers !== undefined ? previewBackground.cfg.halfFloatBuffers : true,
                                 "bufferWrap": previewBackground.cfg.bufferWrap || "clamp",
                                 "bufferWraps": previewBackground.cfg.bufferWraps || [],
                                 "bufferFilter": previewBackground.cfg.bufferFilter || "linear",

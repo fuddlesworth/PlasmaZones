@@ -313,7 +313,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     QColor fillColor = zone->useCustomColors()
         ? zone->highlightColor()
         : overlayOverride.highlightColor.value_or(m_settings ? m_settings->highlightColor()
-                                                             : ConfigDefaults::highlightColor());
+                                                             : ConfigDefaults::highlightFallbackColor());
     qreal alpha = zone->useCustomColors()
         ? zone->activeOpacity()
         : overlayOverride.activeOpacity.value_or(m_settings ? m_settings->activeOpacity()
@@ -326,7 +326,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Border color (RGBA) for shader
     QColor borderClr = zone->useCustomColors()
         ? zone->borderColor()
-        : overlayOverride.borderColor.value_or(m_settings ? m_settings->borderColor() : ConfigDefaults::borderColor());
+        : overlayOverride.borderColor.value_or(m_settings ? m_settings->borderColor()
+                                                          : ConfigDefaults::borderFallbackColor());
     map[BorderR] = borderClr.redF();
     map[BorderG] = borderClr.greenF();
     map[BorderB] = borderClr.blueF();

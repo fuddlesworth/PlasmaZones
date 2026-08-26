@@ -50,6 +50,21 @@ public:
     explicit ShortcutManager(Settings* settings, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
+    /// The scroll adjust steps in percent of the work area, as the user tuned
+    /// them. Public because the registration table's fire lambdas are
+    /// capture-less function pointers at namespace scope and reach the manager
+    /// only through their ShortcutManager* argument; narrow read-only getters
+    /// rather than exposing the mutable Settings* the table would otherwise
+    /// need. They also hold the unreachable-null defence in one place instead
+    /// of a ternary per call site.
+    int scrollColumnWidthStepPercent() const;
+    int scrollWindowHeightStepPercent() const;
+    /// Unlike its two siblings this one has no fire lambda behind it: the
+    /// view STEP is the wheel's, and the ScrollingAdaptor reads it through
+    /// the provider the daemon binds to this getter. It lives here with the
+    /// other two so every step percent has one home and one null defence.
+    int scrollViewScrollStepPercent() const;
+
 public Q_SLOTS:
     void registerShortcuts();
     /// Re-applies current sequences after a settings save; returns true when
@@ -63,8 +78,12 @@ public:
      * table. Used by subsystems that need a transient grab bound to a UI state
      * (e.g. the cancel-overlay Escape grab bound while the layout picker or
      * snap assist is showing). Batches with an immediate flush to the backend.
-     * Idempotent — re-registering the same id updates the callback and
-     * description in place.
+     * Idempotent — re-registering the same id updates the callback in place;
+     * the description is updated in the registry record but is not re-sent to
+     * the backend for an already-registered id (Registry::bind contract).
+     * Ids colliding with the settings-driven table or the indexed slot
+     * prefixes are rejected with a warning: an adhoc unregister on such an id
+     * would purge the persistent binding's saved kglobalshortcutsrc record.
      */
     void registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                std::function<void()> callback) override;
@@ -75,28 +94,82 @@ public:
      */
     void unregisterAdhocShortcut(const QString& id) override;
 
+    /// Batch forms: every entry goes through the per-id path. On the REGISTER
+    /// side the backend flush is deferred to one trailing call, so a
+    /// multi-chord burst (the six layout-picker navigation grabs) costs one
+    /// Portal round-trip instead of superseding its own in-flight Responses.
+    /// The unregister side keeps the same bracketed shape for symmetry only:
+    /// Registry::unbind applies immediately by contract and flush() does not
+    /// include unbinds, so no round-trip is actually coalesced there.
+    void registerAdhocShortcuts(
+        const QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding>& bindings) override;
+    void unregisterAdhocShortcuts(const QStringList& ids) override;
+
     /**
      * Catalog of every settings-driven shortcut for the cheatsheet overlay,
-     * one QVariantMap per row, sorted by display category:
+     * one QVariantMap per row, sorted by display category, then by authored
+     * row order within it:
      *   id (QString), label (translated QString),
      *   category (translated QString), categoryOrder (int),
+     *   rowOrder (int — the row's authoring position inside its category;
+     *   the in-category sort key, with 9000 pinning the digit families to
+     *   the end of their group),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
-     *   mode ("all" | "snapping" | "autotile" — which tiling mode the
-     *   action is meaningful in; the overlay filters on it).
-     * Ad-hoc/transient grabs never appear. Empty before registerShortcuts().
+     *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" |
+     *   "managed" — which tiling mode the action is meaningful in; the
+     *   overlay filters on it. "layouts" is a capability tag rather than a
+     *   mode: it marks the layout-selection actions shown only when the
+     *   screen's engine provides layouts. "managed" is the union of the two
+     *   engine modes, autotile or scrolling, for a row that acts on either
+     *   and is a no-op on snapping — see the catalog's contract block),
+     *   description (translated QString — plain-prose explanation shown as
+     *   the row's tooltip; always present, empty when the action needs none),
+     *   templatesDescription (translated QString — Templates-capability
+     *   variant of description, falling back to it when the row has none).
+     * Ad-hoc/transient grabs never appear. Empty before registerShortcuts()
+     * and again after unregisterShortcuts() (the daemon stop path).
      */
     QVariantList cheatsheetModel() const;
 
     /// One collapsible cheatsheet family: parallel id / expected-final-token
-    /// lists, the combined row label, and the tail token for the merged chip.
+    /// lists, the combined row label, the tail token for the merged chip,
+    /// and an optional combined tooltip for the merged row.
     struct CheatsheetFamily
     {
         QStringList ids;
         QStringList expectedLastTokens;
         QString combinedLabel;
         QString tailToken;
+        // Optional tooltip for the merged row. The merged row otherwise
+        // keeps the FIRST member's description, which for an opposed pair
+        // describes only one direction; a family that carries per-member
+        // descriptions should supply a combined wording here. Empty = keep
+        // the first member's.
+        //
+        // The default-member-initializer (= {}) is load-bearing, same as
+        // KeyDef's trailing members: the directional/digit FamilySpecs are
+        // 4-field aggregate initializers that omit this trailing field, and
+        // GCC's -Wmissing-field-initializers fires per init site when an
+        // omitted field lacks an NSDMI.
+        QString combinedDescription = {};
     };
+
+    /**
+     * Every action id in the file-local STATIC registration table, in
+     * declaration order. The two indexed slot families (quick_layout_N,
+     * snap_to_zone_N, kIndexedSlotCount ids each) are registered separately
+     * by buildEntries() and are NOT returned here — this is the static
+     * portion of the registration surface, not all of it.
+     *
+     * The table is a file-local array with internal linkage, and
+     * cheatsheetModel() is a COMPRESSED view of it (a directional quad or a
+     * digit family collapses into a single row, so its later members have no
+     * rows of their own). Neither
+     * can enumerate the registration surface, which the Shortcuts.Scrolling
+     * parity check needs in order to compare it against the config schema.
+     */
+    static QStringList staticShortcutIds();
 
     /**
      * Pure family-compression pass over cheatsheet rows (static so tests can
@@ -116,6 +189,11 @@ public:
      * exact IBackend calls the manager makes — in particular that
      * unregisterShortcuts() never purges persistent bindings via
      * IBackend::unregisterShortcut (discussion #851).
+     *
+     * unregisterShortcuts() DESTROYS the injected backend along with the
+     * registry; a later registerShortcuts() falls back to the real platform
+     * backend (KGlobalAccel / Portal / session bus) from inside the test.
+     * Re-inject after every teardown before re-registering.
      */
     void setBackendForTesting(std::unique_ptr<PhosphorShortcuts::IBackend> backend);
 
@@ -146,6 +224,7 @@ Q_SIGNALS:
     void pushToEmptyZoneRequested();
     void restoreWindowSizeRequested();
     void toggleWindowFloatRequested();
+    void switchFocusFloatTilingRequested();
     void swapWindowRequested(NavigationDirection direction);
     void snapToZoneRequested(int zoneNumber);
     void rotateWindowsRequested(bool clockwise);
@@ -166,6 +245,48 @@ Q_SIGNALS:
 
     void swapVirtualScreenRequested(NavigationDirection direction);
     void rotateVirtualScreensRequested(bool clockwise);
+
+    // Scrolling-mode column vocabulary. Directional focus/move/swap reuse
+    // the generic navigation signals above; these are the scroll-specific
+    // verbs. Direction deltas (consumeOrExpel, cyclePresets) carry -1 =
+    // left/back, +1 = right/forward; the two ADJUST signals instead carry a
+    // signed PERCENT of the work area, one step per keypress. The step is the
+    // user-tunable scrollingColumnWidthStepPercent /
+    // scrollingWindowHeightStepPercent setting (1-50, default 10), read
+    // through the narrow getters above.
+    void scrollFocusColumnEndRequested(bool last);
+    void scrollMoveColumnToEndRequested(bool last);
+    void scrollConsumeWindowRequested();
+    void scrollExpelWindowRequested();
+    void scrollConsumeOrExpelRequested(int delta);
+    void scrollCenterColumnRequested();
+    void scrollToggleColumnTabbedRequested();
+    void scrollToggleWindowedFullscreenRequested();
+    void scrollCycleColumnWidthRequested(int delta);
+    void scrollAdjustColumnWidthRequested(int deltaPercent);
+    void scrollMaximizeColumnRequested();
+    void scrollExpandColumnRequested();
+    void scrollCycleWindowHeightRequested(int delta);
+    void scrollAdjustWindowHeightRequested(int deltaPercent);
+    void scrollResetWindowHeightsRequested();
+    void scrollCenterVisibleColumnsRequested();
+    /// false = top of the column, true = bottom.
+    void scrollFocusWindowEndRequested(bool bottom);
+    /// Edge-stop adjacent-column focus (the generic focus chords cross
+    /// monitors instead). delta -1 = left, +1 = right; same for the wrap
+    /// variant, which falls through to the far end at the strip edge.
+    void scrollFocusColumnPlainRequested(int delta);
+    void scrollFocusColumnWrapRequested(int delta);
+    /// true = move the focused window to the float layer, false = re-tile it.
+    void scrollMoveToFloatRequested(bool floating);
+    /// Pan the strip view WITHOUT moving focus, by a signed PERCENT of the
+    /// work area's extent along the strip. The page pair carries a whole
+    /// viewport (100); negative is toward the strip's start. The step-sized
+    /// pan has no keyboard row (it is the wheel's), so no emitter carries
+    /// the step percent.
+    void scrollViewRequested(int deltaPercent);
+    void scrollEqualizeColumnWidthsRequested();
+    void scrollMinimizeColumnWidthRequested();
 
 private:
     struct Entry
@@ -232,7 +353,19 @@ private:
     /// Re-applies every entry's current sequence; returns true when any
     /// binding actually differed from the registry's stored sequence.
     bool rebindAll();
-    void drainPendingAdhocOps();
+    /// updateShortcuts' body. @p deferFlush leaves the rebinds pending AND
+    /// the cheatsheetModelChanged emit to the caller — settleRegistration
+    /// coalesces the flush with the drained adhoc ops into ONE backend round
+    /// trip (a second flush supersedes the first's in-flight portal Request,
+    /// and a superseded request whose RPC errors loses its grabs outright)
+    /// and emits only after that flush, since the model prefers the
+    /// backend's read-back.
+    bool applyShortcutUpdates(bool deferFlush);
+    /// Returns true when it drained ops and issued the trailing flush.
+    bool drainPendingAdhocOps();
+    /// Drop every queued adhoc op for @p id. Both queueing paths supersede an
+    /// earlier op for the same id (last write wins), so they share this.
+    void erasePendingAdhocOps(const QString& id);
 
     Settings* m_settings = nullptr;
 
@@ -244,6 +377,9 @@ private:
 
     bool m_registrationInProgress = false;
     bool m_settingsDirty = false;
+    // Set by the adhoc batch forms while their loop runs the per-id paths,
+    // so those paths skip their trailing flush and the batch flushes once.
+    bool m_suppressAdhocFlush = false;
 };
 
 } // namespace PlasmaZones

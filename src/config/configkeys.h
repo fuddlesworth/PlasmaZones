@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 
 #include <QString>
@@ -23,10 +24,18 @@
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
 // Single definition point for the per-screen group prefix spellings.
-// Shared by the *GroupPrefix accessors below (which append the ':') and
-// PerScreenPathResolver's prefix→category mapping table — a rename here
-// updates both in lockstep instead of silently desyncing the JSON path
-// resolver from the group accessors.
+// All five are rows in PerScreenPathResolver's prefix→category mapping table,
+// which is what makes their groups resolve to a nested path under the
+// "PerScreen" container instead of falling back to a dot-path orphan at the
+// JSON root. Four of the five also carry a *GroupPrefix accessor below that
+// appends the ':' (zoneSelectorGroupPrefix, autotileScreenGroupPrefix,
+// scrollingScreenGroupPrefix, scrollingZoneSelectorGroupPrefix); the
+// snapping prefix has none, because
+// per-monitor snapping state is unified into the autotile store and nothing
+// looks its group up by name — it stays in the resolver table so an older
+// build's leftover groups still resolve and can be swept. Defining the
+// spellings here keeps whichever consumers exist in lockstep instead of
+// silently desyncing the JSON path resolver from the group accessors.
 //
 // MIGRATION-FROZEN: configmigration.cpp's v1→v2 INI migration matches
 // per-screen groups through the live resolver (and therefore through these
@@ -38,6 +47,8 @@
 #define P_PER_SCREEN_PREFIX_ZONE_SELECTOR "ZoneSelector"
 #define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
 #define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
+#define P_PER_SCREEN_PREFIX_SCROLLING "ScrollingScreen"
+#define P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR "ScrollingZoneSelector"
 
 namespace PlasmaZones {
 
@@ -72,6 +83,7 @@ public:
     P_CONFIG_GROUP(animationsGroup, "Animations")
     P_CONFIG_GROUP(shortcutsGlobalGroup, "Shortcuts.Global")
     P_CONFIG_GROUP(shortcutsTilingGroup, "Shortcuts.Tiling")
+    P_CONFIG_GROUP(shortcutsScrollingGroup, "Shortcuts.Scrolling")
     P_CONFIG_GROUP(orderingGroup, "Ordering")
     P_CONFIG_GROUP(updatesGroup, "Updates")
 
@@ -85,7 +97,6 @@ public:
     P_CONFIG_GROUP(gapsGroup, "Gaps")
 
     // Snapping sub-groups
-    P_CONFIG_GROUP(snappingZonesGroup, "Snapping.Zones")
     P_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     P_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
     P_CONFIG_GROUP(snappingBehaviorSnapAssistGroup, "Snapping.Behavior.SnapAssist")
@@ -120,8 +131,35 @@ public:
     // Tiling sub-groups
     P_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     P_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
-    P_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
+    P_CONFIG_GROUP(scrollingGroup, "Scrolling")
+    P_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
+    // Scrolling.Wheel.* — the two wheel chords ("scroll keys"): which chord
+    // moves column FOCUS along the strip, and which pans the VIEW without
+    // changing focus. One group each, carrying the shared Triggers leaf, so
+    // each reads like the other trigger-bearing nodes in the tree.
+    P_CONFIG_GROUP(scrollingWheelFocusGroup, "Scrolling.Wheel.Focus")
+    P_CONFIG_GROUP(scrollingWheelViewGroup, "Scrolling.Wheel.View")
+    // Scrolling.Behavior.DragScroll — edge auto-scroll during a drag
+    // re-insert (niri's dnd-edge-view-scroll). Its own subtree rather than
+    // four DragScroll*-prefixed leaves on Scrolling.Behavior, so the card,
+    // the per-page reset manifest and the search catalog address one node.
+    P_CONFIG_GROUP(scrollingDragScrollGroup, "Scrolling.Behavior.DragScroll")
+    // Scrolling.TabIndicator — the whole appearance and placement family for
+    // the indicator drawn alongside a tabbed column. Its own group rather than
+    // a dozen Tab*-prefixed leaves on Scrolling, so the settings page, the
+    // per-page reset manifest and the rule slots all address one subtree.
+    P_CONFIG_GROUP(scrollingTabIndicatorGroup, "Scrolling.TabIndicator")
+    // Scrolling.DropIndicator — the drop-target highlight painted during a
+    // drag re-insert. Its own group for the same reason as TabIndicator: the
+    // settings page, the per-page reset manifest and any later rule slots all
+    // address one subtree.
+    P_CONFIG_GROUP(scrollingDropIndicatorGroup, "Scrolling.DropIndicator")
+    // Scrolling.ZoneSelector — the strip-mode drag popup on scrolling
+    // screens. Mirrors Snapping.ZoneSelector minus the grid-arrangement
+    // keys (LayoutMode / GridColumns / MaxRows): the strip popup is a
+    // single card row along the strip by construction.
+    P_CONFIG_GROUP(scrollingZoneSelectorGroup, "Scrolling.ZoneSelector")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -137,7 +175,9 @@ public:
     // leave its top performance state: measured at ~110 W and +12 C over an idle
     // desktop with the effect unloaded, on hardware that is only ~45% busy. The
     // cost is not the work per frame, it is that there IS work every frame — so
-    // the knobs here bound WHEN the chain animates rather than how much it does.
+    // most knobs here bound WHEN the chain animates. The group also carries one
+    // per-frame-cost knob, BlurScaleMultiplier, which scales how much blur work
+    // each frame does rather than gating when frames happen.
     P_CONFIG_GROUP(decorationsPerformanceGroup, "Decorations.Performance")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
@@ -173,11 +213,10 @@ public:
 
     P_CONFIG_KEY(activeLayoutIdKey, "ActiveLayoutId")
 
-    // Snap mode — last used zone info
+    // Snap mode — last used zone info. Only the zone id is persisted (see
+    // windowtrackingadaptor/saveload.cpp); the companion screen / class /
+    // desktop keys had no reader and no writer left and are gone.
     P_CONFIG_KEY(lastUsedZoneIdKey, "LastUsedZoneId")
-    P_CONFIG_KEY(lastUsedScreenNameKey, "LastUsedScreenName")
-    P_CONFIG_KEY(lastUsedZoneClassKey, "LastUsedZoneClass")
-    P_CONFIG_KEY(lastUsedDesktopKey, "LastUsedDesktop")
 
     // User-snapped classes
     P_CONFIG_KEY(userSnappedClassesKey, "UserSnappedClasses")
@@ -185,6 +224,11 @@ public:
     // Unified, engine-agnostic per-window placement record (WindowPlacementStore) —
     // the SOLE persisted per-window restore key for both snap and autotile.
     P_CONFIG_KEY(windowPlacementsKey, "WindowPlacements")
+
+    // Scrolling strip-structure snapshots (per-context column groupings,
+    // tabbed flags, sizes, focus, view anchor) — ScrollEngine::serializeStripState
+    // blob, restored into the engine's arrival-restore stash on load.
+    P_CONFIG_KEY(scrollStripsKey, "ScrollStrips")
 
     // Legacy per-window restore keys — superseded by WindowPlacements. Retained
     // ONLY so saveState() can deleteKey() them, scrubbing them from any session.json
@@ -221,6 +265,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(backendKey, "Backend")
+    P_CONFIG_KEY(gpuKey, "Gpu")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Snapping (top-level)
@@ -234,9 +279,14 @@ public:
 
     P_CONFIG_KEY(triggersKey, "Triggers")
     P_CONFIG_KEY(toggleActivationKey, "ToggleActivation")
+    // Hold-mode release grace in ms; generic like toggleActivationKey and
+    // shared by Snapping.Behavior, Snapping.Behavior.ZoneSpan, Tiling.Behavior
+    // and Scrolling.Behavior.
+    P_CONFIG_KEY(releaseGraceMsKey, "ReleaseGraceMs")
 
     // Snapping.Behavior.ZoneSpan
-    // (uses enabledKey, modifierKey, triggersKey and toggleActivationKey)
+    // (uses enabledKey, modifierKey, triggersKey, toggleActivationKey and
+    //  releaseGraceMsKey)
 
     // Snapping.Behavior.SnapAssist
     P_CONFIG_KEY(featureEnabledKey, "FeatureEnabled")
@@ -251,10 +301,15 @@ public:
     P_CONFIG_KEY(moveNewToLastZoneKey, "MoveNewToLastZone")
     P_CONFIG_KEY(restoreOnUnsnapKey, "RestoreOnUnsnap")
     P_CONFIG_KEY(restoreOnLoginKey, "RestoreOnLogin")
-    // Shared by Snapping.Behavior.WindowHandling + Tiling.Behavior — restore a
-    // FLOATED (unsnapped / untiled) window to its previous position on reopen.
+    // Shared by Snapping.Behavior.WindowHandling, Tiling.Behavior and
+    // Scrolling.Behavior — restore a FLOATED (unsnapped / untiled) window to its
+    // previous position on reopen.
     P_CONFIG_KEY(restoreFloatedOnLoginKey, "RestoreFloatedOnLogin")
     P_CONFIG_KEY(unfloatFallbackToZoneKey, "UnfloatFallbackToZone")
+    // Shared by Snapping.Behavior.WindowHandling, Tiling.Behavior and
+    // Scrolling.Behavior: stack the mode's floated windows above the windows it
+    // places (keep-above, applied by the KWin effect beneath any SetWindowLayer rule).
+    P_CONFIG_KEY(keepFloatingAboveKey, "KeepFloatingAbove")
     P_CONFIG_KEY(autoAssignAllLayoutsKey, "AutoAssignAllLayouts")
     P_CONFIG_KEY(stickyWindowHandlingKey, "StickyWindowHandling")
     P_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
@@ -268,7 +323,6 @@ public:
     // Config Keys — Snapping.Zones.Colors
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(useSystemKey, "UseSystem")
     P_CONFIG_KEY(highlightKey, "Highlight")
     P_CONFIG_KEY(inactiveKey, "Inactive")
     P_CONFIG_KEY(borderKey, "Border")
@@ -312,9 +366,15 @@ public:
     P_CONFIG_KEY(overlayDisplayModeKey, "OverlayDisplayMode")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.ZoneSelector
+    // Config Keys — Snapping.ZoneSelector / Scrolling.ZoneSelector
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // SHARED leaves: Scrolling.ZoneSelector (the strip selector) reuses
+    // enabledKey, triggerDistanceKey, positionKey, sizeModeKey,
+    // previewWidthKey, previewHeightKey and previewLockAspectKey from this
+    // block, disambiguated by group — renaming one here renames it for BOTH
+    // families. Only layoutModeKey / maxRowsKey / gridColumnsKey are
+    // snapping-only (the strip popup has no grid arrangement).
     // (uses enabledKey)
     P_CONFIG_KEY(triggerDistanceKey, "TriggerDistance")
     P_CONFIG_KEY(positionKey, "Position")
@@ -385,6 +445,76 @@ public:
     P_CONFIG_KEY(perAlgorithmSettingsKey, "PerAlgorithmSettings")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
+    P_CONFIG_KEY(stripAxisKey, "StripAxis")
+    P_CONFIG_KEY(alwaysCenterSingleColumnKey, "AlwaysCenterSingleColumn")
+    P_CONFIG_KEY(cropStraddlersKey, "CropStraddlers")
+    P_CONFIG_KEY(defaultColumnWidthKindKey, "DefaultColumnWidthKind")
+    P_CONFIG_KEY(defaultColumnWidthValueKey, "DefaultColumnWidthValue")
+    P_CONFIG_KEY(defaultColumnDisplayKey, "DefaultColumnDisplay")
+    P_CONFIG_KEY(presetColumnWidthsKey, "PresetColumnWidths")
+    P_CONFIG_KEY(presetWindowHeightsKey, "PresetWindowHeights")
+    P_CONFIG_KEY(defaultColumnWidthPresetIndexKey, "DefaultColumnWidthPresetIndex")
+    P_CONFIG_KEY(defaultWindowHeightKindKey, "DefaultWindowHeightKind")
+    P_CONFIG_KEY(defaultWindowHeightValueKey, "DefaultWindowHeightValue")
+    P_CONFIG_KEY(defaultWindowHeightPresetIndexKey, "DefaultWindowHeightPresetIndex")
+    P_CONFIG_KEY(defaultTemplateKey, "DefaultTemplate")
+    P_CONFIG_KEY(wheelFocusEnabledKey, "WheelFocusEnabled")
+    P_CONFIG_KEY(wheelFocusInvertedKey, "WheelFocusInverted")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.TabIndicator
+    // (also uses enabledKey, widthKey, positionKey — shared leaf names,
+    // disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(styleKey, "Style")
+    P_CONFIG_KEY(hideWhenSingleTabKey, "HideWhenSingleTab")
+    P_CONFIG_KEY(placeWithinColumnKey, "PlaceWithinColumn")
+    P_CONFIG_KEY(gapKey, "Gap")
+    P_CONFIG_KEY(lengthProportionKey, "LengthProportion")
+    P_CONFIG_KEY(gapsBetweenTabsKey, "GapsBetweenTabs")
+    P_CONFIG_KEY(cornerRadiusKey, "CornerRadius")
+    P_CONFIG_KEY(activeColorKey, "ActiveColor")
+    P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
+    P_CONFIG_KEY(urgentColorKey, "UrgentColor")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.DropIndicator
+    // Reuses the shared enabledKey / opacityKey / widthKey / radiusKey
+    // leaves above, the same way Snapping.Zones.Border spells its border as
+    // Width + Radius. Only the fill and border colours need names of their
+    // own.
+    // ═══════════════════════════════════════════════════════════════════════════
+    P_CONFIG_KEY(colorKey, "Color")
+    P_CONFIG_KEY(borderColorKey, "BorderColor")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Behavior
+    // (also uses focusNewWindowsKey, focusFollowsMouseKey,
+    // respectMinimumSizeKey, stickyWindowHandlingKey, insertPositionKey,
+    // restoreOnLoginKey, restoreFloatedOnLoginKey, keepFloatingAboveKey —
+    // shared leaf names, disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
+    P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
+    P_CONFIG_KEY(viewScrollStepPercentKey, "ViewScrollStepPercent")
+    P_CONFIG_KEY(focusFollowsMouseMaxScrollKey, "FocusFollowsMouseMaxScroll")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Behavior.DragScroll
+    // (also uses enabledKey — shared leaf name, disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(triggerWidthKey, "TriggerWidth")
+    P_CONFIG_KEY(delayMsKey, "DelayMs")
+    P_CONFIG_KEY(maxSpeedKey, "MaxSpeed")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Behavior
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -415,6 +545,7 @@ public:
     P_CONFIG_KEY(animateFocusedOnlyKey, "AnimateFocusedOnly")
     P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
     P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
+    P_CONFIG_KEY(blurScaleMultiplierKey, "BlurScaleMultiplier")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps
@@ -477,19 +608,13 @@ public:
     // Phase 4 sub-commit 6: animation fields migrated from 5 per-field
     // keys (duration / easingCurve / minDistance / sequenceMode /
     // staggerInterval) to a single Profile JSON blob under animationProfileKey.
-    // The v1 keys are folded into the Profile blob by `migrateV1ToV2`
-    // (see `configmigration.cpp`). The v1 key accessors are retained for
-    // that migration function only; no separate backwards-compat code
-    // exists within v2. The per-field accessor surface on Settings
-    // (animationDuration / etc.) is preserved and projects through the
-    // Profile blob at read/write time for QML Q_PROPERTY binding
-    // compatibility.
+    // Those v1 spellings are folded into the Profile blob by `migrateV1ToV2`,
+    // which reads them through the frozen `v1Animation*Key` accessors in the
+    // Legacy section below, not through this one — the live per-field accessors
+    // that used to sit here had no caller at all and are gone. The per-field accessor surface on
+    // Settings (animationDuration / etc.) is unaffected: it projects through the
+    // Profile blob at read/write time for QML Q_PROPERTY binding compatibility.
     P_CONFIG_KEY(animationProfileKey, "Profile")
-    P_CONFIG_KEY(durationKey, "Duration")
-    P_CONFIG_KEY(easingCurveKey, "EasingCurve")
-    P_CONFIG_KEY(minDistanceKey, "MinDistance")
-    P_CONFIG_KEY(sequenceModeKey, "SequenceMode")
-    P_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
     // Animations.WindowFiltering knob — distinct from the snapping
     // `Exclusions` group above (which has no equivalent NotificationsAndOsd
     // axis). Consumed by `Settings::animationExcludeNotificationsAndOsd` and
@@ -512,18 +637,23 @@ public:
     P_CONFIG_KEY(toggleCheatsheetKey, "ToggleCheatsheet")
 
     // Parameterized — uses the pattern accessor to avoid duplication.
-    // 1..9 mirrors quickLayoutN() in the enum surface; out-of-range
+    // The range mirrors quickLayoutN() in the enum surface; out-of-range
     // values would round-trip as e.g. "QuickLayout100" and ghost the
     // config namespace.
     P_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
         // qFatal aborts unambiguously in both debug and release builds —
-        // the contract is "n in 1..9, no exceptions". A bare Q_ASSERT_X
+        // the contract is "n in range, no exceptions". A bare Q_ASSERT_X
         // would compile out in release and let an out-of-range value
         // silently yield "QuickLayout100" (or similar), ghosting the
         // config namespace.
-        if (n < 1 || n > 9) {
+        //
+        // Bounded by the protocol constant the daemon validates against
+        // (layoutadaptor.cpp) rather than a hardcoded 9, so raising the slot
+        // count cannot leave this guard rejecting keys the rest of the tree
+        // considers legal.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
             qFatal("quickLayoutKey: n out of range: %d", n);
         }
         return quickLayoutKeyPattern().arg(n);
@@ -540,6 +670,7 @@ public:
     P_CONFIG_KEY(pushToEmptyZoneKey, "PushToEmptyZone")
     P_CONFIG_KEY(restoreWindowSizeKey, "RestoreWindowSize")
     P_CONFIG_KEY(toggleWindowFloatKey, "ToggleWindowFloat")
+    P_CONFIG_KEY(switchFocusFloatTilingKey, "SwitchFocusFloatTiling")
     P_CONFIG_KEY(swapWindowLeftKey, "SwapWindowLeft")
     P_CONFIG_KEY(swapWindowRightKey, "SwapWindowRight")
     P_CONFIG_KEY(swapWindowUpKey, "SwapWindowUp")
@@ -550,12 +681,14 @@ public:
     P_CONFIG_KEY(spanWindowDownKey, "SpanWindowDown")
 
     // Parameterized — uses the pattern accessor to avoid duplication.
-    // 1..9 mirrors snapToZoneN() in the enum surface.
+    // The range mirrors snapToZoneN() in the enum surface, which is the same
+    // digit row the quick-layout slots use.
     P_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
-        // See quickLayoutKey above for the rationale on the qFatal guard.
-        if (n < 1 || n > 9) {
+        // See quickLayoutKey above for the rationale on the qFatal guard and on
+        // bounding by the protocol constant.
+        if (n < 1 || n > PhosphorProtocol::Service::QuickLayoutSlotCount) {
             qFatal("snapToZoneKey: n out of range: %d", n);
         }
         return snapToZoneKeyPattern().arg(n);
@@ -575,6 +708,10 @@ public:
     P_CONFIG_KEY(swapVirtualScreenDownKey, "SwapVirtualScreenDown")
     P_CONFIG_KEY(rotateVirtualScreensClockwiseKey, "RotateVirtualScreensClockwise")
     P_CONFIG_KEY(rotateVirtualScreensCounterclockwiseKey, "RotateVirtualScreensCounterclockwise")
+
+    // Shortcuts.Scrolling keys live in configkeys_scrolling.h
+    // (ConfigKeysScrolling, the next link in the inheritance chain) — split
+    // by concern when this file hit its size ceiling.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Tiling
@@ -637,6 +774,7 @@ public:
 
     P_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
     P_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
+    P_CONFIG_KEY(scrollingTemplateOrderKey, "ScrollingTemplateOrder")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-Screen Config Group Prefixes
@@ -644,9 +782,13 @@ public:
 
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
+    P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
+    P_CONFIG_GROUP(scrollingZoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
+    // Legacy v1/v2/v3/v4 accessors — for migration code, plus the two
+    // documented non-migration readers (configdefaults.cpp's
+    // v1RenderingBackendKey read and settings.cpp's v4 stash-key list).
     //
     // Wrapped in a nested `Legacy` struct so a stray
     // ConfigKeys::v1ActivationGroup() call outside configmigration.cpp
@@ -748,6 +890,11 @@ public:
         P_CONFIG_KEY(v1QuickLayoutShortcutKeyPattern, "QuickLayout%1Shortcut")
         P_CONFIG_KEY(v2QuickLayoutKeyPattern, "QuickLayout%1")
         P_CONFIG_KEY(v2SnapToZoneKeyPattern, "SnapToZone%1")
+        // The hardcoded 9 below is FROZEN at the v1/v2 wire formats, which
+        // only ever had nine slots — do NOT retarget these bounds at
+        // QuickLayoutSlotCount like the live builders above: if that constant
+        // is ever raised, these must keep generating exactly the keys a
+        // historical config could hold.
         static QString v1QuickLayoutShortcutKey(int n)
         {
             if (n < 1 || n > 9) {
@@ -907,27 +1054,30 @@ public:
     //
     // These do NOT live in the main config JSON — they're per-organization
     // QSettings entries (~/.config/<org>/<app>.conf) for the settings UI's
-    // own ephemeral state: last window geometry, dismissed update banner,
-    // last-seen what's-new version. Centralised here so the CLAUDE.md "no
-    // inline QStringLiteral for config keys" rule applies uniformly.
+    // own ephemeral state: last window geometry and the last-seen what's-new
+    // version. Centralised here so the CLAUDE.md "no inline QStringLiteral for
+    // config keys" rule applies uniformly.
     // ═══════════════════════════════════════════════════════════════════════════
+    // Group for the window-geometry entries: the bare "x"/"y"/"width"/
+    // "height" keys collide with any other writer at the file root.
+    P_CONFIG_GROUP(settingsAppWindowGroup, "Window")
     P_CONFIG_KEY(settingsAppWindowXKey, "x")
     P_CONFIG_KEY(settingsAppWindowYKey, "y")
     P_CONFIG_KEY(settingsAppWindowWidthKey, "width")
     P_CONFIG_KEY(settingsAppWindowHeightKey, "height")
-    P_CONFIG_KEY(settingsAppDismissedUpdateVersionKey, "dismissedUpdateVersion")
     P_CONFIG_KEY(settingsAppLastSeenWhatsNewVersionKey, "lastSeenWhatsNewVersion")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Filesystem paths under XDG_DATA_HOME
     //
     // Daemon, settings app, and editor all read/write the same per-user
-    // layouts and algorithms directories. Hoisted into one accessor each so
-    // a rename only touches one site.
+    // layouts directory. Hoisted into one accessor so a rename only touches one
+    // site. The sibling "plasmazones" and "plasmazones/algorithms" spellings
+    // used to sit here for the same reason, but neither had a caller: the
+    // algorithms directory is spelled by Constants::ScriptedAlgorithmSubdir
+    // (core/types/constants.h), which is what every consumer actually uses.
     // ═══════════════════════════════════════════════════════════════════════════
-    P_CONFIG_KEY(userDataSubdir, "plasmazones")
     P_CONFIG_KEY(layoutsSubdir, "plasmazones/layouts")
-    P_CONFIG_KEY(algorithmsSubdir, "plasmazones/algorithms")
 
 private:
     // Non-instantiable

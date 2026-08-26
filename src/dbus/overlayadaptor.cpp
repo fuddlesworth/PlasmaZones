@@ -25,6 +25,7 @@
 #include <QFileInfo>
 #include <QLatin1StringView>
 #include <QTimer>
+#include <QUuid>
 
 #include <algorithm>
 #include <array>
@@ -71,6 +72,8 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDet
     // change cancel, explicit D-Bus hideSnapAssist) through one emit
     // site, so a parameterless forward is the right shape here.
     connect(m_overlayService, &IOverlayService::snapAssistDismissed, this, &OverlayAdaptor::snapAssistDismissed);
+    connect(m_overlayService, &IOverlayService::snapAssistThumbnailCacheTrimmed, this,
+            &OverlayAdaptor::snapAssistThumbnailCacheTrimmed);
 
     // Pre-warm the kwin trust cache so the first @c setSnapAssistThumbnail
     // of a session is a one-set-lookup hit instead of a sync
@@ -302,6 +305,17 @@ bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
     if (!authenticateKwinSender()) {
         return false;
     }
+    // Handle must be a QUuid spelling (the producer always sends
+    // EffectWindow::internalId().toString()). The providers key their caches
+    // on the handle AND parse it back out of an `image://.../<handle>/<gen>`
+    // URL with a first-'/' split, so a handle carrying URL-reserved
+    // characters would be storable but never resolvable — reject it at the
+    // boundary per the input-validation rule.
+    if (QUuid::fromString(compositorHandle).isNull()) {
+        qCWarning(lcDbus) << "setSnapAssistThumbnail: rejecting non-UUID compositor handle (len="
+                          << compositorHandle.size() << ")";
+        return false;
+    }
     // Forward the service's accepted/rejected bool verbatim so the kwin-
     // effect's recently-posted dedup window only marks handles the daemon
     // actually stored. Treating any silent rejection as success would
@@ -327,12 +341,21 @@ bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, i
     // No marshalling-size guard is needed here (unlike the raw-pixel path):
     // a dma-buf is a kernel handle, not an inline byte array, so there is no
     // large payload to deserialise. Bound the dimensions before import to
-    // reject a hostile/buggy authenticated sender, mirroring the raw-pixel
-    // path's 1024² ceiling.
-    static constexpr int MaxDimension = 1024;
+    // reject a hostile/buggy authenticated sender — the ceiling is the
+    // shared protocol constant, so the effect's capture clamp, this check,
+    // and the service-boundary re-validation can never drift apart.
+    static constexpr int MaxDimension = PhosphorProtocol::Service::SnapAssistThumbnailMaxDimension;
     if (width <= 0 || height <= 0 || width > MaxDimension || height > MaxDimension) {
         qCWarning(lcDbus) << "setWindowThumbnailDmabuf: rejecting out-of-range dimensions" << width << "x" << height
                           << "(handle len=" << compositorHandle.size() << ")";
+        return false;
+    }
+    // Same UUID-spelling requirement as the raw-pixel sibling — see the
+    // comment there for why URL-reserved characters must never reach the
+    // provider key space.
+    if (QUuid::fromString(compositorHandle).isNull()) {
+        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: rejecting non-UUID compositor handle (len="
+                          << compositorHandle.size() << ")";
         return false;
     }
     if (!fd.isValid() || !fenceFd.isValid()) {

@@ -21,6 +21,7 @@ Q_LOGGING_CATEGORY(lcDbus, "plasmazones.dbus", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusLayout, "plasmazones.dbus.layout", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusWindow, "plasmazones.dbus.window", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusSettings, "plasmazones.dbus.settings", QtInfoMsg)
+Q_LOGGING_CATEGORY(lcDbusRules, "plasmazones.dbus.rules", QtInfoMsg)
 
 // Editor module categories
 Q_LOGGING_CATEGORY(lcEditor, "plasmazones.editor", QtInfoMsg)
@@ -31,6 +32,8 @@ Q_LOGGING_CATEGORY(lcSnapping, "plasmazones.editor.snapping", QtInfoMsg)
 // Autotile module categories
 Q_LOGGING_CATEGORY(lcAutotile, "plasmazones.autotile", QtInfoMsg)
 Q_LOGGING_CATEGORY(lcDbusAutotile, "plasmazones.dbus.autotile", QtInfoMsg)
+Q_LOGGING_CATEGORY(lcDbusTiling, "plasmazones.dbus.tiling", QtInfoMsg)
+Q_LOGGING_CATEGORY(lcDbusScrolling, "plasmazones.dbus.scrolling", QtInfoMsg)
 
 // KWin effect module categories
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)

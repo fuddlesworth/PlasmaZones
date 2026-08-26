@@ -441,44 +441,58 @@ vec4 surfaceColor(vec2 uv) {
 #endif
 }
 
-// The decoration chain's outer margin, expressed in the SAME card-space
-// units `surfaceColor()`'s `uv` takes — half-width per axis, so the halo
-// band spans `uv` in [-surfacePadRel(), 1 + surfacePadRel()].
+// How far the composited surface canvas extends PAST the card, in the SAME
+// card-space units `surfaceColor()`'s `uv` takes — half-width per axis, so
+// the canvas spans `uv` in [-surfacePadRel(), 1 + surfacePadRel()].
 //
-// A card-space mask built on the bare [0, 1] range clips the halo at the
-// frame edge, discarding the margin the compositor composited into
-// `uSurfaceLayer`. Widening the mask by this value lets it through, and
-// `surfaceColor()`'s unclamped `iLayerRectInTexture` remap resolves the
-// out-of-range `uv` into the band.
+// A card-space mask built on the bare [0, 1] range clips everything the
+// compositor composited outside the frame: the decoration chain's outer
+// margin (glow / motes halo) AND the window's own shadow band, both of
+// which live in `uSurfaceLayer`. Widening the mask by this value lets the
+// whole canvas through, and `surfaceColor()`'s unclamped
+// `iLayerRectInTexture` remap resolves the out-of-range `uv` into it.
 //
-// Derived from the two rect uniforms rather than pushed separately: both
-// describe the SAME inner rect, `iAnchorRectInTexture` within uTexture0's
-// expanded capture and `iLayerRectInTexture` within the layer canvas the
-// compositor padded by the margin. So `inner / rect.zw` recovers each
-// outer extent, and their difference is the two margins — the shadow inset
-// common to both cancels, leaving the padding alone. An unpadded window
-// carries canvas == expanded, hence equal rects and an exact zero, which
-// keeps its mask bit-identical to the un-widened form.
+// Derived from `iLayerRectInTexture` ALONE: that rect places the card
+// inside the layer canvas the compositor padded (expanded rect plus the
+// chain's outer margin), so `1 / rect.zw` is the canvas extent in card
+// units and half of the excess over 1 is the band per side. That halving
+// assumes the excess sits evenly on both sides of the card. The chain
+// padding does, and an applet popup has no shadow, but an app window's
+// shadow inset is usually deeper below the frame than above it, so the
+// symmetric value under-widens the deeper side by half the difference
+// and over-widens the other. The over-widened side reads the canvas's
+// transparent edge texel (clamp-to-edge), so that half costs nothing;
+// the under-widened side clips the outermost few px of shadow. An earlier
+// form differenced it against `iAnchorRectInTexture` so the shadow inset
+// common to both cancelled, leaving the chain padding alone. That under-
+// widened the mask to frame + padding while the canvas (and every pack
+// drawing into it) runs to expanded + padding. The gap is the shadow
+// inset, which is a few px on an app window and a wide band on a Plasma
+// applet popup, where the decoration visibly cropped for the whole show /
+// hide leg. The band between frame and expanded is real composited
+// content, not smear, so it belongs inside the mask.
 //
-// Valid only for SURFACE-EXTENT packs, whose card space is the frame: there
-// both rects share the frame as inner rect, so the result is pad/frame in
-// the card units their masks use. An anchor-extent pack carries
-// `iAnchorRectInTexture == (0, 0, 1, 1)` (inner == expanded), so this would
-// return pad/expanded instead — a different unit that would under-widen its
-// mask. No anchor-extent pack calls this.
+// The result is in the caller's own card units whichever extent it draws
+// at, because the compositor places the card of THAT extent in the layer
+// rect: the frame for a surface-extent pack, the expanded rect for an
+// anchor-extent one (paint_shader_window.cpp derives the rect from
+// `transition.surfaceExtent`). So a surface-extent pack gets band/frame
+// and an anchor-extent pack would get pad/expanded, each the unit its
+// mask takes. Only surface-extent packs call this today, since an
+// anchor-extent pack's card already spans the shadow and only the chain
+// padding lies past it.
 vec2 surfacePadRel() {
 #ifdef PLASMAZONES_KWIN
     // No layer means no composited canvas, so `iLayerRectInTexture` carries
-    // nothing to difference against.
+    // nothing to measure; the mask stays at the bare card edge.
     if (iHasSurfaceLayer == 0) {
         return vec2(0.0);
     }
     vec2 layerSpan = max(iLayerRectInTexture.zw, vec2(1.0e-6));
-    vec2 anchorSpan = max(iAnchorRectInTexture.zw, vec2(1.0e-6));
     // max() against 0: a capture-scale clamp on a huge window can shrink the
-    // canvas below the expanded rect, and a negative pad would eat INTO the
-    // card rather than extend past it.
-    return max(0.5 * (1.0 / layerSpan - 1.0 / anchorSpan), vec2(0.0));
+    // canvas below the frame, and a negative band would eat INTO the card
+    // rather than extend past it.
+    return max(0.5 * (1.0 / layerSpan - 1.0), vec2(0.0));
 #else
     // Daemon path: the padded decoration chain is a compositor-side fold.
     return vec2(0.0);
@@ -525,6 +539,83 @@ float legProgress() {
     return p_reversed ? (1.0 - iTime) : iTime;
 }
 
+// ─── Geometry-leg helpers ──────────────────────────────────────────────
+// A geometry morph (window.movement.*) hands the vertex stage the leg's
+// endpoints as `iFromRect` / `iToRect`. Packs need two things from them:
+// which way the window actually went, and how much of the leg was motion
+// at all.
+//
+// Centre-to-centre delta answers NEITHER. A window pinned at one edge and
+// grown across the strip (the scrolling width/height cycles, a zone-span
+// widen, an unmaximize back to a shared edge) moves its centre by half the
+// size change while the window itself is anchored — so a pack that reads
+// the centre delta as travel applies a full-strength trail, lane stagger or
+// crease pattern to what is really a stretch, and the window tears into
+// parts that settle at different times. Only `window-morph` escaped that,
+// because it morphs in the fragment and never asks which way the leg went.
+
+// The RIGID part of a leg: the displacement both edges of the rect share on
+// each axis. Edges moving the same way carry a common translation of the
+// smaller magnitude; edges moving apart (or one held still) are the window
+// resizing, not travelling, and contribute nothing.
+//
+// Pinned left edge, width +640  → (0, 0)      pure resize
+// Whole rect slid right by 640  → (640, 0)    pure move
+// Slid 100 while growing 640    → (100, 0)    the shared 100
+vec2 legTranslation(vec4 fromRect, vec4 toRect) {
+    vec2 nearEdge = toRect.xy - fromRect.xy;
+    vec2 farEdge = (toRect.xy + toRect.zw) - (fromRect.xy + fromRect.zw);
+    // step() is 1 where the two deltas agree in sign. A zero delta lands on
+    // the 1 side, which is harmless because a zero far delta is zeroed by
+    // the min() and a zero near delta by sign(nearEdge) — a held edge means
+    // the window is not rigidly travelling on that axis.
+    vec2 sameWay = step(vec2(0.0), nearEdge * farEdge);
+    return sameWay * sign(nearEdge) * min(abs(nearEdge), abs(farEdge));
+}
+
+// How much of the leg is travel rather than resize, in [0, 1]. 1 means the
+// leg is pure slide with no size change at all, 0 means pure anchored
+// stretch. This is one scalar for the whole leg, not a per-axis split: a leg
+// that slides on one axis while growing on the other lands in between and
+// damps the transit character on both. Packs whose character only makes
+// sense while the window is in transit (trailing lag, lane stagger,
+// perpendicular bow) scale that character by this, so they degrade to a
+// clean uniform morph on a stretch and keep their full look on a real slide.
+//
+// Unlike legDirection this has no pixel deadband, so a sub-pixel rigid
+// residue still reads as travel and can return a large share off motion
+// smaller than legDirection accepts as an axis. Such a leg does not normally
+// play at all.
+float legTravelShare(vec4 fromRect, vec4 toRect) {
+    float moved = length(legTranslation(fromRect, toRect));
+    float resized = length(toRect.zw - fromRect.zw);
+    return moved / max(moved + resized, 1.0e-3);
+}
+
+// The leg's axis, as a unit vector. The rigid translation names it when the
+// window travelled; failing that the growth axis does, so an anchored
+// stretch still orients along the axis that actually changed rather than a
+// fabricated default. On that fallback the direction is a function of the
+// SIZE DELTA alone and knows nothing about which edge was held, so its sign
+// is per axis the sign of the size change: a grow points along the positive
+// axis and a shrink along the negative one, whichever edge stayed put. Only
+// a leg that neither moved nor resized falls through to the downward
+// default.
+//
+// The 1.0 thresholds are one square pixel — below that the vector is
+// rounding residue and normalize() would amplify it into a random axis.
+vec2 legDirection(vec4 fromRect, vec4 toRect) {
+    vec2 moved = legTranslation(fromRect, toRect);
+    if (dot(moved, moved) > 1.0) {
+        return normalize(moved);
+    }
+    vec2 grown = toRect.zw - fromRect.zw;
+    if (dot(grown, grown) > 1.0) {
+        return normalize(grown);
+    }
+    return vec2(0.0, 1.0);
+}
+
 // ─── Small shared helpers ──────────────────────────────────────────────
 // Premultiply a straight-alpha colour (scale rgb by alpha). Many shaders
 // build a straight-alpha result and premultiply once at output for the
@@ -557,9 +648,10 @@ vec2 resolutionSafe() {
 //
 // Everything else keeps identity: the daemon RHI runtime (Qt colour-
 // manages the scene graph output), shadervalidate, the bake tests, and
-// the desktop-switch path (its capture FBOs inherit the output's
-// colorDescription, so its inputs already live in the blending space and
-// converting again would be wrong).
+// the two screen-level passes — desktop-switch and the scrolling strip.
+// Both capture into FBOs that inherit the output's colorDescription, so
+// their inputs already live in the blending space and converting again
+// would be wrong.
 #ifndef PZ_FINALIZE_COLOR
 #define PZ_FINALIZE_COLOR(c) (c)
 #endif

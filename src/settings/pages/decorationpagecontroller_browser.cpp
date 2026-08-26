@@ -56,6 +56,12 @@ QString surfacePathLabel(const QString& path)
             return PhosphorI18n::tr("Layout Picker");
         if (token == QLatin1String("cheatsheet"))
             return PhosphorI18n::tr("Shortcut Cheatsheet");
+        if (token == QLatin1String("shell"))
+            return PhosphorI18n::tr("Shell");
+        if (token == QLatin1String("panel"))
+            return PhosphorI18n::tr("Panels");
+        if (token == QLatin1String("appletPopup"))
+            return PhosphorI18n::tr("Applet Popups");
         return token;
     };
     const QStringList tokens = path.split(QLatin1Char('.'), Qt::SkipEmptyParts);

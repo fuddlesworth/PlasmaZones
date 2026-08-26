@@ -5,6 +5,7 @@
 
 #include "window_query.h"
 
+#include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -171,6 +172,11 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         }
     }
     if (includeExtended) {
+        // The empty screenId makes ruleQueryFor derive a screen orientation
+        // that this snapshot then never marshals — a knowingly discarded
+        // by-product of reusing the shared builder, not a missing field: the
+        // daemon has no metadata key for it and derives its own context
+        // (stampScreenContext) from the live screen resolution instead.
         PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
         // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon
         // matches its KeepAbove/KeepBelow predicates against this metadata,
@@ -180,6 +186,14 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         namespace Key = PhosphorProtocol::Service::WindowMetadataKey;
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);
+        }
+        // Urgency is read straight off KWin::Window rather than through the
+        // rule query: it is not a rule-matchable field, so adding it to
+        // WindowQuery would grow the predicate vocabulary for a value only the
+        // tab indicator consumes. A window with no underlying KWin::Window
+        // leaves the key absent, which the daemon reads as "not urgent".
+        if (window) {
+            extended.insert(Key::IsDemandingAttention, window->isDemandingAttention());
         }
         if (props.isFullscreen) {
             extended.insert(Key::IsFullscreen, *props.isFullscreen);
@@ -292,7 +306,23 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         // window. QPointer nulls if the window died since the stash; a dead
         // or excluded window contributes no daemon push.
         KWin::EffectWindow* w = it.value().window.data();
-        if (!w || w->isDeleted() || !shouldHandleWindow(w)) {
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        // Geometry-scoped rules (Width / Height / PositionX / PositionY in a
+        // match) need their cached verdicts refreshed when the frame moves —
+        // handled HERE, once per 50 ms flush and only when such a rule
+        // exists (the set-level gate), never from the per-tick lambda
+        // (discussion #816). Runs before the shouldHandleWindow gate below:
+        // an EXCLUSION verdict can be geometry-scoped too, and an excluded
+        // window's verdict must still refresh even though it contributes no
+        // daemon push. Per-window eviction, NOT the coalesced state-change
+        // helper: that helper's flush clears the GLOBAL animation match
+        // cache, and this edge repeats for a drag's whole duration.
+        if (m_hasGeometryScopedRules) {
+            invalidateRuleCachesForWindowGeometry(it.key(), w);
+        }
+        if (!shouldHandleWindow(w)) {
             continue;
         }
         const QRect& geo = it.value().geometry;
@@ -313,6 +343,116 @@ bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)
         || windowClass.contains(QLatin1String("org.kde.plasma.emojier"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("org.kde.plasma.notifications"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("org.kde.krunner"), Qt::CaseInsensitive);
+}
+
+PlasmaZonesEffect::ShellSurfaceKind PlasmaZonesEffect::shellSurfaceKindFor(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return ShellSurfaceKind::None;
+    }
+    // TYPE first, class second. isDock() is KWin's own answer (NET::Dock), and
+    // it is the cheap read; the class check then confirms plasmashell OWNS the
+    // dock, so a third-party panel (a wlr layer-shell bar, an Xembed tray) is
+    // not silently swept into a path named for Plasma's. Verified live: both
+    // Plasma panels report isDock() with resourceName/resourceClass
+    // "plasmashell", while Kickoff and tray popups are NET::AppletPopup and
+    // are therefore NOT Panel here — they are a separate family that will get
+    // its own leaf, not a widening of this one.
+    //
+    // Deliberately reuses isPlasmaShellSurface ONLY as the ownership test,
+    // never as the verdict: that predicate alone would also match the desktop,
+    // notifications, the OSD and krunner, none of which are panels.
+    if (w->isDock() && isPlasmaShellSurface(w->windowClass())) {
+        return ShellSurfaceKind::Panel;
+    }
+    // NET::AppletPopup — the launcher, tray flyouts, any widget's expanded
+    // view. KWin gives this its own NON-STANDARD type, and in practice only
+    // plasmashell sets it, so no class disambiguation is done here. Note what that
+    // costs, because the animation path now leans on this arm harder than the
+    // decoration path did: a shell leg SKIPS the window filter in
+    // tryBeginShaderForEvent, so anything reaching this arm bypasses the user's
+    // animation exclusions. The type is settable rather than compositor-private, so
+    // if that ever needs closing, the fix is the Panel arm's ownership test
+    // (&& isPlasmaShellSurface(w->windowClass())), not a change here. Measured
+    // live: an applet popup sets NONE of KWin's generic predicates (not
+    // isPopupWindow, isMenu, isDialog, isDock, isSpecialWindow aside), which
+    // is why it needs an explicit arm here rather than falling out of one of
+    // the type tests windowTypeFor runs.
+    if (w->isAppletPopup()) {
+        return ShellSurfaceKind::AppletPopup;
+    }
+    return ShellSurfaceKind::None;
+}
+
+QString PlasmaZonesEffect::animationEventPathFor(KWin::EffectWindow* w, const QString& requestedPath) const
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // The overwhelmingly common answer, and the cheapest: an application
+    // window animates on the path its caller named. Two window-type reads
+    // stand between every animated event and that answer, so the switch below
+    // is written to fall through to it rather than to be consulted first.
+    switch (shellSurfaceKindFor(w)) {
+    case ShellSurfaceKind::AppletPopup:
+        // The launcher, the tray flyouts, a widget's expanded view. These open
+        // and close constantly, and they are the surfaces a decoration pack on
+        // the Shell page is most visible on, so they get the two legs that
+        // match what actually happens to them.
+        if (requestedPath == PP::WindowOpen) {
+            return PP::ShellAppletPopupShow;
+        }
+        if (requestedPath == PP::WindowClose) {
+            return PP::ShellAppletPopupHide;
+        }
+        // EVERY other event declines. Not an oversight to be filled in later:
+        // focus, minimize, maximize and the geometry legs describe things that
+        // either never happen to an applet popup or are plasmashell's own
+        // business, and a leg that fires on an event the surface does not
+        // really have is an animation the user cannot explain or turn off.
+        return QString();
+    case ShellSurfaceKind::Panel:
+        // A panel has no leg at all. It is mapped once and stays for the
+        // session — its open and close are a plasmashell restart, which is
+        // exactly when nobody wants a transition — and it hides by sliding
+        // under the screen edge rather than by closing, which never reaches a
+        // window-lifecycle hook. There is no event here worth naming, so the
+        // taxonomy names none. A decoration pack still applies to it: that is
+        // a per-frame paint, not a lifecycle event.
+        return QString();
+    case ShellSurfaceKind::None:
+        break;
+    }
+    return requestedPath;
+}
+
+bool PlasmaZonesEffect::isRuleShieldedSurface(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return true;
+    }
+    // Structural / own-surface shield for the reconcilers that write PERSISTENT
+    // window state from a rule match (stacking layer, title-bar hiding,
+    // open-fullscreen). A broad match expression must never demote a dock, pin
+    // a notification, hide the panel's (nonexistent) title bar, or strip the
+    // daemon overlay's own keep-above.
+    //
+    // Transients / popups are deliberately NOT shielded: transient utility
+    // surfaces are legitimate rule targets, and transient exclusion is
+    // per-feature user opt-in in this project (the IsTransient match field),
+    // never hardcoded policy.
+    //
+    // Distinct from shouldDecorateWindow's gate on purpose, and NOT to be
+    // folded into it: this predicate answers "may a rule mutate this window's
+    // persistent state", which stays NO for plasma-shell surfaces even when
+    // the user has opted into DECORATING one. Decoration is our own paint pass
+    // over a surface we do not own; rewriting that surface's window state is
+    // not. Every caller wants a shielded window to resolve as rule-FREE rather
+    // than to early-return, so an entry that was rule-held before its class
+    // mutated (the Electron/CEF swap, an X11 type change) still drains its
+    // snapshot through the caller's restore branch.
+    const QString winClass = w->windowClass();
+    return isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
+        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay();
 }
 
 bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)

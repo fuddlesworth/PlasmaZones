@@ -47,8 +47,12 @@ SettingsRow {
 
     ModifierAndMouseCheckBoxes {
         width: triggerRow.controlPreferredWidth
-        allowMultiple: true
         acceptMode: acceptModeAll
+        // With "activate on every drag" on, the sentinel holding that flag
+        // takes one of the four stored slots and is stripped from the list
+        // below, so Add must stop one early or the merge drops the newest
+        // chip on write.
+        reservedTriggerSlots: triggerRow.alwaysActive ? 1 : 0
         triggers: triggerRow.settingsBridge.dragActivationTriggers
         defaultTriggers: triggerRow.settingsBridge.defaultDragActivationTriggers
         tooltipEnabled: false

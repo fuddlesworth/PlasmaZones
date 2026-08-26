@@ -61,18 +61,85 @@ void Settings::setAudioSpectrumBarCount(int count)
     Q_EMIT settingsChanged();
 }
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
-// Colors group
-P_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
-P_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
-P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
-P_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
-P_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
-P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
+// Colors group. Theme-fallback keys: the stored STRING is authoritative
+// (EMPTY = follow the system palette); the QColor getters resolve through
+// resolvedSystemColor and the QColor setters store the concrete #AARRGGBB
+// form, so every non-UI consumer keeps its concrete-colour contract.
+
+/// Resolve one theme-fallback colour key: the stored @p raw when it names a
+/// colour Qt can parse, otherwise the palette-derived @p role.
+///
+/// UNPARSEABLE counts as the empty sentinel, not as a colour. Only the setters
+/// write this key and they write a concrete #AARRGGBB, so a raw that does not
+/// parse can only come from a hand-edited config — and QColor(raw) would then
+/// hand an INVALID QColor to the overlay and to QML, where it renders as black
+/// or as nothing at all. Falling back to the palette is what "I could not read
+/// your colour" already means for the empty case, so both unusable inputs
+/// resolve the same way.
+///
+/// Deliberately QColor's own parse, not the hex-shape check the rule paths use:
+/// those feed a value straight to a QML `color` property where an SVG keyword
+/// like "transparent" would silently make the indicator invisible, whereas this
+/// key is user-owned and a hand-written "red" is a colour the user meant.
+QColor Settings::resolveThemeColor(const QString& raw, SystemColorRole role)
+{
+    if (raw.isEmpty()) {
+        return resolvedSystemColor(role);
+    }
+    const QColor parsed(raw);
+    return parsed.isValid() ? parsed : resolvedSystemColor(role);
+}
+P_STORE_GET(QString, highlightColorRaw, snappingZonesColorsGroup, highlightKey, QString)
+P_STORE_SET_STRING2(setHighlightColorRaw, snappingZonesColorsGroup, highlightKey, highlightColorRawChanged,
+                    highlightColorChanged)
+P_STORE_GET(QString, inactiveColorRaw, snappingZonesColorsGroup, inactiveKey, QString)
+P_STORE_SET_STRING2(setInactiveColorRaw, snappingZonesColorsGroup, inactiveKey, inactiveColorRawChanged,
+                    inactiveColorChanged)
+P_STORE_GET(QString, borderColorRaw, snappingZonesColorsGroup, borderKey, QString)
+P_STORE_SET_STRING2(setBorderColorRaw, snappingZonesColorsGroup, borderKey, borderColorRawChanged, borderColorChanged)
+
+QColor Settings::highlightColor() const
+{
+    return resolveThemeColor(highlightColorRaw(), SystemColorRole::Highlight);
+}
+// The QColor setters guard on isValid(): an invalid QColor's name() still
+// produces a non-empty "#ff000000", which would silently PIN opaque black
+// where the caller meant "no colour" — the sane meaning of which is the
+// theme-fallback sentinel.
+void Settings::setHighlightColor(const QColor& color)
+{
+    setHighlightColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
+QColor Settings::inactiveColor() const
+{
+    return resolveThemeColor(inactiveColorRaw(), SystemColorRole::Inactive);
+}
+void Settings::setInactiveColor(const QColor& color)
+{
+    setInactiveColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
+QColor Settings::borderColor() const
+{
+    return resolveThemeColor(borderColorRaw(), SystemColorRole::Border);
+}
+void Settings::setBorderColor(const QColor& color)
+{
+    setBorderColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
 
 // Labels group
-P_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
-P_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+P_STORE_GET(QString, labelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, QString)
+P_STORE_SET_STRING2(setLabelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, labelFontColorRawChanged,
+                    labelFontColorChanged)
+
+QColor Settings::labelFontColor() const
+{
+    return resolveThemeColor(labelFontColorRaw(), SystemColorRole::LabelFont);
+}
+void Settings::setLabelFontColor(const QColor& color)
+{
+    setLabelFontColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
 P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
 P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
 P_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)
@@ -105,6 +172,23 @@ P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadi
 // parser below is still defensive (trim + skip-empty) in case a caller
 // reads a string written before the validator was installed.
 
+void Settings::writeOrderList(const QString& key, const QStringList& order, OrderListSignalFn specificSignal)
+{
+    // Read the canonical stored form before AND after writing so the
+    // canonicalCommaList validator gets to pick the comparison points.
+    // Comparing the caller's (possibly non-canonical) input to the stored
+    // canonical value would emit a spurious `changed` signal every time a
+    // caller passed e.g. " a , b " while disk already holds "a,b".
+    const QString before = m_store->read<QString>(ConfigDefaults::orderingGroup(), key);
+    m_store->write(ConfigDefaults::orderingGroup(), key, order.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(ConfigDefaults::orderingGroup(), key);
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
 QStringList Settings::snappingLayoutOrder() const
 {
     return parseCommaList(
@@ -113,22 +197,7 @@ QStringList Settings::snappingLayoutOrder() const
 
 void Settings::setSnappingLayoutOrder(const QStringList& order)
 {
-    // Read the canonical stored form before AND after writing so the
-    // canonicalCommaList validator gets to pick the comparison points.
-    // Comparing the user's (possibly non-canonical) input to the stored
-    // canonical value would emit a spurious `changed` signal every time a
-    // caller passed e.g. " a , b " while disk already holds "a,b".
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
-    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey(),
-                   order.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT snappingLayoutOrderChanged();
-    Q_EMIT settingsChanged();
+    writeOrderList(ConfigDefaults::snappingLayoutOrderKey(), order, &Settings::snappingLayoutOrderChanged);
 }
 
 QStringList Settings::tilingAlgorithmOrder() const
@@ -139,19 +208,18 @@ QStringList Settings::tilingAlgorithmOrder() const
 
 void Settings::setTilingAlgorithmOrder(const QStringList& order)
 {
-    // See setSnappingLayoutOrder — post-write compare against the canonical
-    // form avoids spurious change signals for equivalent non-canonical input.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
-    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey(),
-                   order.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT tilingAlgorithmOrderChanged();
-    Q_EMIT settingsChanged();
+    writeOrderList(ConfigDefaults::tilingAlgorithmOrderKey(), order, &Settings::tilingAlgorithmOrderChanged);
+}
+
+QStringList Settings::scrollingTemplateOrder() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::scrollingTemplateOrderKey()));
+}
+
+void Settings::setScrollingTemplateOrder(const QStringList& order)
+{
+    writeOrderList(ConfigDefaults::scrollingTemplateOrderKey(), order, &Settings::scrollingTemplateOrderChanged);
 }
 
 // ── Animations (PhosphorConfig::Store-backed) ───────────────────────────────
@@ -169,11 +237,12 @@ P_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
 // ── Decorations.Performance (PhosphorConfig::Store-backed) ──────────────────
-// These bound WHEN the decoration chain animates, not how much work it does per
-// frame. An animated pack repaints every window carrying it on every vsync, and
-// that alone holds the GPU in its top performance state however cheap the frame
-// is — so the only lever that returns the card to its idle clocks is to stop
-// drawing when nothing needs to change.
+// Most of these bound WHEN the decoration chain animates, not how much work it
+// does per frame (the blur-scale multiplier at the end is the per-frame
+// exception). An animated pack repaints every window carrying it on every
+// vsync, and that alone holds the GPU in its top performance state however
+// cheap the frame is — so the only lever that returns the card to its idle
+// clocks is to stop drawing when nothing needs to change.
 
 P_STORE_GET(bool, decorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey, bool)
 P_STORE_SET_BOOL(setDecorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey,
@@ -187,6 +256,13 @@ P_STORE_GET(int, decorationIdleTimeoutSec, decorationsPerformanceGroup, idleTime
 P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey,
                 decorationIdleTimeoutSecChanged)
 
+// Unlike its WHEN-gating group-mates this one shrinks the per-frame work: it
+// scales the resolution every pack's buffer passes (the blur pyramid) render
+// at, relative to the pack's own declared bufferScale.
+P_STORE_GET(double, decorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey, double)
+P_STORE_SET_DOUBLE(setDecorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey,
+                   decorationBlurScaleMultiplierChanged)
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads
@@ -194,6 +270,9 @@ P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTi
 
 P_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
 P_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
+
+P_STORE_GET(QString, gpuDevice, renderingGroup, gpuKey, QString)
+P_STORE_SET_STRING(setGpuDevice, renderingGroup, gpuKey, gpuDeviceChanged)
 
 // Shaders.Audio (ISettings) — the audio-spectrum analysis parameter set.
 // enableAudioVisualizer / audioSpectrumBarCount live with the other

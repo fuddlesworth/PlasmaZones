@@ -6,15 +6,18 @@
         <file alias="RenderNodeOverlay.qml">../ui/RenderNodeOverlay.qml</file>
         <file alias="ZoneItem.qml">../ui/ZoneItem.qml</file>
         <file alias="ZoneSelectorContent.qml">../ui/ZoneSelectorContent.qml</file>
+        <file alias="ZoneSelectorStripCard.qml">../ui/ZoneSelectorStripCard.qml</file>
         <file alias="OsdDismissable.qml">../ui/OsdDismissable.qml</file>
         <file alias="LayoutOsdContent.qml">../ui/LayoutOsdContent.qml</file>
         <file alias="SurfaceDecoration.qml">../ui/SurfaceDecoration.qml</file>
         <file alias="NavigationOsdContent.qml">../ui/NavigationOsdContent.qml</file>
         <file alias="PassiveOverlayShell.qml">../ui/PassiveOverlayShell.qml</file>
+        <file alias="PassiveOverlayModalSlots.qml">../ui/PassiveOverlayModalSlots.qml</file>
         <file alias="SnapAssistContent.qml">../ui/SnapAssistContent.qml</file>
         <file alias="LayoutPickerContent.qml">../ui/LayoutPickerContent.qml</file>
         <file alias="CheatsheetContent.qml">../ui/CheatsheetContent.qml</file>
         <file alias="PopupCardTitle.qml">../ui/PopupCardTitle.qml</file>
         <file alias="KeyChip.qml">../ui/KeyChip.qml</file>
+        <file alias="ScrollDropIndicatorContent.qml">../ui/ScrollDropIndicatorContent.qml</file>
     </qresource>
 </RCC>

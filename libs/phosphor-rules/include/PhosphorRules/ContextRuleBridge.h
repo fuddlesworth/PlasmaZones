@@ -51,7 +51,7 @@ namespace ContextRuleBridge {
 /// precedence value: callers seed new context rules in this band and the
 /// Settings list-order renormalizer / runtime upsert derive concrete values
 /// from it. Kept numerically in sync with `RuleTemplates::kContextBandBase`
-/// (src/settings/ruletemplates.h), which the settings tree defines separately.
+/// (src/settings/rules/ruletemplates.h), which the settings tree defines separately.
 inline constexpr int kContextBandBase = 300;
 
 /**
@@ -232,9 +232,10 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
 /**
  * @brief Build the lossless action list for a migrated zone Assignment.
  *
- * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores both
- * `snappingLayout` and `tilingAlgorithm` so flipping mode never drops the
- * other field. The migrated rule therefore carries up to **three** actions:
+ * The `AssignmentEntry` invariant is mode-toggle losslessness: it stores
+ * `snappingLayout`, `tilingAlgorithm` and `scrollingTemplateLayout` so
+ * flipping mode never drops the other fields. The migrated rule therefore
+ * carries up to **four** actions:
  *
  *   - `SetEngineMode` — always (the mode token, e.g. "snapping" / "autotile"
  *     / "scrolling").
@@ -242,10 +243,13 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  *     action descriptor rejects an empty `layoutId`).
  *   - `SetTilingAlgorithm` — only when @p tilingAlgorithm is non-empty (the
  *     descriptor rejects an empty `algorithm`).
+ *   - `SetScrollingTemplate` — only when @p scrollingTemplate is non-empty
+ *     (same `layoutId` wire KEY as `SetSnappingLayout`, but a native
+ *     scrolling-template uuid — the two id namespaces are disjoint).
  *
- * A mode-only entry (both layout fields empty — the KCM "autotile, default
- * algorithm" shape) yields a single `SetEngineMode` action; the mode token
- * alone preserves the user's intent.
+ * A mode-only entry (all three payload fields empty — the KCM "autotile,
+ * default algorithm" shape) yields a single `SetEngineMode` action; the mode
+ * token alone preserves the user's intent.
  *
  * Open-vocabulary by design: the `SetEngineMode` descriptor's validator
  * checks only that `modeToken` is non-empty — vocabulary validation lives
@@ -260,10 +264,10 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * returns `nullopt` for unknown tokens and leaves the entry on its
  * Snapping default. Every token the validator accepts — today
  * `snapping`/`autotile`/`scrolling`, see `engineModeOptions()` in
- * `ruleaction.cpp` — round-trips end-to-end through the consumer.
+ * `ruleaction_builtins_p.h` — round-trips end-to-end through the consumer.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
-                                               const QString& tilingAlgorithm)
+                                               const QString& tilingAlgorithm, const QString& scrollingTemplate)
 {
     QList<RuleAction> actions;
 
@@ -284,21 +288,33 @@ inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const Q
         tilingAction.params.insert(ActionParam::Algorithm, tilingAlgorithm);
         actions.append(tilingAction);
     }
+    if (!scrollingTemplate.isEmpty()) {
+        RuleAction templateAction;
+        templateAction.type = QString(ActionType::SetScrollingTemplate);
+        templateAction.params.insert(ActionParam::LayoutId, scrollingTemplate);
+        actions.append(templateAction);
+    }
     return actions;
 }
 
 /**
  * @brief Build a complete migrated zone-Assignment `Rule`.
  *
- * The match is context-only; the actions are the lossless three-action set.
+ * The match is context-only; the actions are the lossless assignment set
+ * from @ref makeAssignmentActions.
  * @p name is a human-readable label for the settings UI. @p modeToken is the
  * wire string for the assignment's mode (see `makeAssignmentActions` for
  * vocabulary contract). @p priority is the rule's precedence verbatim — the
  * caller owns it (highest priority wins per slot, ties by list order).
+ * @p scrollingTemplate defers entirely to @ref makeAssignmentActions, which
+ * emits the `SetScrollingTemplate` action only for a non-empty id. It sits
+ * after @p priority rather than beside the other two payload fields so the
+ * pre-scrolling parameter order stays put and every call site only appends an
+ * argument.
  */
 inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
                                const QString& activity, const QString& modeToken, const QString& snappingLayout,
-                               const QString& tilingAlgorithm, int priority)
+                               const QString& tilingAlgorithm, int priority, const QString& scrollingTemplate)
 {
     Rule rule;
     // Deterministic id derived from the source context identity — identical
@@ -308,7 +324,7 @@ inline Rule makeAssignmentRule(const QString& name, const QString& screenId, int
     rule.enabled = true;
     rule.priority = priority;
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
-    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
+    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm, scrollingTemplate);
     return rule;
 }
 
@@ -463,11 +479,11 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         // Any leaf that is not a ScreenId / VirtualDesktop / Activity equality
         // leaf is ignored here — a flat mixed rule still yields its context
         // projection, per the contract above. This includes the Mode,
-        // TiledWindowCount, ScreenOrientation and ActiveLayout leaves: all four
-        // ARE context fields, but none is one of the three decomposed dimensions,
-        // so they are deliberately projected out of contextDimsOf. Callers that
-        // must not lose them gate on pinsNonDimensionContextField first —
-        // contextAxisFor already does.
+        // TiledWindowCount, ScreenOrientation, ActiveLayout and ColorScheme
+        // leaves: all five ARE context fields, but none is one of the three
+        // decomposed dimensions, so they are deliberately projected out of
+        // contextDimsOf. Callers that must not lose them gate on
+        // pinsNonDimensionContextField first — contextAxisFor already does.
     }
     // If no context-equality leaf was matched, the input was either a
     // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or
@@ -488,8 +504,8 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
 inline constexpr Field kContextDimensionFields[] = {Field::ScreenId, Field::VirtualDesktop, Field::Activity};
 
 /// True if @p match pins a context field that is NOT one of the three cascade
-/// dimensions — today @c Mode, @c TiledWindowCount, @c ScreenOrientation and
-/// @c ActiveLayout. Such a match is more specific than the
+/// dimensions — today @c Mode, @c TiledWindowCount, @c ScreenOrientation,
+/// @c ActiveLayout and @c ColorScheme. Such a match is more specific than the
 /// (screen, desktop, activity) shape @c makeContextMatch emits, so it must not
 /// be treated as an exact-context assignment: the batch reader/writers and
 /// exact-rule upsert rebuild the context base from the decoded dims alone, which
@@ -535,7 +551,7 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
         return ContextAxis::CatchAll;
     }
     // A match that ALSO pins a non-dimension context field (Mode /
-    // TiledWindowCount / ScreenOrientation / ActiveLayout) is not the
+    // TiledWindowCount / ScreenOrientation / ActiveLayout / ColorScheme) is not the
     // (screen, desktop, activity) shape makeContextMatch emits, so it is not an
     // exact-context assignment; treat it as CatchAll-axis so the batch
     // projections skip it. It still resolves normally through the evaluator,
@@ -546,7 +562,14 @@ inline ContextAxis contextAxisFor(const MatchExpression& match)
     QString screenId;
     int virtualDesktop = 0;
     QString activity;
-    contextDimsOf(match, screenId, virtualDesktop, activity);
+    // The decode result is honoured, matching matchIsExactContext below. A
+    // failed decode already fails safe (the outputs stay at ("", 0, "") and
+    // contextAxisOf maps an empty screenId to CatchAll), so this is currently
+    // equivalent — but relying on that couples this classifier to another
+    // function's zero-initialisation, which the next refactor need not keep.
+    if (!contextDimsOf(match, screenId, virtualDesktop, activity)) {
+        return ContextAxis::CatchAll;
+    }
     return contextAxisOf(screenId, virtualDesktop, activity);
 }
 
@@ -615,7 +638,7 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
         return false;
     }
     // A pinned non-dimension context leaf (Mode / TiledWindowCount /
-    // ScreenOrientation / ActiveLayout) means the match is more specific than the
+    // ScreenOrientation / ActiveLayout / ColorScheme) means the match is more specific than the
     // bare (screen, desktop, activity) shape, so it is NOT exact — see
     // contextAxisFor for why dropping it here would lose the leaf on rebuild.
     if (pinsNonDimensionContextField(match)) {
@@ -624,7 +647,13 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
     QString s;
     int d = 0;
     QString a;
-    contextDimsOf(match, s, d, a);
+    // Honour the decode verdict. On failure contextDimsOf resets the outputs to
+    // ("", 0, ""), which is exactly the global catch-all tuple — so discarding
+    // the bool would report a malformed match as the exact catch-all context and
+    // let a caller rebuild it as one, dropping whatever it really pinned.
+    if (!contextDimsOf(match, s, d, a)) {
+        return false;
+    }
     return s == screenId && d == virtualDesktop && a == activity;
 }
 
@@ -641,7 +670,7 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
  *
  * Open-vocabulary within the bridge itself. At persistence boundaries the
  * DisableEngine action descriptor's load-time validator already enforces
- * the closed `engineModeOptions()` set (see ruleaction.cpp), so a rule
+ * the closed `engineModeOptions()` set (see ruleaction_builtins_p.h), so a rule
  * that survived load has a vocabulary-valid token. The bridge keeps the
  * verbatim contract so an in-memory caller building a rule programmatically
  * — or a test pinning the bridge's unrecognised-token behaviour — can

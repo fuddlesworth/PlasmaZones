@@ -3,21 +3,16 @@
 
 #pragma once
 
-#include <QColor>
-#include <QHash>
-#include <QRectF>
-#include <QJsonObject>
-#include <QSet>
-#include <QString>
-#include <QStringList>
-#include <QUuid>
-#include <QVariantList>
-#include <QVariantMap>
-#include <QtCore/qnamespace.h>
-
+// NOTE ON THE INCLUDE SET: this is the FIRST link of the ConfigDefaults
+// inheritance chain, and the links below it (gaps → limits → shaders →
+// screens → scrolling → scrolling_behavior → scrolling_shortcuts →
+// configdefaults.h) include only their parent — so
+// this header deliberately hosts the Qt and project includes the WHOLE chain
+// consumes, not just what its own 300 lines read. Trimming an include that
+// looks unused here breaks a downstream link.
 #include "core/types/constants.h"
 #include "core/types/enums.h"
-#include "configkeys.h"
+#include "configkeys_scrolling.h"
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
@@ -33,6 +28,22 @@
 // window-manager border/title-bar APPEARANCE defaults live in the
 // config-backed window-appearance settings above, not in this tree's default.
 #include <PhosphorSurface/DecorationProfileTree.h>
+// Zone-overlay colour/opacity/border defaults this header's own accessors
+// delegate to. Explicit rather than transitive (the chain also reaches it
+// through AssignmentEntry.h) — same policy as configdefaults_scrolling.h.
+#include <PhosphorZones/ZoneDefaults.h>
+
+#include <QColor>
+#include <QHash>
+#include <QRectF>
+#include <QJsonObject>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+#include <QUuid>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QtCore/qnamespace.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -44,32 +55,47 @@ namespace PlasmaZones {
 // Zone-overlay + window-decoration appearance default accessors. Inherited by
 // ConfigDefaultsGaps and ultimately ConfigDefaults, so every ConfigDefaults::foo()
 // call site resolves these static members through inheritance.
-class ConfigDefaultsAppearance : public ConfigKeys
+class ConfigDefaultsAppearance : public ConfigKeysScrolling
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone Overlay (Snapping.Zones.*) Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool useSystemColors()
-    {
-        return true;
-    }
-    static QColor highlightColor()
+    // The four zone-colour CONFIG keys are theme-fallback strings whose
+    // schema default is the empty sentinel ("follow the system palette",
+    // see themeFallbackColorDefault below). These QColor constants are NOT
+    // those defaults — the *Fallback* names say so: they are the resolution
+    // fallbacks Settings::resolvedSystemColor serves when no GUI application
+    // (and therefore no palette) exists, and the shipped constants tests and
+    // headless consumers compare against. Retuning one moves only that
+    // no-palette fallback, never the shipped default.
+    static QColor highlightFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
-    static QColor inactiveColor()
+    static QColor inactiveFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
-    static QColor borderColor()
+    static QColor borderFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::BorderColor;
     }
-    static QColor labelFontColor()
+    static QColor labelFontFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::LabelFontColor;
+    }
+    // The stored default for the FOUR zone colour keys: the empty
+    // follow-the-system sentinel. Routed through an accessor (not an inline
+    // QString() at each schema site) per the ConfigDefaults-for-all-defaults
+    // rule. The other theme-fallback keys (the Windows border/tint trio
+    // below and the scrolling five) reach the same empty sentinel through
+    // their own domain accessors, which double as their ISettings and stub
+    // defaults — one value, two accessor families.
+    static QString themeFallbackColorDefault()
+    {
+        return QString();
     }
     static double activeOpacity()
     {
@@ -166,9 +192,10 @@ public:
     // Tiled/snapped window border + title bar defaults. Distinct from the
     // zone-overlay border constants above: these come from the shared
     // PhosphorCompositor::DecorationDefaults so the daemon and the compositor
-    // plugin never drift. Border colours default to the "accent" sentinel
-    // (resolved to the system accent colour at render time); the border/title-bar
-    // scope defaults to "tiled" (apply only to tiled/snapped windows).
+    // plugin never drift. Border colours default to the EMPTY theme-fallback
+    // sentinel (resolved by the daemon's D-Bus getter against the zone
+    // highlight / inactive colours); the border/title-bar scope defaults to
+    // "tiled" (apply only to tiled/snapped windows).
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool showWindowBorder()
@@ -218,25 +245,23 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
     }
-    // The "accent" sentinel (PhosphorRules::BorderColorToken::Accent) — the effect
-    // resolves it to the live system accent / inactive colour at paint time. Kept
-    // as a bare literal here rather than pulling PhosphorRules into this
-    // widely-included header; the inactive default mirrors the active one.
+    // Theme-fallback keys, like every other follow-the-system colour: EMPTY
+    // means "follow the system accent" (the zone highlight / inactive colour),
+    // resolved by the DAEMON before the value crosses D-Bus, so the effect's
+    // empty-reply skew guard keeps meaning skew and only ever sees concrete
+    // colours from config. The rules vocabulary is separate: rule actions
+    // still carry PhosphorRules::BorderColorToken::Accent, because a rule
+    // param's empty slot already means "unset". The inactive accessor
+    // forwards to the active one, but only the STORED sentinel mirrors: the
+    // two resolve against different targets (active → zone highlight,
+    // inactive → zone inactive), same as the pre-v6 accent token did.
     static QString windowBorderColorActive()
     {
-        return QStringLiteral("accent");
+        return QString();
     }
     static QString windowBorderColorInactive()
     {
         return windowBorderColorActive();
-    }
-    // Concrete opaque colour the settings app seeds into config when the user
-    // leaves "follow the system accent" mode (KDE accent blue, #AARRGGBB). Lives
-    // here so the settings page's fallback stays single-sourced with the config
-    // layer rather than hardcoded in QML.
-    static QString windowBorderColorAccentFallbackHex()
-    {
-        return QStringLiteral("#FF3DAEE9");
     }
     // Fresh-install "Apply to" scope for both the border and the title bar. The
     // token set lives in PhosphorCompositor::WindowAppearanceScope (shared with the
@@ -256,7 +281,8 @@ public:
     // packs), suppressed wholesale by any user pack. Defaults mirror the
     // pack's own parameter defaults (full opacity, no tint) so enabling the
     // toggle changes nothing until the user moves a slider; the tint colour
-    // defaults to the accent sentinel like the border colours.
+    // defaults to the empty follow-the-system sentinel like the border
+    // colours (resolved against the zone highlight).
     static bool showWindowOpacityTint()
     {
         return false;

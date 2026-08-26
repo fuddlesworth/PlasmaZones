@@ -21,6 +21,12 @@ RowLayout {
     property real from: 0
     property real to: 100
     property real stepSize: 1
+    //* @brief Spacing between drawn tick marks, in the slider's own units.
+    //* 0 leaves the style's default (a tick per step), which is unreadable
+    //* once the step is fine-grained; negative disables tick marks. The
+    //* style hint is an int, so a slider that wants sparse ticks over a
+    //* fine step has to work in whole units (percent rather than fraction).
+    property int tickMarkStepSize: 0
     property real value: 0
     property string valueSuffix: "%"
     property int sliderWidth: Kirigami.Units.gridUnit * 16
@@ -56,6 +62,7 @@ RowLayout {
         id: slider
 
         Accessible.name: root.accessibleName
+        Kirigami.StyleHints.tickMarkStepSize: root.tickMarkStepSize
         Layout.preferredWidth: root.sliderWidth
         from: root.from
         to: root.to
@@ -73,5 +80,8 @@ RowLayout {
     Label {
         text: root.formatValue ? root.formatValue(slider.value) : Math.round(slider.value) + root.valueSuffix
         Layout.preferredWidth: root.labelWidth
+        // The unit suffixes are translatable; a locale whose rendering is
+        // wider than the fixed label width must elide rather than overflow.
+        elide: Text.ElideRight
     }
 }

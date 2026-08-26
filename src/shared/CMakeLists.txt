@@ -42,11 +42,13 @@ qt_add_qml_module(plasmazones_shared_qml
         sharedqmlplugin.cpp
     QML_FILES
         AspectRatioBadge.qml
+        AxisChevron.qml
         CapabilityBadgeRow.qml
         CategoryBadge.qml
         LayoutCard.qml
         PopupFrame.qml
         ShaderCompileErrorBanner.qml
+        StripEmptyState.qml
         ParameterEditor.qml
         ShaderParamsEditor.qml
         ParameterRow.qml

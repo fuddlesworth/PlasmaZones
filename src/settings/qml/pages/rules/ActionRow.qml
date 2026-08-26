@@ -3,9 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
 
@@ -78,37 +76,52 @@ ColumnLayout {
         }
         return parts.join("\n");
     }
+    /// The animation-shader effect id whose schema the row should resolve, or
+    /// "" when this action is not an animation-shader override or has no effect
+    /// picked yet.
+    ///
+    /// A `string` property so its change signal fires only when the VALUE
+    /// changes, for the same reason as `_algorithmParamAlgoId` below:
+    /// `_withParam` replaces the whole `row.action` object on every uniform
+    /// write, so a schema binding reading `row.action.effectId` directly
+    /// re-fires on each write. `shaderParameters()` builds a fresh QVariantList
+    /// per call, so that hands ShaderParamsEditor a new array identity on every
+    /// slider tick, which resets its Repeater and destroys the delegate holding
+    /// the drag. Routing through this id keeps the schema stable for the whole
+    /// edit and re-resolves it only when the chosen effect actually changes.
+    readonly property string _animationShaderEffectId: (row.action.type === "overrideAnimationShader" && row.action.effectId) ? row.action.effectId : ""
+    /// The overlay-shader equivalent, value-stable for the same reason.
+    readonly property string _overlayShaderEffectId: (row.action.type === "overrideOverlayShader" && row.action.effectId) ? row.action.effectId : ""
     /// Shader-uniform schema for the action's currently-selected effect. Empty
     /// when the action is not a shader-override, no effect is set, or the
     /// effect declares no parameters. Drives the inline shader editor below
-    /// the row.
+    /// the row. Depends only on `_animationShaderEffectId`, not `row.action`.
     readonly property var _shaderParamSchema: {
-        if (row.action.type !== "overrideAnimationShader")
-            return [];
-
-        var effectId = row.action.effectId || "";
+        var effectId = row._animationShaderEffectId;
         if (effectId.length === 0)
             return [];
 
-        var controller = row.appSettings ? row.appSettings.animationsController : null;
-        return controller ? controller.shaderParameters(effectId) : [];
+        // Named for the registry it comes from: a bare `controller` here shadows
+        // the row's own required `controller` property (the RuleController),
+        // which is a different object entirely.
+        var animationsController = row.appSettings ? row.appSettings.animationsController : null;
+        return animationsController ? animationsController.shaderParameters(effectId) : [];
     }
     /// Shader-uniform schema for OverrideOverlayShader — same shape as
     /// `_shaderParamSchema` but sourced from the overlay/snapping shader
     /// registry (the catalog entry's `parameters`), not the animation one.
+    /// Depends only on `_overlayShaderEffectId`, not `row.action`.
     readonly property var _overlayShaderParamSchema: {
-        if (row.action.type !== "overrideOverlayShader")
-            return [];
-
-        var effectId = row.action.effectId || "";
+        var effectId = row._overlayShaderEffectId;
         if (effectId.length === 0)
             return [];
 
-        var controller = row.appSettings ? row.appSettings.snappingShadersPage : null;
-        if (!controller)
+        // Named for its registry, for the same shadowing reason as above.
+        var overlayShadersController = row.appSettings ? row.appSettings.snappingShadersPage : null;
+        if (!overlayShadersController)
             return [];
 
-        var effects = controller.availableShaderEffects() || [];
+        var effects = overlayShadersController.availableShaderEffects() || [];
         for (var i = 0; i < effects.length; ++i) {
             if (effects[i].id === effectId)
                 return effects[i].parameters || [];
@@ -118,10 +131,17 @@ ColumnLayout {
     /// The active shader-uniform schema for whichever shader-override action is
     /// being edited (animation or overlay) — drives the inline
     /// ShaderParamsEditor below the row.
+    ///
+    /// Selects on `_shaderActionType` rather than `row.action.type` so the last
+    /// hop is value-stable too. A `var` property activates its change signal on
+    /// every write regardless of equality, so reading `row.action` here would
+    /// re-publish the schema on each uniform write even though both sources
+    /// above are now stable.
+    readonly property string _shaderActionType: (row.action.type === "overrideAnimationShader" || row.action.type === "overrideOverlayShader") ? row.action.type : ""
     readonly property var _activeShaderParamSchema: {
-        if (row.action.type === "overrideAnimationShader")
+        if (row._shaderActionType === "overrideAnimationShader")
             return row._shaderParamSchema;
-        if (row.action.type === "overrideOverlayShader")
+        if (row._shaderActionType === "overrideOverlayShader")
             return row._overlayShaderParamSchema;
         return [];
     }
@@ -131,7 +151,7 @@ ColumnLayout {
     /// write, so a binding reading `row.action.algorithm` directly would re-fire on
     /// each write; routing the schema through this value-stable id keeps the params
     /// editor from rebuilding its sliders mid-drag (matching the shader editor,
-    /// whose schema binding returns a cached-identity array).
+    /// whose schema routes through `_animationShaderEffectId` for the same reason).
     readonly property string _algorithmParamAlgoId: (row.action.type === "setAlgorithmParam" && row.action.algorithm) ? row.action.algorithm : ""
     /// The custom-parameter schema for the SetAlgorithmParam action's currently
     /// selected algorithm — drives the inline algorithm-params editor below the
@@ -209,6 +229,12 @@ ColumnLayout {
     // keys once here keeps the two halves from drifting onto different literals.
     readonly property string _decorationChainKey: "chain"
     readonly property string _decorationParamsKey: "params"
+    // The SnapToZone action payload has two target lists, ordinals under
+    // "zones" and names under "zoneNames" (PhosphorRules::ActionParam). Each
+    // editor's empty guard has to read the OTHER list to know whether clearing
+    // its own still leaves a target, so both keys are named once here.
+    readonly property string _zoneOrdinalsKey: "zones"
+    readonly property string _zoneNamesKey: "zoneNames"
     // Param-editor Components — one per param `kind`, keyed off `parent.modelData`
     // (the hosting Loader's descriptor). They live in ActionParamEditors.qml
     // (instantiated below as `paramEditors`) so this file stays under the
@@ -217,17 +243,6 @@ ColumnLayout {
     // read `row.*` for state through the `row: row` handle.
     property ActionParamEditors paramEditors: ActionParamEditors {
         row: row
-    }
-
-    /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
-    /// the border-colour validator accepts and the consumer parses back via
-    /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
-    function _toHexArgb(c) {
-        function h(v) {
-            var s = Math.round(v * 255).toString(16);
-            return s.length < 2 ? "0" + s : s;
-        }
-        return "#" + h(c.a) + h(c.r) + h(c.g) + h(c.b);
     }
 
     // `actionEdited`, not `actionChanged`, because `property var action`
@@ -271,8 +286,18 @@ ColumnLayout {
             // key AND the kind — anything looser risks slotting a value
             // typed for one picker into a slot for another (e.g. dropping
             // a layoutId into a tilingAlgorithm field).
-            if (oldKindByKey[newParam.key] === newParam.kind && row.action[newParam.key] !== undefined)
-                payload[newParam.key] = row.action[newParam.key];
+            if (oldKindByKey[newParam.key] !== newParam.kind || row.action[newParam.key] === undefined)
+                continue;
+            // Colour params share key+kind across the accent-capable trio
+            // and the plain-hex actions, but the "accent" sentinel (the
+            // frozen BorderColorToken wire spelling) is only valid where the
+            // descriptor says so — carrying it into a hasHexColor action
+            // would produce a payload its validator rejects while the editor
+            // shows a healthy "Accent" state with no Reset to escape it.
+            // Keep the new type's seeded hex instead.
+            if (newParam.kind === "color" && newParam.acceptsAccent !== true && row.action[newParam.key] === "accent")
+                continue;
+            payload[newParam.key] = row.action[newParam.key];
         }
         return payload;
     }
@@ -324,8 +349,11 @@ ColumnLayout {
 
         // Categorized action-type picker — the shared cascading category-menu
         // button (PZCommon.CategoryMenuButton). Grouped into Gaps / Engine /
-        // Snapping / Tiling / Overlay / Animation / Appearance / Window, with
-        // Tiling nesting Algorithm and Behavior submenus. Context-domain actions
+        // Snapping / Tiling / Scrolling / Overlay / Window. Tiling nests
+        // Algorithm and Behavior; Scrolling nests Tab indicator and Drop
+        // indicator; Window nests Placement, Scrolling, Appearance, Animation,
+        // Behavior, Tab indicator and Drop indicator, and holds no flat items
+        // of its own. Context-domain actions
         // that can't fire against a window-property match render dimmed with a
         // warning tooltip (the picker's `dimmed` item flag); the per-row chip
         // below + the sheet's InlineMessage reinforce it for an action that's
@@ -333,8 +361,10 @@ ColumnLayout {
         PZCommon.CategoryMenuButton {
             id: typeCombo
 
-            // Wide enough for the longest action label ("Override animation
-            // duration") so the closed picker never elides its current value.
+            // Sized for the common labels. The two per-window drop-indicator
+            // labels ("Set the drop indicator border color when dragging this
+            // window" and its fill sibling) are much longer and do elide;
+            // widening the row for them would cost more than it buys.
             Layout.preferredWidth: Kirigami.Units.gridUnit * 13
             // Map the action metadata to the picker's item shape. A context-
             // domain action against a non-context-only match never fires, so
@@ -370,6 +400,33 @@ ColumnLayout {
             }
         }
 
+        // Info icon — per-action hover help, the WHAT-side mirror of the WHEN
+        // leaf editor's field info icon (MatchLeafEditor's fieldInfoIcon).
+        // The description comes off the actionTypeOptions entry for the
+        // row's current type; an unknown / legacy type yields no text, so
+        // the icon simply hides rather than showing an empty bubble.
+        Kirigami.Icon {
+            // Off the row's own resolved descriptor rather than a second
+            // hand-rolled scan of actionTypeOptions — `_typeEntry` already is
+            // that lookup, and every other consumer on the row reads it.
+            readonly property string _actionDesc: row._typeEntry !== undefined ? (row._typeEntry.description || "") : ""
+
+            visible: _actionDesc !== ""
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-information"
+            color: Kirigami.Theme.highlightColor
+            Accessible.name: _actionDesc
+            ToolTip.text: _actionDesc
+            ToolTip.visible: actionInfoHover.hovered && _actionDesc !== ""
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+
+            HoverHandler {
+                id: actionInfoHover
+            }
+        }
+
         // Per-row warning chip — surfaces when the action's current type is
         // incompatible with the rule's match. The full message lives in the
         // RuleEditorSheet's InlineMessage (which lists every issue across
@@ -401,6 +458,14 @@ ColumnLayout {
             animationsController: row.appSettings ? row.appSettings.animationsController : null
         }
 
+        // "This event is not driven per window" chip — for a rule that still
+        // names an event the picker no longer offers. Same shared-component
+        // shape as the conflict chip above.
+        InertAnimationEventChip {
+            action: row.action
+            animationsController: row.appSettings ? row.appSettings.animationsController : null
+        }
+
         // One editor per parameter — the shape comes from the param `kind`,
         // never an action-type ladder. The param-editor Components live on the
         // `paramEditors` handle (ActionParamEditors.qml, instantiated above) so
@@ -426,6 +491,9 @@ ColumnLayout {
 
                     if (modelData.kind === "snappingLayout")
                         return paramEditors._snappingLayoutEditor;
+
+                    if (modelData.kind === "scrollingTemplate")
+                        return paramEditors._scrollingTemplateEditor;
 
                     if (modelData.kind === "tilingAlgorithm")
                         return paramEditors._tilingAlgorithmEditor;
@@ -453,6 +521,9 @@ ColumnLayout {
 
                     if (modelData.kind === "zoneOrdinals")
                         return paramEditors._zoneOrdinalsEditor;
+
+                    if (modelData.kind === "zoneNames")
+                        return paramEditors._zoneNamesEditor;
 
                     if (modelData.kind === "screenId")
                         return paramEditors._screenIdEditor;

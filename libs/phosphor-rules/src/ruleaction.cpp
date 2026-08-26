@@ -7,7 +7,6 @@
 #include <QJsonValue>
 
 #include "rulelogging.h"
-#include "ruleaction_builtins_p.h"
 
 #include <algorithm>
 
@@ -202,13 +201,50 @@ QStringList ActionRegistry::typesWithTag(QLatin1StringView tag) const
     return result;
 }
 
+QString ActionRegistry::paramKeyOfKind(const QString& type, QLatin1StringView kind) const
+{
+    const auto it = m_descriptors.constFind(type);
+    if (it == m_descriptors.constEnd()) {
+        return {};
+    }
+    // Compared against QLatin1StringView directly, the same non-allocating
+    // shape hasTag above uses.
+    for (const ParamSchema& param : it->params) {
+        if (param.kind == kind) {
+            return param.key;
+        }
+    }
+    return {};
+}
+
 void ActionRegistry::registerBuiltins()
 {
-    // Split across two TUs for file-size; the registration order (engine half
-    // first, then appearance half) is load-bearing for the descriptors'
-    // displayOrder / category grouping, so the call order here is fixed.
+    // Split across three TUs for file-size; the registration order (engine
+    // half, then appearance half, then the indicator families) is load-bearing
+    // for the descriptors' displayOrder / category grouping, so the call order
+    // here is fixed.
     registerBuiltinsEngine();
     registerBuiltinsAppearance();
+    registerBuiltinsIndicators();
+}
+
+bool ruleHasLiveEffectAction(const QList<RuleAction>& actions,
+                             const std::function<bool(const QString& event)>& eventIsLive)
+{
+    const ActionRegistry& registry = ActionRegistry::instance();
+    for (const RuleAction& action : actions) {
+        if (!registry.hasTag(action.type, Tag::Effect)) {
+            continue;
+        }
+        const QString eventKey = registry.paramKeyOfKind(action.type, ParamKind::AnimationEvent);
+        if (eventKey.isEmpty() || !eventIsLive) {
+            return true;
+        }
+        if (eventIsLive(action.params.value(eventKey).toString())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace PhosphorRules

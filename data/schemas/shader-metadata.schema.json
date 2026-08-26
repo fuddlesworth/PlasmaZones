@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "urn:plasmazones:schema:shader-metadata",
     "title": "PlasmaZones Wallpaper Shader Metadata",
-    "description": "metadata.json for a bundled or user wallpaper-shader pack. Core identity and the parameter contract are enforced. Optional multipass, buffer, and wallpaper rendering keys, plus descriptive metadata (category, description, author, version), are type-checked so a wrong-typed value is rejected at the gate rather than silently swallowed by a typed accessor at load.",
+    "description": "metadata.json for a bundled or user wallpaper-shader pack. Core identity and the parameter contract are enforced. Optional multipass, buffer (including halfFloatBuffers), and wallpaper rendering keys, plus descriptive metadata (category, description, author, version), are type-checked so a wrong-typed value is rejected at the gate rather than silently swallowed by a typed accessor at load.",
     "type": "object",
     "required": ["id", "name", "fragmentShader"],
     "properties": {
@@ -20,7 +20,7 @@
         },
         "presets": {
             "type": "object",
-            "description": "Named parameter presets. Each value is a map of parameter id to value; image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
+            "description": "Named parameter presets. Each value is a map of parameter id to value. Image-typed values are pack-declared paths and are containment-checked at load like an image param's default.",
             "additionalProperties": { "type": "object" }
         },
         "multipass": { "type": "boolean" },
@@ -33,6 +33,7 @@
         "bufferFilters": { "type": "array", "items": { "type": "string" } },
         "bufferFeedback": { "type": "boolean" },
         "depthBuffer": { "type": "boolean" },
+        "halfFloatBuffers": { "type": "boolean" },
         "wallpaper": { "type": "boolean" }
     },
     "definitions": {
@@ -58,7 +59,7 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 31,
-                    "description": "Explicit UBO lane. 31 is the scalar-pool ceiling; the color pool tops out at 15 and the image pool at 3, which the pack validator lints per type."
+                    "description": "Explicit UBO lane. 31 is the scalar-pool ceiling, and the color pool tops out at 15 with the image pool at 3, which the pack validator lints per type."
                 }
             }
         }

@@ -16,7 +16,9 @@ PhosphorUi.AboutPageShell {
     appName: i18n("PlasmaZones")
     appIcon: "plasmazones"
     appVersion: Qt.application.version.length > 0 ? i18n("Version %1", Qt.application.version) : i18n("Version unknown")
-    description: i18n("A window tiling and zone management tool for Wayland compositors. Organize your desktop with customizable zones, automatic tiling layouts, and keyboard-driven window placement.")
+    description: i18n("Window snapping, tiling and scrolling for Wayland compositors. Snap windows into zones you draw, let an algorithm tile them for you, or scroll them along an endless strip. Every monitor picks its own mode.")
+    // Not translated: a copyright notice is a legal attribution, not UI prose.
+    copyright: "© 2026 fuddlesworth"
     license: i18n("PlasmaZones is free software licensed under the GNU General Public License version 3 or later (GPL-3.0-or-later).")
     homepageUrl: "https://github.com/fuddlesworth/PlasmaZones"
     // ── Extras: Links / Credits cards rendered below the homepage URL ──
@@ -64,12 +66,13 @@ PhosphorUi.AboutPageShell {
                     horizontalPadding: Kirigami.Units.largeSpacing
                     Accessible.name: i18n("What's New")
                     onClicked: {
-                        // Defensive check: this AboutPage is also used by the
-                        // standalone phosphor-control demo, which declares no
-                        // `window` id at all. `window` is an ID lookup, not a
-                        // context property, so a bare `window && …` THROWS a
-                        // ReferenceError there before && can short-circuit;
-                        // only the typeof form degrades to false.
+                        // `window` resolves to Main.qml's root id, so this page
+                        // only has it when mounted inside the settings app's
+                        // chrome. The typeof form is required rather than
+                        // stylistic: `window` is an ID lookup, not a context
+                        // property, so a bare `window && …` THROWS a
+                        // ReferenceError wherever the id is absent, before &&
+                        // can short-circuit. Only typeof degrades to false.
                         if (typeof window !== "undefined" && window && window.showWhatsNew)
                             window.showWhatsNew();
                     }
@@ -86,6 +89,10 @@ PhosphorUi.AboutPageShell {
                         Label {
                             text: i18n("What's New")
                             Layout.fillWidth: true
+                            // Elide rather than wrap: this label is a button's
+                            // contentItem, so wrapping would grow the button
+                            // instead of fitting the text to it.
+                            elide: Text.ElideRight
                             color: Kirigami.Theme.linkColor
                         }
 
@@ -106,28 +113,42 @@ PhosphorUi.AboutPageShell {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
+                // All three wrap. SettingsCard puts its contentItem inside a
+                // `clip: true` item and binds the content width to the card, so
+                // a Label that does not wrap is truncated mid-word rather than
+                // merely overflowing. Layout.preferredWidth: 0 is paired with
+                // wrapMode the way AboutPageShell documents; here the card
+                // overrides the content width outright, so it is belt-and-braces
+                // rather than load-bearing, and it keeps this content correct if
+                // it is ever hosted somewhere without that override.
                 Label {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     text: i18n("Created by fuddlesworth")
                     font.weight: Font.DemiBold
+                    wrapMode: Text.WordWrap
                 }
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Inspired by FancyZones, extended with automatic tiling.")
+                    text: i18n("Snapping is inspired by FancyZones and scrolling by the niri compositor.")
                     opacity: 0.7
+                    wrapMode: Text.WordWrap
                 }
 
                 Label {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 0
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
                     text: i18n("Built with Qt, KDE Frameworks, and Kirigami.")
                     opacity: 0.7
+                    wrapMode: Text.WordWrap
                 }
             }
         }
@@ -158,10 +179,9 @@ PhosphorUi.AboutPageShell {
             }
             // Surface the rejection via a toast in addition to the
             // console.warn — a silent console message is invisible to
-            // the user clicking the button. Defensive truthy-check on
-            // `window` + `showToast` mirrors the AboutPage's other
-            // call sites: the standalone phosphor-control demo
-            // mounts this page without the chrome's toast.
+            // the user clicking the button. The typeof guard on
+            // `window` is the same one the What's New handler above
+            // needs, and for the same reason.
             console.warn("AboutPage.LinkButton: refusing to open non-http(s) URL:", u);
             if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(i18n("Cannot open this link"));
@@ -179,6 +199,8 @@ PhosphorUi.AboutPageShell {
             Label {
                 text: linkButton.linkText
                 Layout.fillWidth: true
+                // Elide, not wrap — see the What's New label above.
+                elide: Text.ElideRight
                 color: Kirigami.Theme.linkColor
             }
 

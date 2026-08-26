@@ -6,8 +6,8 @@
 include(GenerateExportHeader)
 
 # QTP0004: All QML files are explicitly listed in qt_add_qml_module.
-# Guarded — the policy exists only from Qt 6.8 and QT_MIN_VERSION is 6.6;
-# unguarded, a 6.6/6.7 toolchain fatal-errors on the unknown policy.
+# Guarded — the policy exists only from Qt 6.8, so a toolchain older than that
+# fatal-errors on the unknown policy if it is set unconditionally.
 # QT_KNOWN_POLICY_*, not if(POLICY ...): CMake's POLICY test only knows
 # CMP* policies and is always false for QTP*.
 if(QT_KNOWN_POLICY_QTP0004)
@@ -45,7 +45,9 @@ set(plasmazones_core_SRCS
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h
     core/types/animationshadersupportedpaths.h
+    core/types/stripselectorhittest.h
     core/types/types.h
+    core/types/zoneselectorlayout.h
     core/utils/utils.h
     core/utils/utils.cpp
     core/resolve/daemongeometryresolver.h
@@ -72,6 +74,8 @@ set(plasmazones_core_SRCS
     core/utils/unifiedlayoutlist.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
+    common/stripcardserialize.cpp
+    common/stripcardserialize.h
     common/screenidresolver.cpp
     common/screenidresolver.h
     common/layoutbundlebuilder.cpp
@@ -93,6 +97,7 @@ set(plasmazones_core_SRCS
     config/settings/loadsave.cpp
     config/settings/setters.cpp
     config/settings/perscreen.cpp
+    config/settings/perscreen_selector.cpp
     config/settings/animationprofile.cpp
     config/settings/profiletrees.cpp
     config/settings/disable.cpp
@@ -101,6 +106,7 @@ set(plasmazones_core_SRCS
     config/settings/systemcolors.cpp
     config/settings/storescalars.cpp
     config/settings/shortcuts.cpp
+    config/settings/scrolling.cpp
     config/settings.h
     config/configdefaults.cpp
     config/configbackends.h
@@ -111,6 +117,9 @@ set(plasmazones_core_SRCS
     config/perscreenresolver.cpp
     config/settingsschema.h
     config/settingsschema.cpp
+    config/settingsschema_p.h
+    config/settingsschema_scrolling.cpp
+    config/settingsschema_tiling.cpp
     config/settingsschemachoices.h
     config/settingsvaluelabels.cpp
     config/settingsvaluelabels.h
@@ -124,18 +133,19 @@ set(plasmazones_core_SRCS
     config/configmigration_v4rules.cpp
     config/configmigration_v4finalize.cpp
     config/configmigration_v5.cpp
-    config/colorimporter.cpp
-    config/colorimporter.h
-    config/updatechecker.cpp
-    config/updatechecker.h
+    config/configmigration_v6.cpp
     dbus/dbushelpers.cpp
     dbus/layoutadaptor/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
+    dbus/layoutadaptor/assignment_batch.cpp
     dbus/layoutadaptor/editor.cpp
     dbus/layoutadaptor/layoutadaptor.h
     dbus/settingsadaptor/settingsadaptor.cpp
     dbus/settingsadaptor/settingsadaptor_batch.cpp
     dbus/settingsadaptor/settingsadaptor_registry.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_snapping.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_autotile.cpp
+    dbus/settingsadaptor/settingsadaptor_registry_scrolling.cpp
     dbus/settingsadaptor/settingsadaptor.h
     dbus/shaderadaptor.cpp
     dbus/shaderadaptor.h
@@ -155,6 +165,8 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp
+    dbus/windowtrackingadaptor/rules_placement.cpp
+    dbus/windowtrackingadaptor/rules_admission.h
     dbus/windowtrackingadaptor/crossmode.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp
@@ -162,20 +174,26 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/saveload.cpp
     dbus/windowtrackingadaptor/persistenceworker.cpp
     dbus/windowtrackingadaptor/persistenceworker.h
-    dbus/windowtrackingadaptor/snaprestore.cpp
     dbus/windowtrackingadaptor/convenience.cpp
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/windowdragadaptor/windowdragadaptor.cpp
+    dbus/windowdragadaptor/selector_gate.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
+    dbus/windowdragadaptor/dragtimers.cpp
+    dbus/windowdragadaptor/dragzonespan.cpp
     dbus/windowdragadaptor/dragactivation.cpp
     dbus/windowdragadaptor/dragactivation.h
     dbus/windowdragadaptor/windowdragadaptor.h
+    dbus/scrollingadaptor/scrollingadaptor.cpp
+    dbus/scrollingadaptor/scrollingadaptor.h
     dbus/autotileadaptor/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor/autotileadaptor.h
+    dbus/tilingadaptor/tilingadaptor.cpp
+    dbus/tilingadaptor/tilingadaptor.h
     dbus/snapadaptor/snapadaptor.cpp
     dbus/snapadaptor/commit.cpp
     dbus/snapadaptor/snaprestore.cpp
@@ -202,15 +220,19 @@ generate_export_header(plasmazones_core
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
-# All four TUs below are excluded from unity build:
+# All five TUs below are excluded from unity build:
 #   configdefaults.cpp — Settings PCH includes that conflict with unity macros
-#   drag.cpp / drag_protocol.cpp / drop.cpp — forward-declaration conflicts
-#     with the d-bus-adaptor-generated extern declarations across these TUs
+#   drag.cpp / drag_protocol.cpp / drop.cpp / selector_gate.cpp —
+#     forward-declaration conflicts with the d-bus-adaptor-generated extern
+#     declarations across these TUs
 set_source_files_properties(
     config/configdefaults.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
+    dbus/windowdragadaptor/dragtimers.cpp
+    dbus/windowdragadaptor/dragzonespan.cpp
+    dbus/windowdragadaptor/selector_gate.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 # PhosphorShaders + PhosphorWayland headers are available via PUBLIC link dependencies
@@ -233,6 +255,7 @@ target_link_libraries(plasmazones_core
         PhosphorPlacement::PhosphorPlacement
         PhosphorTileEngine::PhosphorTileEngine
         PhosphorSnapEngine::PhosphorSnapEngine
+        PhosphorScrollEngine::PhosphorScrollEngine
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorProtocol::PhosphorProtocol
@@ -474,22 +497,33 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/vulkansupport.cpp
     daemon/daemon.cpp
     daemon/controllers/enginefactory.cpp
+    daemon/controllers/shortcutmanager_catalog.cpp
+    daemon/controllers/shortcutmanager_ids.h
     daemon/daemon/start.cpp
+    daemon/daemon/shortcuts_wiring.cpp
     daemon/daemon/autotile_init.cpp
+    daemon/daemon/scrolling_init.cpp
+    daemon/daemon/scrolling.cpp
     daemon/daemon/signals.cpp
     daemon/daemon/shader_warmup.cpp
     daemon/daemon/animation_profiles.cpp
     daemon/daemon/init_services.cpp
     daemon/daemon/init_adaptors.cpp
     daemon/daemon/init_engines.cpp
+    daemon/daemon/init_assignment_apply.cpp
+    daemon/daemon/init_dbus_service.cpp
     daemon/daemon/lifecycle.cpp
     daemon/daemon/idle.cpp
     daemon/daemon/navigation.cpp
     daemon/daemon/autotile.cpp
+    daemon/daemon/engine_release.cpp
     daemon/daemon/seedorderfilter.cpp
     daemon/daemon/seedorderfilter.h
     daemon/daemon/osd.cpp
+    daemon/daemon/cheatsheet.cpp
+    daemon/daemon/stripzones.h
     daemon/daemon.h
+    daemon/daemon_fwd.h
     daemon/daemon/helpers.h
     daemon/daemon/macros.h
     # Concrete daemon-side adapters bridging the existing services
@@ -508,8 +542,10 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/priming.cpp
     daemon/overlayservice/rekey.cpp
     daemon/overlayservice/cheatsheet.cpp
+    daemon/overlayservice/scrolldropindicator.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
+    daemon/overlayservice/selector_strip.cpp
     daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp
@@ -519,6 +555,9 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/internal.h
     daemon/rendering/snapassistthumbnailprovider.cpp
     daemon/rendering/snapassistthumbnailprovider.h
+    # Handle-normalisation + image:// URL composition shared by both thumbnail
+    # providers (pixel and dma-buf) so their key/URL discipline cannot drift.
+    daemon/rendering/thumbnailurlutil.h
     # Zero-copy GPU thumbnail path (PLASMAZONES_DMABUF_THUMBNAILS): imports
     # dma-bufs handed from the kwin-effect as Vulkan-backed QSGTextures.
     daemon/rendering/dmabuftextureprovider.cpp
@@ -588,7 +627,7 @@ find_package(Vulkan REQUIRED)
 target_link_libraries(plasmazonesd PRIVATE Vulkan::Vulkan)
 
 # libepoxy: EGL/GL entry points for the OpenGL-RHI dma-buf import fallback
-# (daemon/dmabufglimport.cpp). Only that TU includes epoxy headers.
+# (daemon/rendering/dmabufglimport.cpp). Only that TU includes epoxy headers.
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(Epoxy REQUIRED IMPORTED_TARGET epoxy)
 target_link_libraries(plasmazonesd PRIVATE PkgConfig::Epoxy)
@@ -626,7 +665,6 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/plasmazones.service
     DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
-
 
 # Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
 # can match the process (it compares executable path to desktop Exec).
@@ -705,6 +743,8 @@ set(plasmazones_editor_SRCS
     editor/EditorController.cpp
     editor/EditorGapsModel.cpp
     editor/EditorGapsModel.h
+    editor/EditorTemplateModel.cpp
+    editor/EditorTemplateModel.h
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h
     editor/EditorAppAdaptor.cpp
@@ -719,6 +759,7 @@ set(plasmazones_editor_SRCS
     editor/controller/zones.cpp
     editor/controller/zoneops.cpp
     editor/controller/settings.cpp
+    editor/controller/scrollingtemplate.cpp
     editor/EditorController.h
     editor/helpers/BatchOperationScope.h
     editor/helpers/ZoneSerialization.cpp
@@ -797,6 +838,8 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/UpdateFixedGeometryCommand.h
     editor/undo/commands/UpdateVisibilityCommand.cpp
     editor/undo/commands/UpdateVisibilityCommand.h
+    editor/undo/commands/UpdateTemplateCommand.cpp
+    editor/undo/commands/UpdateTemplateCommand.h
 )
 
 # Create the executable first
@@ -856,6 +899,9 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ZoneOperations.qml
         editor/qml/HelpDialogContent.qml
         editor/qml/TemplatePreview.qml
+        editor/qml/TemplateStripCanvas.qml
+        editor/qml/TemplatePropertyPanel.qml
+        editor/qml/PresetChipEditor.qml
         editor/qml/ShaderSettingsDialog.qml
         editor/qml/VisibilitySettingsDialog.qml
         editor/qml/LayoutSettingsDialog.qml
@@ -904,7 +950,9 @@ install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 # PhosphorAnimation for the animation effect parser + entry scaffold.
 add_executable(plasmazones-shader-validate
     shadervalidate/main.cpp
-    shadervalidate/packvalidators.cpp
+    shadervalidate/packvalidator_overlay.cpp
+    shadervalidate/packvalidator_animation.cpp
+    shadervalidate/packvalidator_surface.cpp
     shadervalidate/packvalidatorcommon.cpp
 )
 target_link_libraries(plasmazones-shader-validate
@@ -924,7 +972,20 @@ install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
 # runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms. Zone
 # packs (data/overlays), animation packs (--animation, data/animations), and
 # surface packs (--surface, data/surface) are distinct authoring models with
-# different entry conventions, so each gets its own invocation.
+# different entry conventions, so each gets its own invocation. (The validator
+# also detects the model per pack now, so the flags are belt-and-braces here;
+# they pin each test to one model regardless of what a tree grows later.)
+#
+# REQUIRES `glslangValidator` (or the newer `glslang` spelling, either name is
+# accepted) on PATH for shader_validate_animations.
+# Compositor-only animation packs (35 of the bundled 94, every desktop-* and the
+# geometry set) are classic-GL, which QShaderBaker's SPIR-V target rejects by
+# design, so they are compiled out of process through glslang's default
+# GLSL-semantics mode. That invocation FAILS rather than skips when the binary
+# is absent: those packs are compiled nowhere else in a headless run (the
+# GPU bake test QSKIPs without a desktop GL 4.5 context), so a silent skip
+# would put the gate back to lints-only for a third of the set. The other two
+# invocations need no such tool.
 if(BUILD_TESTING)
     add_test(NAME shader_validate_bundled
              COMMAND plasmazones-shader-validate --overlay ${PROJECT_SOURCE_DIR}/data/overlays)
@@ -942,7 +1003,7 @@ if(BUILD_TESTING)
     #
     # The validator's pack ENUMERATION never touches QStandardPaths — it walks
     # the explicit --overlay/--animation/--surface directory arguments and
-    # derives include paths from them (packvalidators.cpp). The one host
+    # derives include paths from them (the packvalidator_* arms). The one host
     # exposure this sandbox closes is narrower: SurfaceShaderRegistry's
     # `builtin:` buffer fallback resolves through QStandardPaths when a pack
     # names a builtin buffer whose sibling `../shared/` copy is missing —
@@ -967,7 +1028,11 @@ if(BUILD_TESTING)
     endforeach()
 endif()
 
-# Standalone settings app (no KDE Frameworks required)
+# Standalone settings app: independent of KDE System Settings, so it runs
+# outside a Plasma session. It is NOT framework-free — src/settings/CMakeLists.txt
+# does find_package(KF6Kirigami REQUIRED) and links KF6::Kirigami, and this
+# add_subdirectory is unconditional, so Kirigami is a hard configure-time
+# dependency of the portable USE_KDE_FRAMEWORKS=OFF build too.
 add_subdirectory(settings)
 
 # Separate precompiled headers for executables (different PIC/PIE settings than shared lib)

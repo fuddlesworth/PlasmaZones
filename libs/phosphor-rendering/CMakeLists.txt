@@ -46,12 +46,14 @@ set(phosphorrendering_SRCS
     src/shadernoderhisetters.cpp
     src/shadereffect.cpp
     src/shadereffect_params.cpp
+    src/shadereffect_setters.cpp
     src/zonelabeltexture.cpp
     src/zoneshadernoderhi.cpp
 )
 
 set(phosphorrendering_public_HDRS
     include/PhosphorRendering/ShaderCompiler.h
+    include/PhosphorRendering/ShaderNodeLiveness.h
     include/PhosphorRendering/ShaderNodeRhi.h
     include/PhosphorRendering/ShaderEffect.h
     include/PhosphorRendering/ZoneShaderCommon.h

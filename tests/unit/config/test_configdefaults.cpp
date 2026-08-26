@@ -40,6 +40,27 @@ private Q_SLOTS:
     }
 
     /**
+     * All four hold-mode release graces ship the same 150 ms.
+     *
+     * Pins the shipped VALUE, which the bounds tripwire cannot: three of the
+     * four accessors currently delegate to dragActivationGraceMs(), so a bounds
+     * check on them is satisfied by construction. Giving one mode arm its own
+     * different default is a deliberate act, and this is the test that has to
+     * be updated to do it.
+     */
+    void testTriggerGrace_defaultsAgreeAcross150()
+    {
+        QCOMPARE(ConfigDefaults::dragActivationGraceMs(), 150);
+        QCOMPARE(ConfigDefaults::zoneSpanGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        QCOMPARE(ConfigDefaults::autotileDragInsertGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        QCOMPARE(ConfigDefaults::scrollingDragInsertGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        QCOMPARE(ConfigDefaults::snapAssistGraceMs(), ConfigDefaults::dragActivationGraceMs());
+        // 0 must stay reachable: it is the documented off switch.
+        QCOMPARE(ConfigDefaults::triggerGraceMsMin(), 0);
+        QVERIFY(ConfigDefaults::triggerGraceMsMax() > ConfigDefaults::dragActivationGraceMs());
+    }
+
+    /**
      * Every numeric default must fall within the min/max bounds declared in
      * ConfigDefaults. This prevents drift between default values and their bounds.
      */
@@ -48,7 +69,14 @@ private Q_SLOTS:
         // Activation. Enum-valued settings derive their bounds from the enum
         // (not magic literals) so the tripwire tracks the enum if it grows.
         QVERIFY(ConfigDefaults::zoneSpanModifier() >= static_cast<int>(DragModifier::Disabled));
-        QVERIFY(ConfigDefaults::zoneSpanModifier() <= static_cast<int>(DragModifier::CtrlAltMeta));
+        QVERIFY(ConfigDefaults::zoneSpanModifier() <= MaxDragModifier);
+
+        // One pair only. The other three grace accessors currently DELEGATE to
+        // this one, so repeating the range check for them asserts nothing that
+        // this line does not already cover. Their independence, and the shipped
+        // value, are pinned by testTriggerGrace_defaultsAgreeAcross150 instead.
+        QVERIFY(ConfigDefaults::dragActivationGraceMs() >= ConfigDefaults::triggerGraceMsMin());
+        QVERIFY(ConfigDefaults::dragActivationGraceMs() <= ConfigDefaults::triggerGraceMsMax());
 
         // Display
         QVERIFY(ConfigDefaults::osdStyle() >= ConfigDefaults::osdStyleMin());
@@ -199,6 +227,44 @@ private Q_SLOTS:
         QCOMPARE(cfg.previewLockAspect, ConfigDefaults::previewLockAspect());
         QCOMPARE(cfg.gridColumns, ConfigDefaults::gridColumns());
         QCOMPARE(cfg.triggerDistance, ConfigDefaults::triggerDistance());
+    }
+
+    /**
+     * normalizeGpuDevice is the sole gate between stored config and the
+     * environment exports (DRI_PRIME, the Vulkan index pin), so its coercion
+     * contract is load-bearing: "auto" or an exactly-4-hex-per-field
+     * vendor:device pair passes through lowercased and trimmed; everything
+     * else coerces to "auto". It must also be idempotent — the schema
+     * validator contract (Schema.h) and Store::write's short-circuit both
+     * depend on normalize(normalize(x)) == normalize(x).
+     */
+    void testNormalizeGpuDevice_contract()
+    {
+        QCOMPARE(ConfigDefaults::gpuDevice(), QStringLiteral("auto"));
+        // Pass-through forms.
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("auto")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("1002:73df")), QStringLiteral("1002:73df"));
+        // Case and whitespace normalize rather than reject.
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral(" AUTO ")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral(" 1002:73DF ")), QStringLiteral("1002:73df"));
+        // Coerced to the default: empty, garbage, 0x prefixes, short fields
+        // (sysfs always prints 0x%04x, so no legitimate producer emits them),
+        // missing halves, and embedded whitespace.
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QString()), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("garbage")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("0x1002:0x73df")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("2:4")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("1002:")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral(":73df")), QStringLiteral("auto"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("1002:73df\n")), QStringLiteral("1002:73df"));
+        QCOMPARE(ConfigDefaults::normalizeGpuDevice(QStringLiteral("10 02:73df")), QStringLiteral("auto"));
+        // Idempotence over a representative sample.
+        const QStringList samples{QStringLiteral("auto"), QStringLiteral("1002:73df"), QStringLiteral("garbage"),
+                                  QString(), QStringLiteral(" 10DE:1E84 ")};
+        for (const QString& s : samples) {
+            const QString once = ConfigDefaults::normalizeGpuDevice(s);
+            QCOMPARE(ConfigDefaults::normalizeGpuDevice(once), once);
+        }
     }
 };
 

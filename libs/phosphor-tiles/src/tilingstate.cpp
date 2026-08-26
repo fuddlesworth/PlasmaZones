@@ -99,6 +99,16 @@ bool TilingState::removeWindow(const QString& windowId)
     m_windowOrder.removeAt(index);
     syncTreeRemove(windowId);
 
+    // Clear the layer memories BEFORE any emission (matching setFloating's
+    // ordering): a handler re-entering during floatingChanged must not read
+    // a memory naming the just-removed window.
+    if (m_lastTiledFocus == windowId) {
+        m_lastTiledFocus.clear();
+    }
+    if (m_lastFloatingFocus == windowId) {
+        m_lastFloatingFocus.clear();
+    }
+
     // Emit floatingChanged so listeners can clean up floating-specific state
     bool wasFloating = m_floatingWindows.remove(windowId);
     if (wasFloating) {
@@ -177,10 +187,29 @@ bool TilingState::swapWindows(int index1, int index2)
 
     const QString id1 = m_windowOrder.at(index1);
     const QString id2 = m_windowOrder.at(index2);
+    const bool floating1 = m_floatingWindows.contains(id1);
+    const bool floating2 = m_floatingWindows.contains(id2);
 
     m_windowOrder.swapItemsAt(index1, index2);
 
-    syncTreeSwap(id1, id2);
+    if (floating1 && floating2) {
+        // Two floats swapping order slots leave the tiled subsequence — and
+        // therefore the tree — untouched. Nothing to reconcile.
+    } else if (!floating1 && !floating2 && m_splitTree && m_splitTree->leafForWindow(id1)
+               && m_splitTree->leafForWindow(id2)) {
+        syncTreeSwap(id1, id2);
+    } else {
+        // A tiled↔floating swap reorders the tiled subsequence while the
+        // floating side has no leaf, so SplitTree::swap would no-op and
+        // leave the tree diverged from the order — the invariant moveWindow
+        // protects with this same rebuild fallback. Also covers a tiled
+        // window truncated out of the tree. Accepted trade: the rebuild
+        // restores tuned split ratios only for pairs that stay direct
+        // siblings, so a mixed swap (reachable only from the D-Bus
+        // swapWindows surface) can reset broken pairs to the default ratio,
+        // which beats the silent divergence it replaces.
+        rebuildSplitTree();
+    }
 
     Q_EMIT windowOrderChanged();
     notifyStateChanged();
@@ -456,6 +485,24 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         rebuildSplitTree();
     }
 
+    // Layer memories on a layer change. For the FOCUSED window the layer
+    // moved under the focus with no compositor report coming, so the new
+    // side inherits the memory and the old side drops it. For a NON-focused
+    // window the old-side memory is RETAINED: consumers validate at read
+    // (the switch verb's eligibility filter rejects a candidate on the
+    // wrong layer), and retention is what lets an engine-internal transient
+    // float — drag-eviction, overflow churn — round-trip without
+    // permanently erasing "which tile do I return to".
+    if (m_focusedWindow == windowId) {
+        if (floating) {
+            m_lastTiledFocus.clear();
+            m_lastFloatingFocus = windowId;
+        } else {
+            m_lastFloatingFocus.clear();
+            m_lastTiledFocus = windowId;
+        }
+    }
+
     Q_EMIT floatingChanged(windowId, floating);
     Q_EMIT windowCountChanged(); // Tiled count changed
     notifyStateChanged();
@@ -476,8 +523,9 @@ bool TilingState::toggleFloating(const QString& windowId)
 QStringList TilingState::floatingWindows() const
 {
     QStringList list(m_floatingWindows.begin(), m_floatingWindows.end());
-    // Sort for deterministic serialization — QSet iteration order is unstable
-    // across Qt versions and hash seed randomization.
+    // Sort for deterministic ordering — QSet iteration order is unstable
+    // across Qt versions and hash seed randomization, and the layer-switch
+    // fallback pool and the tests both index this list.
     list.sort();
     return list;
 }
@@ -514,15 +562,44 @@ void TilingState::setFocusedWindow(const QString& windowId)
         return;
     }
 
+    // Layer-side memory is written even when the focus slot is unchanged.
+    // Through this class's own API the write is belt-and-braces (setFloating
+    // already reclassifies the focused window on a layer change), but
+    // engine-side orderings can deliver a redundant same-id focus report
+    // after the layer moved, and classifying against the CURRENT float set
+    // on every accepted report is what makes that harmless.
+    if (!windowId.isEmpty()) {
+        if (m_floatingWindows.contains(windowId)) {
+            m_lastFloatingFocus = windowId;
+        } else {
+            m_lastTiledFocus = windowId;
+        }
+    }
+
     if (m_focusedWindow != windowId) {
         m_focusedWindow = windowId;
         Q_EMIT focusedWindowChanged();
     }
 }
 
+QString TilingState::lastTiledFocus() const
+{
+    return m_lastTiledFocus;
+}
+
+QString TilingState::lastFloatingFocus() const
+{
+    return m_lastFloatingFocus;
+}
+
+bool TilingState::floatingHasFocus() const
+{
+    return !m_focusedWindow.isEmpty() && m_floatingWindows.contains(m_focusedWindow);
+}
+
 int TilingState::focusedTiledIndex() const
 {
-    if (m_focusedWindow.isEmpty() || m_floatingWindows.contains(m_focusedWindow)) {
+    if (m_focusedWindow.isEmpty() || floatingHasFocus()) {
         return -1;
     }
 

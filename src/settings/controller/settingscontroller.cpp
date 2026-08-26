@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the SettingsController constructor and
+// destructor — one long, ordered wiring/teardown pair whose declaration-order
+// and disconnect-before-reset contracts reference each other in sequence
+// (see the in-body banners). Everything separable has already moved to the
+// settingscontroller_*.cpp siblings; the natural next split, the rule-label
+// resolver installation block, belongs in a _rulelabels.cpp when it is next
+// touched substantively.
+
 #include "settingscontroller.h"
 
 #include "settings/pages/editorpagecontroller.h"
@@ -12,8 +20,9 @@
 #include "settings/pages/snappingeffectscontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
-#include "settings/pages/windowappearancecontroller.h"
+#include "settings/pages/scrollingbehaviorcontroller.h"
 #include "settings/pages/tilingbehaviorcontroller.h"
+#include "settings/pages/windowappearancecontroller.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -26,6 +35,8 @@
 #include "core/types/constants.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
@@ -39,6 +50,7 @@
 // std::make_unique<RuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
 // dependency graph into every consumer of SettingsController.
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
 
@@ -77,6 +89,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -88,6 +101,94 @@
 #include <memory>
 
 namespace PlasmaZones {
+
+// The scrolling kind vocabularies and value bounds, read straight from
+// ConfigDefaults — the C++ side is the single home for these numbers. The
+// scrolling pages bind this map instead of re-spelling the literals in QML,
+// which would otherwise duplicate the kind ints, the slider and spin ranges,
+// and the preset ceiling across the C++/QML boundary.
+//
+// Template-authoring caps are NOT here: template editing lives in the
+// editor process, whose EditorTemplateModel::scrollingConstants() carries
+// its own copy of the ceilings the store enforces.
+//
+// The map covers both dimensions, not just widths: width kinds and their
+// value bounds, the height kinds and their fixed-pixel range, the editing
+// steps for each, the preset-index ceiling, the shortcut adjust-step percent
+// bounds, and the tab indicator's numeric ranges and its fully-rounded
+// corner-radius sentinel. Only the height kind the QML actually keys rows off is
+// exported — Auto has no row of its own (it is the fall-through when neither
+// Fixed nor Preset matches), so exporting it would be an unread entry.
+QVariantMap SettingsController::scrollingConstants() const
+{
+    return {
+        {QStringLiteral("kindProportion"), ConfigDefaults::scrollingWidthKindProportion()},
+        {QStringLiteral("kindFixed"), ConfigDefaults::scrollingWidthKindFixed()},
+        {QStringLiteral("kindClientDecides"), ConfigDefaults::scrollingWidthKindClientDecides()},
+        {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthProportionMin()},
+        {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
+        {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
+        {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthFixedMax()},
+        {QStringLiteral("proportionStep"), ConfigDefaults::scrollingDefaultColumnWidthProportionStep()},
+        {QStringLiteral("fixedStep"), ConfigDefaults::scrollingDefaultColumnWidthFixedStep()},
+        // Bounds for the shortcut adjust-step percent rows (Window Handling
+        // card) — a different thing from the editor-granularity steps above,
+        // see ConfigDefaults.
+        {QStringLiteral("stepPercentMin"), ConfigDefaults::scrollingStepPercentMin()},
+        {QStringLiteral("stepPercentMax"), ConfigDefaults::scrollingStepPercentMax()},
+        {QStringLiteral("ffmMaxScrollMin"), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMin()},
+        {QStringLiteral("ffmMaxScrollMax"), ConfigDefaults::scrollingFocusFollowsMouseMaxScrollMax()},
+        // Preset kind + the schema's stored-index ceiling. The QML spins take
+        // the smaller of this and the live list length, so a shrunk list can
+        // never leave the spin offering an index the schema would clamp.
+        {QStringLiteral("kindPreset"), ConfigDefaults::scrollingWidthKindPreset()},
+        {QStringLiteral("presetIndexMax"), ConfigDefaults::scrollingPresetIndexMax()},
+        {QStringLiteral("heightKindFixed"), ConfigDefaults::scrollingHeightKindFixed()},
+        {QStringLiteral("heightKindPreset"), ConfigDefaults::scrollingHeightKindPreset()},
+        {QStringLiteral("heightFixedMin"), ConfigDefaults::scrollingDefaultWindowHeightMin()},
+        {QStringLiteral("heightFixedMax"), ConfigDefaults::scrollingDefaultWindowHeightMax()},
+        {QStringLiteral("heightFixedStep"), ConfigDefaults::scrollingDefaultWindowHeightStep()},
+        // Tab indicator (Scrolling.TabIndicator). Bounds and steps only — the
+        // style and position VOCABULARIES are deliberately absent: both combos
+        // build their model from valueOptions("Scrolling.TabIndicator", ...)
+        // with valueRole "value", so they never read a wire value from here.
+        // Exporting them would be the unread entry this function's own policy
+        // note above forbids.
+        //
+        // The gap floor is NEGATIVE on purpose (it draws the indicator over
+        // the window) and the corner-radius floor IS the "fully rounded"
+        // sentinel — the page spells that one as a toggle, not as -1 in a spin
+        // box, so it needs the sentinel value as well as the range.
+        {QStringLiteral("tabGapMin"), ConfigDefaults::scrollingTabIndicatorGapMin()},
+        {QStringLiteral("tabGapMax"), ConfigDefaults::scrollingTabIndicatorGapMax()},
+        {QStringLiteral("tabWidthMin"), ConfigDefaults::scrollingTabIndicatorWidthMin()},
+        {QStringLiteral("tabWidthMax"), ConfigDefaults::scrollingTabIndicatorWidthMax()},
+        {QStringLiteral("tabLengthMin"), ConfigDefaults::scrollingTabIndicatorLengthProportionMin()},
+        {QStringLiteral("tabLengthMax"), ConfigDefaults::scrollingTabIndicatorLengthProportionMax()},
+        {QStringLiteral("tabLengthStep"), ConfigDefaults::scrollingTabIndicatorLengthProportionStep()},
+        {QStringLiteral("tabGapsBetweenMin"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMin()},
+        {QStringLiteral("tabGapsBetweenMax"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMax()},
+        {QStringLiteral("tabCornerRadiusPill"), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()},
+        {QStringLiteral("tabCornerRadiusMax"), ConfigDefaults::scrollingTabIndicatorCornerRadiusMax()},
+        // Drop indicator (Scrolling.DropIndicator). Bounds only, same policy
+        // as the tab block above. The border bounds mirror the snapping zone
+        // overlay's so the two highlights cannot drift apart visually.
+        {QStringLiteral("dropOpacityMin"), ConfigDefaults::scrollingDropIndicatorOpacityMin()},
+        {QStringLiteral("dropOpacityMax"), ConfigDefaults::scrollingDropIndicatorOpacityMax()},
+        {QStringLiteral("dropBorderWidthMin"), ConfigDefaults::scrollingDropIndicatorBorderWidthMin()},
+        {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
+        {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
+        {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
+        // Edge auto-scroll (Scrolling.Behavior.DragScroll). Bounds only,
+        // same policy as the two indicator blocks above.
+        {QStringLiteral("dragScrollTriggerWidthMin"), ConfigDefaults::scrollingDragScrollTriggerWidthMin()},
+        {QStringLiteral("dragScrollTriggerWidthMax"), ConfigDefaults::scrollingDragScrollTriggerWidthMax()},
+        {QStringLiteral("dragScrollDelayMsMin"), ConfigDefaults::scrollingDragScrollDelayMsMin()},
+        {QStringLiteral("dragScrollDelayMsMax"), ConfigDefaults::scrollingDragScrollDelayMsMax()},
+        {QStringLiteral("dragScrollMaxSpeedMin"), ConfigDefaults::scrollingDragScrollMaxSpeedMin()},
+        {QStringLiteral("dragScrollMaxSpeedMax"), ConfigDefaults::scrollingDragScrollMaxSpeedMax()},
+    };
+}
 
 QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
 {
@@ -186,12 +287,15 @@ SettingsController::~SettingsController()
     // ~RuleController runs as part of the QObject teardown, those
     // captured containers are already gone. Any model-signal slot that
     // reaches a lookup during teardown would deref destroyed state.
-    // RuleModel::leafLabel/actionLabel treat empty lookups as
-    // identity, so clearing here is the safe contract.
+    // The leafLabel/actionLabel helpers in rulemodel_labels.cpp treat empty
+    // lookups as identity, so clearing here is the safe contract.
     if (m_rulesPage) {
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});
         m_rulesPage->setZoneLookup({});
+        // The zone-name provider captures `this` and walks m_localLayoutManager;
+        // clear it for the same reason (the controller keeps its last list).
+        m_rulesPage->setZoneNamesProvider({});
         m_rulesPage->setVirtualDesktopLookup({});
         m_rulesPage->setSnappingLayoutLookup({});
         m_rulesPage->setTilingAlgorithmLookup({});
@@ -200,6 +304,9 @@ SettingsController::~SettingsController()
         // installs (the curve resolver is QML-installed and captures only
         // RuleController-owned state, so it is deliberately left alone).
         m_rulesPage->setShaderEffectLookup({});
+        // The event resolver reaches m_animationsPage (a QObject child); clear
+        // it for the same reason.
+        m_rulesPage->setAnimationEventLookup({});
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.
         m_rulesPage->setOverlayShaderLookup({});
@@ -216,6 +323,15 @@ SettingsController::~SettingsController()
         if (m_rulesPage->model())
             m_rulesPage->model()->refreshLabels();
     }
+
+    // Drop the registry's borrow of the template store, the same posture the
+    // lookups above take: the injection is a raw pointer with no owner-side
+    // notification, so anything reaching the registry during the remainder of
+    // teardown must find it unwired rather than pointing at a store that is
+    // about to go. The declaration order in the header already outlives the
+    // registry; this makes the contract explicit at the one injection site.
+    if (m_localLayoutManager)
+        m_localLayoutManager->setScrollingTemplateStore(nullptr);
 }
 
 SettingsController::SettingsController(QObject* parent)
@@ -249,7 +365,11 @@ SettingsController::SettingsController(QObject* parent)
     // same across daemon/editor/settings. Adding a new engine library
     // doesn't require editing this file unless the engine demands a
     // service the KCM doesn't already publish.
-    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+    m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_localTemplateStore->loadTemplates();
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get(),
+                                    m_localTemplateStore.get());
+    m_localLayoutManager->setScrollingTemplateStore(m_localTemplateStore.get());
 
     // Begin watching rules.json for external writes. Complements the
     // daemon's rulesChanged D-Bus signal (reloadLocalRuleStore) so the
@@ -270,6 +390,15 @@ SettingsController::SettingsController(QObject* parent)
     // at m_layouts.
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
+        // The SnapToZone picker's zone-name list comes from the registry's Zone
+        // objects, not from the LayoutPreview projection below (which carries
+        // geometry and numbers only), so a rename that changes no preview still
+        // has to reach it. Refresh BEFORE the withhold / equality gates below:
+        // both key off the preview list, and the controller compares the name
+        // list itself so this is a no-op emit-wise when nothing changed.
+        if (m_rulesPage) {
+            m_rulesPage->refreshZoneNames();
+        }
         QVariantList localLayouts = localLayoutPreviews();
         // An empty disk view is published like any other: when the user deletes
         // every layout we want m_layouts to reflect the empty state. This path
@@ -378,6 +507,12 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
         if (m_daemonController.isRunning()) {
+            // The freshly started daemon has just read the current rendering
+            // config, so the General page's "restart required" banner must
+            // stop comparing against the values this app started with.
+            if (m_generalPage) {
+                m_generalPage->rebaselineStartupSnapshots();
+            }
             // Daemon just came online — reload all D-Bus-dependent data.
             // scheduleLayoutLoad() and ScreenHelper::refreshScreens() emit their
             // own NOTIFY (layoutsChanged / screensChanged). refreshVirtualDesktops
@@ -443,9 +578,12 @@ SettingsController::SettingsController(QObject* parent)
     // above never wires their change signals. Connect them explicitly. The
     // Settings layer emits these ONLY when an override actually changes — a
     // no-op write (same value) or a rejected key early-returns without
-    // emitting — so routing them through onSettingsPropertyChanged() gives
-    // correct change-only dirty tracking (and load() populates the maps
-    // directly, never via the setters, so this stays quiet during load).
+    // emitting — so routing them through onValueBlindSettingsChanged() gives
+    // change-only dirty tracking while SUSPENDING the value-based reconcile:
+    // per-screen values live outside every page manifest, so the reconcile
+    // would otherwise clear a page whose edit is real but invisible to it
+    // (load() populates the maps directly, never via the setters, so this
+    // stays quiet during load).
     // Re-emitting perScreenOverridesChanged() refreshes the scope-chip
     // override dots and the bound per-screen card values. The Q_INVOKABLE
     // wrappers in settingscontroller_perscreen.cpp therefore do NOT mark
@@ -453,12 +591,42 @@ SettingsController::SettingsController(QObject* parent)
     // truth, which is also why clicking a value already set no longer flips
     // the page to "unsaved changes".
     const auto wirePerScreenOverrideSignal = [this](void (Settings::*signal)()) {
-        connect(&m_settings, signal, this, &SettingsController::onSettingsPropertyChanged);
+        connect(&m_settings, signal, this, &SettingsController::onValueBlindSettingsChanged);
         connect(&m_settings, signal, this, &SettingsController::perScreenOverridesChanged);
     };
     wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenScrollingZoneSelectorSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
+
+    // The three ordering pages (and the layout library's Priority sort
+    // availability) bind to the staged*OrderChanged signals only. When
+    // nothing is staged the effective order is the Settings value, so a
+    // settings-layer-only change (factory reset, profile apply, external
+    // config reload) must re-emit the staged signal or those surfaces keep
+    // rendering the stale order until restart. Gated on the optional being
+    // disengaged: an engaged staged edit already shadows the settings value,
+    // and the save()/defaults() flush paths emit their own transition signal
+    // after resetting the optional — this guard is what stops each of those
+    // from double-firing (their Settings write lands while the optional is
+    // still engaged).
+    connect(&m_settings, &Settings::snappingLayoutOrderChanged, this, [this] {
+        if (!m_stagedSnappingOrder.has_value())
+            Q_EMIT stagedSnappingOrderChanged();
+    });
+    connect(&m_settings, &Settings::tilingAlgorithmOrderChanged, this, [this] {
+        if (!m_stagedTilingOrder.has_value())
+            Q_EMIT stagedTilingOrderChanged();
+    });
+    connect(&m_settings, &Settings::scrollingTemplateOrderChanged, this, [this] {
+        if (!m_stagedScrollingOrder.has_value())
+            Q_EMIT stagedScrollingOrderChanged();
+    });
+
+    // An external config reload parks while the user has unsaved edits, so it
+    // drains on the same signal the dirty tracking above emits.
+    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
 
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
@@ -466,24 +634,22 @@ SettingsController::SettingsController(QObject* parent)
     m_editorPage = new EditorPageController(m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
+    // Snapping→Behavior + Tiling→Behavior + Scrolling→Window page sub-controllers. Their
     // underlying settings ARE Q_PROPERTY on Settings, so the meta-object
     // loop above already wires them to onSettingsPropertyChanged(); the
     // sub-controllers only provide the QML-facing forwarders + storage/QML
     // trigger-list conversion.
     m_snappingBehaviorPage = new SnappingBehaviorController(m_settings, this);
     m_tilingBehaviorPage = new TilingBehaviorController(m_settings, this);
+    m_scrollingBehaviorPage = new ScrollingBehaviorController(m_settings, this);
 
     // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
     // facade over ConfigDefaults — no Settings wiring required.
     m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
 
-    // Snapping→Zones page sub-controller (the drag-time zone overlay). Owns
-    // border bounds plus the color-import action surface; its changed() signal
-    // drives dirty tracking on successful imports.
-    m_snappingZonesPage = new SnappingZonesController(m_settings, this);
-    connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
-            &SettingsController::onSettingsPropertyChanged);
+    // Snapping→Zones page sub-controller (the drag-time zone overlay). Pure
+    // CONSTANT bounds facade over ConfigDefaults — no Settings wiring required.
+    m_snappingZonesPage = new SnappingZonesController(this);
 
     // Snapping→Effects page — CONSTANT-only bounds facade. The Window Appearance
     // page is ISettings-backed: it forwards its window border / title bar and the
@@ -650,177 +816,10 @@ SettingsController::SettingsController(QObject* parent)
     // apply / discard participate in the framework's Save/Discard.
     m_profilesPage = new ProfilePageController(m_settings, *m_rulesPage, this);
 
-    // Wire screen / activity / layout label resolvers so the rule model and
-    // monitor-overview render friendly names instead of raw connector strings,
-    // activity UUIDs and layout UUIDs.
-    //
-    // The closures capture `this` and read live snapshot state on every call,
-    // so they need to be installed exactly ONCE — re-installing on every
-    // upstream change was wasteful (three model-wide `dataChanged` emits per
-    // signal × three signals = nine emits). Upstream changes are now routed
-    // to `RuleModel::refreshLabels()` which emits a single dataChanged
-    // covering every label-derived role.
-    m_rulesPage->setScreenLookup([this](const QString& screenId) -> QString {
-        const QVariantList all = screens();
-        for (const QVariant& sv : all) {
-            const QVariantMap m = sv.toMap();
-            // Match against `name` (the connector / virtual-screen id) or
-            // `screenId` (the daemon-stable screen identifier). The screen
-            // payload built by `screenInfoListToVariantList` never emits an
-            // `id` key — comparing against `"id"` would be dead code.
-            if (m.value(QStringLiteral("name")).toString() == screenId
-                || m.value(QStringLiteral("screenId")).toString() == screenId) {
-                const QString label = m.value(QStringLiteral("displayLabel")).toString();
-                return label.isEmpty() ? screenId : label;
-            }
-        }
-        return screenId;
-    });
-    m_rulesPage->setActivityLookup([this](const QString& activityId) -> QString {
-        for (const QVariant& av : std::as_const(m_activities)) {
-            const QVariantMap m = av.toMap();
-            if (m.value(QStringLiteral("id")).toString() == activityId) {
-                const QString name = m.value(QStringLiteral("name")).toString();
-                return name.isEmpty() ? activityId : name;
-            }
-        }
-        return activityId;
-    });
-    m_rulesPage->setVirtualDesktopLookup([this](const QString& desktopNumber) -> QString {
-        // Desktop numbers are 1-based; the names list is 0-indexed. Return the name
-        // for a valid in-range number; an out-of-range / unnamed / unparseable value
-        // returns empty so the summary falls back to the bare number.
-        bool ok = false;
-        const int num = desktopNumber.toInt(&ok);
-        if (ok && num >= 1 && num <= m_virtualDesktopNames.size()) {
-            return m_virtualDesktopNames.at(num - 1);
-        }
-        return QString();
-    });
-    // Zone (snap-zone UUID) → friendly "<layout> — <zone>" label, walking the
-    // local manual layouts for the zone whose id matches. Resolved live so a
-    // later layout/zone rename surfaces on the next refreshLabels(). The zone-name
-    // data is not in the LayoutPreview list (it carries geometry + numbers, not
-    // UUIDs), so this reads the registry's actual Zone objects directly. Unknown
-    // ids (deleted layout, hand-edited rule) round-trip verbatim.
-    m_rulesPage->setZoneLookup([this](const QString& zoneId) -> QString {
-        if (zoneId.isEmpty() || !m_localLayoutManager) {
-            return zoneId;
-        }
-        for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
-            if (!layout) {
-                continue;
-            }
-            for (PhosphorZones::Zone* zone : layout->zones()) {
-                if (!zone || zone->id().toString() != zoneId) {
-                    continue;
-                }
-                const QString zoneName =
-                    zone->name().isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone->zoneNumber()) : zone->name();
-                const QString layoutName = layout->name();
-                return layoutName.isEmpty() ? zoneName : PhosphorI18n::tr("%1 — %2").arg(layoutName, zoneName);
-            }
-        }
-        return zoneId;
-    });
-    // SettingsController::layouts() is the union of snapping layouts
-    // (UUID-keyed) and autotile entries (algorithm-token-keyed via the
-    // "autotile:<token>" or bare-token shape PhosphorTiles ships) — one
-    // resolver lambda is sufficient. The typed setters below are about
-    // CONTRACT clarity at the RuleController API surface so a
-    // future caller can wire a more restrictive snapping-only lookup
-    // without also constraining the tiling resolver.
-    auto resolveByLayoutsLookup = [this](const QString& tokenOrId) -> QString {
-        for (const QVariant& lv : std::as_const(m_layouts)) {
-            const QVariantMap m = lv.toMap();
-            if (m.value(QStringLiteral("id")).toString() == tokenOrId) {
-                // Layouts are serialised via `toVariantMap(LayoutPreview)`
-                // which stamps the friendly label under `displayName`, not
-                // `name`. Reading `name` here would always return an empty
-                // string and the tile caption would show the raw UUID.
-                const QString name = m.value(QStringLiteral("displayName")).toString();
-                return name.isEmpty() ? tokenOrId : name;
-            }
-        }
-        return tokenOrId;
-    };
-    // Snapping layouts are stored by UUID, which matches the layouts-list id
-    // directly. Tiling-algorithm actions, however, store the BARE algorithm
-    // token ("bsp"), while the layouts list keys autotile entries by the
-    // "autotile:<token>" form — so the bare token must be prefixed before the
-    // lookup, or the list shows the raw id instead of the friendly name. Try
-    // the prefixed form first, then fall back to the bare token (covering the
-    // bare-keyed shape PhosphorTiles can also ship, and already-prefixed data).
-    auto resolveTilingAlgorithmLookup = [resolveByLayoutsLookup](const QString& algorithmToken) -> QString {
-        const QString prefixed = PhosphorLayout::LayoutId::makeAutotileId(algorithmToken);
-        const QString label = resolveByLayoutsLookup(prefixed);
-        return label == prefixed ? resolveByLayoutsLookup(algorithmToken) : label;
-    };
-    m_rulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
-    m_rulesPage->setTilingAlgorithmLookup(resolveTilingAlgorithmLookup);
-    // OverrideAnimationShader actions store an effect id ("dissolve"); resolve
-    // it to the friendly name via the same animation shader registry the rule
-    // editor's shader picker reads (availableShaderEffects), so the list shows
-    // "Shader: Dissolve" rather than the raw id. Unknown ids round-trip
-    // verbatim (registry miss → raw id), matching the editor's fallback.
-    auto resolveShaderEffectLookup = [this](const QString& effectId) -> QString {
-        if (effectId.isEmpty() || !m_animationShaderRegistry || !m_animationShaderRegistry->hasEffect(effectId)) {
-            return effectId;
-        }
-        const QString name = m_animationShaderRegistry->effect(effectId).name;
-        return name.isEmpty() ? effectId : name;
-    };
-    m_rulesPage->setShaderEffectLookup(resolveShaderEffectLookup);
-    // OverrideOverlayShader stores an overlay/snapping shader id; resolve it to
-    // the friendly name via the overlay shader registry (the same source the
-    // rule editor's overlay-shader picker reads), so the list shows
-    // "Overlay shader: <name>" rather than the raw id. Unknown ids round-trip
-    // verbatim (registry miss → empty name → raw id). m_overlayShaderRegistry is
-    // constructed later in this ctor; the `!m_overlayShaderRegistry` guard below
-    // covers that window — the lambda captures `this` and is invoked only lazily
-    // (on the model's first label render, after construction completes).
-    auto resolveOverlayShaderLookup = [this](const QString& effectId) -> QString {
-        if (effectId.isEmpty() || !m_overlayShaderRegistry) {
-            return effectId;
-        }
-        const QString name = m_overlayShaderRegistry->shader(effectId).name;
-        return name.isEmpty() ? effectId : name;
-    };
-    m_rulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
-    // OverrideDecorationChain stores surface-pack ids ("frosted-glass");
-    // resolve them to friendly names via the surface shader registry (the
-    // same source the decoration pages' pack picker reads), so the list
-    // shows "Decoration: Frosted Glass, Glow" rather than raw ids. Unknown
-    // ids round-trip verbatim, matching the other lookups' fallbacks.
-    auto resolveDecorationPackLookup = [this](const QString& packId) -> QString {
-        if (packId.isEmpty() || !m_surfaceShaderRegistry || !m_surfaceShaderRegistry->hasEffect(packId)) {
-            return packId;
-        }
-        const QString name = m_surfaceShaderRegistry->effect(packId).name;
-        return name.isEmpty() ? packId : name;
-    };
-    m_rulesPage->setDecorationPackLookup(resolveDecorationPackLookup);
-    auto refreshRuleLabels = [this]() {
-        if (m_rulesPage && m_rulesPage->model()) {
-            m_rulesPage->model()->refreshLabels();
-        }
-    };
-    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
-    connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
-    connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
-    connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
-    // The virtual-desktop resolver reads m_virtualDesktopNames live — refresh
-    // on renames too, like its screen/activity/layout siblings, or a rule's
-    // "Desktop: Work" label stays stale until an unrelated refresh fires.
-    connect(this, &SettingsController::virtualDesktopsChanged, this, refreshRuleLabels);
-    // A shader-pack rescan (user drops in a new effect, or one is removed)
-    // can change an id→name mapping; refresh so resolved Shader labels track it.
-    connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
-            refreshRuleLabels);
-    // Same refresh for surface-pack rescans so resolved Decoration labels
-    // track pack installs/removals.
-    connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
-            refreshRuleLabels);
+    // The rule-list label lookups (screen / activity / desktop / zone / layout
+    // / algorithm / shader / event / decoration) and the refreshes that keep
+    // them live. Installed exactly once; see settingscontroller_rulelookups.cpp.
+    installRuleLabelLookups();
 
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
@@ -837,9 +836,10 @@ SettingsController::SettingsController(QObject* parent)
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
     // Overlay-pack rescans change id→name mappings the OverrideOverlayShader
     // rule labels resolve live — refresh them like the animation and surface
-    // registries above (connected here because the registry is built after
-    // that block; the refreshRuleLabels lambda is still in scope).
-    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, refreshRuleLabels);
+    // registries (connected here rather than in installRuleLabelLookups because
+    // the registry is built after that call).
+    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
+            &SettingsController::refreshRuleLabels);
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject
@@ -907,8 +907,9 @@ SettingsController::SettingsController(QObject* parent)
     // settingscontroller_dbuswire.cpp::wireDaemonSubscriptions along with every
     // other daemon broadcast this class listens to. Of those, settingsChanged
     // reaches this timer as well, by way of onExternalSettingsChanged() ->
-    // load(). quickLayoutSlotsChanged relays straight back out as a signal for
-    // QML. The rest run their own slots and never touch it.
+    // load(). quickLayoutSlotsChanged and the Scrolling interface's
+    // stripChanged relay straight back out as signals for QML. The rest run
+    // their own slots and never touch it.
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
@@ -917,10 +918,9 @@ SettingsController::SettingsController(QObject* parent)
     // itself — see its constructor — so no SettingsController-side plumbing
     // is needed here.)
 
-    // Load dismissed update version from app-local settings
+    // Load the last-seen What's New version from app-local settings
     {
         QSettings appSettings;
-        m_dismissedUpdateVersion = appSettings.value(ConfigDefaults::settingsAppDismissedUpdateVersionKey()).toString();
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
     }
@@ -945,8 +945,27 @@ SettingsController::SettingsController(QObject* parent)
             } else {
                 releases = doc.object().value(QLatin1String("releases")).toArray();
             }
+            // Only entries for THIS build or older are consumed: whatsnew.json
+            // gains the next release's entry while it is still unreleased, and
+            // without the clamp a user opening What's New on the current build
+            // would both SEE the unreleased entry and get it stamped as seen,
+            // so the badge never fires when that release actually ships. An
+            // unparsable app version fails open (no filtering).
+            // VERSION_STRING, not applicationVersion(): the latter is only
+            // set by the settings app's own main(); a host that skips
+            // setApplicationVersion would fail the clamp open, let the
+            // unreleased entry through, AND let markWhatsNewSeen stamp it —
+            // exactly the badge-never-fires bug the clamp prevents. An
+            // unparsable VERSION_STRING (impossible for a release build)
+            // fails open: no filtering, and the stamp risk returns with it.
+            const QVersionNumber appVersion = QVersionNumber::fromString(PlasmaZones::VERSION_STRING);
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
+                const QVersionNumber entryVersion =
+                    QVersionNumber::fromString(obj.value(QLatin1String("version")).toString());
+                if (!appVersion.isNull() && !entryVersion.isNull() && entryVersion > appVersion) {
+                    continue;
+                }
                 QVariantMap release;
                 release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
                 release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
@@ -981,12 +1000,26 @@ SettingsController::SettingsController(QObject* parent)
     scheduleLayoutLoad();
     refreshVirtualDesktops();
     refreshActivities();
-    m_updateChecker.checkForUpdates();
 }
 
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
+}
+
+SnappingBehaviorController* SettingsController::snappingBehaviorPage() const
+{
+    return m_snappingBehaviorPage;
+}
+
+TilingBehaviorController* SettingsController::tilingBehaviorPage() const
+{
+    return m_tilingBehaviorPage;
+}
+
+ScrollingBehaviorController* SettingsController::scrollingBehaviorPage() const
+{
+    return m_scrollingBehaviorPage;
 }
 
 WindowAppearanceController* SettingsController::windowAppearancePage() const

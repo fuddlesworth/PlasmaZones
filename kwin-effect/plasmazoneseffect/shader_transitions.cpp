@@ -7,6 +7,7 @@
 #include "window_query.h"
 
 #include "compositor/windowanimator.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/AnimationShaderContract.h>
@@ -66,8 +67,6 @@
 
 namespace PlasmaZones {
 
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
-
 using ShaderInternal::kUserTextureSamplerNames;
 using ShaderInternal::kUserTextureWrapKeys;
 using ShaderInternal::loadUserTextureImage;
@@ -121,25 +120,19 @@ QByteArray ShaderInternal::injectKwinDefineAfterVersion(const QString& source)
     // CRLF appears in the source, emit "\r\n"; otherwise plain "\n".
     const bool useCrlf = working.contains(QStringLiteral("\r\n"));
     const QString eol = useCrlf ? QStringLiteral("\r\n") : QStringLiteral("\n");
-    // KWin 6.7's generateCustomShader compiles custom effect shaders at GLSL
-    // #version 140 (it rewrites our #version 450 down to the GL context's core
-    // version). At 140 the `layout(location = N)` qualifiers our vertex stages
-    // declare on in/out attributes are illegal without these ARB extensions, so
-    // the vertex shader fails to compile (NVIDIA error C7548). Failed compiles
-    // are NOT cached (the compile path returns false without inserting into
-    // m_shaderCache), so every transition then re-runs the whole
-    // assemble+compile on the compositor thread — the cause of the severe
-    // per-command window-movement / mode-change lag. The daemon's Qt-RHI/SPIR-V
-    // path (no PLASMAZONES_KWIN) needs the explicit locations for SPIR-V, so we
-    // enable the extensions on the KWin path rather than stripping the
-    // qualifiers. `: enable` is a harmless no-op on the fragment stage and on
-    // drivers that already expose explicit locations in core 140. The
-    // directives precede every declaration (only KWin's #defines and the
-    // source's leading comments come before them), which is all NVIDIA's
-    // compiler requires.
-    const QString defineLine = QStringLiteral("#extension GL_ARB_explicit_attrib_location : enable") + eol
-        + QStringLiteral("#extension GL_ARB_separate_shader_objects : enable") + eol
-        + QStringLiteral("#define PLASMAZONES_KWIN") + eol;
+    // The ARB `#extension` pair and the `#define PLASMAZONES_KWIN` ABI switch
+    // come from PhosphorShaders so the offline validator and the GPU bake test
+    // splice the identical block; `kwinDefineBlock`'s declaration carries why
+    // each directive is needed (KWin 6.7 recompiles at #version 140). Only the
+    // #version-finding walk below is this function's own.
+    //
+    // Cost of getting it wrong, since that is compositor-specific: a failed
+    // COMPILE is cached as a null-shader sentinel, so it costs the assemble
+    // once and later transitions skip it. The failures that are NOT cached are
+    // the ones returning before the cache is touched at all — a missing or
+    // empty shader file, or an include-expansion error — which re-run the full
+    // read and assemble on the compositor thread every transition.
+    const QString defineLine = PhosphorShaders::kwinDefineBlock(eol);
 
     // Walk the source line-by-line and find the FIRST line whose
     // non-whitespace prefix is `#version`. A naive
@@ -353,6 +346,17 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassDesktop)) {
         qCWarning(lcEffect) << "beginShaderTransition: refusing desktop-contract shader" << effectId
                             << "on a per-window event — desktop packs sample unbound uFromDesktop/uToDesktop";
+        return false;
+    }
+    // Same unbound-sampler shape as the desktop refusal: a strip-contract pack
+    // samples uStrip (the full-output scene capture), which only the strip
+    // post-process pass binds. On a per-window surface it is unbound garbage,
+    // so refuse it at the same chokepoint. scrolling.view itself never routes
+    // here (StripTransitionManager owns that pass); this catches hand-edited
+    // configs assigning a strip pack at window/global scope.
+    if (eff.appliesTo.contains(PhosphorAnimation::ProfilePaths::EventClassStrip)) {
+        qCWarning(lcEffect) << "beginShaderTransition: refusing strip-contract shader" << effectId
+                            << "on a per-window event — strip packs sample the unbound uStrip scene capture";
         return false;
     }
 
@@ -906,6 +910,18 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (!isSameWindowSupersession) {
         redirect(window);
     }
+    // shaderApplied is deliberately NOT cleared here. The flag is
+    // double-booked: it means "the decoration owns the offscreen slot" to
+    // the paint drivers, but removeWindowDecoration's release gate also
+    // reads it as "decoration GL exists" — and a close transition's deleted
+    // path tears the decoration down through exactly that gate, so clearing
+    // the flag at install time silently skipped releaseDecorationGl (the
+    // unredirect + padded-band damage) on every animated close, leaving the
+    // halo band on screen. The cost of keeping it true is one redundant
+    // per-frame repaint from the postPaintScreen decoration driver for the
+    // transition's duration, which the driver's own screen-level damage
+    // already subsumes visually. See the redirected-animating predicate
+    // comment in paint_pipeline.cpp for the matching proxy caveat.
     // setShader replaces any prior shader pointer (idempotent for the
     // same shader, so same-effect supersession is correct here). Vertex-
     // deform transitions go through KWin's default texture shader so

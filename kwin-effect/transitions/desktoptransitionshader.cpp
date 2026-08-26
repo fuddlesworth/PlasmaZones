@@ -6,6 +6,8 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "shadertransitionmanager.h"
 #include "plasmazoneseffect/shader_internal.h"
+#include "transitionpasshelpers.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -30,8 +32,6 @@
 // pipeline (read → entry-point scaffold → include expansion → param preamble →
 // KWin define → generateCustomShader) only serves this question, so it lives here.
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compiledShader(const QString& effectId)
 {
@@ -87,26 +87,10 @@ DesktopTransitionManager::CompiledDesktopShader* DesktopTransitionManager::compi
         expanded, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
     const QByteArray fragWithKwinDefine = ShaderInternal::injectKwinDefineAfterVersion(expanded);
 
-    // Full-screen quad vertex stage. Positions arrive in the RenderViewport's
-    // device coordinate space and are projected by KWin's own matrix, which
-    // encodes RenderTarget::transform() (the output rotation/flip, combined with
-    // the buffer's FlipY) and the render offset. Emitting clip-space directly, as
-    // this used to, is only equivalent when the transform is exactly FlipY and the
-    // offset is zero — the default, unrotated configuration. On a rotated output
-    // the target framebuffer is panel-oriented while the captures are logical-
-    // oriented, so the blend painted the desktops unrotated and stretched.
-    static constexpr const char* kDesktopQuadVertexSource =
-        "#version 450\n"
-        "uniform mat4 modelViewProjectionMatrix;\n"
-        "layout(location = 0) in vec2 position;\n"
-        "layout(location = 1) in vec2 texCoord;\n"
-        "layout(location = 0) out vec2 vTexCoord;\n"
-        "void main() {\n"
-        "    vTexCoord = texCoord;\n"
-        "    gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);\n"
-        "}\n";
+    // Full-screen quad vertex stage, shared with the strip pass — see
+    // TransitionPass::outputQuadVertexSource for the projection rationale.
     const QByteArray vertWithKwinDefine =
-        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(kDesktopQuadVertexSource));
+        ShaderInternal::injectKwinDefineAfterVersion(QString::fromUtf8(TransitionPass::outputQuadVertexSource()));
 
     std::unique_ptr<KWin::GLShader> shader = KWin::ShaderManager::instance()->generateCustomShader(
         KWin::ShaderTrait::MapTexture, vertWithKwinDefine, fragWithKwinDefine);

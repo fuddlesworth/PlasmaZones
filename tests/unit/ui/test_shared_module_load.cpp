@@ -94,6 +94,17 @@ private Q_SLOTS:
     {
         loadType(QStringLiteral("ShaderCompileErrorBanner"));
     }
+    void loadsStripEmptyState()
+    {
+        loadType(QStringLiteral("StripEmptyState"), QStringLiteral("caption: \"no windows\""));
+    }
+    void loadsAxisChevron()
+    {
+        // Every property is required, so an omission here fails creation
+        // rather than silently defaulting.
+        loadType(QStringLiteral("AxisChevron"),
+                 QStringLiteral("direction: 0; arm: 6; thickness: 1.4; strokeColor: \"white\""));
+    }
     void loadsParameterEditor()
     {
         loadType(QStringLiteral("ParameterEditor"), QStringLiteral("parameters: []; currentValues: ({})"));

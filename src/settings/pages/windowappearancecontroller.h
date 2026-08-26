@@ -45,8 +45,10 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int windowBorderWidth READ windowBorderWidth WRITE setWindowBorderWidth NOTIFY windowBorderWidthChanged)
     Q_PROPERTY(
         int windowBorderRadius READ windowBorderRadius WRITE setWindowBorderRadius NOTIFY windowBorderRadiusChanged)
-    // Border colours: a concrete "#AARRGGBB" hex, or the sentinel "accent" that
-    // the effect resolves to the live system accent at paint time.
+    // Border colours: a concrete "#AARRGGBB" hex, or EMPTY meaning "follow
+    // the system" (active → zone highlight, inactive → zone inactive). The
+    // daemon's D-Bus adaptor resolves the sentinel before the value crosses
+    // the wire, so the effect only ever sees concrete colours.
     Q_PROPERTY(QString windowBorderColorActive READ windowBorderColorActive WRITE setWindowBorderColorActive NOTIFY
                    windowBorderColorActiveChanged)
     Q_PROPERTY(QString windowBorderColorInactive READ windowBorderColorInactive WRITE setWindowBorderColorInactive
@@ -59,7 +61,8 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
     // ── Plain opacity+tint layer (Windows.*) ──────────────────────────────────
     // Opacity/strength are [0.0, 1.0]; the tint colour shares the border
-    // colours' "#AARRGGBB" or "accent" sentinel shape.
+    // colours' theme-fallback shape ("#AARRGGBB" hex, or EMPTY meaning
+    // "follow the zone highlight").
     Q_PROPERTY(bool showWindowOpacityTint READ showWindowOpacityTint WRITE setShowWindowOpacityTint NOTIFY
                    showWindowOpacityTintChanged)
     Q_PROPERTY(QString opacityTintScope READ windowOpacityTintScope WRITE setWindowOpacityTintScope NOTIFY
@@ -78,13 +81,6 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
-
-    // ── Border colour sentinel + fallback (single source: ConfigDefaults) ──
-    // The "follow the system accent" sentinel and the concrete colour the page
-    // seeds when the user leaves accent mode. Exposed here so QML never hardcodes
-    // either literal.
-    Q_PROPERTY(QString accentColorToken READ accentColorToken CONSTANT)
-    Q_PROPERTY(QString defaultBorderColorHex READ defaultBorderColorHex CONSTANT)
 
     // ── CONSTANT slider bounds ────────────────────────────────────────────────
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
@@ -180,15 +176,6 @@ public:
     // tracking rides; these invokables are the per-monitor-aware path.
     Q_INVOKABLE QVariant gapValue(const QString& screenName, const QString& key) const;
     Q_INVOKABLE void writeGap(const QString& screenName, const QString& key, const QVariant& value);
-
-    QString accentColorToken() const
-    {
-        return ConfigDefaults::windowBorderColorActive();
-    }
-    QString defaultBorderColorHex() const
-    {
-        return ConfigDefaults::windowBorderColorAccentFallbackHex();
-    }
 
     // CONSTANT slider bounds.
     int borderWidthMin() const

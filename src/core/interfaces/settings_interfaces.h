@@ -30,11 +30,17 @@ struct ZoneSelectorConfig
     // zone-selector default accessors — position(), layoutMode(),
     // maxRows(), … (unprefixed; core interface headers must not depend on
     // the config layer, so the values are duplicated rather than included).
-    // They matter only for BARE default construction — every production
-    // path (Settings::resolvedZoneSelectorConfig and the ISettings default
-    // implementation) populates from the accessors, so a retuned
-    // ConfigDefaults value diverges here only for default-constructed
-    // instances no resolver touched.
+    // They matter mostly for BARE default construction — the zone-selector
+    // production paths (Settings::resolvedZoneSelectorConfig and the
+    // ISettings default implementation) populate every field from the
+    // accessors. ONE production exception: the strip resolver
+    // (resolvedScrollingZoneSelectorConfig below) deliberately leaves
+    // maxRows and gridColumns at these struct literals, which is inert —
+    // it stamps layoutMode Horizontal, and computeZoneSelectorLayout
+    // consults both fields only under the Grid branch. A retuned
+    // ConfigDefaults maxRows()/gridColumns() therefore still cannot change
+    // strip behaviour, only default-constructed instances no resolver
+    // touched.
     int position = 1; // ZoneSelectorPosition enum value (Top)
     int layoutMode = 0; // ZoneSelectorLayoutMode enum value (Grid)
     int sizeMode = 0; // ZoneSelectorSizeMode enum value (Auto)
@@ -95,12 +101,44 @@ inline constexpr const char AnimationDuration[] = "AnimationDuration";
 inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
 } // namespace PerScreenAutotileKey
 
+/**
+ * Per-screen scrolling override key constants. Unprefixed on disk AND in
+ * memory (no autotile-style "Autotile" asymmetry — that exists only for v4
+ * migration history), and spelled exactly like the engine's
+ * ScrollPerScreenKeys settings channel so the daemon merge is a plain copy.
+ *
+ * TWO disjoint sub-domains: the New-columns card's sizing defaults (the
+ * analogue of the tiling Algorithm card's per-monitor tuning) and the strip
+ * axis, which is an orientation intent surfaced by a different card. They are
+ * split by isPerScreenScrollingSizingKey / isPerScreenScrollingAxisKey in
+ * perscreen.cpp so one card's scope chip cannot report or clear the other's
+ * override. Scrolling's remaining behavior and view settings stay app-wide
+ * like their tiling/snapping siblings — the per-context variants are the rule
+ * actions, which use the engine's rule channel rather than this store.
+ */
+namespace PerScreenScrollingKey {
+inline constexpr const char DefaultColumnWidthKind[] = "DefaultColumnWidthKind";
+inline constexpr const char DefaultColumnWidthValue[] = "DefaultColumnWidthValue";
+inline constexpr const char DefaultColumnWidthPresetIndex[] = "DefaultColumnWidthPresetIndex";
+inline constexpr const char DefaultColumnDisplay[] = "DefaultColumnDisplay";
+inline constexpr const char DefaultWindowHeightKind[] = "DefaultWindowHeightKind";
+inline constexpr const char DefaultWindowHeightValue[] = "DefaultWindowHeightValue";
+inline constexpr const char DefaultWindowHeightPresetIndex[] = "DefaultWindowHeightPresetIndex";
+/// Which way this monitor's strip runs. Per-screen because the axis's only
+/// legitimate discriminator IS the monitor's shape, which is exactly what
+/// this store is keyed on — the same argument that puts the sizing defaults
+/// here rather than app-wide.
+inline constexpr const char StripAxis[] = "StripAxis";
+} // namespace PerScreenScrollingKey
+
 // Per-screen snapping overrides carry only the gap keys, spelled by the shared
 // PhosphorEngine::PerScreenKeys namespace (InnerGap / OuterGap / per-side).
-// Snap-assist and the zone-selector enable switch are global-only
-// (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled); the per-screen
-// zone-selector config lives in its own map/group keyed by ZoneSelectorConfigKey
-// (see kPerScreenKeys in perscreen.cpp).
+// Snap-assist and the selector enable switches are global-only
+// (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled /
+// setScrollingZoneSelectorEnabled); the per-screen selector configs live in
+// their own maps/groups — TWO stores sharing the ZoneSelectorConfigKey
+// vocabulary (see PerScreenDetail::kZoneSelectorKeys and the strip subset
+// kStripSelectorKeys in perscreen_selector.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
@@ -126,8 +164,13 @@ public:
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
     virtual bool zoneSpanToggleMode() const = 0;
     virtual void setZoneSpanToggleMode(bool enable) = 0;
+    virtual int zoneSpanGraceMs() const = 0;
+    virtual void setZoneSpanGraceMs(int ms) = 0;
     virtual bool toggleActivation() const = 0;
     virtual void setToggleActivation(bool enable) = 0;
+    // Hold-mode release grace in ms (see ConfigDefaults::dragActivationGraceMs).
+    virtual int dragActivationGraceMs() const = 0;
+    virtual void setDragActivationGraceMs(int ms) = 0;
     virtual bool snappingEnabled() const = 0;
     virtual void setSnappingEnabled(bool enabled) = 0;
 };
@@ -182,9 +225,13 @@ public:
     virtual OverlayDisplayMode overlayDisplayMode() const = 0;
     virtual void setOverlayDisplayMode(OverlayDisplayMode mode) = 0;
 
-    // Appearance settings
-    virtual bool useSystemColors() const = 0;
-    virtual void setUseSystemColors(bool use) = 0;
+    // Appearance settings. The four zone colours are theme-fallback keys:
+    // the getters return RESOLVED colours (palette-derived while the stored
+    // string is empty), the setters pin a concrete colour (an INVALID QColor
+    // stores the sentinel, i.e. resumes following). The stored-string
+    // surface lives on the concrete Settings class for the settings UI.
+    // Their NOTIFYs also fire on a palette change while following — see the
+    // note above ISettings' signal block.
     virtual QColor highlightColor() const = 0;
     virtual void setHighlightColor(const QColor& color) = 0;
     virtual QColor inactiveColor() const = 0;
@@ -376,6 +423,67 @@ public:
 };
 
 /**
+ * @brief Settings for the strip-mode drag selector popup
+ *
+ * The scrolling engine's peer of IZoneSelectorSettings, stored under
+ * Scrolling.ZoneSelector. It carries no LayoutMode / GridColumns / MaxRows:
+ * the strip popup renders one row of column cards along the strip, so the
+ * grid-arrangement knobs have nothing to arrange.
+ *
+ * Used by: KWin Effect, KCM, Overlay Service
+ */
+class PLASMAZONES_EXPORT IScrollingZoneSelectorSettings
+{
+public:
+    virtual ~IScrollingZoneSelectorSettings() = default;
+
+    virtual bool scrollingZoneSelectorEnabled() const = 0;
+    virtual void setScrollingZoneSelectorEnabled(bool enabled) = 0;
+    virtual int scrollingZoneSelectorTriggerDistance() const = 0;
+    virtual void setScrollingZoneSelectorTriggerDistance(int distance) = 0;
+    virtual ZoneSelectorPosition scrollingZoneSelectorPosition() const = 0;
+    virtual void setScrollingZoneSelectorPosition(ZoneSelectorPosition position) = 0;
+    virtual ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const = 0;
+    virtual void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode mode) = 0;
+    virtual int scrollingZoneSelectorPreviewWidth() const = 0;
+    virtual void setScrollingZoneSelectorPreviewWidth(int width) = 0;
+    virtual int scrollingZoneSelectorPreviewHeight() const = 0;
+    virtual void setScrollingZoneSelectorPreviewHeight(int height) = 0;
+    virtual bool scrollingZoneSelectorPreviewLockAspect() const = 0;
+    virtual void setScrollingZoneSelectorPreviewLockAspect(bool locked) = 0;
+
+    // Per-screen strip selector config resolution.
+    //
+    // The resolved value is a ZoneSelectorConfig, the SAME struct the snapping
+    // selector resolves to, because both popups are laid out by the one
+    // computeZoneSelectorLayout. layoutMode is stamped to Horizontal rather
+    // than read from a key: the strip popup is one row of cards mirroring the
+    // strip, so it has no Grid form and no user-selected form at all. Which
+    // way that row runs is the ENGINE's strip axis, passed to
+    // computeZoneSelectorLayout as its own argument, so a vertical strip does
+    // not need (and must not take) a Vertical stamp here. maxRows and
+    // gridColumns stay at the struct defaults for the same reason — a single
+    // row of cards consults neither.
+    //
+    // Per-screen override keys REUSE the ZoneSelectorConfigKey constants (the
+    // Position / SizeMode / PreviewWidth / PreviewHeight / PreviewLockAspect /
+    // TriggerDistance subset). There is no second key namespace; the
+    // "ScrollingZoneSelector:" group prefix is what separates the two stores.
+    virtual ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& /*screenIdOrName*/) const
+    {
+        ZoneSelectorConfig config;
+        config.position = static_cast<int>(scrollingZoneSelectorPosition());
+        config.layoutMode = static_cast<int>(ZoneSelectorLayoutMode::Horizontal);
+        config.sizeMode = static_cast<int>(scrollingZoneSelectorSizeMode());
+        config.previewWidth = scrollingZoneSelectorPreviewWidth();
+        config.previewHeight = scrollingZoneSelectorPreviewHeight();
+        config.previewLockAspect = scrollingZoneSelectorPreviewLockAspect();
+        config.triggerDistance = scrollingZoneSelectorTriggerDistance();
+        return config;
+    }
+};
+
+/**
  * @brief Settings related to window behavior (snap restore, sticky handling)
  *
  * Used by: KWin Effect, KCM, Window Tracking Service
@@ -407,6 +515,18 @@ public:
     virtual void setSnappingRestoreFloatedWindowsOnLogin(bool restore) = 0;
     virtual bool autotileRestoreFloatedWindowsOnLogin() const = 0;
     virtual void setAutotileRestoreFloatedWindowsOnLogin(bool restore) = 0;
+    /// Keep a FLOATED window stacked above the windows the mode places. The
+    /// same per-engine split as the restore pair above: snap-floated and
+    /// autotile-floated windows are gated independently (the scrolling twin is
+    /// the defaulted virtual on ISettings). No daemon reader: the KWin effect
+    /// pulls the pair across the settings wire and fills the window-layer slot
+    /// for a floated window when no SetWindowLayer rule owns it. On the
+    /// interface rather than concrete-only so the D-Bus registry can register
+    /// the keys through it and a non-Settings backend keeps them.
+    virtual bool snappingKeepFloatingAbove() const = 0;
+    virtual void setSnappingKeepFloatingAbove(bool keep) = 0;
+    virtual bool autotileKeepFloatingAbove() const = 0;
+    virtual void setAutotileKeepFloatingAbove(bool keep) = 0;
     /// When a window that was never snapped (no pre-float zone to return to) is
     /// unfloated (Meta+F), snap it to a fallback zone (last-used → first-empty →
     /// first zone) instead of leaving it floating. Default off: unfloat with no
@@ -421,13 +541,15 @@ public:
     virtual void setSnapAssistEnabled(bool enabled) = 0;
     virtual QVariantList snapAssistTriggers() const = 0;
     virtual void setSnapAssistTriggers(const QVariantList& triggers) = 0;
+    virtual int snapAssistGraceMs() const = 0;
+    virtual void setSnapAssistGraceMs(int ms) = 0;
 
     virtual bool filterLayoutsByAspectRatio() const = 0;
     virtual void setFilterLayoutsByAspectRatio(bool filter) = 0;
 };
 
 /**
- * @brief Settings related to manual layout/algorithm ordering
+ * @brief Settings related to manual layout / algorithm / scrolling-template ordering
  *
  * Used by: Daemon (layout cycling, zone selector, overlay), Settings UI
  */
@@ -440,6 +562,8 @@ public:
     virtual void setSnappingLayoutOrder(const QStringList& order) = 0;
     virtual QStringList tilingAlgorithmOrder() const = 0;
     virtual void setTilingAlgorithmOrder(const QStringList& order) = 0;
+    virtual QStringList scrollingTemplateOrder() const = 0;
+    virtual void setScrollingTemplateOrder(const QStringList& order) = 0;
 };
 
 /**

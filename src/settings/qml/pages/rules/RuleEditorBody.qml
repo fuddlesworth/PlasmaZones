@@ -63,11 +63,45 @@ ColumnLayout {
     /// just never fire it.
     property var _actionTypeOptions: root.controller.actionTypes()
     property var _matchFieldOptions: root.controller.matchFields()
+    /// Widest operator label across the FULL operator vocabulary, in pixels.
+    /// MatchLeafEditor sizes its operator dropdown to this (not to the current
+    /// field's operator subset) so the operator column lines up on every
+    /// condition row and doesn't resize when the field changes. Measured HERE
+    /// rather than in the leaf: the sweep is field-independent, so every leaf
+    /// in the tree was recomputing the identical answer — the same reason the
+    /// two option tables above are cached at this level.
+    property real _widestOperatorTextWidth: 0
+
+    /// Measure every operator label (the full vocabulary, via
+    /// controller.allOperators()) and cache the widest in pixels. The label set
+    /// is static per catalogue, so this runs on load, on font change, and on a
+    /// catalogue refresh.
+    function _recalcOperatorWidth() {
+        var ops = root.controller ? root.controller.allOperators() : [];
+        var maxW = 0;
+        for (var i = 0; i < ops.length; ++i) {
+            opMetrics.text = ops[i].label || "";
+            maxW = Math.max(maxW, opMetrics.advanceWidth);
+        }
+        root._widestOperatorTextWidth = maxW;
+    }
+
+    // Non-visual measurer for _recalcOperatorWidth(). The operator dropdown is
+    // a plain QQC2 control, so it renders in the application font — which is
+    // what Kirigami's platform theme publishes as defaultFont. Re-measures if
+    // that font changes (a theme or scale switch).
+    TextMetrics {
+        id: opMetrics
+
+        font: Kirigami.Theme.defaultFont
+        onFontChanged: root._recalcOperatorWidth()
+    }
 
     Connections {
         function onAuthoringCatalogueChanged() {
             root._actionTypeOptions = root.controller.actionTypes();
             root._matchFieldOptions = root.controller.matchFields();
+            root._recalcOperatorWidth();
         }
         target: root.controller
         ignoreUnknownSignals: true
@@ -86,6 +120,7 @@ ColumnLayout {
         // Seed the cache so the consumer's footer doesn't flash a
         // "no issues" state on first paint before the 50 ms timer fires.
         validationIssues = root.controller.validationIssuesForJson(root.workingRule);
+        root._recalcOperatorWidth();
     }
 
     Timer {
@@ -102,10 +137,12 @@ ColumnLayout {
 
     /// True iff every action carries a non-empty type. A freshly-added action
     /// is a type-less placeholder ("Choose…" in the picker) until the user
-    /// picks one — block saving that incomplete action. The rule library's
-    /// validator deliberately treats an empty-type slot as a benign
-    /// placeholder (see validationIssuesForJson), so the completeness gate has
-    /// to live here rather than surfacing as a validation issue.
+    /// picks one — block saving that incomplete action. `validationIssuesForJson`
+    /// drops every issue raised against a type-less slot (the library's
+    /// co-located-exclusion check does flag them, with no action name to print),
+    /// so this completeness gate is what blocks the save. An action that HAS a
+    /// type but an unfilled param is the other half and arrives as an
+    /// IncompleteActionPayload validation issue, which canSave gates on below.
     function _actionsAllHaveType(actions) {
         if (actions === undefined || actions === null)
             return false;
@@ -260,6 +297,7 @@ ColumnLayout {
         controller: root.controller
         appSettings: root.appSettings
         matchFieldOptions: root._matchFieldOptions
+        widestOperatorTextWidth: root._widestOperatorTextWidth
         removable: false
         onNodeEdited: function (updated) {
             root._patch("match", updated);

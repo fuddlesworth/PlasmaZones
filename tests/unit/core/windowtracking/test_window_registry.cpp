@@ -15,8 +15,19 @@
  *  - instancesWithAppId reverse index stays in sync across mutations and removes
  *  - remove emits windowDisappeared
  *  - clear emits windowDisappeared for every tracked id
+ *  - canonical freeze: the first id seen for an instance is frozen and never
+ *    re-seeded, including an appId-less "|instanceId" placeholder, so a
+ *    window keeps ONE key for its whole life; an empty id is exempt and
+ *    seeds nothing
  *  - canonical retirement: remove/clear emit before retiring the canonical
- *    record, and a subscriber-reseeded canonical survives the removal
+ *    record, and a subscriber-reseeded canonical survives the removal; a
+ *    subscriber's re-UPSERT during a bulk clear does not, since the clear
+ *    drops the replay and must not leave the mapping behind either; outside
+ *    a clear the mapping IS kept, for the record that does get replayed
+ *  - pruneStaleInstances fails closed on an empty alive set
+ *  - wide metadata: windowRole / pid / virtualDesktop / activity / windowType
+ *    round-trip and emit per-field change signals
+ *  - rejection of an empty instance id, and appIdFor on an unknown instance
  *  - re-entrancy: nested clear/remove/upsert from signal receivers (including
  *    receiver-deletes-registry) leave the registry consistent and emit once
  *  - isMinimized resolves composite windowIds to the instance record
@@ -198,6 +209,55 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // canonical freeze
+    // ────────────────────────────────────────────────────────────────────
+
+    void canonicalizeWindowId_firstSeenId_isFrozen()
+    {
+        WindowRegistry reg;
+
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("firefox|u1")), QStringLiteral("firefox|u1"));
+        // Single-shot: a mutated class never re-seeds the mapping.
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("renamed|u1")), QStringLiteral("firefox|u1"));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u1")), QStringLiteral("firefox|u1"));
+    }
+
+    void canonicalizeWindowId_appIdLessFirstContact_isStillFrozen()
+    {
+        // KWin reports a blank class for a surface it has not finished
+        // mapping, so the first push for a window can carry "|instanceId".
+        // That shape is frozen like any other ON PURPOSE. Exempting it would
+        // make the canonical CHANGE once the real class arrived, and the
+        // engines key their membership maps at adopt time with no re-key
+        // path: close would stop removing the window and the alive-set walk
+        // in pruneStaleWindows would force-remove a live one from its layout.
+        // The appId such a window is missing is served by appIdFor, which
+        // self-corrects on the class-change push — never by parsing the id.
+        WindowRegistry reg;
+
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("|u1")), QStringLiteral("|u1"));
+        // One key for the window's life: the later well-formed push resolves
+        // BACK to the frozen id rather than replacing it.
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("ghostty|u1")), QStringLiteral("|u1"));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("ghostty|u1")), QStringLiteral("|u1"));
+
+        // And the identity is recoverable from the metadata record, which is
+        // where callers are told to get it.
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("ghostty")));
+        QCOMPARE(reg.appIdFor(QStringLiteral("u1")), QStringLiteral("ghostty"));
+    }
+
+    void canonicalizeWindowId_emptyId_isNotFrozen()
+    {
+        WindowRegistry reg;
+
+        QCOMPARE(reg.canonicalizeWindowId(QString()), QString());
+        // The empty early return must not have seeded a mapping under an
+        // empty instance id.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("firefox|")), QStringLiteral("firefox|"));
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // remove + clear
     // ────────────────────────────────────────────────────────────────────
 
@@ -243,6 +303,85 @@ private Q_SLOTS:
         QCOMPARE(ids, (QStringList{QStringLiteral("canonical-only"), QStringLiteral("u1"), QStringLiteral("u2")}));
         QCOMPARE(reg.size(), 0);
         QVERIFY(reg.instancesWithAppId(QStringLiteral("firefox")).isEmpty());
+    }
+
+    void clear_subscriberReupsertsDuringEmit_leavesNothingBehind()
+    {
+        // clear() drops a re-entrant upsert on purpose (the bulk reset
+        // supersedes it), so the canonical must be dropped with it. Keeping
+        // the mapping for a record that is never replayed left the instance
+        // behind as a canonical-only survivor of a reset whose whole contract
+        // is that the registry ends up empty.
+        //
+        // Scoped to the re-UPSERT shape deliberately. A subscriber that seeds
+        // a canonical for an instance that had NONE takes the
+        // postEmit != canonical branch instead, which skips this retirement
+        // entirely and lets the fresh mapping live — that is a re-announce,
+        // covered by remove_subscriberReseededCanonical_survivesRemoval, and
+        // it is not what this gate governs. (A subscriber calling
+        // canonicalizeWindowId for an instance that still HAS its mapping
+        // just gets the frozen id back and changes nothing.)
+        WindowRegistry reg;
+        reg.canonicalizeWindowId(QStringLiteral("firefox|u1"));
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& instanceId) {
+            // A re-announce racing the clear.
+            reg.upsert(instanceId, make(QStringLiteral("firefox")));
+        });
+
+        reg.clear();
+
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(!reg.contains(QStringLiteral("u1")));
+        // No canonical-only remnant: nothing resolves for this instance any
+        // more. (The discriminating assertion — without the m_clearing gate
+        // the retired mapping is re-inserted and this returns "firefox|u1".)
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u1")), QStringLiteral("renamed|u1"));
+    }
+
+    void remove_subscriberUpsertsThenRemoves_cancelsTheQueuedReplay()
+    {
+        // A re-entrant remove() for an instance already mid-disappearance
+        // CANCELS its queued upsert rather than replaying it. Without that,
+        // a subscriber that re-announces and then immediately closes a window
+        // during one emit would resurrect the record it just asked to drop.
+        // The existing re-entrancy slots only reach this line with an empty
+        // pending map, where the cancel is a no-op and proves nothing.
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        QSignalSpy appeared(&reg, &WindowRegistry::windowAppeared);
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& instanceId) {
+            reg.upsert(instanceId, make(QStringLiteral("firefox"))); // queues a replay
+            reg.remove(instanceId); // …and cancels it
+        });
+
+        reg.remove(QStringLiteral("u1"));
+
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(!reg.contains(QStringLiteral("u1")));
+        // The cancelled replay never re-announced the window.
+        QCOMPARE(appeared.size(), 0);
+    }
+
+    void remove_reannouncingSubscriber_keepsCanonicalOutsideClear()
+    {
+        // The non-clearing leg of the same gate: outside a bulk clear the
+        // re-entrant upsert IS replayed, so the canonical must be kept for it
+        // rather than retired. Without this, a close racing a re-announce
+        // would strip the identity translation the replayed record needs.
+        WindowRegistry reg;
+        reg.canonicalizeWindowId(QStringLiteral("firefox|u1"));
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& instanceId) {
+            reg.upsert(instanceId, make(QStringLiteral("firefox")));
+        });
+
+        reg.remove(QStringLiteral("u1"));
+
+        // The replayed record is back, and still reachable through the id the
+        // stores were keyed with.
+        QVERIFY(reg.contains(QStringLiteral("u1")));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u1")), QStringLiteral("firefox|u1"));
     }
 
     void remove_canonicalOnly_emitsBeforeRetiringCanonical()
@@ -602,6 +741,38 @@ private Q_SLOTS:
                  QStringLiteral("konsole-renamed|dead-1"));
         // The alive window is untouched.
         QCOMPARE(reg.appIdFor(QStringLiteral("alive-1")), QStringLiteral("firefox"));
+    }
+
+    void pruneStaleInstances_emptyAliveSet_isRefused()
+    {
+        // Fail-closed guard. The effect's one-shot alive report at daemon-ready
+        // fires before session-restored apps have mapped their windows, so an
+        // empty set arrives meaning "I have not looked yet", not "everything
+        // died". Honouring it would destroy the whole registry — every window's
+        // identity translation — in one call.
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        reg.canonicalizeWindowId(QStringLiteral("konsole|u2"));
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        const int pruned = reg.pruneStaleInstances({});
+
+        QCOMPARE(pruned, 0);
+        QCOMPARE(disappeared.size(), 0);
+        QCOMPARE(reg.size(), 1);
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u2")), QStringLiteral("konsole|u2"));
+    }
+
+    void pruneStaleInstances_emptySetOnEmptyRegistry_isNoop()
+    {
+        // The one legitimately-empty case: nothing tracked, nothing alive. It
+        // must fall through the guard rather than trip it.
+        WindowRegistry reg;
+        QSignalSpy disappeared(&reg, &WindowRegistry::windowDisappeared);
+
+        QCOMPARE(reg.pruneStaleInstances({}), 0);
+        QCOMPARE(disappeared.size(), 0);
+        QCOMPARE(reg.size(), 0);
     }
 
     void pruneStaleInstances_allAlive_isNoop()

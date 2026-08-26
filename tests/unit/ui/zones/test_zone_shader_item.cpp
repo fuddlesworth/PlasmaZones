@@ -201,10 +201,10 @@ private Q_SLOTS:
     {
         ZoneShaderItem item;
 
-        // Verify default color 1 matches ConfigDefaults::highlightColor()
+        // Verify default color 1 matches ConfigDefaults::highlightFallbackColor()
         constexpr float kEpsilon = 0.002f;
         QColor defaultColor = item.customColor1();
-        QColor expectedColor = PlasmaZones::ConfigDefaults::highlightColor();
+        QColor expectedColor = PlasmaZones::ConfigDefaults::highlightFallbackColor();
         QVERIFY(qAbs(static_cast<float>(defaultColor.redF()) - static_cast<float>(expectedColor.redF())) < kEpsilon);
         QVERIFY(qAbs(static_cast<float>(defaultColor.greenF()) - static_cast<float>(expectedColor.greenF()))
                 < kEpsilon);
@@ -264,6 +264,61 @@ private Q_SLOTS:
         // Normal value should pass through
         item.setBufferScale(0.5);
         QVERIFY(qFuzzyCompare(item.bufferScale(), 0.5));
+    }
+
+    void testZoneShaderItem_halfFloatBuffersDefaultsTrue()
+    {
+        ZoneShaderItem item;
+
+        // Half-float buffers are the safe default: a pack that never declared
+        // the key keeps RGBA16F intermediates (HDR / signed-data / feedback
+        // safe). Only an explicit "halfFloatBuffers": false opts into RGBA8.
+        QCOMPARE(item.halfFloatBuffers(), true);
+
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(item.halfFloatBuffers(), false);
+
+        item.setHalfFloatBuffers(true);
+        QCOMPARE(item.halfFloatBuffers(), true);
+
+        // COVERAGE LIMIT: this pins the item-side property contract only. The
+        // behaviour the flag exists for — ensureBufferTarget choosing RGBA8
+        // over RGBA16F and rebuilding the buffer targets on a flip — lives on
+        // the render node behind a live scene graph, reachable only through
+        // the opt-in GPU harness (PLASMAZONES_GPU_TESTS=1).
+    }
+
+    void testZoneShaderItem_halfFloatBuffersChangeGuard()
+    {
+        ZoneShaderItem item;
+
+        QSignalSpy spy(&item, &ZoneShaderItem::halfFloatBuffersChanged);
+        // Repeat of the current value must be suppressed ("emit only on
+        // change"), a genuine flip must emit exactly once. Same pattern the
+        // labelsTexture suppression test below establishes.
+        item.setHalfFloatBuffers(true);
+        QCOMPARE(spy.count(), 0);
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(spy.count(), 1);
+        item.setHalfFloatBuffers(false);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testZoneShaderItem_releaseIdleGraphicsResourcesWithoutWindow()
+    {
+        ZoneShaderItem item;
+        item.setShaderSource(QUrl(QStringLiteral("qrc:/does/not/matter.frag")));
+        const auto statusBefore = item.status();
+        const QString errorBefore = item.errorLog();
+
+        // The daemon's idle quiesce reaches this Q_INVOKABLE via the QML
+        // forwarder chain. Windowless (headless) it must be a clean no-op:
+        // the win guard returns before any render job is scheduled, and
+        // neither status nor errorLog moves.
+        item.releaseIdleGraphicsResources();
+
+        QCOMPARE(item.status(), statusBefore);
+        QCOMPARE(item.errorLog(), errorBefore);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -331,17 +386,21 @@ private Q_SLOTS:
         QCOMPARE(item.status(), ZoneShaderItem::Status::Loading);
     }
 
-    void testZoneShaderItem_unsupportedUrlSchemeSetsError()
+    void testZoneShaderItem_unsupportedUrlSchemeIsFullyRefused()
     {
         // http:// / ftp:// / etc. can't be loaded by the RHI pipeline; the
-        // library now rejects them at setShaderSource() (input-validation
-        // boundary) with an Error status + log, rather than silently
-        // deferring to the render thread where it would fail with a
-        // generic "Shader loading failed" message.
+        // library rejects them at setShaderSource() (input-validation
+        // boundary) as a FULL refusal: no state changes at all, only a
+        // warning. Setting Status::Error while the previous shader kept
+        // rendering made status, the property value, and the on-screen
+        // output disagree (and reloadShader() then erased the error), so
+        // the contract is now "a refused write leaves everything as it
+        // was".
         ZoneShaderItem item;
         item.setShaderSource(QUrl(QStringLiteral("http://example.com/shader.frag")));
-        QCOMPARE(item.status(), ZoneShaderItem::Status::Error);
-        QVERIFY(!item.errorLog().isEmpty());
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Null);
+        QVERIFY(item.errorLog().isEmpty());
+        QVERIFY(item.shaderSource().isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

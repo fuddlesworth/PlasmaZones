@@ -18,7 +18,6 @@
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/ScriptedAlgoTestSetup.h"
-#include "helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -383,8 +382,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
-        PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         layout->setSnappingPreferredProvider([] {
@@ -440,8 +438,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
-        PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         layout->setSnappingPreferredProvider([] {
@@ -528,8 +525,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
-        PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString autotileScreen = QStringLiteral("DP-2");
@@ -585,8 +581,7 @@ private:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         PhosphorZones::LayoutRegistry* layout =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
-        PlasmaZones::StubZoneDetector zoneDet;
-        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layout, nullptr, nullptr);
         AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString autotileScreen = QStringLiteral("DP-2");

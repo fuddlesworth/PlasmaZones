@@ -8,15 +8,16 @@
 //     screen-state / staged-assignment queries the assignments page reads back.
 //   * Virtual-desktop + activity tracking (D-Bus signals from KWin /
 //     ActivityManager and the daemon's screen-layout broadcast).
-//   * Running-windows and physical-screen queries (used by the assignments
-//     page).
-//   * Config import / export (whole-file JSON dump and restore).
+//   * Running-windows queries (used by the assignments page).
+//   * The live scrolling-strip preview the Monitors page renders as a
+//     layout thumbnail.
 //   * Window-geometry persistence (QSettings entry under the
 //     organization config file, NOT the main JSON).
-//   * KZones import helpers.
 //
-// Per-screen overrides live in settingscontroller_perscreen.cpp and the
-// ordering helpers in settingscontroller_ordering.cpp.
+// Config export/import and the KZones import wrappers live in
+// settingscontroller_transfer.cpp; per-screen overrides in
+// settingscontroller_perscreen.cpp and the ordering helpers in
+// settingscontroller_ordering.cpp.
 //
 // All methods here are members of PlasmaZones::SettingsController and use its
 // private state. Same class as settingscontroller.cpp, separate translation
@@ -24,26 +25,18 @@
 
 #include "settingscontroller.h"
 
+#include "settingscontroller_pagekeys.h"
+
 #include "config/configdefaults.h"
-#include "config/configmigration.h"
 #include "core/platform/logging.h"
 #include "core/interfaces/settings_interfaces.h"
-#include "core/utils/utils.h"
-#include "phosphor_i18n.h"
 #include "settings/utils/dbusutils.h"
-#include "settings/utils/kzonesimporter.h"
-#include "settingscontroller_pagekeys.h"
-#include "settings/utils/virtualscreenutils.h"
-
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
-#include <QDBusConnection>
 #include <QDBusMessage>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -80,28 +73,78 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
                                               int mode, const QString& snappingLayoutId,
                                               const QString& tilingAlgorithmId)
 {
+    // QML hands both of these across as bare ints and they reach the wire
+    // unchanged, so validate here. A malformed mode is REFUSED, never clamped.
+    if (mode < static_cast<int>(PhosphorZones::AssignmentEntry::Snapping)
+        || mode > static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+        qCWarning(lcCore) << "stageAssignmentEntry: refusing unknown mode" << mode << "for screen" << screenName;
+        return;
+    }
+    // A negative desktop is malformed on any reading, so it is refused
+    // unconditionally.
+    if (virtualDesktop < 0) {
+        qCWarning(lcCore) << "stageAssignmentEntry: refusing negative virtual desktop" << virtualDesktop << "for screen"
+                          << screenName;
+        return;
+    }
+    // The UPPER bound is only enforced against a count the daemon actually
+    // answered with. m_virtualDesktopCount falls back to 1 when the read fails,
+    // and that fallback is a DISPLAY value — the same contract the
+    // disabled-desktop pruner honours by gating on refreshVirtualDesktops()'s
+    // return. Enforcing the bound against it would refuse every legitimate
+    // stage onto desktop 2 and up for as long as the daemon was unreachable,
+    // and the refusal is silent (void, no QML feedback), so the user would see
+    // their pick simply not take.
+    if (m_virtualDesktopCountFromDaemon && virtualDesktop > m_virtualDesktopCount) {
+        qCWarning(lcCore) << "stageAssignmentEntry: refusing virtual desktop" << virtualDesktop << "outside 0.."
+                          << m_virtualDesktopCount << "for screen" << screenName;
+        return;
+    }
     m_staging.stageAssignmentEntry(screenName, virtualDesktop, activityId, mode, snappingLayoutId, tilingAlgorithmId);
     setNeedsSave(true);
 }
 
-void SettingsController::stageAssignmentClear(const QString& screenName, int virtualDesktop, const QString& activityId)
+void SettingsController::stageScrollingTemplate(const QString& screenName, int virtualDesktop,
+                                                const QString& activityId, const QString& templateId)
 {
-    m_staging.stageFullClear(screenName, virtualDesktop, activityId);
+    // Same desktop validation as stageAssignmentEntry, for the same reason:
+    // QML hands the number across as a bare int and it reaches the wire
+    // unchanged. There is no mode argument to validate here — the flush
+    // decides whether to issue this slot's call from the STAGED mode, so a
+    // template staged against a context that ends up non-scrolling is simply
+    // never written.
+    if (virtualDesktop < 0) {
+        qCWarning(lcCore) << "stageScrollingTemplate: refusing negative virtual desktop" << virtualDesktop
+                          << "for screen" << screenName;
+        return;
+    }
+    if (m_virtualDesktopCountFromDaemon && virtualDesktop > m_virtualDesktopCount) {
+        qCWarning(lcCore) << "stageScrollingTemplate: refusing virtual desktop" << virtualDesktop << "outside 0.."
+                          << m_virtualDesktopCount << "for screen" << screenName;
+        return;
+    }
+    m_staging.stageScrollingTemplate(screenName, virtualDesktop, activityId, templateId);
     setNeedsSave(true);
 }
 
+// Removes any staged entry for the (screen × desktop × activity) assignment
+// context — a true unstage, so on Apply the context's daemon-side assignment is
+// left untouched.
+//
+// No QML page calls this today. It is kept as the staging surface's inverse:
+// stageAssignmentEntry is the only way in, and a page that stages a pick and
+// then wants to take it back (rather than stage the opposite) has no other
+// route. Deleting it would leave the surface one-way.
 void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
                                                 const QString& activityId)
 {
     m_staging.removeStagedAssignment(screenName, virtualDesktop, activityId);
-    // Same bookkeeping as stageAssignmentClear. Removing a staged entry can
-    // leave the staging map empty, but dirtiness here is page-level, not a
-    // count of staged entries: the user interacted with the page, and Apply
-    // simply flushes whatever remains (possibly nothing) — the flush of an
-    // empty map is a no-op. There is no unstage path in this controller
-    // that flips needsSave back to false short of save()/load(), so
-    // setNeedsSave(true) is the coherent mirror of the other staging
-    // mutators.
+    // Same bookkeeping as stageAssignmentEntry. Removing a staged entry can
+    // leave the staging map empty, but dirtiness here is page-level, not a count
+    // of staged entries: the user interacted with the page, and Apply flushes
+    // whatever remains, an empty map being a no-op. Nothing in this controller
+    // flips needsSave back to false short of save()/load(), so setNeedsSave(true)
+    // is the coherent mirror of the other staging mutators.
     setNeedsSave(true);
 }
 
@@ -122,6 +165,35 @@ QString SettingsController::urlToLocalFile(const QUrl& url) const
 // Quick layout slots (D-Bus to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+namespace {
+
+/// Shared tail for the three quick-slot getters: read the slot id out of @p
+/// reply, warning when the reply carried nothing usable.
+///
+/// Warned rather than silent because an unreachable daemon and an unassigned
+/// slot are indistinguishable in the return value — both are an empty string.
+/// Left silent, a daemon-down launch rendered every slot as unassigned and a
+/// later Save could write those clears over real assignments. Note the normal
+/// unassigned case does NOT warn: a successful reply for an empty slot still
+/// carries one (empty) argument, so it returns through the first branch.
+///
+/// Anonymous namespace keeps this TU-local, the same convention
+/// parseRunningWindowsJson below follows so unity-build batching cannot
+/// produce a duplicate-symbol surprise.
+QString quickSlotFromReply(const QDBusMessage& reply, const char* what, int slotNumber)
+{
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toString();
+    }
+    qCWarning(lcCore) << what << "slot" << slotNumber
+                      << (reply.type() == QDBusMessage::ErrorMessage
+                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
+                              : QStringLiteral("reply carried no arguments"));
+    return {};
+}
+
+} // namespace
+
 QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
@@ -129,12 +201,10 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
         return staged;
-    // Snapping quick slots use wire mode 0 (AssignmentEntry::Snapping).
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getQuickLayoutSlot"), {0, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeSnapping, slotNumber}),
+                              "getQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -143,15 +213,26 @@ void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layou
         return;
     m_staging.stageSnappingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
+    // The staged value has no NOTIFY of its own, so without this the slot cards
+    // never re-read and the pick reverted on screen at the next model rebuild
+    // while Apply still wrote it. getQuickLayoutSlot is staging-aware, so the
+    // re-read this triggers shows the staged pick rather than the daemon's
+    // saved slot. Same emit the per-page Reset path uses.
+    Q_EMIT quickLayoutSlotsChanged();
 }
 
 QString SettingsController::getQuickLayoutShortcut(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
         return {};
-    // Return the default shortcut string -- the standalone cannot query KGlobalAccel
-    // since it doesn't link KF6::GlobalAccel. The shortcut is Meta+Alt+N.
-    return QStringLiteral("Meta+Alt+%1").arg(slotNumber);
+    // The quick-layout shortcuts are config-backed, so the live sequence comes
+    // from the store the user's rebind writes to — not from a hardcoded
+    // "Meta+Alt+N", which kept showing the factory binding on every slot card
+    // after a rebind. The schema registers the factory sequence as the key's
+    // default, so an untouched slot still reads back Meta+Alt+N. The getter is
+    // 0-based (it indexes the same slot array ShortcutManager walks), while
+    // slots are 1-based at every UI and D-Bus surface.
+    return m_settings.quickLayoutShortcut(slotNumber - 1);
 }
 
 QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
@@ -161,13 +242,12 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedTilingQuickSlot(slotNumber, staged))
         return staged;
-    // Tiling quick slots use wire mode 1 (AssignmentEntry::Autotile). They are
-    // daemon-backed (mode-keyed LayoutRegistry), same as snapping slots.
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                QStringLiteral("getQuickLayoutSlot"), {1, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
-        return reply.arguments().first().toString();
-    return {};
+    // Tiling quick slots are daemon-backed (mode-keyed LayoutRegistry), same as
+    // snapping slots.
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeTiling, slotNumber}),
+                              "getTilingQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -176,36 +256,93 @@ void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString&
         return;
     m_staging.stageTilingQuickSlot(slotNumber, layoutId);
     setNeedsSave(true);
+    // See setQuickLayoutSlot above — the staged value has no NOTIFY of its own,
+    // and getTilingQuickLayoutSlot is staging-aware, so this re-read is what
+    // keeps the pick on screen until Apply.
+    Q_EMIT quickLayoutSlotsChanged();
+}
+
+QString SettingsController::getScrollingQuickLayoutSlot(int slotNumber) const
+{
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
+        return {};
+    QString staged;
+    if (m_staging.stagedScrollingQuickSlot(slotNumber, staged))
+        return staged;
+    // Scrolling quick slots hold native template ids.
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeScrolling, slotNumber}),
+                              "getScrollingQuickLayoutSlot:", slotNumber);
+}
+
+void SettingsController::setScrollingQuickLayoutSlot(int slotNumber, const QString& templateId)
+{
+    if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
+        return;
+    m_staging.stageScrollingQuickSlot(slotNumber, templateId);
+    setNeedsSave(true);
+    // See setQuickLayoutSlot above — the staged value has no NOTIFY of its
+    // own, and the getter is staging-aware, so this re-read is what keeps
+    // the pick on screen until Apply.
+    Q_EMIT quickLayoutSlotsChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Virtual desktops / activities (D-Bus queries to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void SettingsController::refreshVirtualDesktops()
+bool SettingsController::refreshVirtualDesktops()
 {
+    bool countOk = false;
     QDBusMessage countReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                      QStringLiteral("getVirtualDesktopCount"));
     if (countReply.type() == QDBusMessage::ReplyMessage && !countReply.arguments().isEmpty()) {
         m_virtualDesktopCount = countReply.arguments().first().toInt();
-    } else if (countReply.type() == QDBusMessage::ErrorMessage) {
+        countOk = true;
+    } else {
+        // Plain `else`, deliberately: an argument-less ReplyMessage is a
+        // successful call that answered nothing, which is no more usable than a
+        // transport error and used to match NEITHER branch — leaving the stale
+        // count in place while the return said the refresh had failed.
         qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopCount D-Bus call failed:"
-                          << countReply.errorMessage();
+                          << (countReply.type() == QDBusMessage::ReplyMessage
+                                  ? QStringLiteral("reply carried no arguments")
+                                  : countReply.errorMessage());
         // Mirror the refreshActivities pattern: reset to the single-
         // desktop default on error so QML doesn't render desktop indices
-        // the daemon no longer enumerates.
+        // the daemon no longer enumerates. A DISPLAY fallback only: the false
+        // return is what stops a caller reading it as "the user really is down
+        // to one desktop" and pruning every list that names desktop 2 and up.
         m_virtualDesktopCount = 1;
     }
+    // Whether the count in hand came from the daemon or is the display
+    // fallback. Every caller that REFUSES or DESTROYS on the strength of the
+    // count reads this rather than the count itself.
+    m_virtualDesktopCountFromDaemon = countOk;
 
+    bool namesOk = false;
     QDBusMessage namesReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                      QStringLiteral("getVirtualDesktopNames"));
     if (namesReply.type() == QDBusMessage::ReplyMessage && !namesReply.arguments().isEmpty()) {
         m_virtualDesktopNames = namesReply.arguments().first().toStringList();
-    } else if (namesReply.type() == QDBusMessage::ErrorMessage) {
+        namesOk = true;
+    } else {
+        // Same reasoning as the count branch above.
         qCWarning(lcCore) << "refreshVirtualDesktops: getVirtualDesktopNames D-Bus call failed:"
-                          << namesReply.errorMessage();
+                          << (namesReply.type() == QDBusMessage::ReplyMessage
+                                  ? QStringLiteral("reply carried no arguments")
+                                  : namesReply.errorMessage());
         m_virtualDesktopNames.clear();
     }
+    // Both halves have to have landed. The two calls fail independently, and a
+    // count without names (or names without a count) is a half-refreshed view
+    // no destructive caller should act on.
+    // Deliberately BOTH: the prune only consumes the count, but a names
+    // failure with a good count still means the D-Bus session is degraded,
+    // and skipping one prune cycle is the cheap, non-destructive posture
+    // (stale disabled entries just wait for the next change event).
+    return countOk && namesOk;
 }
 
 void SettingsController::refreshActivities()
@@ -214,8 +351,16 @@ void SettingsController::refreshActivities()
                                                      QStringLiteral("isActivitiesAvailable"));
     if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
         m_activitiesAvailable = availReply.arguments().first().toBool();
-    } else if (availReply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable D-Bus call failed:" << availReply.errorMessage();
+    } else {
+        // A plain `else`, not an ErrorMessage test: an argument-less
+        // ReplyMessage is a successful call that answered nothing, and it
+        // matched NEITHER branch — leaving the stale availability in place,
+        // which is the very outcome the warning below describes. Same fix
+        // refreshVirtualDesktops already carries for the same shape.
+        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable"
+                          << (availReply.type() == QDBusMessage::ErrorMessage
+                                  ? QStringLiteral("D-Bus call failed: %1").arg(availReply.errorMessage())
+                                  : QStringLiteral("reply carried no arguments"));
         // Treat a D-Bus error the same as an explicit "false" reply —
         // without this, m_activitiesAvailable kept its previous (likely
         // true) value, the function then entered the `if (true)` branch
@@ -228,29 +373,20 @@ void SettingsController::refreshActivities()
     if (m_activitiesAvailable) {
         QDBusMessage infoReply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                         QStringLiteral("getAllActivitiesInfo"));
-        if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
-            QString json = infoReply.arguments().first().toString();
-            QJsonParseError parseErr;
-            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseErr);
-            if (parseErr.error != QJsonParseError::NoError) {
-                // Malformed payload — clear so QML stops rendering an
-                // activity set we can no longer trust to match the
-                // daemon's view. Silent-on-parse-error would keep
-                // m_activities stale forever.
-                qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo parse error:" << parseErr.errorString();
-                m_activities.clear();
-            } else if (doc.isArray()) {
-                m_activities.clear();
-                for (const auto& val : doc.array()) {
-                    m_activities.append(val.toObject().toVariantMap());
-                }
-            } else {
-                // Reply was a JSON document but not an array — same
-                // shape mismatch as a parse error; treat as failure.
-                qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo reply was not a JSON array";
-                m_activities.clear();
+        if (infoReply.type() != QDBusMessage::ErrorMessage) {
+            // A malformed or non-array payload comes back as an empty array
+            // (the helper warns), and rebuilding from an empty array clears —
+            // which is the posture the explicit branches here used to spell
+            // out: stop rendering an activity set we can no longer trust to
+            // match the daemon's view rather than leaving it stale forever.
+            const QJsonArray arr =
+                DaemonDBus::replyJsonArray(infoReply, QLatin1String("refreshActivities: getAllActivitiesInfo"));
+            m_activities.clear();
+            m_activities.reserve(arr.size());
+            for (const auto& val : arr) {
+                m_activities.append(val.toObject().toVariantMap());
             }
-        } else if (infoReply.type() == QDBusMessage::ErrorMessage) {
+        } else {
             qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo D-Bus call failed:"
                               << infoReply.errorMessage();
             // Same rationale as the isActivitiesAvailable branch above:
@@ -265,9 +401,17 @@ void SettingsController::refreshActivities()
             QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getCurrentActivity"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             m_currentActivity = currentReply.arguments().first().toString();
-        } else if (currentReply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(lcCore) << "refreshActivities: getCurrentActivity D-Bus call failed:"
-                              << currentReply.errorMessage();
+        } else {
+            // Plain `else` for the argument-less-reply reason given above.
+            qCWarning(lcCore) << "refreshActivities: getCurrentActivity"
+                              << (currentReply.type() == QDBusMessage::ErrorMessage
+                                      ? QStringLiteral("D-Bus call failed: %1").arg(currentReply.errorMessage())
+                                      : QStringLiteral("reply carried no arguments"));
+            // Same clear-on-error posture as the two branches above and as the
+            // activities-unavailable arm below. Keeping the previous id would
+            // also defeat the restart change-detection that compares the
+            // current activity against the one we last saw.
+            m_currentActivity.clear();
         }
     } else {
         // Activities subsystem went away (kactivities not running, plugin
@@ -284,7 +428,7 @@ void SettingsController::refreshActivities()
 
 void SettingsController::onVirtualDesktopsChanged()
 {
-    refreshVirtualDesktops();
+    const bool desktopsRefreshed = refreshVirtualDesktops();
 
     // Prune both per-mode disabled-desktop lists. This is driven by a
     // KDE virtual-desktop count change (external system event), not by
@@ -304,15 +448,22 @@ void SettingsController::onVirtualDesktopsChanged()
     bool prunedAny = false;
     {
         ExternalEditScope scope(*this, QStringLiteral("overview"));
+        // Only prune against a count that actually came from the daemon. A
+        // failed read leaves the member at its display fallback of 1, and
+        // pruning against that deletes every disabled-desktop entry for desktop
+        // 2 and up, persisted on the next Save.
+        //
         // Iterate every mode the (Mode, Family) table knows about so a
         // future mode (e.g. Scrolling) is automatically pruned when the
         // user removes a virtual desktop it referenced. The hand-maintained
         // {Snapping, Autotile} list here used to silently skip Scrolling.
-        for (const auto mode : PhosphorZones::allModes()) {
-            QStringList disabled = m_settings.disabledDesktops(mode);
-            if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
-                m_settings.setDisabledDesktops(mode, disabled);
-                prunedAny = true;
+        if (desktopsRefreshed && m_virtualDesktopCount >= 1) {
+            for (const auto mode : PhosphorZones::allModes()) {
+                QStringList disabled = m_settings.disabledDesktops(mode);
+                if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
+                    m_settings.setDisabledDesktops(mode, disabled);
+                    prunedAny = true;
+                }
             }
         }
         if (prunedAny) {
@@ -320,6 +471,11 @@ void SettingsController::onVirtualDesktopsChanged()
         }
     }
 
+    // Unconditional on purpose, against the usual emit-on-change discipline.
+    // This is an externally driven session event: the compositor is the change
+    // authority, so it only tells us when something actually moved, and a
+    // spurious re-emit costs a model refresh and nothing else. No snapshot
+    // compare.
     Q_EMIT virtualDesktopsChanged();
 }
 
@@ -336,19 +492,24 @@ void SettingsController::onActivitiesChanged()
     bool prunedAny = false;
     {
         ExternalEditScope scope(*this, QStringLiteral("overview"));
-        if (!m_activities.isEmpty()) {
-            QSet<QString> validIds;
-            for (const QVariant& v : std::as_const(m_activities)) {
-                const QVariantMap map = v.toMap();
-                const QString id = map.value(QStringLiteral("id")).toString();
-                if (!id.isEmpty()) {
-                    validIds.insert(id);
-                }
+        QSet<QString> validIds;
+        for (const QVariant& v : std::as_const(m_activities)) {
+            const QVariantMap map = v.toMap();
+            const QString id = map.value(QStringLiteral("id")).toString();
+            if (!id.isEmpty()) {
+                validIds.insert(id);
             }
-            // Iterate every mode the (Mode, Family) table knows about so a
-            // future mode (e.g. Scrolling) is automatically pruned when the
-            // user removes a KDE activity it referenced. Symmetric with the
-            // desktop-prune loop in onVirtualDesktopsChanged above.
+        }
+        // Gate on the ids the prune actually consumes, not on m_activities: a
+        // non-empty payload whose entries carry no usable id passes an
+        // m_activities check with an empty validIds, and pruning against an
+        // empty set wipes every disabled-activity entry the user has.
+        //
+        // Iterate every mode the (Mode, Family) table knows about so a
+        // future mode (e.g. Scrolling) is automatically pruned when the
+        // user removes a KDE activity it referenced. Symmetric with the
+        // desktop-prune loop in onVirtualDesktopsChanged above.
+        if (!validIds.isEmpty()) {
             for (const auto mode : PhosphorZones::allModes()) {
                 QStringList disabledActs = m_settings.disabledActivities(mode);
                 if (pruneDisabledActivityEntries(disabledActs, validIds)) {
@@ -362,6 +523,8 @@ void SettingsController::onActivitiesChanged()
         }
     }
 
+    // Unconditional for the same reason as virtualDesktopsChanged above: KDE
+    // is the change authority for this event, so no snapshot compare.
     Q_EMIT activitiesChanged();
 }
 
@@ -381,17 +544,6 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
 
 namespace {
 
-// Drop a leading UTF-8 BOM from @p bytes. Qt's JSON parser treats a BOM as a
-// syntax error rather than skipping it, so any bytes handed to
-// QJsonDocument::fromJson have to come through here first. Shared by the import
-// probe's head sniff and its whole-file parse so the two agree on where the
-// content starts.
-QByteArray withoutUtf8Bom(const QByteArray& bytes)
-{
-    static const QByteArray kUtf8Bom("\xEF\xBB\xBF", 3);
-    return bytes.startsWith(kUtf8Bom) ? bytes.mid(kUtf8Bom.size()) : bytes;
-}
-
 // Parses the daemon's running-windows JSON payload into a QVariantList of
 // {windowClass, appName, caption, desktopFile} maps ready for QML consumption. The
 // synchronous getRunningWindows() predecessor was removed in Phase 6 of
@@ -404,9 +556,18 @@ QVariantList parseRunningWindowsJson(const QString& json)
     if (json.isEmpty()) {
         return {};
     }
+    // A signal payload rather than a method reply, so DaemonDBus::replyJsonArray
+    // does not fit — but it warns for the same reason: the caller sees an empty
+    // list either way, and without a log line "no windows are open" and "the
+    // effect sent something unreadable" are the same state.
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcCore) << "parseRunningWindowsJson: payload is not valid JSON:" << parseError.errorString();
+        return {};
+    }
+    if (!doc.isArray()) {
+        qCWarning(lcCore) << "parseRunningWindowsJson: payload JSON is not an array";
         return {};
     }
 
@@ -431,8 +592,38 @@ QVariantList parseRunningWindowsJson(const QString& json)
     return result;
 }
 
+// The most tabs a strip preview will draw pills for. The daemon is a
+// same-user peer rather than a hostile one, so this is version-skew and
+// daemon-bug insurance, not a security boundary — but it is the only bound on
+// the path: the count is forwarded into a Repeater `model`, so it is a live
+// QQuickItem instantiation count on the GUI thread, once per tile, on every
+// strip read. A column holding more windows than this is already past the
+// point where individual pills are distinguishable in a thumbnail.
+//
+// Only this producer caps. The daemon's in-process twin (stripzones.h) takes
+// the same field straight off the engine's own value type rather than off a
+// wire it has to distrust, so there is nothing there for a cap to defend
+// against. The two therefore disagree above this count by design.
+constexpr int MaxPreviewTabs = 64;
+
 } // namespace
 
+// ── Running window picker (async flow) ──────────────────────────────────────
+//
+// The QML picker dialog calls this and binds to runningWindowsAvailable(list)
+// — no blocking D-Bus round-trip. The controller caches the most recent list in
+// m_cachedRunningWindows so QML dialogs can read it directly between calls. The
+// old synchronous getRunningWindows() was removed in Phase 6 of
+// refactor/dbus-performance.
+//
+// This invalidates the cache before issuing the call, so QML readers binding to
+// cachedRunningWindows() during a refresh see an empty list (intentional —
+// distinguishes "loading" from "stale-but-cached").
+//
+// A client-side timeout guards against the KWin effect being unloaded: if no
+// reply arrives within RunningWindowsTimeoutMs, we emit runningWindowsTimedOut()
+// so the QML dialog can show a "no response" state instead of hanging on a
+// spinner forever.
 void SettingsController::requestRunningWindows()
 {
     // Fire-and-forget: the daemon emits runningWindowsRequested to the
@@ -477,323 +668,6 @@ void SettingsController::onRunningWindowsAvailable(const QString& json)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Config export/import
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool SettingsController::exportAllSettings(const QString& filePath)
-{
-    // Reachable from QML: urlToLocalFile yields an empty string for a URL that
-    // is not a local file, so a remote destination lands here rather than being
-    // a programmer error.
-    if (filePath.isEmpty()) {
-        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Settings can only be exported to a local file."));
-        return false;
-    }
-    // Defence-in-depth: same sanitiser the per-layout import/export uses.
-    // A QML or D-Bus caller passing a path with `..` traversal segments,
-    // an embedded NUL, or a leading `~` is treated as a programmer error.
-    const QString safeFilePath = Utils::sanitizeIOPath(filePath);
-    if (safeFilePath.isEmpty()) {
-        qCWarning(lcCore) << "exportAllSettings: refusing unsafe path" << filePath;
-        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That export path is not allowed."));
-        return false;
-    }
-    const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
-    // Exporting onto the live config is refused: the write below would put the
-    // current settings into the file the app is using, which is an implicit
-    // Save of whatever the user has pending, and it would leave that file
-    // disagreeing with the baseline per-page Discard reverts to. The file
-    // picker can reach the config directory. Canonical paths, so a symlink or a
-    // `.` segment pointing at the same file is caught too. canonicalFilePath()
-    // is empty for a file that does not exist yet, which on a fresh profile is
-    // exactly the live config path; in that case canonicalize the PARENT
-    // directory and rejoin the filename, so `<symlink-to-config-dir>/config.json`
-    // is still caught, and fall back to cleaned lexical paths only when the
-    // parent does not exist either (nothing on disk to resolve).
-    const QFileInfo destInfo(safeFilePath);
-    bool destIsLiveConfig = false;
-    if (destInfo.exists()) {
-        destIsLiveConfig = destInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath();
-    } else {
-        const auto resolveThroughParent = [](const QFileInfo& info) -> QString {
-            const QString parentCanonical = info.dir().canonicalPath();
-            if (parentCanonical.isEmpty())
-                return QDir::cleanPath(info.filePath());
-            return parentCanonical + QLatin1Char('/') + info.fileName();
-        };
-        destIsLiveConfig = resolveThroughParent(destInfo) == resolveThroughParent(QFileInfo(configPath));
-    }
-    if (destIsLiveConfig) {
-        qCWarning(PlasmaZones::lcCore) << "exportAllSettings: destination is the live config file, refusing"
-                                       << safeFilePath;
-        Q_EMIT settingsTransferFailed(
-            PhosphorI18n::tr("That is the settings file this app is using. Export to a different file."));
-        return false;
-    }
-    // Serialize the current settings straight to the destination rather than
-    // copying the live config. The old form flushed with Settings::save()
-    // first, so that the export carried what the user could see rather than the
-    // last-saved snapshot — but save() commits to ~/.config and re-baselines,
-    // so pressing Export persisted edits the user had never chosen to save and
-    // left a later per-page Discard with nothing to revert to. exportTo writes
-    // the same values (the setters already keep the backend's in-memory root
-    // current) without touching the live file or the baseline, and it writes
-    // atomically, so a failed export leaves whatever was at the destination
-    // alone instead of unlinking it up front to make room.
-    if (!m_settings.exportTo(safeFilePath)) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << safeFilePath;
-        Q_EMIT settingsTransferFailed(
-            PhosphorI18n::tr("Could not write the export. Check that the folder is writable."));
-        return false;
-    }
-    return true;
-}
-
-bool SettingsController::importAllSettings(const QString& filePath)
-{
-    // Same as the export side: an empty path here is a URL that is not a local
-    // file, which a user can pick.
-    if (filePath.isEmpty()) {
-        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Settings can only be imported from a local file."));
-        return false;
-    }
-    // Split rather than combined: a refused path and a file that is not there
-    // are the same `false` to a caller but different words to a user, and the
-    // log wants them apart too.
-    const QString safeFilePath = Utils::sanitizeIOPath(filePath);
-    if (safeFilePath.isEmpty()) {
-        qCWarning(lcCore) << "importAllSettings: refusing unsafe path" << filePath;
-        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That file path is not allowed."));
-        return false;
-    }
-    if (!QFile::exists(safeFilePath)) {
-        qCWarning(lcCore) << "importAllSettings: file not found" << filePath;
-        Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That settings file is no longer there."));
-        return false;
-    }
-
-    const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
-
-    // Importing the live config onto itself is a no-op, but the copy below
-    // removes the destination first and would then find its source gone. The
-    // backup restores it, so nothing is lost, yet the user is told the import
-    // failed when there was simply nothing to do. Refuse it up front instead.
-    const QFileInfo importInfo(safeFilePath);
-    if (importInfo.canonicalFilePath() == QFileInfo(configPath).canonicalFilePath()) {
-        qCWarning(PlasmaZones::lcCore) << "importAllSettings: source is the live config file, refusing" << safeFilePath;
-        Q_EMIT settingsTransferFailed(
-            PhosphorI18n::tr("Those are the settings this app is already using. Pick a different file to import."));
-        return false;
-    }
-
-    // Detect if the imported file is legacy INI format (not JSON).
-    // If so, run the migration converter to produce a JSON file.
-    bool isLegacyIni = false;
-    {
-        QFile f(safeFilePath);
-        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            // Read enough bytes to find the first non-whitespace character.
-            // JSON files start with '{' (or '[' for arrays, though config is always an object).
-            QByteArray head = f.peek(256);
-            // Reject non-UTF-8 BOMs explicitly — a UTF-16/UTF-32 file would
-            // not be valid JSON for our config format AND is not legacy INI
-            // either; misclassifying it as INI would corrupt data on
-            // migration. Caller gets the same "not legacy" path which then
-            // fails JSON validation and aborts cleanly.
-            const auto byte = [&head](int i) {
-                return static_cast<unsigned char>(head.at(i));
-            };
-            if (head.size() >= 4 && byte(0) == 0x00 && byte(1) == 0x00 && byte(2) == 0xFE && byte(3) == 0xFF) {
-                qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 BE BOM, refusing:" << filePath;
-                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
-                return false;
-            }
-            if (head.size() >= 4 && byte(0) == 0xFF && byte(1) == 0xFE && byte(2) == 0x00 && byte(3) == 0x00) {
-                qCWarning(PlasmaZones::lcCore) << "Import file has UTF-32 LE BOM, refusing:" << filePath;
-                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
-                return false;
-            }
-            if (head.size() >= 2 && ((byte(0) == 0xFE && byte(1) == 0xFF) || (byte(0) == 0xFF && byte(1) == 0xFE))) {
-                qCWarning(PlasmaZones::lcCore) << "Import file has UTF-16 BOM, refusing:" << filePath;
-                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
-                return false;
-            }
-            // Skip UTF-8 BOM (EF BB BF) if present — trimmed() only strips ASCII whitespace.
-            head = withoutUtf8Bom(head.trimmed()).trimmed();
-            // A leading '[' is ambiguous: a legacy INI file starts with its
-            // first "[Group]" header, but so does a JSON array. The array is
-            // valid JSON yet never a settings file (the config root is always
-            // an object), and feeding it to the INI migrator would produce a
-            // misleading "older settings file" error. Disambiguate by parsing
-            // the whole file: valid JSON here means it is not INI, so refuse
-            // it with the accurate message; a parse failure means a real INI
-            // section header and the migration path proceeds as before.
-            if (!head.isEmpty() && head.at(0) == '[') {
-                // Parse the body under the SAME normalization `head` got. peek()
-                // left the read position at 0, so readAll() re-reads the BOM that
-                // was stripped from `head` above, and Qt's JSON parser rejects a
-                // leading BOM outright — a BOM'd JSON array would look like a
-                // parse failure, fall through to isLegacyIni, and earn exactly the
-                // misleading "older settings file" error this branch exists to
-                // prevent.
-                if (!QJsonDocument::fromJson(withoutUtf8Bom(f.readAll().trimmed())).isNull()) {
-                    qCWarning(PlasmaZones::lcCore)
-                        << "Import file is a JSON array, not a settings object, refusing:" << filePath;
-                    Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
-                    return false;
-                }
-            }
-            isLegacyIni = !head.isEmpty() && head.at(0) != '{';
-        }
-    }
-
-    // Backup current config
-    const QString backupPath = configPath + QStringLiteral(".bak");
-    if (QFile::exists(backupPath)) {
-        QFile::remove(backupPath);
-    }
-    if (QFile::exists(configPath) && !QFile::copy(configPath, backupPath)) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to backup config to:" << backupPath;
-        Q_EMIT settingsTransferFailed(
-            PhosphorI18n::tr("Could not back up your current settings, so nothing was imported."));
-        return false;
-    }
-
-    bool ok = false;
-    if (isLegacyIni) {
-        // Convert INI to JSON in-place using the migration module
-        if (QFile::exists(configPath)) {
-            QFile::remove(configPath);
-        }
-        ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath);
-        if (!ok) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << safeFilePath;
-            Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not read that older settings file."));
-        }
-    } else {
-        // Validate JSON before overwriting current config
-        QFile importFile(safeFilePath);
-        if (!importFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to open import file:" << safeFilePath;
-            Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not read that settings file."));
-            ok = false;
-        } else {
-            QJsonParseError parseErr;
-            QJsonDocument importDoc = QJsonDocument::fromJson(importFile.readAll(), &parseErr);
-            if (parseErr.error != QJsonParseError::NoError || !importDoc.isObject()) {
-                qCWarning(PlasmaZones::lcCore)
-                    << "Invalid JSON in import file:" << safeFilePath << parseErr.errorString();
-                Q_EMIT settingsTransferFailed(PhosphorI18n::tr("That is not a settings file this app can read."));
-                ok = false;
-            } else {
-                // Valid JSON — copy to config path
-                if (QFile::exists(configPath)) {
-                    QFile::remove(configPath);
-                }
-                ok = QFile::copy(safeFilePath, configPath);
-                if (!ok) {
-                    qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << safeFilePath;
-                    // Says what failed, not what the restore below will do:
-                    // that runs after this and can fail too.
-                    Q_EMIT settingsTransferFailed(PhosphorI18n::tr("Could not replace your settings with that file."));
-                }
-            }
-        }
-    }
-
-    if (!ok) {
-        // Restore backup on failure. `QFile::rename` on Qt REFUSES to
-        // overwrite an existing destination (regardless of POSIX rename(2)
-        // atomicity at the syscall layer), so we must explicitly remove
-        // configPath first. In the open-fail / JSON-parse-fail paths above
-        // configPath was never touched, so it still exists — without this
-        // pre-remove the rename silently fails and the user is left with
-        // their original (pre-import) config plus a misleading "Failed to
-        // restore" warning while the actual restore-from-backup is
-        // unreachable. There's a one-syscall window between remove and
-        // rename where configPath doesn't exist; that's preferable to the
-        // silent-failure semantics of the previous form.
-        if (QFile::exists(backupPath)) {
-            // Both arms leave the user without their settings, which the
-            // failure reported above does not cover: it says the import
-            // failed, not that the restore behind it failed too and the only
-            // copy is now the backup. Name the file, since recovering it by
-            // hand is the one action left.
-            if (QFile::exists(configPath) && !QFile::remove(configPath)) {
-                qCWarning(PlasmaZones::lcCore)
-                    << "Failed to remove configPath before restore. Backup remains at:" << backupPath;
-                Q_EMIT settingsTransferFailed(
-                    PhosphorI18n::tr("Your settings could not be put back. A copy is saved at %1.").arg(backupPath));
-            } else if (!QFile::rename(backupPath, configPath)) {
-                qCWarning(PlasmaZones::lcCore)
-                    << "Failed to restore config from backup after failed import. Backup remains at:" << backupPath;
-                Q_EMIT settingsTransferFailed(
-                    PhosphorI18n::tr("Your settings could not be put back. A copy is saved at %1.").arg(backupPath));
-            }
-        }
-    } else {
-        // Clean up backup on success
-        QFile::remove(backupPath);
-        // Wrap the in-memory reload so property NOTIFY signals don't mark
-        // pages dirty — the imported config is already on disk. Keep
-        // m_loading=true through the page-controller revert calls below
-        // too: revertPending() emits pendingChangesChanged synchronously
-        // and revert() schedules a daemon fetch whose reply could
-        // re-fire dirtyChanged before the trailing setNeedsSave(false)
-        // runs. Both connect-side handlers (the
-        // m_animationsPage::pendingChangesChanged and
-        // m_rulesPage::dirtyChanged connect lambdas in
-        // settingscontroller.cpp) early-return when m_loading is true.
-        bool animationsReverted = false;
-        {
-            const ScopedFlag loadingScope(m_loading);
-            m_settings.load();
-            // Page controllers with their own on-disk staging surfaces
-            // (animations / rules) must reload too — m_settings.load()
-            // only refreshes settings.json-backed state. Without these the
-            // imported config disagrees with what the page controllers still
-            // hold in their in-memory snapshots.
-            // Refused means an async discard still owns the snapshot map, so the
-            // page is still holding pre-edit content for files the import just
-            // rewrote. Do not force the session clean in that case: the import did
-            // not fully land, so leave whatever dirty state the session already
-            // carried rather than declaring it settled. (This only withholds the
-            // clear; setNeedsSave(false) never marks anything dirty, and a later
-            // Discard on the animation pages is gated by hasPendingChanges(), not
-            // by m_dirtyPages membership.)
-            animationsReverted = !m_animationsPage || m_animationsPage->revertPending();
-            if (!animationsReverted) {
-                qCWarning(lcConfig)
-                    << "importConfig: animation snapshots are still staged after the revert (a discard is "
-                       "in flight, or a restore failed)";
-                // The settings on disk are the imported ones, but the animation
-                // page still holds pre-import snapshots. That is a partial result
-                // the user has to know about: without this the import reports plain
-                // success while the page shows something else.
-                Q_EMIT settingsTransferFailed(
-                    PhosphorI18n::tr("Your settings were imported, but the animation pages still show the old ones. "
-                                     "Reopen the settings window to see the imported values."));
-                // Report not-fully-landed. The bool's only job is gating the General
-                // page's success toast (see the settingsTransferFailed doc), and the
-                // toast surface replaces whatever is in flight. Returning true here
-                // would let the caller overwrite the reason just emitted, inside the
-                // same JS statement, so the user would only ever read "Settings
-                // imported" on the one path that exists to say otherwise.
-                ok = false;
-            }
-            if (m_rulesPage) {
-                m_rulesPage->revert();
-            }
-        }
-        DaemonDBus::notifyReload();
-        if (animationsReverted) {
-            setNeedsSave(false);
-        }
-    }
-    return ok;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Screen state query
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -801,24 +675,148 @@ QVariantList SettingsController::getScreenStates() const
 {
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("getScreenStates"));
-    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty())
-        return {};
-
-    const QString json = reply.arguments().at(0).toString();
-    if (json.isEmpty())
-        return {};
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray())
-        return {};
-
+    const QJsonArray arr = DaemonDBus::replyJsonArray(reply, QLatin1String("getScreenStates"));
     QVariantList result;
-    for (const QJsonValue& value : doc.array()) {
+    result.reserve(arr.size());
+    for (const QJsonValue& value : arr) {
         if (value.isObject())
             result.append(value.toObject().toVariantMap());
     }
     return result;
+}
+
+QVariantMap SettingsController::getScrollingBlueprintProgress(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Scrolling),
+                                                QStringLiteral("blueprintProgressJson"), {screenId});
+    const QJsonObject obj = DaemonDBus::replyJsonObject(reply, QLatin1String("getScrollingBlueprintProgress"));
+    // A screen the daemon gated out answers "{}", which parses to an empty
+    // object and reaches QML as an empty map. Passed through as-is rather
+    // than defaulted to zeroes: the caller distinguishes "no blueprint to
+    // describe" from "a blueprint with nothing spent", and zeroes would
+    // collapse the two.
+    if (obj.isEmpty()) {
+        return {};
+    }
+    return obj.toVariantMap();
+}
+
+QVariantList SettingsController::getScrollingStripPreview(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Scrolling),
+                                                QStringLiteral("visibleStripJson"), {screenId});
+    const QJsonArray arr = DaemonDBus::replyJsonArray(reply, QLatin1String("getScrollingStripPreview"));
+    // Shape the rects into the zone maps LayoutThumbnail/LayoutCard render,
+    // mirroring the daemon's OSD strip preview (numbers ascending in strip
+    // order; no custom colors).
+    QVariantList zones;
+    zones.reserve(arr.size());
+    // Counts the tiles actually EMITTED, which is what the fallback numbering
+    // and the synthetic ids below are keyed on. The raw array index leaves a
+    // hole wherever an element is skipped: a four-element payload whose second
+    // element is malformed numbered its three tiles 1, 3, 4, so the thumbnail
+    // labelled slots the Snap-to-Zone digits do not address.
+    int emitted = 0;
+    for (int i = 0; i < arr.size(); ++i) {
+        if (!arr.at(i).isObject()) {
+            // A non-object element reads back as an all-default rect and renders
+            // as a zero-size zone at the origin. Skip the phantom tile.
+            continue;
+        }
+        ++emitted;
+        const QJsonObject rect = arr.at(i).toObject();
+        QVariantMap relGeo;
+        relGeo[PhosphorZones::ZoneJsonKeys::X] = rect.value(PhosphorZones::ZoneJsonKeys::X).toDouble();
+        relGeo[PhosphorZones::ZoneJsonKeys::Y] = rect.value(PhosphorZones::ZoneJsonKeys::Y).toDouble();
+        relGeo[PhosphorZones::ZoneJsonKeys::Width] = rect.value(PhosphorZones::ZoneJsonKeys::Width).toDouble();
+        relGeo[PhosphorZones::ZoneJsonKeys::Height] = rect.value(PhosphorZones::ZoneJsonKeys::Height).toDouble();
+        QVariantMap zone;
+        // The wire's zoneNumber is the tile's 1-based visible slot in strip
+        // order — the same sequential space the Snap-to-Zone digits target,
+        // so the thumbnail labels exactly what the digits do. The fallback is
+        // for a payload from an older daemon that carries no zoneNumber, and it
+        // counts EMITTED tiles so a skipped malformed element does not leave a
+        // hole in the numbering.
+        const int zoneNumber = rect.value(PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt(emitted);
+        zone[PhosphorZones::ZoneJsonKeys::ZoneNumber] = zoneNumber;
+        zone[PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeo;
+        // Namespaced, never a bare index. These are render-only synthetic
+        // zones with no persisted identity, and nothing on THIS side resolves
+        // them (ZonePreview does match ids against highlightedZoneIds, which
+        // the daemon's OSD populates) — but a bare "0"/"1"/"2" is
+        // indistinguishable from a real zone id, and any consumer that starts
+        // keying on zone.id (a delegate reuse key, selection state) would
+        // collide across screens. CLAUDE.md: zone IDs everywhere, never
+        // indices.
+        //
+        // Keyed on the SAME number the zone carries, not on the emit counter:
+        // the daemon's in-process twin (StripZones::zoneMapsForTiles) builds
+        // its ids from the tile's zoneNumber, and the two id spaces only match
+        // entry-for-entry while both read the same field. The trade is that
+        // uniqueness now depends on the walk numbering densely rather than on
+        // a local counter that could not repeat; the engine stamps it densely
+        // over one walk, and matching the twin is what the ids are for.
+        zone[PhosphorZones::ZoneJsonKeys::Id] = QStringLiteral("strip:%1:%2").arg(screenId).arg(zoneNumber);
+        // Nothing reads these two. They keep a synthetic strip zone the same
+        // shape as a real one, so the thumbnail delegate takes one path.
+        zone[PhosphorZones::ZoneJsonKeys::Name] = QString();
+        zone[PhosphorZones::ZoneJsonKeys::UseCustomColors] = false;
+        // The tab indicator the tile's column draws, carried through to the
+        // thumbnail so a tabbed column reads as tabbed rather than as a plain
+        // window. Copied only when the daemon sent a count: an absent key and
+        // a zero both mean "this column draws no indicator" (a daemon from
+        // before this payload sends neither), and forwarding the absence keeps
+        // the renderer's one gate rather than inventing a zeroed triple here.
+        const int rawTabCount = rect.value(PhosphorProtocol::Service::StripPreviewKey::TabCount).toInt();
+        // Capped, and loudly. Every other boundary read in this file refuses a
+        // value it does not believe and says so; this one is the same wire and
+        // deserves the same treatment, because the count is the one field the
+        // renderer cannot bound for itself.
+        const int tabCount = qMin(rawTabCount, MaxPreviewTabs);
+        if (rawTabCount > MaxPreviewTabs) {
+            qCWarning(lcCore) << "getScrollingStripPreview: capping tab count" << rawTabCount << "at" << MaxPreviewTabs
+                              << "for screen" << screenId;
+        }
+        if (tabCount > 0) {
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabCount] = tabCount;
+            // Clamped into the pill row rather than merely defaulted: the count
+            // says an indicator is drawn, so some tab of it is this tile's, and
+            // an index outside the row would leave the band with nothing lit —
+            // which reads as "no tab is current" on a column that always has
+            // one. toInt's default only catches an absent or non-numeric value.
+            const int rawActiveTab = rect.value(PhosphorProtocol::Service::StripPreviewKey::ActiveTab).toInt(0);
+            const int activeTab = qBound(0, rawActiveTab, tabCount - 1);
+            if (rawActiveTab != activeTab) {
+                qCWarning(lcCore) << "getScrollingStripPreview: active tab" << rawActiveTab << "outside 0.."
+                                  << (tabCount - 1) << "for screen" << screenId;
+            }
+            zone[PhosphorProtocol::Service::StripPreviewKey::ActiveTab] = activeTab;
+            // Clamped to the four TabIndicatorPosition values. An unknown one
+            // would fall through the renderer's edge test and draw on the
+            // bottom edge, which is a wrong answer that looks like a right one.
+            const int rawTabPosition = rect.value(PhosphorProtocol::Service::StripPreviewKey::TabPosition).toInt(0);
+            const int tabPosition = qBound(0, rawTabPosition, 3);
+            if (rawTabPosition != tabPosition) {
+                qCWarning(lcCore) << "getScrollingStripPreview: tab position" << rawTabPosition
+                                  << "outside 0..3 for screen" << screenId;
+            }
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabPosition] = tabPosition;
+            // Full length is the safe read for a missing or malformed value:
+            // the renderer clamps it into 0..1, and an indicator drawn too
+            // long still says "this column is tabbed", where a zero would
+            // silently drop it for a column that draws one.
+            zone[PhosphorProtocol::Service::StripPreviewKey::TabLength] =
+                rect.value(PhosphorProtocol::Service::StripPreviewKey::TabLength).toDouble(1.0);
+        }
+        zones.append(zone);
+    }
+    return zones;
 }
 
 QVariantMap SettingsController::getStagedAssignment(const QString& screenName, int virtualDesktop,
@@ -828,14 +826,6 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
     if (!s)
         return {};
     QVariantMap map;
-    // A staged full clear carries no mode/layout fields (stageFullClear
-    // resets them), so surface it explicitly — otherwise QML restore code
-    // would see an empty map and fall back to the daemon's still-resolved
-    // explicit values, hiding the pending clear.
-    if (s->fullCleared) {
-        map[QStringLiteral("fullCleared")] = true;
-        return map;
-    }
     if (s->snappingLayoutId.has_value())
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {
@@ -843,15 +833,27 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
         map[QStringLiteral("algorithmId")] =
             PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
     }
-    // Explicit mode takes priority (stageAssignmentEntry path)
+    // Key PRESENCE is the staged/not-staged answer here, as it is for the two
+    // slots above: the staged value is legitimately an empty string when the
+    // user picked "inherit the default", so a value test would read that back
+    // as untouched and the dropdown would snap away from the user's pick on
+    // the next page visit.
+    if (s->scrollingTemplateId.has_value())
+        map[QStringLiteral("scrollingTemplateId")] = *s->scrollingTemplateId;
+    // Only two writers reach the staging map and they decide this between
+    // them: stageAssignmentEntry always sets the mode, and stageScrollingTemplate
+    // touches nothing but the template slot. So an entry with no staged mode
+    // is a template-only stage, and the map it produces deliberately carries
+    // no "mode" key — there is nothing to report, and inventing one would
+    // claim an engine switch the user never made.
+    //
+    // A mode-inference fallback used to stand here for the per-field stagers
+    // (stageSnapping / stageTiling / stageTilingClear). Those were retired
+    // with the per-family assignment pages, which left the branch unreachable:
+    // with no staged mode, both the snapping and tiling slots are necessarily
+    // unset, so every arm of the inference tested false anyway.
     if (s->stagedMode.has_value()) {
         map[QStringLiteral("mode")] = *s->stagedMode;
-    } else {
-        // Infer mode from which fields are staged (per-field path)
-        if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
-            map[QStringLiteral("mode")] = 1;
-        else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
-            map[QStringLiteral("mode")] = 0;
     }
     return map;
 }
@@ -864,93 +866,79 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 QVariantMap SettingsController::loadWindowGeometry() const
 {
     QSettings settings;
+    settings.beginGroup(ConfigDefaults::settingsAppWindowGroup());
     QVariantMap geo;
     int w = settings.value(ConfigDefaults::settingsAppWindowWidthKey(), 0).toInt();
     int h = settings.value(ConfigDefaults::settingsAppWindowHeightKey(), 0).toInt();
     int x = settings.value(ConfigDefaults::settingsAppWindowXKey()).toInt();
     int y = settings.value(ConfigDefaults::settingsAppWindowYKey()).toInt();
-    bool hasPosition = settings.contains(ConfigDefaults::settingsAppWindowXKey());
+    // Both coordinates or neither. A file carrying only X restores that X and a
+    // silent y=0, putting the window somewhere the user never left it.
+    bool hasPosition = settings.contains(ConfigDefaults::settingsAppWindowXKey())
+        && settings.contains(ConfigDefaults::settingsAppWindowYKey());
+
+    // Floor for a remembered size. saveWindowGeometry is the only writer, but a
+    // hand-edited or truncated file can carry something like 12x8, and QML
+    // applies any positive size verbatim, leaving a window too small to grab.
+    constexpr int kMinRestoredWindowWidth = 480;
+    constexpr int kMinRestoredWindowHeight = 360;
 
     // Validate against available screen geometry
+    QRect virtualGeo;
+    for (auto* screen : QGuiApplication::screens())
+        virtualGeo = virtualGeo.united(screen->availableGeometry());
+
     if (w > 0 && h > 0) {
-        QRect virtualGeo;
-        for (auto* screen : QGuiApplication::screens())
-            virtualGeo = virtualGeo.united(screen->availableGeometry());
+        // The clamp needs a screen to clamp against, so it is skipped when the
+        // query came back empty. The floor is not: with no screens to ask, a
+        // hand-edited 12x8 would otherwise be handed to QML verbatim.
         if (!virtualGeo.isEmpty()) {
             w = qMin(w, virtualGeo.width());
             h = qMin(h, virtualGeo.height());
-            // Check if center of saved window is on any screen
-            if (hasPosition && !virtualGeo.contains(QPoint(x + w / 2, y + h / 2))) {
-                hasPosition = false; // off-screen, let WM place it
-            }
         }
+        // Floor after the screen clamp, and never above what the screen can
+        // actually hold.
+        const int minWidth =
+            virtualGeo.isEmpty() ? kMinRestoredWindowWidth : qMin(kMinRestoredWindowWidth, virtualGeo.width());
+        const int minHeight =
+            virtualGeo.isEmpty() ? kMinRestoredWindowHeight : qMin(kMinRestoredWindowHeight, virtualGeo.height());
+        w = qMax(minWidth, w);
+        h = qMax(minHeight, h);
+    }
+
+    // Check if the centre of the saved window is on any screen. Hoisted OUT of
+    // the size block: a file carrying a position but no size (a truncated write,
+    // a hand edit) took no containment test at all, so a coordinate on a monitor
+    // that is now gone was restored verbatim and the window opened off-screen.
+    // With w and h at 0 the centre is just the saved corner, which is the right
+    // question to ask when there is no size to offset by.
+    if (hasPosition && !virtualGeo.isEmpty() && !virtualGeo.contains(QPoint(x + w / 2, y + h / 2))) {
+        hasPosition = false; // off-screen, let WM place it
     }
 
     geo[ConfigDefaults::settingsAppWindowWidthKey()] = w;
     geo[ConfigDefaults::settingsAppWindowHeightKey()] = h;
     geo[ConfigDefaults::settingsAppWindowXKey()] = x;
     geo[ConfigDefaults::settingsAppWindowYKey()] = y;
+    // Derived, not persisted: the four keys above are QSettings entries this
+    // function reads back, but "hasPosition" is this function's own verdict on
+    // them (both coordinates present AND the centre still on a screen). It is a
+    // plain map key for QML, deliberately not a ConfigDefaults accessor —
+    // nothing ever writes it to a config file.
     geo[QStringLiteral("hasPosition")] = hasPosition;
+    settings.endGroup();
     return geo;
 }
 
 void SettingsController::saveWindowGeometry(int x, int y, int width, int height)
 {
     QSettings settings;
+    settings.beginGroup(ConfigDefaults::settingsAppWindowGroup());
     settings.setValue(ConfigDefaults::settingsAppWindowXKey(), x);
     settings.setValue(ConfigDefaults::settingsAppWindowYKey(), y);
     settings.setValue(ConfigDefaults::settingsAppWindowWidthKey(), width);
     settings.setValue(ConfigDefaults::settingsAppWindowHeightKey(), height);
+    settings.endGroup();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// KZones Import — thin wrappers around kzonesimporter.{h,cpp}
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool SettingsController::hasKZonesConfig()
-{
-    return KZonesImporter::hasKZonesConfig();
-}
-
-int SettingsController::importFromKZones()
-{
-    const auto result = KZonesImporter::importFromKwinrc();
-    if (result.imported > 0) {
-        m_pendingSelectLayoutId = result.pendingSelectLayoutId;
-        scheduleLayoutLoad();
-    }
-    Q_EMIT kzonesImportFinished(result.imported, result.message);
-    return result.imported;
-}
-
-int SettingsController::importFromKZonesFile(const QString& filePath)
-{
-    // Defence-in-depth: same sanitiser, and same QFileDialog entry point, as
-    // the layout and algorithm imports.
-    const QString safe = Utils::sanitizeIOPath(filePath);
-    if (safe.isEmpty()) {
-        qCWarning(lcCore) << "importFromKZonesFile: refusing unsafe path" << filePath;
-        Q_EMIT kzonesImportFinished(0, PhosphorI18n::tr("That file path is not allowed."));
-        return 0;
-    }
-    const auto result = KZonesImporter::importFromFile(safe);
-    if (result.imported > 0) {
-        m_pendingSelectLayoutId = result.pendingSelectLayoutId;
-        scheduleLayoutLoad();
-    }
-    Q_EMIT kzonesImportFinished(result.imported, result.message);
-    return result.imported;
-}
-
-// ── Virtual screen configuration ──────────────────────────────────────────
-
-QStringList SettingsController::getPhysicalScreens() const
-{
-    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
-                                                QStringLiteral("getPhysicalScreens"));
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toStringList();
-    }
-    return {};
-}
 } // namespace PlasmaZones

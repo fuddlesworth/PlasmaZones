@@ -6,9 +6,11 @@ import QtQuick
 // model declaration like the animation sub-pages, with i18n() labels in QML.
 //
 // "All Popups" (path "popup") is the category root card for the transient
-// popups (snap assist, zone selector, layout picker); each can override it via
-// the DecorationProfileTree walk-up. Popups have no title bar, so none expose
-// the toggle.
+// popups (snap assist, zone selector, layout picker, shortcut cheatsheet);
+// each can override it via the DecorationProfileTree walk-up. No surface here
+// is alwaysEnabled, so every card carries a toggle: the root's doubles as the
+// category's decoration master switch, and a child's engages or clears that
+// child's own override.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Popup decoration surfaces")
     headerText: i18n("Decoration for the transient popups. \"All Popups\" is the default. Each popup can override it.")

@@ -22,10 +22,14 @@
 
 #include <unistd.h> // geteuid — the read-only-directory test is a no-op as root
 
+#include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 #include "helpers/StubSettings.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -174,8 +178,61 @@ private Q_SLOTS:
 
         mgr->removeLayout(layout);
 
-        QVERIFY(!mgr->hasExplicitAssignment(QStringLiteral("screen1")));
+        // The context rule SURVIVES the delete since the explicit no-layout
+        // state exists: the purge rewrites the dead reference to the reserved
+        // word rather than dropping the rule, so the screen keeps NO layout
+        // instead of silently inheriting the registry-wide default (the same
+        // verdict deleting a scrolling screen's template reaches — see the
+        // delete-scrubs tests in test_layoutmanager_assignment.cpp). The
+        // quick slot still sweeps: a stale binding must not resurrect the
+        // deleted layout on a shortcut press.
+        QVERIFY(mgr->hasExplicitAssignment(QStringLiteral("screen1")));
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("screen1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(entry.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("screen1"), 0, QString()), nullptr);
         QVERIFY(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).contains(1));
+
+        // The purge must also fire the per-context refresh signal: overlays
+        // and the autotile derive re-read the cascade off layoutAssigned, so
+        // a scrub that mutates the store silently leaves them on the deleted
+        // layout until something unrelated nudges them.
+        QSignalSpy purgeAssignedSpy(mgr.data(), &PhosphorZones::LayoutRegistry::layoutAssigned);
+        auto* second = createTestLayout(QStringLiteral("AlsoAssigned"));
+        mgr->addLayout(second);
+        // A SURVIVING layout, so the fresh registry below has a non-null
+        // defaultLayout(): without it the reloaded nullptr assertion passes
+        // even when the sentinel never reached disk (an empty registry
+        // answers nullptr for everything).
+        auto* survivor = createTestLayout(QStringLiteral("Survivor"));
+        mgr->addLayout(survivor);
+        mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), second);
+        purgeAssignedSpy.clear();
+        mgr->removeLayout(second);
+        QVERIFY2(purgeAssignedSpy.count() >= 1, "the delete scrub must emit layoutAssigned for the affected context");
+
+        // And the scrub must have reached DISK, not just the in-memory rule
+        // set: a fresh registry over the same guard-isolated dirs reads the
+        // reserved word back, so a daemon restart cannot resurrect the
+        // deleted layout's context (the failure mode a save() swallowed by
+        // setAllRules would produce). Same fresh-registry pattern the sidecar
+        // tests below use.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        mgr2->setLayoutDirectory(mgr->layoutDirectory());
+        mgr2->loadLayouts();
+        mgr2->loadAssignments();
+        const auto reloaded = mgr2->assignmentEntryForScreen(QStringLiteral("screen1"), 0);
+        QCOMPARE(reloaded.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(reloaded.snappingLayout, QString(PhosphorZones::NoSnappingLayout));
+        // Discriminating, thanks to Survivor above: the fresh registry HAS a
+        // default layout, so nullptr here proves the on-disk sentinel is in
+        // force rather than an empty registry answering nullptr for
+        // everything. Asserted on defaultLayout() itself, which is the
+        // property that makes the check discriminating — a non-zero layout
+        // count only implies it.
+        QVERIFY(mgr2->defaultLayout() != nullptr);
+        QCOMPARE(mgr2->layoutForScreen(QStringLiteral("screen1"), 0, QString()), nullptr);
     }
 
     // A failed sidecar write must abandon the whole removal rather than
@@ -362,8 +419,9 @@ private Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // The current on-disk format nests slots per mode
-    // ({ "snapping": {...}, "autotile": {...} }). Both modes must survive a
-    // save → fresh-load round trip and stay independent.
+    // ({ "snapping": {...}, "autotile": {...}, "scrolling": {...} }). All
+    // three modes must survive a save → fresh-load round trip and stay
+    // independent.
     void testLayoutManager_quickLayouts_nestedFormatRoundTrip()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
@@ -373,9 +431,20 @@ private Q_SLOTS:
         const QString uuid = layout->id().toString();
         const auto snapping = PhosphorZones::AssignmentEntry::Snapping;
         const auto autotile = PhosphorZones::AssignmentEntry::Autotile;
+        const auto scrolling = PhosphorZones::AssignmentEntry::Scrolling;
 
         mgr->setQuickLayoutSlot(snapping, 1, uuid); // each set writes the sidecar
         mgr->setQuickLayoutSlot(autotile, 2, QStringLiteral("autotile:bsp"));
+        // Scrolling owns its OWN array and on-disk key since the
+        // native-template pivot; its slot values are template ids.
+        PhosphorZones::ScrollingTemplateStore store;
+        mgr->setScrollingTemplateStore(&store);
+        PhosphorZones::ScrollingTemplate slotTemplate;
+        slotTemplate.name = QStringLiteral("SlotTemplate");
+        slotTemplate.presetColumnWidths = {0.5};
+        const QString templId = store.saveTemplate(slotTemplate).toString();
+        mgr->setQuickLayoutSlot(scrolling, 3, templId);
+        mgr->setScrollingTemplateStore(nullptr);
 
         // A fresh registry on the SAME guard-isolated dirs reloads the sidecar
         // (quicklayouts.json lives next to rules.json, not in the layout
@@ -389,6 +458,11 @@ private Q_SLOTS:
         // Modes stay independent across the round trip.
         QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(2));
         QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(1));
+        // The scrolling-mode write round-trips through its OWN on-disk key
+        // and never leaks into the snapping array.
+        QCOMPARE(mgr2->quickLayoutSlots(scrolling).value(3), templId);
+        QVERIFY(!mgr2->quickLayoutSlots(snapping).contains(3));
+        QVERIFY(!mgr2->quickLayoutSlots(autotile).contains(3));
     }
 
     // A pre-mode (flat) quicklayouts.json is NOT a supported format: the reader
@@ -401,19 +475,175 @@ private Q_SLOTS:
         const QString uuid = QUuid::createUuid().toString();
         const QString path = ConfigDefaults::quickLayoutsFilePath();
         QDir().mkpath(QFileInfo(path).absolutePath());
+
+        const auto writeSidecar = [&path](const QJsonObject& document) {
+            QFile f(path);
+            if (!f.open(QIODevice::WriteOnly)) {
+                return false;
+            }
+            f.write(QJsonDocument(document).toJson());
+            return true;
+        };
+
+        // POSITIVE CONTROL first: the same hand-computed path, holding a
+        // document in the SUPPORTED nested shape, must load. Without this the
+        // emptiness below would also be the result of writing to a path the
+        // registry never reads, and the test would pass for the wrong reason.
+        QJsonObject nestedSlots;
+        nestedSlots.insert(QStringLiteral("1"), uuid);
+        QJsonObject nested;
+        nested.insert(PhosphorZones::LayoutRegistry::QuickSlotsSnappingKey, nestedSlots);
+        QVERIFY(writeSidecar(nested));
+        mgr->loadAssignments();
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).value(1), uuid);
+
+        // Now the flat document, over the same path the control just proved is
+        // live. The reader is nested-only, so every mode comes back empty.
         QJsonObject flat;
         flat.insert(QStringLiteral("1"), uuid);
         flat.insert(QStringLiteral("3"), uuid);
-        {
-            QFile f(path);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            f.write(QJsonDocument(flat).toJson());
-        }
+        QVERIFY(writeSidecar(flat));
 
         mgr->loadAssignments(); // re-reads the sidecar we just wrote
 
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping).isEmpty());
         QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).isEmpty());
+        // Scrolling owns a third array read from the same document, so it has
+        // to be asserted too or a flat file could leak into it unnoticed.
+        QVERIFY(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling).isEmpty());
+    }
+
+    // setAllQuickLayoutSlots is the batch peer of setQuickLayoutSlot and had no
+    // coverage at all. Its scrolling arm HAND-DUPLICATES the single setter's
+    // canonicalization and validation rather than sharing it, so the two can
+    // drift silently: an unbraced id stored verbatim would survive the delete
+    // of the template it names (the purge sweep compares exact strings), and a
+    // malformed or unknown id stored at all would leave a dangling slot.
+    void testLayoutManager_setAllQuickLayoutSlots_validatesAndCanonicalizes()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        PhosphorZones::ScrollingTemplateStore store;
+        mgr->setScrollingTemplateStore(&store);
+
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = QStringLiteral("Batch");
+        templ.presetColumnWidths = {0.5};
+        const QUuid templId = store.saveTemplate(templ);
+        QVERIFY(!templId.isNull());
+
+        // Slot 1 braced (accepted as is), slot 2 the SAME id unbraced and
+        // upper-cased (must come back canonical), slot 3 a well-formed id no
+        // template owns, slot 4 not a UUID at all. Only 1 and 2 survive.
+        const QString unbraced = templId.toString(QUuid::WithoutBraces).toUpper();
+        QHash<int, QString> batch;
+        batch.insert(1, templId.toString());
+        batch.insert(2, unbraced);
+        batch.insert(3, QStringLiteral("{99999999-9999-9999-9999-999999999999}"));
+        batch.insert(4, QStringLiteral("not-a-uuid"));
+        mgr->setAllQuickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling, batch);
+
+        const QHash<int, QString> stored = mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(stored.size(), 2);
+        QCOMPARE(stored.value(1), templId.toString());
+        QCOMPARE(stored.value(2), templId.toString());
+        QVERIFY(!stored.contains(3));
+        QVERIFY(!stored.contains(4));
+
+        // The batch write goes through the sidecar like the single setter, so
+        // a fresh registry on the same isolated dirs reads back the canonical
+        // spellings rather than what the caller handed in.
+        mgr->setScrollingTemplateStore(nullptr);
+        QScopedPointer<PhosphorZones::LayoutRegistry> reloaded(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        reloaded->loadAssignments();
+        const QHash<int, QString> afterReload = reloaded->quickLayoutSlots(PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(afterReload.value(1), templId.toString());
+        QCOMPARE(afterReload.value(2), templId.toString());
+        QCOMPARE(afterReload.size(), 2);
+    }
+
+    // The AUTOTILE arm of the same batch setter. It is hand-duplicated beside
+    // the scrolling and snapping arms, so a rule enforced in one can silently
+    // go missing from another: the reserved opt-out id is refused (a slot
+    // bound to it resolves nothing on press — a silent dead press), while a
+    // real algorithm id is stored verbatim, having no canonical UUID form.
+    void testLayoutManager_setAllQuickLayoutSlots_autotileArmRefusesTheOptOut()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        QHash<int, QString> batch;
+        batch.insert(1, QStringLiteral("autotile:bsp"));
+        batch.insert(2, PhosphorLayout::LayoutId::makeAutotileId(QString(PhosphorZones::NoTilingAlgorithm)));
+        mgr->setAllQuickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile, batch);
+
+        const QHash<int, QString> stored = mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(stored.value(1), QStringLiteral("autotile:bsp"));
+        QVERIFY2(!stored.contains(2), "the batch arm must refuse the reserved opt-out id, like the single setter");
+        QCOMPARE(stored.size(), 1);
+
+        // The LOADER's own refusal, exercised by writing the word straight into
+        // the sidecar rather than through a setter. Reloading what the batch
+        // setter just wrote would prove nothing — the write side already
+        // refused slot 2, so its absence after a reload holds whether or not
+        // the loader filters anything. A hand-edited file is the only way the
+        // word reaches readQuickLayouts, and it must not resurrect the dead
+        // press there either.
+        const QString path = ConfigDefaults::quickLayoutsFilePath();
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QJsonObject autotileSlots;
+        // Slot 1 carries a value the batch setter above never wrote. That is
+        // what makes it a control: "autotile:bsp" would already be on disk
+        // from the setter, so it would read back even if this document landed
+        // on a path the registry never opens, and the test would pass in a
+        // world where the hand write did nothing.
+        autotileSlots.insert(QStringLiteral("1"), QStringLiteral("autotile:spiral"));
+        autotileSlots.insert(QStringLiteral("2"), QStringLiteral("autotile:none"));
+        QJsonObject document;
+        document.insert(PhosphorZones::LayoutRegistry::QuickSlotsAutotileKey, autotileSlots);
+        {
+            QFile sidecar(path);
+            QVERIFY(sidecar.open(QIODevice::WriteOnly));
+            sidecar.write(QJsonDocument(document).toJson());
+        }
+
+        QScopedPointer<PhosphorZones::LayoutRegistry> reloaded(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        reloaded->loadAssignments();
+        const QHash<int, QString> afterReload = reloaded->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile);
+        // Slot 1 is the positive control: only the hand-written document can
+        // put this value on disk, so its presence proves the file landed on
+        // the path the registry actually reads — which in turn makes slot 2's
+        // absence the loader refusing the word rather than a file that was
+        // never loaded at all.
+        QCOMPARE(afterReload.value(1), QStringLiteral("autotile:spiral"));
+        QVERIFY2(!afterReload.contains(2), "the loader must drop a hand-edited reserved opt-out id");
+    }
+
+    // The batch setter CLEARS the mode's array before applying, and only that
+    // mode's. A caller replacing the scrolling slots must not disturb the
+    // snapping or autotile arrays sharing the sidecar.
+    void testLayoutManager_setAllQuickLayoutSlots_clearsOnlyItsOwnMode()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("Slotted"));
+        mgr->addLayout(layout);
+        const QString uuid = layout->id().toString();
+
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 1, uuid);
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Autotile, 1, QStringLiteral("autotile:bsp"));
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Snapping, 5, uuid);
+
+        // Replacing the snapping array drops slot 5 (not named in the batch)
+        // and leaves autotile untouched.
+        QHash<int, QString> batch;
+        batch.insert(2, uuid);
+        mgr->setAllQuickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping, batch);
+
+        const QHash<int, QString> snapping = mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(snapping.size(), 1);
+        QCOMPARE(snapping.value(2), uuid);
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).value(1),
+                 QStringLiteral("autotile:bsp"));
     }
 };
 

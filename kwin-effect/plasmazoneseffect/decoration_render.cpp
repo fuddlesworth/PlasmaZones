@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <core/renderviewport.h>
 #include <effect/effecthandler.h>
@@ -14,6 +15,7 @@
 
 #include "shader_internal.h"
 #include "shader_resolve.h"
+#include "surface_fold.h"
 
 #include <QByteArray>
 #include <QLoggingCategory>
@@ -23,8 +25,6 @@
 #include <optional>
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Surface shader (the window border / rounded-corner pack and any future surface
@@ -303,18 +303,37 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // window). frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) *
     // scale is the frame's offset inside that texture (top-down device px), and
     // frameSize = frameGeometry.size * scale its extent.
-    const QRectF frame = w->frameGeometry();
+    const QRectF windowFrame = w->frameGeometry();
+    QRectF frame = windowFrame;
+    // Shell surfaces: substitute the scanned visible-content bounds for the
+    // frame, so the SDF hugs the panel's visible body (a floating or Panel
+    // Colorizer-styled panel is a rounded rect inset in a mostly transparent
+    // full-width window) instead of tracing the invisible window rect. Guarded
+    // on the frame size the scan ran at — after a resize the stale bounds are
+    // ignored until the next capture rescans (updateShellContentRect).
+    if (wb.isShellSurface) {
+        if (const auto psIt = m_surfaceMultipass.find(windowId); psIt != m_surfaceMultipass.end()) {
+            const SurfaceMultipassState& mp = psIt->second;
+            if (!mp.shellContentRect.isEmpty() && mp.shellContentFrameSize == frame.size()) {
+                frame = mp.shellContentRect.translated(frame.topLeft());
+            }
+        }
+    }
     // The canvas the fold is drawing into — surfaceCanvasFor's device-aligned
     // rect, padding included. NOT re-derived from expandedGeometry + padding:
     // the alignment shifts the canvas off the raw expanded rect by a
     // sub-pixel band, and these uniforms position the frame INSIDE the
     // texture in device px, so they must describe the actual canvas to the
     // texel. The expanded/frame fallback covers callers with no canvas.
+    // The last-resort fallback is the RAW window frame, never the shell
+    // content substitution above: `expanded` describes the canvas TEXTURE
+    // extent, and substituting the visible-body rect there would tell the
+    // shader the texture is only as big as the body, mis-mapping the SDF.
     QRectF expanded = canvasRect;
     if (!expanded.isValid() || expanded.isEmpty()) {
         expanded = w->expandedGeometry();
         if (expanded.isEmpty()) {
-            expanded = frame;
+            expanded = windowFrame;
         }
     }
     const QVector2D windowExpandedSize(static_cast<float>(expanded.width() * scale),
@@ -351,7 +370,10 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // most once per frame. @p windowId is threaded from the fold so this hot
     // path does not recompute getWindowId(w) per pack.
     if (pack.uFocusedLoc >= 0) {
-        const bool focused = KWin::effects && w == KWin::effects->activeWindow();
+        // Shell surfaces pin focused high — a panel never becomes the active
+        // window, so the raw test froze it on inactiveColor forever. Must
+        // agree with planSurfaceFold's focusedNow (same rationale there).
+        const bool focused = wb.isShellSurface || (KWin::effects && w == KWin::effects->activeWindow());
         shader->setUniform(pack.uFocusedLoc, advanceFocusFade(windowId, focused));
     }
     // uSurfaceOpacity is a LEGACY constant now: the retired handlesOpacity
@@ -464,10 +486,71 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
     // paths never collide.
     int boundChannels = 0; // # of units we bound (for post-draw cleanup)
     constexpr int kSurfaceChannelBaseUnit = ShaderInternal::kSurfaceChannelBaseUnit;
+    // The region OffscreenData::paint scissors the present to. KWin's is right
+    // for a window nothing else is animating; the padded-present branch below
+    // widens it when a FOREIGN effect has clipped it.
+    KWin::Region drawRegion = deviceRegion;
     if (!m_capturingSnapshot && !m_windowDecorations.isEmpty() && !m_shaderManager.findTransition(w)) {
         const QString wid = getWindowId(w);
-        const auto bit = m_windowDecorations.constFind(wid);
-        if (bit != m_windowDecorations.constEnd() && bit->shaderApplied) {
+        // Mutable: the foreign-transform branch below records what it painted.
+        const auto bit = m_windowDecorations.find(wid);
+        if (bit != m_windowDecorations.end() && bit->shaderApplied) {
+            // FOREIGN ANIMATION on a PADDED chain. The only animation of ours that
+            // reaches a decorated window is a transition, and that path is excluded
+            // above, so a translation or a dimmed opacity in `data` here was put
+            // there by another effect in the paint chain: KWin's sliding-popups
+            // slide on a Plasma applet popup is the one that ships. That effect
+            // clips its window's paint region to the popup's EXPANDED rect
+            // (SlidingPopupsEffect::paintWindow, `effectiveRegion &=
+            // damagedLogicalArea`) and damages only that rect afterwards. An
+            // applet popup reports no shadow inset, so expanded == frame, and the
+            // region that reaches this draw scissors the padded present quad
+            // (apply()) back to the bare frame: the chain's outer margin (glow,
+            // motes halo) vanishes for the whole slide and pops back at rest. A
+            // normal window never sees this because nothing clips it.
+            //
+            // Widen the scissor by the padded band, translated by the foreign
+            // transform so it tracks the sliding quad, and damage three rects
+            // so the next frame's scene repaint covers them (the foreign effect
+            // damages only its own clip rect): the band as painted THIS frame,
+            // so it is recomposited in proper z-order and cleared once the
+            // quad moves on; the band as painted LAST frame, so a slide leaves
+            // no trail outside the rest band; and the band at rest, for the
+            // frame the transform ends on. Gated on a live foreign transform on
+            // purpose: with KWin's untouched region the damage is the scene's
+            // and painting past it would overdraw windows above that did not
+            // repaint this frame. The transition path makes the same call with
+            // Region::infinite() and a full-output damage.
+            //
+            // Acts only on a frame where the transform CHANGED. A foreign
+            // effect can hold one still for many frames (windowaperture while
+            // Peek at Desktop is held, the translucency effect's inactive dim),
+            // and damaging on every such frame would schedule the next frame
+            // from inside this one: a repaint loop at the refresh rate with the
+            // overdraw above on every tick. The change frame damages the band,
+            // the next frame recomposites it in z-order, and the held frames
+            // after that read the buffer like a window at rest.
+            if (bit->outerPadding > 0) {
+                const bool foreign =
+                    !qFuzzyIsNull(data.xTranslation()) || !qFuzzyIsNull(data.yTranslation()) || data.opacity() < 1.0;
+                const QRectF band = foreign
+                    ? paddedBandRect(w, bit->outerPadding).translated(data.xTranslation(), data.yTranslation())
+                    : QRectF();
+                const bool changed =
+                    band != bit->lastForeignBand || !qFuzzyCompare(data.opacity(), bit->lastForeignOpacity);
+                if (changed && KWin::effects) {
+                    if (!band.isEmpty()) {
+                        drawRegion |= viewport.mapToDeviceCoordinatesAligned(KWin::RectF(band));
+                        KWin::effects->addRepaint(KWin::RectF(band));
+                    }
+                    if (!bit->lastForeignBand.isEmpty()) {
+                        KWin::effects->addRepaint(KWin::RectF(bit->lastForeignBand));
+                    }
+                    damagePaddedBand(w, bit->outerPadding);
+                }
+                bit->lastForeignBand = band;
+                bit->lastForeignOpacity = data.opacity();
+            }
             // MULTI-PACK present: the whole chain was already composited into a
             // per-window FBO by paintWindow (renderSurfaceChainComposite). Bind the
             // final slot to a high unit and point the present passthrough's uFinal
@@ -564,7 +647,7 @@ void PlasmaZonesEffect::drawWindow(const KWin::RenderTarget& renderTarget, const
             reboundSnapshotUnit = true;
         }
     }
-    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+    KWin::OffscreenEffect::drawWindow(renderTarget, viewport, w, mask, drawRegion, data);
 
     // Unbind the multipass channel units we bound and restore GL_TEXTURE0 —
     // texture hygiene mirroring paint_pipeline.cpp, so a stray bind doesn't leak

@@ -25,7 +25,6 @@
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QSet>
-#include <QStandardPaths>
 #include <QtConcurrent/QtConcurrent>
 
 namespace PlasmaZones {
@@ -152,8 +151,13 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     }
     if (m_settings) {
         // Sole emitter of pendingChangesChanged for shader-tree edits: EVERY
-        // tree change (our own mutators, an external Discard/import/load) funnels
-        // through Settings::setShaderProfileTree → this NOTIFY. Because dirtiness
+        // tree change reaches this NOTIFY. Not all of them through the setter,
+        // though — our own mutators and the scoped Discard go through
+        // Settings::setShaderProfileTree, while a reload, a profile switch and a
+        // whole-tree Discard re-fire it from Settings' own notify-property loop
+        // (`shaderProfileTreeJson` carries this signal). What matters here is
+        // that this lambda is bound to the SIGNAL rather than to the setter, so
+        // it sees all of them either way. Because dirtiness
         // is now value-based (hasPendingChanges diffs live-vs-committed), the
         // lambda no longer distinguishes own-writes from reloads or touches any
         // flag — it just refreshes the cards and re-evaluates the dirty state.
@@ -717,10 +721,18 @@ void AnimationsPageController::asyncRevertPending()
             // routes through the worker-aware paths (e.g. test harnesses
             // that read state on the result signal). The mutator gate
             // re-opens together with the flag clear.
+            // Two source strings, not one "file(s)" spelling: Qt's plural tr()
+            // falls back to the single source verbatim when untranslated, so a
+            // combined form reads "file(s)" to every English user. Both arms
+            // keep %n, and the n>1 arm carries the real count for locales with
+            // more than two plural forms.
+            const int retainedCount = static_cast<int>(result.retained.size());
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PhosphorI18n::tr("Could not restore %n profile file(s). They remain pending.", nullptr,
-                                   static_cast<int>(result.retained.size()));
+                : (retainedCount == 1 ? PhosphorI18n::tr("Could not restore %n profile file. It remains pending.",
+                                                         nullptr, retainedCount)
+                                      : PhosphorI18n::tr("Could not restore %n profile files. They remain pending.",
+                                                         nullptr, retainedCount));
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;
         },
@@ -774,8 +786,9 @@ void AnimationsPageController::asyncRevertPending()
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────
-// `sectionForPath`, `eventLabel`, `parentChain` live in
-// `animationspagecontroller_paths.cpp`. Same class, separate TU, no API change.
+// `eventPathAcceptsWindowRules`, `sectionForPath`, `eventLabel`, `parentChain`
+// live in `animationspagecontroller_paths.cpp`. Same class, separate TU, no
+// API change.
 
 QVariantList AnimationsPageController::eventSections() const
 {
@@ -823,6 +836,18 @@ QVariantList AnimationsPageController::eventSections() const
         // section root (e.g. "window", "popup") rather than a leaf
         // event — i.e. another built-in path uses it as parent.
         entry.insert(QStringLiteral("isCategory"), parentPaths.contains(path));
+        // Whether a per-window Rule can reach this event at all. True for
+        // exactly ten leaves — the four `window.appearance` leaves, the five
+        // `window.movement` leaves, and `scrolling.tabSwitch` — and false for
+        // EVERY other path, including the `window` category nodes above those
+        // leaves. `ProfilePaths::eventPathResolvesPerWindow` is the authority;
+        // the rest (the desktop switches, the scrolling strip, the OSDs, the
+        // popups, the panels, the cursor, the editor's own actions and widgets,
+        // the whole shell subtree) are resolved without a window, and a rule's
+        // animation action is matched against one. Carried on the entry so the
+        // rule editor's picker can filter on data it already receives instead of
+        // spelling a second copy of the list in QML.
+        entry.insert(QStringLiteral("acceptsWindowRules"), ProfilePaths::eventPathResolvesPerWindow(path));
         sectionPaths[section].append(entry);
     }
 
@@ -831,7 +856,7 @@ QVariantList AnimationsPageController::eventSections() const
     for (const QString& section : sectionOrder) {
         QVariantMap sectionEntry;
         sectionEntry.insert(QStringLiteral("section"), section);
-        sectionEntry.insert(QStringLiteral("label"), humanizeSegment(section));
+        sectionEntry.insert(QStringLiteral("label"), segmentLabel(section));
         sectionEntry.insert(QStringLiteral("paths"), sectionPaths.value(section));
         result.append(sectionEntry);
     }

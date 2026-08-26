@@ -28,10 +28,18 @@ Item {
     id: root
 
     // Layout data
+    /// Declared but never read here. It exists so the C++ push of "layoutId"
+    /// (OverlayService::pushLayoutOsdContent) lands on a declared property
+    /// instead of silently creating a dynamic one — the failure mode that
+    /// once left this card's strip properties unwired at an intermediate hop.
+    /// Delete it only together with that write and the osdSlot declaration and
+    /// forwarding in PassiveOverlayShell.qml; removing one end alone either
+    /// resurrects the dynamic-property trap or breaks the chain.
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
-    // Layout category: 0=Manual (matches LayoutCategory in C++)
+    // Layout category, matching LayoutCategory in C++ and the vocabulary
+    // CategoryBadge renders: 0=Manual, 1=Autotile, 2=ScrollingTemplate.
     property int category: 0
     // Per-layout autoAssign flag (raw, not yet OR'd with the global master
     // toggle). CategoryBadge folds in `globalAutoAssign` to display effective
@@ -47,9 +55,24 @@ Item {
     property int masterCount: 1
     property bool producesOverlappingZones: false
     property string zoneNumberDisplay: "all"
-    // Screen info for aspect ratio (bounded to prevent layout issues)
+    /// Strip axis ticks: "none" (every layout card) or "horizontal" /
+    /// "vertical" for the scrolling strip card. Pushed by
+    /// OverlayService::pushLayoutOsdContent on EVERY show, so a strip card
+    /// cannot leave its ticks on the next layout card.
+    property string stripAxisHint: "none"
+    /// Non-empty replaces the zone preview with the empty state: the axis
+    /// arrow plus this caption. Only the strip card ever sets it, and only
+    /// when the strip has nothing to draw. The caption is the gate rather
+    /// than a separate flag, so the two cannot disagree.
+    property string stripEmptyCaption: ""
+    // Screen info for aspect ratio (bounded to prevent layout issues).
+    // Clamped symmetrically about 1:1 — the lower bound is the inverse of
+    // the upper. A 0.5 floor reported a rotated 21:9 (about 0.43) as 1:2,
+    // and the preview box was then drawn in a shape no window on that
+    // screen has; rotated ultrawides are exactly the monitors the vertical
+    // strip serves.
     property real screenAspectRatio: 16 / 9
-    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
+    readonly property real safeAspectRatio: Math.max(0.25, Math.min(4, screenAspectRatio))
     // Layout's intended aspect ratio class (set from C++)
     property string aspectRatioClass: "any"
     // Resolved preview AR: use layout's class if set, fall back to screen's AR
@@ -67,11 +90,15 @@ Item {
             return safeAspectRatio;
         }
     }
-    // Auto-dismiss interval. Show/hide fade shapes are owned by the
-    // SurfaceAnimator's `osd.show` / `osd.pop` / `osd.hide` profile JSONs;
-    // tune the JSONs to adjust the appear/disappear feel rather than
-    // re-introducing per-window duration overrides here.
-    property int displayDuration: 1500
+    // Auto-dismiss interval — a local constant (readonly: no C++ path
+    // writes it and the shell does not forward it). Show/hide fade shapes
+    // are owned by the SurfaceAnimator's `osd.show` / `osd.pop` /
+    // `osd.hide` profile JSONs; tune the JSONs to adjust the
+    // appear/disappear feel rather than re-introducing per-window duration
+    // overrides here.
+    // A zone preview is recognised at a glance; an empty-state caption has to
+    // be READ. Same card, two different tasks, so the empty state gets longer.
+    readonly property int displayDuration: root.stripEmptyCaption !== "" ? 2500 : 1500
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -91,8 +118,20 @@ Item {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    // True when the layout shown is a scrolling screen's sizing TEMPLATE
+    // (live-Templates capability): the name label captions it "Column
+    // template" so a template pick never reads as a snap-layout switch.
+    property bool isTemplate: false
     property bool disabled: false
     property string disabledReason: ""
+    // Icon for the disabled-style overlay card. This card is refusal-only
+    // by design (overlayservice.h documents it: every producer explains why
+    // a requested change had no effect), so the sole writer restates
+    // "dialog-cancel" per show and the grey tint below is unconditional. A
+    // future positive announcement must NOT reuse this card — it renders
+    // its own content type instead (the scrolling mode switch, which
+    // briefly reused it, now shows its strip preview).
+    property string disabledIcon: "dialog-cancel"
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified shell host re-emits this as its `osdDismissRequested`
     /// signal, which C++ (wirePassiveShellSlots) routes to
@@ -107,7 +146,23 @@ Item {
         dismiss.restart();
     }
 
-    Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
+    // StaticText role so the name is actually exposed (a bare name on a
+    // roleless Item may never surface), and the name carries the CONTENT —
+    // the layout name with its Locked / Column template decorations — not
+    // just "an OSD appeared". Mirrors NavigationOsdContent's root.
+    Accessible.role: Accessible.StaticText
+    // The caption is folded in rather than left to the StripEmptyState label,
+    // which is Accessible.ignored: on an empty-strip card the caption IS the
+    // message, and a name of just the layout name would announce the card
+    // while dropping the only thing it says.
+    //
+    // A bare "%1, %2" join, unlike the Monitors page, which branches on the
+    // reason and writes whole sentences. The difference is that both halves
+    // here are already independently translated strings and the format adds no
+    // grammar of its own, so a translator can reorder them freely. The card
+    // also has only the caption TEXT to work with — the daemon pushes the
+    // sentence, not which branch produced it.
+    Accessible.name: root.stripEmptyCaption !== "" ? i18nc("accessible name of the scrolling strip OSD when the strip is empty; %1 is the card name, %2 the reason", "%1, %2", nameLabel.text, root.stripEmptyCaption) : nameLabel.text
 
     // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
     // why the latch is needed (timer-fire and click both race to dismiss).
@@ -145,6 +200,10 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Kirigami.Units.gridUnit * 11
             height: Math.round(Kirigami.Units.gridUnit * 11 / root.previewAspectRatio)
+            // The 16 px minZoneSize below INFLATES sub-floor zones, and a
+            // dense layout's inflated zones can extend past this fixed-size
+            // container — keep the overflow inside the card frame.
+            clip: true
 
             // Background for preview area. backgroundColor (not the
             // alternate role) so inactive zone fills stay readable
@@ -161,7 +220,15 @@ Item {
 
                 anchors.fill: parent
                 anchors.margins: Kirigami.Units.smallSpacing
+                // Hidden rather than fed an empty list: an empty ZonePreview
+                // still draws its own axis ticks, which would double up with
+                // the empty state's arrow sitting in the same well.
+                visible: root.stripEmptyCaption === ""
                 zones: root.zones
+                stripAxisHint: root.stripAxisHint
+                // The card's own text colour, not theme text: the daemon
+                // pushes a colour here and the ticks belong to this card.
+                stripAxisHintColor: root.textColor
                 highlightColor: root.highlightColor
                 inactiveColor: root.inactiveColor
                 borderColor: root.borderColor
@@ -169,7 +236,12 @@ Item {
                 isActive: true
                 zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
                 edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
-                minZoneSize: 12
+                // 16, not lower: ZonePreview hides zone numbers under a
+                // hard 16 px legibility floor, and this instance shows them
+                // — a smaller floor renders 12-15 px zones as silent
+                // unnumbered boxes (MonitorStatePage raises its floor for
+                // the same coupling).
+                minZoneSize: 16
                 showZoneNumbers: true
                 producesOverlappingZones: root.producesOverlappingZones
                 zoneNumberDisplay: root.zoneNumberDisplay
@@ -184,6 +256,20 @@ Item {
                 masterCount: root.masterCount
                 fontStrikeout: root.fontStrikeout
                 animationDuration: Kirigami.Units.shortDuration
+            }
+
+            // The empty strip. Not a variant of the zone preview: it draws no
+            // zones at all, because there are none, and says why in words.
+            QFZCommon.StripEmptyState {
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.smallSpacing
+                visible: root.stripEmptyCaption !== ""
+                verticalAxis: root.stripAxisHint === "vertical"
+                caption: root.stripEmptyCaption
+                // The daemon-pushed card colour, matching the name label
+                // below and the sibling host in LayoutCard. Left to its own
+                // theme default the arrow drifted off the card's palette.
+                contentColor: root.textColor
             }
         }
 
@@ -212,9 +298,11 @@ Item {
 
             Kirigami.Icon {
                 anchors.centerIn: parent
-                source: "dialog-cancel"
+                source: root.disabledIcon
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
+                // Unconditional grey: the card is refusal-only (see the
+                // disabledIcon note above), so the tint always applies.
                 color: Kirigami.Theme.disabledTextColor
             }
         }
@@ -236,21 +324,38 @@ Item {
                 visible: !root.disabled
                 anchors.verticalCenter: parent.verticalCenter
                 category: root.category
-                autoAssign: root.autoAssign === true
-                globalAutoAssign: root.globalAutoAssign === true
+                autoAssign: root.autoAssign
+                globalAutoAssign: root.globalAutoAssign
             }
 
             Label {
                 id: nameLabel
 
+                // The root Item announces this text (Accessible.name binds
+                // nameLabel.text); without ignoring the label a screen
+                // reader walks the same text twice.
+                Accessible.ignored: true
                 // Cap the name width so a long layout name widens the OSD only up
                 // to this bound, then elides with "…" instead of spilling past the
                 // frame. Short names use their natural width (full text shown).
-                readonly property int maxWidth: Kirigami.Units.gridUnit * 16
+                // The disabled card gets a wider cap: its text is a SENTENCE
+                // built from user data ("Disabled on <desktop name>"), it is
+                // the only thing the card carries (the preview is blanked),
+                // and the name-sized cap elided exactly the words that
+                // identify the refusal.
+                readonly property int maxWidth: root.disabled ? Kirigami.Units.gridUnit * 24 : Kirigami.Units.gridUnit * 16
+                // Kirigami exposes no OSD-headline type constant; same named
+                // factor the nav OSD documents (messageFontScale there).
+                readonly property real nameFontScale: 1.2
 
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.disabled ? root.disabledReason : (root.locked ? i18n("%1 (Locked)", root.layoutName) : root.layoutName)
-                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
+                text: {
+                    if (root.disabled)
+                        return root.disabledReason;
+                    var name = root.isTemplate ? i18nc("OSD caption, %1 is the template name", "Column template — %1", root.layoutName) : root.layoutName;
+                    return root.locked ? i18n("%1 (Locked)", name) : name;
+                }
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * nameFontScale
                 font.weight: Font.Medium
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
@@ -260,15 +365,24 @@ Item {
         }
     }
 
-    // Click the card to dismiss. Anchored to the card (not the whole OSD
-    // slot) so a concurrent modal slot (snap assist, picker) keeps receiving
-    // its own clicks instead of hitting a screen-wide input shield.
-    // dismiss.fire() collapses timer-fire + click into a single
-    // dismissRequested per show cycle via the shared latch.
+    // Click the card to dismiss — BEST-EFFORT only: the OSD's host surface
+    // is input-transparent whenever no modal slot is up (see the
+    // anyInputGrabbing rationale in shellhost_bridge.cpp), so in the common
+    // case this area receives nothing and the timer is the real dismiss.
+    // Clicks land here only while a modal slot has the surface accepting
+    // input; the card anchoring keeps the modal's own clicks out of a
+    // screen-wide shield in that case. dismiss.fire() collapses timer-fire +
+    // click into a single dismissRequested per show cycle via the shared
+    // latch. Keep the MouseArea: the daemon rationale depends on it existing
+    // for the modal-visible case.
     MouseArea {
         anchors.fill: container
         onClicked: dismiss.fire()
         Accessible.role: Accessible.Button
         Accessible.name: i18n("Dismiss notification")
+        // Without a press action an assistive client can see the button but
+        // not activate it — same call the click handler makes, same wiring
+        // as every sibling dismiss surface (picker, cheatsheet, snap assist).
+        Accessible.onPressAction: dismiss.fire()
     }
 }

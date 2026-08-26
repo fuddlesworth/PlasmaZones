@@ -50,6 +50,14 @@ public:
     /// Opaque placement identifier for the window's current slot.
     /// Snap mode: zone UUID. Autotile mode: tiling-order index as string.
     /// Empty if the window is floating or unassigned.
+    ///
+    /// NO in-tree caller today — the three implementations are reached only
+    /// from their own tests. Kept because it is the one piece of this
+    /// interface that answers "where is this window" in a form comparable
+    /// ACROSS modes, which is what a cross-mode restore or a support bundle
+    /// would need, and each implementation is a handful of lines over state it
+    /// already holds. Anyone auditing for dead code has now found this note
+    /// rather than the silence; delete it if the answer is still no consumer.
     virtual QString placementIdForWindow(const QString& windowId) const = 0;
 
     /// Number of tiled (non-floating) windows in the managed set.

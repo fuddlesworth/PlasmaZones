@@ -22,6 +22,8 @@
 #include <PhosphorTiles/TilingState.h>
 
 #include <PhosphorIdentity/VirtualScreenId.h>
+
+#include "helpers/IsolatedConfigGuard.h"
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include "FakeScreenProvider.h"
@@ -50,7 +52,10 @@ const QString kScreen = QStringLiteral("eDP-1");
 void installBinarySplitLayout(AutotileEngine* engine)
 {
     PhosphorTiles::TilingState* state = engine->tilingStateForScreen(kScreen);
-    Q_ASSERT(state);
+    // QVERIFY, not Q_ASSERT: the fixture-precondition convention the rest of
+    // the partition uses, and it fails loudly in a release-built test binary
+    // instead of segfaulting on the setCalculatedZones below.
+    QVERIFY(state);
     // setCalculatedZones must run AFTER the post-open retile (which fails under
     // the null ScreenManager and would otherwise clear these) — callers invoke
     // this once the engine is fully constructed.
@@ -99,10 +104,14 @@ private Q_SLOTS:
     void focus_fromTopRight_resolvesEachDirectionGeometrically();
     void swap_exchangesWithSpatialNeighbour();
 
-    void entryWindowForCrossing_picksEdgeTileFacingSource();
-    void crossOutput_swapTowardNonAutotileOutput_emitsCrossModeSwap();
+    // Declaration order matches definition order (the suite's convention;
+    // Qt Test runs slots in declaration order, so this is readability only).
+    void crossOutput_focusTowardNonAutotileOutput_defersCrossModeFocus();
+    void crossOutput_focusTowardNonAutotileOutput_unhandledFallsThrough();
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
     void crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate();
+    void entryWindowForCrossing_picksEdgeTileFacingSource();
+    void crossOutput_swapTowardNonAutotileOutput_emitsCrossModeSwap();
     void crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow();
     void crossOutput_moveTowardFullAutotileOutput_doesNotStrandWindow();
     void crossOutput_moveFloatRuledTiledWindow_towardFullOutput_refuses();
@@ -240,6 +249,85 @@ struct TwoOutputFixture
 };
 
 } // namespace
+
+void TestNavigationCrossSurface::crossOutput_focusTowardNonAutotileOutput_defersCrossModeFocus()
+{
+    // DP-2 is a non-autotile (snap/scrolling) neighbour: the same-mode probe
+    // holds no state for it and answers empty, so the focus defers to the
+    // daemon via crossModeFocusRequested — the parity twin of the scroll
+    // engine's cross-mode focus arm. A handler that activates sets the
+    // DirectConnection out-param, and the verb announces the crossing on the
+    // TARGET screen.
+    PhosphorScreens::FakeScreenProvider provider;
+    provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+    provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+    auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
+        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+    manager->start();
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
+    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
+    auto engine =
+        std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
+    engine->setCrossSurfaceResolver(resolver.get());
+    engine->setAutotileScreens({QStringLiteral("DP-1")}); // DP-2 deliberately NOT autotile
+    engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+    engine->windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+    QCoreApplication::processEvents();
+    engine->tilingStateForScreen(QStringLiteral("DP-1"))
+        ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+
+    bool sawRequest = false;
+    QObject::connect(
+        engine.get(), &AutotileEngine::crossModeFocusRequested, engine.get(),
+        [&sawRequest](const QString& target, const QString& direction, bool* handled) {
+            sawRequest = true;
+            QCOMPARE(target, QStringLiteral("DP-2"));
+            QCOMPARE(direction, QStringLiteral("right"));
+            if (handled) {
+                *handled = true;
+            }
+        },
+        Qt::DirectConnection);
+    QSignalSpy feedback(engine.get(), &AutotileEngine::navigationFeedback);
+    engine->focusInDirection(QStringLiteral("right"), NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+    QVERIFY(sawRequest);
+    QVERIFY(!feedback.isEmpty());
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("DP-2"));
+}
+
+void TestNavigationCrossSurface::crossOutput_focusTowardNonAutotileOutput_unhandledFallsThrough()
+{
+    // Same shape, but no handler sets the out-param (an empty neighbour
+    // surface is an everyday state for a focus): the verb must NOT announce a
+    // crossing that never happened — it falls through to the boundary refusal.
+    PhosphorScreens::FakeScreenProvider provider;
+    provider.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080));
+    provider.addScreen(QStringLiteral("DP-2"), QRect(1920, 0, 1920, 1080));
+    auto manager = std::make_unique<PhosphorScreens::ScreenManager>(
+        PhosphorScreens::ScreenManagerConfig{.screenProvider = &provider, .useGeometrySensors = false});
+    manager->start();
+    auto resolver = std::make_unique<PlasmaZones::CrossSurfaceResolver>(manager.get(), nullptr);
+    auto engine =
+        std::make_unique<AutotileEngine>(nullptr, nullptr, manager.get(), PlasmaZones::TestHelpers::testRegistry());
+    engine->setCrossSurfaceResolver(resolver.get());
+    engine->setAutotileScreens({QStringLiteral("DP-1")});
+    engine->windowOpened(QStringLiteral("a1"), QStringLiteral("DP-1"));
+    engine->windowOpened(QStringLiteral("a2"), QStringLiteral("DP-1"));
+    QCoreApplication::processEvents();
+    engine->tilingStateForScreen(QStringLiteral("DP-1"))
+        ->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
+
+    QSignalSpy activateSpy(engine.get(), &AutotileEngine::activateWindowRequested);
+    QSignalSpy feedback(engine.get(), &AutotileEngine::navigationFeedback);
+    engine->focusInDirection(QStringLiteral("right"), NavigationContext{QStringLiteral("a2"), QStringLiteral("DP-1")});
+    QCOMPARE(activateSpy.count(), 0);
+    QVERIFY(!feedback.isEmpty());
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_neighbor"));
+}
 
 void TestNavigationCrossSurface::crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput()
 {
@@ -585,7 +673,13 @@ void TestNavigationCrossSurface::crossOutput_focusMigrationToFullOutput_doesNotS
 
     // The user-visible half: isWindowTiled() reads a window's OWNING state, so a
     // stranded window (in no state) reports a phantom tile that never clears.
-    if (!fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->isFloating(QStringLiteral("a2"))) {
+    // Discriminated on BOTH branches rather than skipped for the floated one
+    // (the shape the two sibling slots below use): whichever way the
+    // destination's overflow pass resolves the arrival, the verdict is
+    // asserted, not silently unexercised.
+    if (fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->isFloating(QStringLiteral("a2"))) {
+        QVERIFY2(!fx.engine->isWindowTiled(QStringLiteral("a2")), "a floated arrival must not report a phantom tile");
+    } else {
         QVERIFY(fx.engine->isWindowTiled(QStringLiteral("a2")));
     }
 }
@@ -724,8 +818,10 @@ void TestNavigationCrossSurface::crossVirtualScreen_focusRight_crossesToSiblingV
 
 void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnNextDesktop()
 {
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
 
     // Seed a window on desktop 2, then return to desktop 1.
@@ -748,8 +844,10 @@ void TestNavigationCrossSurface::crossDesktop_focusRight_activatesEntryWindowOnN
 
 void TestNavigationCrossSurface::crossDesktop_moveRight_relocatesToNextDesktopAndRequestsKWinMove()
 {
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
 
     PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
@@ -791,16 +889,22 @@ void TestNavigationCrossSurface::crossDesktop_moveToSnapTargetDesktop_emitsCross
     // must emit crossModeMoveRequested (the reciprocal of the snap→autotile
     // cross-desktop move). Needs a real LayoutRegistry so modeForScreen resolves;
     // the engine-helper tests pass a null registry, so they never hit this branch.
+    // Isolated config: setAssignmentEntryDirect PERSISTS a rule via
+    // RuleStore::save(), and without the guard the eDP-1/desktop-2 rule
+    // leaks into the shared build-tree config that every sibling test loads.
+    PlasmaZones::TestHelpers::IsolatedConfigGuard configGuard;
     std::unique_ptr<PhosphorZones::LayoutRegistry> registry(
         PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("autotile-cross-mode-desktop")));
     PhosphorZones::AssignmentEntry snapEntry;
     snapEntry.mode = PhosphorZones::AssignmentEntry::Snapping;
     registry->setAssignmentEntryDirect(kScreen, 2, QString(), snapEntry); // desktop 2 = snap
 
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
+    FakeCrossSurfaceResolver resolver; // right → next desktop; no neighbour output
     std::unique_ptr<AutotileEngine> engine(
         new AutotileEngine(registry.get(), nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry()));
     engine->setAutotileScreens({kScreen});
-    FakeCrossSurfaceResolver resolver; // right → next desktop; no neighbour output
     engine->setCrossSurfaceResolver(&resolver);
     engine->setCurrentDesktop(1);
     engine->windowOpened(QStringLiteral("w0"), kScreen);
@@ -830,8 +934,10 @@ void TestNavigationCrossSurface::crossDesktop_swapRight_doesNotRelocate()
     // Swap is NOT extended across virtual desktops — only MOVE relocates to an
     // adjacent desktop. Swapping the edge window toward the next desktop is a
     // no-op: no windowDesktopMoveRequested.
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
     PhosphorTiles::TilingState* d1 = engine->tilingStateForScreen(kScreen);
     d1->setCalculatedZones({QRect(0, 0, 960, 1080), QRect(960, 0, 960, 1080)});
@@ -849,8 +955,10 @@ void TestNavigationCrossSurface::crossDesktop_focusLeft_atGridEdge_doesNotActiva
     // ("no neighbour") for "left" there. Focusing left from the leftmost window
     // has no in-surface neighbour, no neighbour output, and no neighbour desktop
     // — nothing may be activated.
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
     engine->setCurrentDesktop(1);
 
@@ -870,8 +978,10 @@ void TestNavigationCrossSurface::crossDesktop_moveLeft_atGridEdge_doesNotRequest
     // move nor an output-move marker fires. (Drives moveFocusedInDirection, the
     // action this test is named for; swap-at-the-desktop-boundary no-op is covered
     // by crossDesktop_swapRight_doesNotRelocate.)
-    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
+    // resolver before engine: the engine keeps it as a raw pointer, and locals
+    // are destroyed in reverse declaration order.
     FakeCrossSurfaceResolver resolver;
+    std::unique_ptr<AutotileEngine> engine(PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 2));
     engine->setCrossSurfaceResolver(&resolver);
     engine->setCurrentDesktop(1);
 

@@ -127,11 +127,13 @@ P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup,
 //
 // Three global decoration-filtering knobs in `Decorations.WindowFiltering`:
 // `decorationExcludeTransientWindows`, `decorationMinimumWindowWidth`,
-// `decorationMinimumWindowHeight`. Mirrors the Exclusions block, stored
+// `decorationMinimumWindowHeight`, mirroring the Exclusions block. Stored
 // independently so the KWin effect's border pass can be tuned separately
 // from snapping and animation filtering. Reuses the shared leaf keys; only
 // the group differs. Consumed effect-side via the generic settingsChanged
-// D-Bus broadcast (see kwin-effect loadCachedSettings).
+// D-Bus broadcast (see kwin-effect loadCachedSettings). Plasma-shell
+// surfaces carry no filtering knob: their opt-in is the decoration tree's
+// baseline-isolated `shell` subtree.
 
 P_STORE_GET(bool, decorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setDecorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey,
@@ -181,9 +183,15 @@ void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
 }
 void Settings::setZoneSelectorPositionInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
-        setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
+    // Refused loudly rather than dropped, matching the scrolling twin. These
+    // facades exist for QML, which binds an index and then believes it wrote; a
+    // silent no-op leaves the property reporting its old value with nothing to
+    // explain the mismatch.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorPosition::BottomRight)) {
+        qCWarning(lcConfig) << "snapping: zone selector position" << value << "is out of range, ignoring";
+        return;
     }
+    setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
 }
 
 ZoneSelectorLayoutMode Settings::zoneSelectorLayoutMode() const
@@ -209,9 +217,12 @@ void Settings::setZoneSelectorLayoutMode(ZoneSelectorLayoutMode value)
 }
 void Settings::setZoneSelectorLayoutModeInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
-        setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(value));
+    // Refused loudly, matching the sibling facades.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
+        qCWarning(lcConfig) << "snapping: zone selector layout mode" << value << "is out of range, ignoring";
+        return;
     }
+    setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(value));
 }
 
 P_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
@@ -248,9 +259,12 @@ void Settings::setZoneSelectorSizeMode(ZoneSelectorSizeMode value)
 }
 void Settings::setZoneSelectorSizeModeInt(int value)
 {
-    if (value >= 0 && value <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
-        setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
+    // Refused loudly, matching the sibling facades and the scrolling twin.
+    if (value < 0 || value > static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+        qCWarning(lcConfig) << "snapping: zone selector size mode" << value << "is out of range, ignoring";
+        return;
     }
+    setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
 }
 
 P_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)

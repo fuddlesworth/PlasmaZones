@@ -109,6 +109,11 @@ public:
         bool useWallpaper = false;
         bool bufferFeedback = false;
         qreal bufferScale = 1.0;
+        /// Buffer-pass texel format: RGBA16F when true (default — safe for
+        /// HDR, signed data, and feedback accumulators), RGBA8 when the pack
+        /// declares its buffers hold plain clamped colour. Halves buffer
+        /// bandwidth on the packs that can afford it.
+        bool halfFloatBuffers = true;
         QString bufferWrap = QStringLiteral("clamp");
         QStringList bufferWraps;
         QString bufferFilter = QStringLiteral("linear");

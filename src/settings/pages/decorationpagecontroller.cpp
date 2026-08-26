@@ -241,10 +241,16 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
     // for a pack. Seeds only while the matching plain layer is on (otherwise
     // there is no look to carry), only ids the pack declares (border-rgb has
     // no colour slots, border-double no borderWidth), clamped to the pack's
-    // declared bounds, and never over an existing value. The "accent" colour
-    // sentinel is not a valid QColor and is skipped, leaving the pack's own
-    // default colours.
-    if (m_registry && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
+    // declared bounds, and never over an existing value. The empty
+    // follow-the-theme sentinel — the shipped default — is seeded from the
+    // RESOLVED zone colours it follows, so the colour half of the carry-over
+    // promise above holds in the default configuration too.
+    // Never for the baseline-isolated shell subtree: those surfaces take no
+    // plain border / opacity-tint layer at all (chain-only by contract, see
+    // DecorationSupportedPaths.h), so there is no plain look to carry over and
+    // a pack added there starts from its own defaults.
+    if (m_registry && !PhosphorSurfaceShaders::decorationPathIsBaselineIsolated(path)
+        && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
         // Base the working map on the DIRECT override when one is engaged, else
         // on the RESOLVED effective parameters. Seeding engages the optional
         // (profile.parameters = allParams below), and DecorationProfile::overlay
@@ -303,20 +309,29 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
                 seedParam(QStringLiteral("cornerRadius"), m_settings->windowBorderRadius());
                 // Colours ride as their #AARRGGBB strings — the runtime
                 // converts to QColor and JSON persistence round-trips them
-                // untouched.
+                // untouched. The empty sentinel resolves through the same
+                // ISettings getters the D-Bus adaptor uses (active/tint →
+                // zone highlight, inactive → zone inactive), so the seeded
+                // pack shows the colour the user was actually looking at.
                 const QString active = m_settings->windowBorderColorActive();
-                if (QColor(active).isValid())
-                    seedParam(QStringLiteral("activeColor"), active);
+                seedParam(QStringLiteral("activeColor"),
+                          QColor(active).isValid() ? active : m_settings->highlightColor().name(QColor::HexArgb));
                 const QString inactive = m_settings->windowBorderColorInactive();
-                if (QColor(inactive).isValid())
-                    seedParam(QStringLiteral("inactiveColor"), inactive);
+                seedParam(QStringLiteral("inactiveColor"),
+                          QColor(inactive).isValid() ? inactive : m_settings->inactiveColor().name(QColor::HexArgb));
             }
             if (seedOpacityTint) {
                 seedParam(QStringLiteral("opacity"), m_settings->windowOpacity());
                 seedParam(QStringLiteral("tintStrength"), m_settings->windowTintStrength());
                 const QString tint = m_settings->windowTintColor();
-                if (QColor(tint).isValid())
-                    seedParam(QStringLiteral("tintColor"), tint);
+                // Alpha stripped on the sentinel seed: the tint contract is
+                // "stored opaque, tint strength is the sole alpha" (the
+                // plain layer's hexToOpaqueHex enforces it for picks), while
+                // the resolved highlight carries the zone alpha.
+                QColor resolvedTint = m_settings->highlightColor();
+                resolvedTint.setAlpha(255);
+                seedParam(QStringLiteral("tintColor"),
+                          QColor(tint).isValid() ? tint : resolvedTint.name(QColor::HexArgb));
             }
             if (!packParams.isEmpty())
                 allParams.insert(packId, packParams);
@@ -342,9 +357,21 @@ void DecorationPageController::setChainLayerEnabled(const QString& path, const Q
     DecorationProfile profile = directProfileAt(tree, path);
     // First direct edit at this path: seed from the RESOLVED value so the
     // toggle diverges from what the user was previewing instead of silently
-    // re-enabling every inherited-off layer (mirrors _engageOverride's
-    // chain/params seeding in DecorationSurfaceCard).
+    // re-enabling every inherited-off layer (same engage-from-resolved
+    // discipline as setChain's prevChain above).
     QStringList disabled = profile.disabledPacks ? *profile.disabledPacks : tree.resolve(path).effectiveDisabledPacks();
+    // Filter an inherited seed to this path's effective chain, mirroring
+    // setChain's prune: an inherited disabled entry for a pack not in the
+    // chain would otherwise be materialised into the direct override and
+    // resurrect a long-forgotten toggle if that pack ever re-enters.
+    if (!profile.disabledPacks) {
+        const QStringList chain = tree.resolve(path).effectiveChain();
+        disabled.erase(std::remove_if(disabled.begin(), disabled.end(),
+                                      [&chain](const QString& id) {
+                                          return !chain.contains(id);
+                                      }),
+                       disabled.end());
+    }
     const bool currentlyDisabled = disabled.contains(packId);
     if (enabled == !currentlyDisabled) {
         return; // already in the requested state — avoid a no-op tree write

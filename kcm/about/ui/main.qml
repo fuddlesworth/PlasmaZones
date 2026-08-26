@@ -8,18 +8,23 @@ import org.kde.kcmutils as KCMUtils
 import org.kde.kirigami as Kirigami
 
 KCMUtils.SimpleKCM {
-    // URL scheme launch handles the common case. For non-KDE desktops,
-    // users can run plasmazones-settings from the terminal.
-
     id: root
 
     ColumnLayout {
-        width: parent.width
+        // Guarded because `parent` is null for one event loop while
+        // SimpleKCM (a Kirigami.ScrollablePage) instantiates its content item.
+        // Unguarded, dereferencing it raises a TypeError and the binding
+        // evaluates to undefined for that frame, which then propagates into
+        // every Layout.fillWidth child. AboutPageShell carries the same guard
+        // for the same reason.
+        width: parent ? parent.width : 0
         spacing: Kirigami.Units.largeSpacing
 
         // App header
         RowLayout {
-            Layout.fillWidth: true
+            // No Layout.fillWidth here: a filling item ignores the horizontal
+            // half of Layout.alignment, which left-aligned the icon, heading and
+            // version under a page whose every other element centres itself.
             Layout.topMargin: Kirigami.Units.largeSpacing * 2
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.largeSpacing
@@ -35,23 +40,23 @@ KCMUtils.SimpleKCM {
 
                 Kirigami.Heading {
                     level: 1
-                    text: i18n("PlasmaZones")
+                    text: qsTr("PlasmaZones")
                 }
 
                 Label {
-                    text: kcm.currentVersion.length > 0 ? i18n("Version %1", kcm.currentVersion) : i18n("Version unknown")
+                    // qsTr takes no substitution arguments, so %1 is filled with
+                    // .arg() rather than by the call itself.
+                    text: kcm.currentVersion.length > 0 ? qsTr("Version %1").arg(kcm.currentVersion) : qsTr("Version unknown")
                     opacity: 0.7
                 }
-
             }
-
         }
 
         Label {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
             horizontalAlignment: Text.AlignHCenter
-            text: i18n("Window tiling and zone management for Wayland compositors")
+            text: qsTr("Window snapping, tiling and scrolling for Wayland compositors")
             wrapMode: Text.WordWrap
             opacity: 0.7
         }
@@ -60,7 +65,11 @@ KCMUtils.SimpleKCM {
         Button {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: Kirigami.Units.largeSpacing * 2
-            text: i18n("Open PlasmaZones Settings")
+            // The implicitWidth below is a floor with no ceiling, and button
+            // text never wraps, so a long translation or a large font scale
+            // would push the button past the viewport. Cap it at the column.
+            Layout.maximumWidth: parent ? parent.width : 0
+            text: qsTr("Open PlasmaZones Settings")
             icon.name: "configure"
             font.bold: true
             implicitHeight: Kirigami.Units.gridUnit * 3
@@ -71,7 +80,11 @@ KCMUtils.SimpleKCM {
         Label {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            text: i18n("Configure zones, tiling, appearance, shortcuts, and more")
+            text: qsTr("Configure zones, tiling, scrolling, appearance, shortcuts, and more")
+            // This PR lengthened the string. Without wrapMode it overflows the
+            // column at a narrow KCM width instead of wrapping, and a German or
+            // Russian translation makes that worse. Matches the tagline Label above.
+            wrapMode: Text.WordWrap
             opacity: 0.5
             font: Kirigami.Theme.smallFont
         }
@@ -84,31 +97,28 @@ KCMUtils.SimpleKCM {
 
             Button {
                 flat: true
-                text: i18n("GitHub")
+                text: qsTr("GitHub")
                 icon.name: "vcs-branch"
                 onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones")
             }
 
             Button {
                 flat: true
-                text: i18n("Report Bug")
+                text: qsTr("Report Bug")
                 icon.name: "tools-report-bug"
                 onClicked: Qt.openUrlExternally("https://github.com/fuddlesworth/PlasmaZones/issues/new")
             }
 
             Button {
                 flat: true
-                text: i18n("Documentation")
+                text: qsTr("Documentation")
                 icon.name: "documentation"
                 onClicked: Qt.openUrlExternally("https://phosphor-works.github.io/plasmazones/")
             }
-
         }
 
         Item {
             Layout.fillHeight: true
         }
-
     }
-
 }

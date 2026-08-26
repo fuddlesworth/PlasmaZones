@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include "zoneslogging.h"
 
@@ -63,7 +64,24 @@ void LayoutRegistry::initCommon()
 
     // One evaluation model — bound to the store's live rule set. The store
     // owns the set's lifetime; the evaluator holds a reference to it.
+    //
+    // A rule store is a HARD construction precondition, not an optional
+    // dependency: the evaluator is built here and never reset, so every
+    // resolver derefs m_evaluator unguarded. The sole constructor is the only
+    // caller of this function and it already qFatals on a null store, so the
+    // dereference below is guarded there rather than re-checked here.
     m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    // Context resolution honours only the blanket Exclude as a walk-stopper.
+    // The scoped exclusions (ExcludePlacement / ExcludeDecorations /
+    // ExcludeAnimations) are per-window concerns resolved by their dedicated
+    // sliced evaluators; letting one of them terminate a context cascade
+    // (gaps, overlay, tiling params, engine mode) via a hand-edited mixed
+    // rule would contradict their documented scope. The context resolvers'
+    // carries-the-slot admit predicates already reject rules without a
+    // relevant action, so this scope only matters for a mixed rule carrying
+    // both a context action and a scoped exclusion — the shape the rule
+    // validator warns about but a hand-edited rules.json can still load.
+    m_evaluator->setTerminalActionScope({QString(PhosphorRules::ActionType::Exclude)});
 
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed
@@ -73,7 +91,10 @@ void LayoutRegistry::initCommon()
 
 LayoutRegistry::~LayoutRegistry()
 {
-    qDeleteAll(m_layouts);
+    // No qDeleteAll: addLayout() parents every Layout to this registry, so
+    // ~QObject destroys them. The manual sweep was redundant and read against
+    // the parent-ownership rule the rest of this file follows (deleteLater
+    // everywhere else).
 }
 
 void LayoutRegistry::setDefaultLayoutIdProvider(std::function<QString()> provider)
@@ -90,6 +111,11 @@ void LayoutRegistry::setTiledWindowCountProvider(
     std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)> provider)
 {
     m_tiledWindowCountProvider = std::move(provider);
+}
+
+void LayoutRegistry::setColorSchemeProvider(std::function<std::optional<QString>()> provider)
+{
+    m_colorSchemeProvider = std::move(provider);
 }
 
 void LayoutRegistry::setScreenOrientationProvider(
@@ -218,8 +244,13 @@ static PhosphorZones::Layout* findLayout(const QVector<PhosphorZones::Layout*>& 
 // Helper: emit layoutAssigned for a single screenId/layoutId pair
 void LayoutRegistry::emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
-    PhosphorZones::Layout* layout =
-        PhosphorLayout::LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
+    // Only Snapping ids name a Layout*. The two engine-owned id shapes carry no
+    // layout entity, so both emit a null pointer. Scrolling is spelled out
+    // rather than left to fall through the UUID parse (which would also yield
+    // null, by accident) so the third mode is visible at the emit site.
+    const bool hasNoLayoutEntity =
+        PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId);
+    PhosphorZones::Layout* layout = hasNoLayoutEntity ? nullptr : layoutById(QUuid::fromString(layoutId));
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
@@ -230,8 +261,16 @@ bool LayoutRegistry::shouldSkipLayoutAssignment(const QString& layoutId, const Q
     if (layoutId.isEmpty()) {
         return true;
     }
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-        return false; // Autotile IDs are valid without PhosphorZones::Layout* lookup
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId) || PhosphorLayout::LayoutId::isScrolling(layoutId)
+        || layoutId == PhosphorZones::NoSnappingLayout) {
+        // Autotile ids, the bare scrolling sentinel, and the snapping opt-out
+        // word are valid without a PhosphorZones::Layout* lookup. Skipping any
+        // of them here would be DATA LOSS in the batch path:
+        // applyBatchAssignments drops the addressed rule family before this
+        // validation re-adds entries, so a rejected Scrolling context — or a
+        // snapping context explicitly set to no layout — would lose its
+        // assignment for good on a get->set round trip.
+        return false;
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
         qCWarning(lcZonesLib) << "Skipping non-existent layout for" << context << ":" << layoutId;
@@ -244,6 +283,16 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
 {
     if (m_defaultLayoutIdProvider) {
         const QString configuredId = m_defaultLayoutIdProvider();
+        // The explicit opt-out answers "no default at all", so it must NOT
+        // fall through to the first-registered-layout net below — that
+        // fallback exists to degrade a stale/unparseable UUID gracefully,
+        // and degrading the sentinel to a real layout would hand every
+        // defaultLayout() consumer (overlay seed, zone selector, D-Bus
+        // getActiveLayout, the cascade-miss tail of layoutForScreen) zones
+        // the user opted out of.
+        if (configuredId == PhosphorZones::NoSnappingLayout) {
+            return nullptr;
+        }
         if (!configuredId.isEmpty()) {
             if (PhosphorZones::Layout* layout = layoutById(QUuid::fromString(configuredId))) {
                 return layout;
@@ -256,11 +305,18 @@ PhosphorZones::Layout* LayoutRegistry::defaultLayout() const
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
 // Filters out hidden layouts and respects visibility allow-lists
+//
+// NOTE: reachable in production only through cycleToPrevious/NextLayout,
+// which currently have no daemon-side callers — the daemon's cycle shortcut
+// runs UnifiedLayoutController::cycle() instead (a richer list: autotile
+// cards, custom order, template exemptions). This impl stays as the
+// library-level fallback for embedders and is exercised by the registry
+// tests; keep its scrolling routing in step with the controller's.
 PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, int direction)
 {
-    if (m_layouts.isEmpty()) {
-        return nullptr;
-    }
+    // No layout-list early-out here: the scrolling branch below cycles the
+    // TEMPLATE store and must work with zero manual layouts loaded. The
+    // layout walk guards itself (visible.isEmpty()).
 
     // Translate connector name to screen ID for allowedScreens matching
     QString resolvedScreenId;
@@ -277,6 +333,47 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // known (empty screenId) or no per-output value is on record.
     const int desktop =
         resolvedScreenId.isEmpty() ? m_currentVirtualDesktop : currentVirtualDesktopForScreen(resolvedScreenId);
+
+    // On a scrolling screen the cycle walks the native TEMPLATE store, not
+    // the layout list — layouts are not templates since the native-template
+    // pivot. Reports no Layout* by construction (there is none); the
+    // assignment write is the observable effect, and the daemon's richer
+    // controller cycle owns the OSD. No-current starts at the direction's
+    // first entry.
+    if (!resolvedScreenId.isEmpty()
+        && modeForScreen(resolvedScreenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
+        if (!m_scrollingTemplateStore) {
+            return nullptr;
+        }
+        const QList<ScrollingTemplate> templates = m_scrollingTemplateStore->templates();
+        if (templates.isEmpty()) {
+            return nullptr;
+        }
+        const ScrollingTemplate current = scrollingTemplateForContext(resolvedScreenId, desktop, m_currentActivity);
+        int currentIdx = -1;
+        if (current.isValid()) {
+            for (int i = 0; i < templates.size(); ++i) {
+                if (templates.at(i).id == current.id) {
+                    currentIdx = i;
+                    break;
+                }
+            }
+        }
+        const int newIdx = currentIdx < 0 ? (direction > 0 ? 0 : templates.size() - 1)
+                                          : (currentIdx + direction + templates.size()) % templates.size();
+        // Commit through the same helper the quick-slot and picker presses
+        // use, so all three write the context key the same way (the screen's
+        // own desktop, empty activity, shadowing activity-keyed entry
+        // cleared). Writing an activity-keyed rule here instead would leave a
+        // cycled screen with an entry the picker paths then have to clear.
+        // The bool is not surfaced: the cycle reports no Layout* either way.
+        // The only refusal reachable from here is the unknown-template arm
+        // (the id comes from the store's own list, so it resolves), and the
+        // helper logs that one itself; the empty-argument arms cannot arise
+        // with a resolved screen id and a non-null template id.
+        applyScrollingTemplateToScreen(resolvedScreenId, templates.at(newIdx).id.toString());
+        return nullptr;
+    }
 
     // Build filtered list of visible layouts for current context
     QVector<PhosphorZones::Layout*> visible;
@@ -306,19 +403,31 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
         return nullptr;
     }
 
-    // Use per-screen layout as reference for cycling so each screen cycles independently
+    // Use per-screen layout as reference for cycling so each screen cycles
+    // independently. (Scrolling screens never reach here — the template
+    // branch above returns.)
     PhosphorZones::Layout* currentLayout = nullptr;
+    // An explicitly opted-out context has NO current layout, and that is a
+    // resolved answer rather than a failure to resolve. Distinguishing the two
+    // matters here: the fallbacks below exist for "could not work out what is
+    // in force", and letting an opt-out reach them adopted the default (or the
+    // first visible row) as if the screen were using it, so the first press
+    // stepped from that layout's index and skipped the row it should have
+    // landed on. Leaving currentLayout null takes the not-in-the-list arm,
+    // which starts the walk from either end.
+    const bool explicitlyNoLayout = !resolvedScreenId.isEmpty()
+        && snappingLayoutForScreen(resolvedScreenId, desktop, m_currentActivity) == NoSnappingLayout;
     if (!resolvedScreenId.isEmpty()) {
         currentLayout = layoutForScreen(resolvedScreenId, desktop, m_currentActivity);
     }
-    if (!currentLayout) {
+    if (!currentLayout && !explicitlyNoLayout) {
         currentLayout = defaultLayout();
     }
-    if (!currentLayout) {
+    if (!currentLayout && !explicitlyNoLayout) {
         currentLayout = visible.first();
     }
 
-    int currentIndex = visible.indexOf(currentLayout);
+    int currentIndex = currentLayout ? visible.indexOf(currentLayout) : -1;
     if (currentIndex < 0) {
         // Current layout is not in the visible list (e.g. hidden).
         // For forward cycling, start before the first so we land on visible[0].
@@ -334,11 +443,54 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // shared with applyQuickLayout. Cycling with an empty screenId
     // (uncommon but not invalid — happens when no focused screen is
     // known) just updates the global active layout.
-    applyLayoutToScreen(resolvedScreenId, newLayout);
+    // Report what was actually COMMITTED: applyLayoutToScreen refuses a
+    // Scrolling-mode screen outright, and returning newLayout on a refusal
+    // would claim a switch that never happened. The scrolling branch above
+    // already returns for such a screen, so the refusal is defence in depth
+    // against the two mode checks ever diverging.
+    if (!applyLayoutToScreen(resolvedScreenId, newLayout)) {
+        return nullptr;
+    }
     return newLayout;
 }
 
-void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
+bool LayoutRegistry::applyScrollingTemplateToScreen(const QString& screenId, const QString& templateId)
+{
+    // The template twin of applyLayoutToScreen's per-screen commit: write
+    // the screen's OWN desktop, clear a shadowing activity-keyed entry, and
+    // leave the global active-layout pointer alone (it feeds snap overlay /
+    // zone-detector queries a template choice must not repoint). Refuses an
+    // id the store does not know so a mis-wired press reads as "nothing
+    // happened" instead of clearing the context's template.
+    //
+    // CONVENTION SPLIT with UnifiedLayoutController::applyEntry's picker
+    // branch, deliberate on both sides. This helper serves the template CYCLE,
+    // the quick-slot press and the D-Bus applyQuickLayout, and writes the
+    // EMPTY-activity entry while clearing the activity-keyed one, so a press
+    // here applies across activities. The picker writes the current
+    // (screen, desktop, activity) tuple through assignScrollingTemplate
+    // directly, matching its own autotile and manual siblings: a card press
+    // applies to the context the user is looking at, and an activity-scoped
+    // context must not have its entry cleared out from under it. Do not
+    // collapse the two without deciding which semantics the quick slots and
+    // the cycle should have.
+    if (screenId.isEmpty() || templateId.isEmpty()) {
+        return false;
+    }
+    const QUuid parsed = QUuid::fromString(templateId);
+    if (parsed.isNull() || (m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed))) {
+        qCInfo(lcZonesLib) << "applyScrollingTemplateToScreen: unknown template" << templateId << "— refusing";
+        return false;
+    }
+    const int desktop = currentVirtualDesktopForScreen(screenId);
+    if (!m_currentActivity.isEmpty()) {
+        clearAssignment(screenId, desktop, m_currentActivity);
+    }
+    assignScrollingTemplate(screenId, desktop, QString(), parsed.toString());
+    return true;
+}
+
+bool LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
 {
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
@@ -348,6 +500,18 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         // applyQuickLayout via LayoutAdaptor) pass an already idForName-resolved
         // screenId, matching the per-output map's key.
         const int desktop = currentVirtualDesktopForScreen(screenId);
+        // Scrolling refusal. A manual Layout* is not an input on a scrolling
+        // screen at all: it is not a placement (assignLayout below would
+        // classify its UUID as Snapping and flip the screen off the
+        // scrolling engine), and since the native-template pivot it is not a
+        // template either — templates are their own ScrollingTemplate
+        // objects with their own id namespace, assigned through
+        // assignScrollingTemplate / applyScrollingTemplateToScreen. Refuse
+        // so a mis-routed layout press reads as "nothing happened" instead
+        // of silently clearing the context's template.
+        if (modeForScreen(screenId, desktop, m_currentActivity) == AssignmentEntry::Scrolling) {
+            return false;
+        }
         // Write per-desktop assignment with empty activity so it applies
         // regardless of which activity is active. Activity-specific
         // overrides are a separate KCM-only feature. Clear any stale
@@ -365,6 +529,7 @@ void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones:
         const QSignalBlocker blocker(this);
         setActiveLayout(layout);
     }
+    return true;
 }
 
 PhosphorZones::Layout* LayoutRegistry::layoutById(const QUuid& id) const
@@ -401,10 +566,10 @@ void LayoutRegistry::addLayout(PhosphorZones::Layout* layout)
     }
 }
 
-void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
+bool LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
 {
     if (!layout || layout->isSystemLayout() || !m_layouts.contains(layout)) {
-        return;
+        return false;
     }
 
     // Store state BEFORE any operations that might invalidate the pointer
@@ -440,15 +605,33 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
             m_layoutSettings.setSettingsFor(layoutIdStr, removedSettings);
             qCWarning(lcZonesLib) << "Failed to persist the layout settings sidecar — keeping layout" << layoutIdStr
                                   << "rather than leaving its settings orphaned on disk";
-            return;
+            return false;
         }
+    }
+
+    // Delete the layout file (using the stored path) BEFORE the layout leaves
+    // m_layouts, and take the whole removal down when it fails — the same
+    // leave-it-consistent-and-retry discipline the sidecar write above follows.
+    // Ignoring the result was the asymmetry: with the settings entry already
+    // dropped and the layout already out of memory, a file that survived on
+    // disk would be re-read by the next loadLayouts() and the layout would come
+    // back wearing default settings. QFile::remove() also reports false for a
+    // file that was never written (a layout added but never saved), so the
+    // existence test comes first and that case removes cleanly.
+    if (QFile::exists(filePath) && !QFile::remove(filePath)) {
+        qCWarning(lcZonesLib) << "Failed to delete the layout file" << filePath << "— keeping layout" << layoutIdStr;
+        if (!removedSettings.isEmpty()) {
+            m_layoutSettings.setSettingsFor(layoutIdStr, removedSettings);
+            if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+                qCWarning(lcZonesLib) << "Failed to restore the layout settings sidecar for" << layoutIdStr
+                                      << "after its layout file could not be deleted";
+            }
+        }
+        return false;
     }
 
     // Remove from layouts list
     m_layouts.removeOne(layout);
-
-    // Delete layout file (using stored path)
-    QFile::remove(filePath);
 
     // Clear every pointer that could capture the about-to-deleteLater
     // layout. m_previousLayout is obvious. m_activeLayout is the subtle
@@ -483,33 +666,19 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         }
     } else {
         // Truly deleted — clean up rules and shortcuts referencing this layout.
-        // A context rule references the layout iff its SetSnappingLayout action
-        // carries this layout's UUID string. The rule is NOT blanket-deleted:
-        // an Autotile-mode context rule can carry a stale SetSnappingLayout
-        // (the mode-toggle losslessness invariant), so dropping the whole rule
-        // would lose its SetEngineMode + SetTilingAlgorithm autotile intent.
-        // purgeSnappingLayoutFromAssignments rebuilds each affected rule with
-        // only the snapping layout cleared, dropping a rule only when nothing
-        // meaningful remains.
-        purgeSnappingLayoutFromAssignments(layoutIdStr);
-
-        // A deleted manual layout's UUID only ever lives in the Snapping
-        // slots, but prune both modes defensively so a stale binding can
-        // never resurrect a deleted layout.
-        bool shortcutRemoved = false;
-        for (auto& slots : m_quickLayoutSlots) {
-            for (auto it = slots.begin(); it != slots.end();) {
-                if (it.value() == layoutIdStr) {
-                    it = slots.erase(it);
-                    shortcutRemoved = true;
-                } else {
-                    ++it;
-                }
-            }
-        }
-        if (shortcutRemoved) {
-            writeQuickLayouts();
-        }
+        // A context rule references the layout iff its SetSnappingLayout or
+        // SetScrollingTemplate action carries this layout's UUID string. The
+        // rule is NOT blanket-deleted: an Autotile-mode context rule can carry
+        // a stale SetSnappingLayout (the mode-toggle losslessness invariant),
+        // so dropping the whole rule would lose its SetEngineMode +
+        // SetTilingAlgorithm autotile intent. purgeLayoutIdFromAssignments
+        // rebuilds each affected rule with only the referencing layout slots
+        // cleared. A rule pinned to an exact context is never dropped; only a
+        // rule with no context shape — a window-property or catch-all rule —
+        // whose sole action was the dead reference is. It
+        // also sweeps the quick-slot arrays for the same id, so a stale
+        // binding can never resurrect the deleted layout on a shortcut press.
+        purgeLayoutIdFromAssignments(layoutIdStr);
 
         if (wasActive) {
             setActiveLayout(defaultLayout());
@@ -517,11 +686,12 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     }
 
     Q_EMIT layoutsChanged();
+    return true;
 }
 
-void LayoutRegistry::removeLayoutById(const QUuid& id)
+bool LayoutRegistry::removeLayoutById(const QUuid& id)
 {
-    removeLayout(layoutById(id));
+    return removeLayout(layoutById(id));
 }
 
 PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* source)
@@ -530,9 +700,10 @@ PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* so
         return nullptr;
     }
 
-    auto newLayout = new PhosphorZones::Layout(*source);
+    // Unparented: addLayout() below takes ownership. clone() already leaves
+    // sourcePath and systemSourcePath empty, making the duplicate a user layout.
+    auto* newLayout = source->clone();
     newLayout->setName(source->name() + duplicateNameSuffix());
-    // Note: Copy constructor already leaves sourcePath empty, making it a user layout
 
     // Reset visibility restrictions so duplicated layout starts fresh
     newLayout->setHiddenFromSelector(false);
@@ -558,6 +729,11 @@ void LayoutRegistry::setActiveLayout(PhosphorZones::Layout* layout)
     } else if (m_activeLayout == layout) {
         qCInfo(lcZonesLib) << "setActiveLayout: SKIPPED (already active):"
                            << (layout ? layout->name() : QStringLiteral("null"));
+    } else {
+        // Non-null but absent from m_layouts. Every other rejection path here
+        // logs; this one returned in silence, so a caller passing a retired or
+        // foreign Layout* saw no signal and no explanation.
+        qCWarning(lcZonesLib) << "setActiveLayout: REFUSED (layout not owned by this registry):" << layout->name();
     }
 }
 
@@ -568,7 +744,13 @@ void LayoutRegistry::setActiveLayoutById(const QUuid& id)
 
 PhosphorZones::Layout* LayoutRegistry::layoutForShortcut(AssignmentEntry::Mode mode, int number) const
 {
-    const auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    // Scrolling slots hold ScrollingTemplate ids — a distinct namespace
+    // with no Layout* behind it; applyQuickLayout's scrolling arm reads the
+    // slot id directly.
+    if (mode == AssignmentEntry::Scrolling) {
+        return nullptr;
+    }
+    const auto& slots = m_quickLayoutSlots[slotIndexFor(mode)];
     if (slots.contains(number)) {
         const QString& id = slots[number];
         if (PhosphorLayout::LayoutId::isAutotile(id))
@@ -586,11 +768,27 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
     // slot (setQuickLayoutSlot(mode, n, "")), pressing the shortcut must be a
     // no-op — falling back to m_layouts.at(number-1) silently resurrects
     // a layout the user deliberately unbound.
-    //
-    // Only manual (Snapping) slots can be applied here: an autotile slot
+
+    // Scrolling slots hold native TEMPLATE ids: the press swaps the
+    // context's template, never the engine. Same desktop/activity handling
+    // as applyLayoutToScreen (write the screen's own desktop, clear a
+    // shadowing activity-keyed entry). An unset slot is a no-op like the
+    // other modes'.
+    if (mode == AssignmentEntry::Scrolling) {
+        const QString templateId = m_quickLayoutSlots[slotIndexFor(mode)].value(number);
+        if (templateId.isEmpty()) {
+            qCInfo(lcZonesLib) << "Quick slot" << number << "is unset for scrolling — no-op";
+            return;
+        }
+        applyScrollingTemplateToScreen(screenId, templateId);
+        return;
+    }
+
+    // Only manual-layout slots can be applied here: an autotile slot
     // resolves to an algorithm ID with no Layout*, and switching algorithms
     // needs the autotile engine, which lives in the daemon. The daemon's
-    // shortcut handler applies autotile slots directly; see daemon/start.cpp.
+    // shortcut handler applies autotile slots directly; see
+    // daemon/shortcuts_wiring.cpp.
     auto layout = layoutForShortcut(mode, number);
     if (!layout) {
         qCInfo(lcZonesLib) << "Quick slot" << number << "is unset or not directly applicable — no-op";
@@ -603,18 +801,48 @@ void LayoutRegistry::applyQuickLayout(AssignmentEntry::Mode mode, int number, co
 
 void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, const QString& layoutId)
 {
-    if (number < 1 || number > 9) {
-        qCWarning(lcZonesLib) << "Invalid quick layout slot number:" << number << "(must be 1-9)";
+    if (number < 1 || number > QuickSlotCount) {
+        qCWarning(lcZonesLib) << "Invalid quick layout slot number:" << number
+                              << qUtf8Printable(QStringLiteral("(must be 1-%1)").arg(QuickSlotCount));
         return;
     }
 
-    auto& slots = m_quickLayoutSlots[modeIndex(mode)];
+    auto& slots = m_quickLayoutSlots[slotIndexFor(mode)];
 
     if (layoutId.isEmpty()) {
         // Clear the slot
         slots.remove(number);
         qCInfo(lcZonesLib) << "Cleared quick layout slot" << number << "mode=" << mode;
+    } else if (mode == AssignmentEntry::Scrolling) {
+        // Scrolling slots hold native TEMPLATE ids, validated against the
+        // template store (parity with the layoutById check below). Without a
+        // wired store the id is neither validated nor refused (a test-only
+        // configuration): it is stored as-is here, and
+        // applyScrollingTemplateToScreen likewise accepts it at press time,
+        // since its existence check is store-gated too.
+        const QUuid parsed = QUuid::fromString(layoutId);
+        if (parsed.isNull()) {
+            qCWarning(lcZonesLib) << "Rejecting malformed template id for quick slot:" << layoutId;
+            return;
+        }
+        if (m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
+            qCWarning(lcZonesLib) << "Cannot assign non-existent template to quick slot:" << layoutId;
+            return;
+        }
+        slots[number] = parsed.toString();
+        qCInfo(lcZonesLib) << "Assigned template" << layoutId << "to quick slot" << number;
     } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        // The explicit opt-out is not a bindable slot value: a quick slot is
+        // an "apply this layout" binding, the opt-out has its own picker
+        // card, and a press on such a slot was a silent dead press (the
+        // controller's list keys the opt-out by the bare word, so
+        // applyLayoutById("autotile:none") resolves nothing). The snapping
+        // arm below already rejects the bare word through its UUID parse —
+        // this keeps the two families symmetric.
+        if (PhosphorLayout::LayoutId::extractAlgorithmId(layoutId) == NoTilingAlgorithm) {
+            qCWarning(lcZonesLib) << "Rejecting the reserved opt-out id for quick slot:" << layoutId;
+            return;
+        }
         // Autotile IDs have no corresponding Layout* — accept as-is.
         slots[number] = layoutId;
         qCInfo(lcZonesLib) << "Assigned autotile layout" << layoutId << "to quick slot" << number;
@@ -632,7 +860,11 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
             qCWarning(lcZonesLib) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
         }
-        slots[number] = layoutId;
+        // Canonical braced spelling, matching the scrolling arm: the
+        // id-keyed slot sweep in purgeLayoutIdFromAssignments compares exact
+        // strings, so a caller's unbraced or upper-case spelling would
+        // survive the delete of the layout it names.
+        slots[number] = parsed.toString();
         qCInfo(lcZonesLib) << "Assigned layout" << layoutId << "to quick slot" << number;
     }
 
@@ -642,7 +874,7 @@ void LayoutRegistry::setQuickLayoutSlot(AssignmentEntry::Mode mode, int number, 
 
 void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots)
 {
-    auto& target = m_quickLayoutSlots[modeIndex(mode)];
+    auto& target = m_quickLayoutSlots[slotIndexFor(mode)];
 
     // Clear all existing slots for this mode first
     target.clear();
@@ -652,7 +884,7 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
         int number = it.key();
         const QString& layoutId = it.value();
 
-        if (number < 1 || number > 9) {
+        if (number < 1 || number > QuickSlotCount) {
             qCWarning(lcZonesLib) << "Skipping invalid quick layout slot number:" << number;
             continue;
         }
@@ -662,7 +894,41 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
             continue;
         }
 
-        if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        // Anything that parses as a UUID is stored in its canonical braced
+        // spelling, matching setQuickLayoutSlot: the id-keyed slot sweep in
+        // purgeLayoutIdFromAssignments compares exact strings, so a caller's
+        // unbraced or upper-case spelling would survive the delete of the
+        // layout or template it names. Autotile ids are opaque tokens with no
+        // canonical form and are stored verbatim.
+        QString stored = layoutId;
+
+        if (mode == AssignmentEntry::Scrolling) {
+            // Template-id validation, mirroring setQuickLayoutSlot's
+            // scrolling arm.
+            const QUuid parsed = QUuid::fromString(layoutId);
+            if (parsed.isNull()) {
+                qCWarning(lcZonesLib) << "Skipping malformed template id for quick slot" << number << ":" << layoutId;
+                continue;
+            }
+            if (m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
+                qCWarning(lcZonesLib) << "Skipping non-existent template for quick slot" << number << ":" << layoutId;
+                continue;
+            }
+            stored = parsed.toString();
+        } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+            // Mirror setQuickLayoutSlot's refusal of the reserved opt-out id.
+            // A quick slot is an "apply this layout" binding; the opt-out has
+            // its own picker card, and a press on such a slot resolves nothing
+            // (a silent dead press). Accepting it here while the single setter
+            // refuses it let a bus batch write land the exact value the single
+            // setter exists to keep out.
+            if (PhosphorLayout::LayoutId::extractAlgorithmId(layoutId) == NoTilingAlgorithm) {
+                qCWarning(lcZonesLib) << "Batch: skipping the reserved opt-out id for quick slot" << number << ":"
+                                      << layoutId;
+                continue;
+            }
+            // Autotile IDs have no corresponding Layout* — accept as-is.
+        } else {
             // See setQuickLayoutSlot for the two-step parse/lookup
             // rationale — catches malformed UUID strings separately
             // from lookup-miss for clearer diagnostics.
@@ -675,9 +941,10 @@ void LayoutRegistry::setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QH
                 qCWarning(lcZonesLib) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
                 continue;
             }
+            stored = parsed.toString();
         }
 
-        target[number] = layoutId;
+        target[number] = stored;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to quick slot" << number << "mode=" << mode;
     }
 

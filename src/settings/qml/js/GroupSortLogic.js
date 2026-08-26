@@ -6,8 +6,8 @@
 /**
  * Neutral grouping / sorting primitives for the settings listing pages.
  * Functions take plain data and caller-supplied, i18n-resolved labels and never
- * touch any QML context, so they're page-agnostic. The Layouts page (snapping
- * layouts + tiling algorithms) is the current consumer; the primitives are kept
+ * touch any QML context, so they're page-agnostic. The library pages (snapping
+ * layouts + tiling algorithms) are the current consumers; the primitives are kept
  * here as a small reusable library for any future grouped/sorted listing.
  *
  * Group shape: an object keyed by group id, each value `{ items, order, label }`.
@@ -39,7 +39,7 @@ function groupByBoolKey(items, testFn, trueKey, trueLabel, falseKey, falseLabel)
 
 // General N-bucket grouping — the multi-bucket generalization of
 // groupByBoolKey, provided by the library for reuse (no page consumes it today;
-// the Layouts page only needs the two-bucket split). `keyFn(item)` returns
+// the library pages only need the two-bucket split). `keyFn(item)` returns
 // `{ key, order, label }` describing the bucket the item belongs to. Items
 // mapping to the same `key` share a bucket; the first occurrence's
 // `order`/`label` win.
@@ -86,7 +86,7 @@ function applySort(groups, comparator, ascending) {
 
 // Flatten the group map into an ordered, non-empty `[{ label, items }]` array.
 // When only one non-empty group remains its header is dropped — UNLESS
-// `keepSingleLabel` is true. The Layouts page passes true for its "None"
+// `keepSingleLabel` is true. The library pages pass true for their "None"
 // grouping (so the lone "All layouts" card keeps its header) and false
 // otherwise (so a real grouping that happens to collapse to one group renders
 // header-less).

@@ -167,6 +167,28 @@ bool MatchExpression::referencesAnyField(const QSet<Field>& fields) const
     return false;
 }
 
+bool MatchExpression::negatesAnyField(const QSet<Field>& fields) const
+{
+    // A leaf at the top level is a positive reference, never a negated one.
+    if (m_kind == Kind::Leaf) {
+        return false;
+    }
+    for (const auto& child : m_children) {
+        if (m_kind == Kind::None) {
+            // Everything under a None is negation-scoped: a leaf on one of the
+            // fields here inverts on absence, and a nested composite under it
+            // still sits inside the negation, so a plain referencesAnyField
+            // walk is the right test for the whole subtree.
+            if (child.referencesAnyField(fields)) {
+                return true;
+            }
+        } else if (child.negatesAnyField(fields)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void MatchExpression::ensureRegex()
 {
     if (m_kind != Kind::Leaf || m_predicate.op != Operator::Regex || m_compiledRegex) {

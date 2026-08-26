@@ -5,7 +5,7 @@
 
 #include "compositor/deferredwindowcommits.h"
 
-#include <PhosphorCompositor/AutotileState.h>
+#include <PhosphorCompositor/TilingState.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
 #include <QHash>
@@ -31,7 +31,7 @@ namespace PlasmaZones {
 // not leak the whole PhosphorCompositor namespace into every includer.
 // (Re-declaring the same alias/using in a sibling header is well-formed.)
 using PhosphorCompositor::BorderState;
-namespace AutotileStateHelpers = PhosphorCompositor::AutotileStateHelpers;
+namespace TilingStateHelpers = PhosphorCompositor::TilingStateHelpers;
 
 class PlasmaZonesEffect;
 
@@ -51,18 +51,18 @@ struct CachedSnapRestore
 /**
  * @brief Handles snapping integration for PlasmaZones.
  *
- * The snap-mode counterpart to AutotileHandler. Owns the snap-side tiled
- * tracking (m_border, parallel to AutotileHandler::m_border) for
+ * The snap-mode counterpart to TilingHandler. Owns the snap-side tiled
+ * tracking (m_border, parallel to TilingHandler::m_border) for
  * snap-committed windows. The tracking set feeds the IsSnapped rule field;
  * per-window border appearance and title-bar (borderless) state are resolved
  * from rules and applied via the effect's DecorationManager — this handler
  * does not touch decorations or resolve appearance itself.
  * Delegates window lookups back to the effect through the m_effect back-pointer.
  *
- * Built on the shared PhosphorCompositor BorderState + AutotileStateHelpers so
+ * Built on the shared PhosphorCompositor BorderState + TilingStateHelpers so
  * snap and autotile share one standardized tracking mechanism. The effect's
  * membership resolver (resolveSurfacePathFor) reads isTiledWindow() here
- * alongside AutotileHandler's so each window resolves to the decoration surface
+ * alongside TilingHandler's so each window resolves to the decoration surface
  * path of the mode that manages it.
  */
 class SnapHandler : public QObject
@@ -72,7 +72,7 @@ class SnapHandler : public QObject
 public:
     explicit SnapHandler(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
-    // ── Snap border-state lifecycle (mirrors AutotileHandler's set) ──
+    // ── Snap border-state lifecycle (mirrors TilingHandler's set) ──
 
     /// Record @p windowId as snap-committed on @p screenId (idempotent) and
     /// (re)draw its border. Title-bar hiding is driven by rules.
@@ -85,13 +85,13 @@ public:
     /// Drop all snap tiled-tracking bookkeeping. Physical title-bar restores
     /// are the DecorationManager's job — teardown callers pair this with
     /// DecorationManager::restoreAll() (symmetric with
-    /// AutotileHandler::clearTiledTracking).
+    /// TilingHandler::clearTiledTracking).
     void clearSnapTracking();
     /// Drop snap border/title-bar tracking for a window being destroyed. Pure
     /// bookkeeping — no setNoBorder/removeWindowDecoration, the window is going away.
     void onWindowClosed(const QString& windowId);
 
-    // ── Snapping focus-follows-mouse (mirrors AutotileHandler) ──
+    // ── Snapping focus-follows-mouse (mirrors TilingHandler) ──
     void setFocusFollowsMouse(bool enabled);
     /// Activate the topmost snapped window under the cursor when FFM is on.
     /// No-op unless the window directly under the cursor is snapped (occlusion
@@ -148,9 +148,14 @@ public:
     /// window's first-frame suppression. Pass false when something else will
     /// still reposition it on a miss (the autotile-screen path tiles it via
     /// onComplete) — there the suppression must hold through that reposition.
+    /// isOpenPath: whether this resolve is driven by a window OPEN (session
+    /// restore, bring-up re-announce, deferred-routing flush) as opposed to
+    /// the unminimize-orphan and pending-restores-sweep drivers. Threaded to
+    /// the daemon, which gates the cross-screen tile reclaim on it — an
+    /// unminimize must never teleport a window across monitors.
     void callResolveWindowRestore(KWin::EffectWindow* window,
                                   std::function<void(bool snapApplied)> onComplete = nullptr,
-                                  bool releaseSuppressionOnMiss = true);
+                                  bool releaseSuppressionOnMiss = true, bool isOpenPath = true);
     /// Store a window's pre-snap (free-float) geometry with the daemon before a
     /// snap commit, so a later float toggle restores the original position.
     void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -159,7 +164,7 @@ public:
     /// external event). The daemon discards the in-flight snap.
     void callCancelSnap();
 
-    // ── Snap minimize-float (mirrors AutotileHandler's minimize→float machine) ──
+    // ── Snap minimize-float (mirrors TilingHandler's minimize→float machine) ──
     /// Drive the snap-mode minimize→float state machine: on a snapping-mode
     /// screen, float a window when it minimizes and unfloat it when it
     /// unminimizes. The autotile-screen gate is DIRECTION-ASYMMETRIC by
@@ -189,10 +194,10 @@ public:
     void handleMinimizeChanged(KWin::EffectWindow* window, const QString& windowId, const QString& screenId,
                                bool minimized);
     /// Cross-mode transfer entry point over handleMinimizeChanged's
-    /// unminimize path (mirror of AutotileHandler::offerMinimizeEdge).
+    /// unminimize path (mirror of TilingHandler::offerMinimizeEdge).
     /// Returns false when the entry gate would refuse the window (the screen
     /// moved back under autotile) WITHOUT forwarding; true after forwarding.
-    /// AutotileHandler's became-snap hand-offs must use this so a refused
+    /// TilingHandler's became-snap hand-offs must use this so a refused
     /// transfer re-arms on the sender instead of stranding the suspension.
     bool offerMinimizeEdge(KWin::EffectWindow* window, const QString& windowId, const QString& screenId);
     void retryVisibleMinimizeFloats();
@@ -212,7 +217,7 @@ public:
         m_minimizeFloatedWindows.insert(windowId);
     }
 
-    /// Retry-budget hand-off — see AutotileHandler's twin for rationale.
+    /// Retry-budget hand-off — see TilingHandler's twin for rationale.
     int unfloatRetryBudgetUsed(const QString& windowId) const
     {
         return m_unfloatRetryAttempts.value(windowId);
@@ -256,12 +261,12 @@ public:
         m_pendingUnminimizeUnfloat.cancel(windowId);
     }
 
-    // ── Tiled-membership accessor — delegates to shared AutotileStateHelpers ──
+    // ── Tiled-membership accessor — delegates to shared TilingStateHelpers ──
     // The snapped-window set feeds the IsSnapped rule field; per-window border
     // appearance and title-bar hiding are resolved from rules, not this state.
     bool isTiledWindow(const QString& windowId) const
     {
-        return AutotileStateHelpers::isTiledWindow(m_border, windowId);
+        return TilingStateHelpers::isTiledWindow(m_border, windowId);
     }
 
 public Q_SLOTS:
@@ -296,7 +301,7 @@ private:
     // FFM but scoped to the snap BorderState tiled set instead of autotile screens.
     bool m_focusFollowsMouse = false;
     // Snapping's own managed-window border state, parallel to
-    // AutotileHandler::m_border. Populated at snap commit, cleared on
+    // TilingHandler::m_border. Populated at snap commit, cleared on
     // float / unsnap / close.
     //
     // KEYING WARNING: this set is per-SCREEN, but the daemon's snap membership
@@ -308,15 +313,15 @@ private:
     // is usually snapped in a SIBLING desktop's or activity's state, and
     // clearing it flips the tiled appearance scope and restores its title
     // bar mid-switch (the autotile #808 bug; see the gated diff in
-    // autotilehandler/tiling.cpp onComplete).
+    // tilinghandler/tiling.cpp onComplete).
     BorderState m_border;
     // Single-shot instant-restore latency cache (appId → saved zone geometry +
     // screen), populated on daemon-ready and consumed on window-open.
     QHash<QString, CachedSnapRestore> m_restoreCache;
     // Snap-mode windows floated because they were minimized (mirrors
-    // AutotileHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
+    // TilingHandler::m_minimizeFloatedWindows). Removed on unminimize / close.
     // Deliberately NOT cleared on daemon restart, unlike the autotile twin
-    // (AutotileHandler::onDaemonReady): the restore net in
+    // (TilingHandler::clearPerSessionDaemonState): the restore net in
     // commitUnminimizeUnfloat is snap's restart-recovery path, and it only
     // fires for windows still in this set — clearing on daemon-ready would
     // strand exactly the windows the net exists to recover.
@@ -331,7 +336,7 @@ private:
     // spurious minimize-pair window with the shader and autotile paths.
     DeferredWindowCommits m_pendingMinimizeFloat{this};
     // Pending deferred unminimize→unfloat commits, keyed by windowId — the
-    // snap-mode mirror of AutotileHandler::m_pendingUnminimizeUnfloat, for the
+    // snap-mode mirror of TilingHandler::m_pendingUnminimizeUnfloat, for the
     // same reason: the unfloat re-snaps the window (the daemon applies its
     // zone geometry), and a moveResize landing mid-flight cancels KWin's own
     // unminimize animation (discussion #816). Deferred by an

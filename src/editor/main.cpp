@@ -21,13 +21,11 @@
 
 #include <QApplication>
 #include <QFile>
-#include <QLibrary>
 #include <QScopeGuard>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QCommandLineParser>
 #include <QQuickStyle>
-#include <QQuickWindow>
 #include <QObject>
 
 #include "phosphor_i18n.h"
@@ -45,13 +43,19 @@ constexpr PlasmaZones::SingleInstanceIds kEditorIds{PhosphorProtocol::Service::A
 /// Try to forward a launch request to an already-running editor instance.
 /// Returns true if the running instance accepted the request (caller should exit).
 ///
-/// The running instance applies the forwarded args (layout / screen / preview)
-/// but deliberately does not attempt to raise its window — see the comment on
-/// EditorController::handleLaunchRequest for why.
-bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+/// The running instance applies the forwarded args (layout / screen /
+/// preview / create-new / scrolling-template / new-template) but deliberately
+/// does not attempt to raise its window — see the comment on
+/// EditorLaunchController::handleLaunchRequest for why.
+bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                             const QString& templateId, bool newTemplate)
 {
-    return PlasmaZones::SingleInstanceService::forward(kEditorIds, QStringLiteral("handleLaunchRequest"),
-                                                       {screenId, layoutId, createNew, preview});
+    // Hand-maintained trio: this arg list, EditorAppAdaptor::handleLaunchRequest,
+    // and dbus/org.plasmazones.EditorApp.xml must agree (the contract test
+    // documents that XML as out of scope). Change all three together.
+    return PlasmaZones::SingleInstanceService::forward(
+        kEditorIds, QStringLiteral("handleLaunchRequest"),
+        {screenId, layoutId, createNew, preview, templateId, newTemplate});
 }
 
 } // anonymous namespace
@@ -90,9 +94,21 @@ int main(int argc, char* argv[])
 #if QT_CONFIG(vulkan)
     QVulkanInstance vulkanInstance;
 #endif
+    const PlasmaZones::ConfigDefaults::RenderingBootConfig renderingConfig =
+        PlasmaZones::ConfigDefaults::readRenderingConfigFromDisk();
     {
-        const QString backend = PlasmaZones::ConfigDefaults::readRenderingBackendFromDisk();
-        useVulkan = PlasmaZones::probeAndSetGraphicsApi(backend);
+        useVulkan = PlasmaZones::probeAndSetGraphicsApi(renderingConfig.backend);
+        if (!useVulkan && renderingConfig.backend == QLatin1String("vulkan")) {
+            // Mirror the daemon's diagnostic: without it a silent drop to
+            // OpenGL leaves no log line even though the comment above promises
+            // previews render identically to the daemon.
+            qCCritical(PlasmaZones::lcEditor) << "Vulkan library not found — falling back to OpenGL."
+                                              << "Install vulkan-icd-loader or equivalent for your distro.";
+        }
+        // Same GPU pin as the daemon so shader previews render on the same
+        // device. DRI_PRIME must be exported before the app object (Mesa
+        // reads it when the DRI screen opens during platform init).
+        PlasmaZones::applyOpenGlGpuPreference(renderingConfig.gpuDevice);
     }
 
     // QApplication (not QGuiApplication): the org.kde.desktop QtQuick Controls
@@ -104,19 +120,31 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
-    // Create and store QVulkanInstance for shader preview windows (same as daemon)
+    // Probe Vulkan usability and export the GPU pin (same checks as the
+    // daemon). Note the editor's QQuickWindows never attach this instance —
+    // no editor-side consumer reads PVulkanInstanceProperty, so Qt creates
+    // its own internal QVulkanInstance per window. The call is still wanted
+    // for its side effects: the enumerable-GPU probe (falling back to OpenGL
+    // before the API is locked in) and the QT_VK_PHYSICAL_DEVICE_INDEX
+    // export, which Qt's own instance honors at device selection.
 #if QT_CONFIG(vulkan)
     qRegisterMetaType<QVulkanInstance*>();
     if (useVulkan) {
-        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
+        if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app, renderingConfig.gpuDevice)) {
             qCCritical(PlasmaZones::lcEditor)
                 << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
                 << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"
                 << "a reboot may be needed to match the kernel module to the userspace driver.";
-            useVulkan = false;
         }
     }
 #endif
+
+    // Publish the exported/cleared GPU var lists exactly like the daemon:
+    // this process exports the same variables, and the scrub contract is
+    // keyed on these properties, so every GPU-exporting binary must publish
+    // them even while no editor-side spawn site exists today.
+    app.setProperty(PlasmaZones::PGpuExportedVarsProperty, PlasmaZones::exportedGpuPreferenceVariables());
+    app.setProperty(PlasmaZones::PGpuClearedVarsProperty, PlasmaZones::clearedGpuPreferenceVariables());
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
@@ -150,8 +178,13 @@ int main(int argc, char* argv[])
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
                                        PhosphorI18n::tr("Create new layout"));
     QCommandLineOption previewOption(QStringLiteral("preview"), PhosphorI18n::tr("Open in read-only preview mode"));
+    QCommandLineOption templateIdOption(QStringList{QStringLiteral("t"), QStringLiteral("scrolling-template")},
+                                        PhosphorI18n::tr("Scrolling template ID to edit"), QStringLiteral("uuid"));
+    QCommandLineOption newTemplateOption(QStringLiteral("new-scrolling-template"),
+                                         PhosphorI18n::tr("Create new scrolling template"));
 
-    parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
+    parser.addOptions(
+        {layoutIdOption, screenOption, newLayoutOption, previewOption, templateIdOption, newTemplateOption});
     parser.process(app);
 
     // Use platform style if available, fall back to Fusion for non-KDE environments
@@ -176,21 +209,39 @@ int main(int argc, char* argv[])
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
-        qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
+        qCWarning(lcEditor) << "--preview and --new are mutually exclusive; ignoring --preview";
+    }
+    if (parser.isSet(previewOption) && (parser.isSet(templateIdOption) || parser.isSet(newTemplateOption))) {
+        qCWarning(lcEditor) << "--preview does not apply to scrolling-template launches; ignoring --preview";
     }
     if (parser.isSet(newLayoutOption) && parser.isSet(layoutIdOption)) {
-        qWarning() << "--new and --layout are mutually exclusive; ignoring --layout";
+        qCWarning(lcEditor) << "--new and --layout are mutually exclusive; ignoring --layout";
+    }
+    if ((parser.isSet(templateIdOption) || parser.isSet(newTemplateOption))
+        && (parser.isSet(layoutIdOption) || parser.isSet(newLayoutOption))) {
+        qCWarning(lcEditor) << "The scrolling-template flags are mutually exclusive with --layout/--new;"
+                            << "ignoring the layout flags";
+    }
+    if (parser.isSet(newTemplateOption) && parser.isSet(templateIdOption)) {
+        qCWarning(lcEditor) << "--new-scrolling-template and --scrolling-template are mutually exclusive;"
+                            << "ignoring --scrolling-template";
     }
 
-    const bool createNewLayout = parser.isSet(newLayoutOption);
-    const QString layoutIdArg =
-        (!createNewLayout && parser.isSet(layoutIdOption)) ? parser.value(layoutIdOption) : QString();
-    const bool previewArg = parser.isSet(previewOption) && !createNewLayout;
+    const bool newTemplateArg = parser.isSet(newTemplateOption);
+    const QString templateIdArg =
+        (!newTemplateArg && parser.isSet(templateIdOption)) ? parser.value(templateIdOption) : QString();
+    const bool templateLaunch = newTemplateArg || !templateIdArg.isEmpty();
+    const bool createNewLayout = !templateLaunch && parser.isSet(newLayoutOption);
+    const QString layoutIdArg = (!templateLaunch && !createNewLayout && parser.isSet(layoutIdOption))
+        ? parser.value(layoutIdOption)
+        : QString();
+    const bool previewArg = parser.isSet(previewOption) && !createNewLayout && !templateLaunch;
 
     // Single-instance: if another editor is already running, forward the launch
     // request and exit. Avoids spawning parallel editor processes when the user
     // hits the shortcut repeatedly while the first editor is still starting up.
-    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg, templateIdArg,
+                                newTemplateArg)) {
         return 0;
     }
 
@@ -244,16 +295,18 @@ int main(int argc, char* argv[])
     // surface the error so the user knows the shortcut silently failed.
     if (!launcher.registerDBusService()) {
         qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg, templateIdArg,
+                                    newTemplateArg)) {
             return 0;
         }
         qCCritical(lcEditor) << "Editor D-Bus name" << PhosphorProtocol::Service::Apps::Editor::ServiceName
-                             << "is held by an unreachable instance. The existing editor may be hung —"
-                             << "kill the stale plasmazones-editor process and try again.";
+                             << "is held by an unreachable instance. The existing editor may be hung, or it"
+                             << "may be an older build whose launch-request signature no longer matches"
+                             << "(in-place upgrade) — kill the stale plasmazones-editor process and try again.";
         return 1;
     }
 
-    launcher.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg);
+    launcher.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg, templateIdArg, newTemplateArg);
 
     // Set up QML engine
     QQmlApplicationEngine engine;

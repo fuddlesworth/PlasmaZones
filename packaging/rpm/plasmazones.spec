@@ -1,5 +1,5 @@
 # PlasmaZones RPM Spec File
-# Window tiling and autotiling for KDE Plasma
+# Window snapping, tiling and scrolling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.7+ (KF6 6.26, Qt 6.10, KWin 6.7+).
@@ -18,7 +18,7 @@
 Name:           plasmazones
 Version:        0.0.0
 Release:        1%{?dist}
-Summary:        Window tiling and autotiling for KDE Plasma
+Summary:        Window snapping, tiling and scrolling for KDE Plasma
 
 # The effective licence of the built binaries. GPL-3.0-or-later covers the app
 # and daemon, LGPL-2.1-or-later the Phosphor component libraries. MIT and
@@ -93,10 +93,12 @@ BuildRequires:  qt6-qtsvg-devel
 %if 0%{?suse_version}
 BuildRequires:  cmake(KF6KCMUtils)
 BuildRequires:  cmake(KF6GlobalAccel)
+BuildRequires:  cmake(KF6ColorScheme)
 BuildRequires:  cmake(KF6Kirigami)
 %else
 BuildRequires:  kf6-kcmutils-devel >= 6.26.0
 BuildRequires:  kf6-kglobalaccel-devel >= 6.26.0
+BuildRequires:  kf6-kcolorscheme-devel >= 6.26.0
 BuildRequires:  kf6-kirigami-devel >= 6.26.0
 %endif
 
@@ -154,6 +156,9 @@ Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
 Requires:       kf6-kirigami >= 6.26.0
 Requires:       kf6-kcmutils >= 6.26.0
+# The KWin effect links KColorScheme. Soname autoreq already pulls the
+# library in; this line only states the 6.26.0 parity floor.
+Requires:       kf6-kcolorscheme >= 6.26.0
 Requires:       qt6-qtwayland >= 6.10.0
 # KWin: minimum version, NOT an exact patch pin.
 #
@@ -175,6 +180,10 @@ Requires:       qt6-qtwayland >= 6.10.0
 Requires:       kwin >= 6.7.0
 %endif
 Requires:       hicolor-icon-theme
+# Soft dependency, unconditional (Fedora and openSUSE both name it hwdata):
+# readable GPU names in the rendering device picker
+# (/usr/share/hwdata/pci.ids); the picker degrades to vendor labels without it.
+Recommends:     hwdata
 
 # Post-install scriptlet dependencies — must be in preamble (rpmbuild
 # parses Requires(post) only here; placing them after %%install is
@@ -190,16 +199,20 @@ Requires(post): /usr/bin/update-mime-database
 %endif
 
 %description
-PlasmaZones is a window tiling and zone management tool for KDE Plasma 6.
+PlasmaZones is a window placement tool for KDE Plasma 6. It gives every
+monitor one of three placement modes. Snapping drops windows into zones
+you drew, tiling places them automatically with a scripted algorithm,
+and scrolling arranges them as columns on an endless strip.
 
 Features:
-- Drag windows to predefined zones
-- Automatic tiling with multiple layout algorithms
-- Custom zone layouts with visual editor
-- Modifier key activation (Shift, Ctrl, etc.)
-- Multi-monitor support
-- Keyboard navigation between zones
-- Activity and virtual desktop-based layout switching
+- Drag windows into named zones, with a visual layout editor
+- Automatic tiling with a library of bundled Luau algorithms
+- Scrolling columns with width presets, tabs, and strip templates
+- A mode per monitor, virtual desktop, and activity
+- Multi-monitor support and virtual screen subdivision
+- Keyboard navigation with rebindable shortcuts throughout
+- Per-application window rules
+- GLSL shader overlays, window decoration packs, and window animations
 - Wayland-native using Layer Shell
 
 %prep
@@ -265,7 +278,10 @@ echo ""
 %doc README.md
 
 # Executables — globbed by the plasmazones prefix (plasmazonesd plus
-# plasmazones-editor / -report / -settings). phosphor-shell is
+# plasmazones-editor / -report / -settings / -shader-validate).
+# plasmazones-shader-render shares the prefix but never reaches the
+# buildroot: it needs BUILD_TOOLS=ON plus INSTALL_SHADER_RENDER_TOOL=ON
+# and both default to OFF. phosphor-shell is
 # deliberately NOT matched: it is gated behind the BUILD_PHOSPHOR_SHELL
 # CMake option (work in progress, default OFF), so packaging builds
 # never produce it and listing it explicitly would fail rpmbuild.

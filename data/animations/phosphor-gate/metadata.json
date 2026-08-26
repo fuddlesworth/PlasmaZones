@@ -1,0 +1,127 @@
+{
+    "id": "phosphor-gate",
+    "name": "Phosphor Gate",
+    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the edge they enter from, and columns leaving drain to a dark navy silhouette with a rose afterglow at the edge they leave by. The gates breathe in with scroll speed and never touch the middle of the screen. Everything settles to the plain strip the instant scrolling stops.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "appliesTo": ["strip"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "speedRef",
+            "name": "Response Speed",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.1,
+            "max": 1.5,
+            "step": 0.05,
+            "description": "Scroll speed at which the edge gates reach half strength. Lower values make the gates light up on gentler scrolls.",
+            "group": "Gates"
+        },
+        {
+            "id": "depth",
+            "name": "Gate Depth",
+            "type": "float",
+            "default": 0.16,
+            "min": 0.05,
+            "max": 0.22,
+            "step": 0.01,
+            "description": "How far each edge gate reaches inward at full scroll speed, as a fraction of the strip's work area along the direction it scrolls.",
+            "group": "Gates"
+        },
+        {
+            "id": "glow",
+            "name": "Glow Intensity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "step": 0.05,
+            "description": "Brightness of the gradient glow where content crosses the gates.",
+            "group": "Gates"
+        },
+        {
+            "id": "unlitDim",
+            "name": "Unlit Dim",
+            "type": "float",
+            "default": 0.65,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How dark content goes while it is still materializing at the arrival edge or draining out at the departure edge.",
+            "group": "Gates"
+        },
+        {
+            "id": "afterglow",
+            "name": "Afterglow Trail",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Length of the rose afterglow that departing content leaves at the trailing edge.",
+            "group": "Gates"
+        },
+        {
+            "id": "meander",
+            "name": "Gate Meander",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How raggedly the gate boundary wavers. Zero gives a perfectly straight gate.",
+            "group": "Boundary"
+        },
+        {
+            "id": "grain",
+            "name": "Meander Grain",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 3.0,
+            "step": 0.1,
+            "description": "Scale of the gate waver across the boundary. Higher values give finer ripples.",
+            "group": "Boundary"
+        },
+        {
+            "id": "embers",
+            "name": "Ember Sparks",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Strength of the small sparks that feed arriving content through the gate.",
+            "group": "Embers"
+        },
+        {
+            "id": "density",
+            "name": "Ember Density",
+            "type": "float",
+            "default": 24.0,
+            "min": 8.0,
+            "max": 60.0,
+            "step": 1.0,
+            "description": "How many bands of ember sparks the arrival gate carries. More bands mean narrower sparks, since each one is sized to its band.",
+            "group": "Embers"
+        },
+        {
+            "id": "edgeFeather",
+            "name": "Edge Feather",
+            "type": "float",
+            "default": 0.02,
+            "min": 0.0,
+            "max": 0.2,
+            "step": 0.01,
+            "description": "How softly the effect fades at the edges of the strip work area.",
+            "group": "Boundary"
+        },
+        { "id": "colorCyan", "name": "Gradient Cyan", "type": "color", "default": "#22D3EE" },
+        { "id": "colorBlue", "name": "Gradient Blue", "type": "color", "default": "#3B82F6" },
+        { "id": "colorPurple", "name": "Gradient Purple", "type": "color", "default": "#A855F7" },
+        { "id": "colorRose", "name": "Gradient Rose", "type": "color", "default": "#F43F5E" },
+        { "id": "colorTint", "name": "Unlit Tint", "type": "color", "default": "#0B1730" }
+    ]
+}

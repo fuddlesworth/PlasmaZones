@@ -20,8 +20,13 @@ namespace PhosphorRules {
  *
  * Window attributes are `std::optional`: absent when evaluating a windowless
  * context query (zone-assignment resolution). A predicate over an absent
- * window field evaluates `false`, so window-property rules are naturally
- * inert during context resolution — no special-casing in the evaluator.
+ * window field evaluates `false`, so a POSITIVE window-property leaf is
+ * naturally inert during context resolution — no special-casing in the
+ * evaluator. That inertness does NOT extend to negation: `none{}` matches when
+ * no child matched, so a NEGATED leaf over an absent field matches
+ * unconditionally. The context resolvers therefore exclude rules that negate
+ * any Window-sourced field, via MatchExpression::negatesAnyField over
+ * windowSourcedFields().
  *
  * Context attributes are present even for a windowless context query, with one
  * exception: `tiledWindowCount` is optional and absent when the count is
@@ -60,20 +65,23 @@ struct WindowQuery
     std::optional<int> positionX; ///< frame left edge X in px
     std::optional<int> positionY; ///< frame top edge Y in px
     std::optional<QString> captionNormal; ///< title without the WM-added app-name suffix
-    std::optional<bool> isFloating; ///< floated out of tiling (snap or autotile)
+    std::optional<bool> isFloating; ///< floated out of any placement engine (snapping, autotile, or scrolling)
     std::optional<bool> isSnapped; ///< occupies a snap zone (snap mode only)
     std::optional<QString> zone; ///< the snap zone's UUID the window occupies
-    std::optional<bool> isTiled; ///< managed by the autotile engine (distinct from isSnapped)
+    std::optional<bool> isTiled; ///< managed by a tiling-family engine — autotile or scrolling (distinct from
+                                 ///< isSnapped)
 
     // ── Context attributes — always present (except the optional tiledWindowCount) ──
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
-    QString mode; ///< current placement mode wire token ("snapping" / "tiling"); a floating window has no mode (empty)
+    QString mode; ///< placement-mode wire token — the `ModeToken` vocabulary in MatchTypes.h; a floating window has no
+                  ///< mode (empty, which is not a token)
     QString
         screenOrientation; ///< "portrait" / "landscape" of the resolving screen; empty = unknown (no geometry provider)
-    QString
-        activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>"); empty where unpopulated
+    QString activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>" / "scrolling:"); empty
+                          ///< where unpopulated
+    QString colorScheme; ///< "light" / "dark" system colour scheme; empty = unknown (no provider)
 
     /// Tiled-window count for the screen + desktop being resolved. Optional
     /// rather than defaulted because 0 is a meaningful value (an empty tiled
@@ -140,6 +148,8 @@ struct WindowQuery
             return std::optional<QVariant>(screenOrientation);
         case Field::ActiveLayout:
             return std::optional<QVariant>(activeLayout);
+        case Field::ColorScheme:
+            return std::optional<QVariant>(colorScheme);
         case Field::TiledWindowCount:
             return tiledWindowCount ? std::optional<QVariant>(*tiledWindowCount) : std::nullopt;
         case Field::IsMaximized:

@@ -13,6 +13,7 @@
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QTest>
 
 #include <PhosphorProtocol/AutotileMarshalling.h>
@@ -33,6 +34,50 @@ public Q_SLOTS:
     PhosphorProtocol::AlgorithmInfoEntry echoEntry(const PhosphorProtocol::AlgorithmInfoEntry& entry) const
     {
         return entry;
+    }
+};
+
+/// Same shape for TileRequestEntry. That struct has been widened more than
+/// once, so this says nothing about which fields are current: the round-trip
+/// pins that operator<< and operator>> agree on the field order, whatever that
+/// order happens to be.
+class TileRequestEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    PhosphorProtocol::TileRequestEntry echoEntry(const PhosphorProtocol::TileRequestEntry& entry) const
+    {
+        return entry;
+    }
+};
+
+/// Echoes a SwapTargetResult — the highest-transposition-risk wire struct
+/// (18 fields with two interleaved int quadruples and five trailing
+/// strings): a swap introduced in operator>> alone keeps the signature
+/// valid and passes every signature-only probe.
+class SwapTargetResultEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    PhosphorProtocol::SwapTargetResult echoEntry(const PhosphorProtocol::SwapTargetResult& entry) const
+    {
+        return entry;
+    }
+};
+
+/// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
+/// silently get an empty map, so this object exists to pin the demarshalling
+/// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
+class VariantMapEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    QVariantMap echoMap(const QVariantMap& map) const
+    {
+        return map;
     }
 };
 
@@ -62,6 +107,46 @@ class TestWireTypes : public QObject
 private Q_SLOTS:
 
     // =================================================================
+    // D-Bus types: PhosphorProtocol::PreTileGeometryEntry roundtrip
+    // =================================================================
+
+    void testPreTileGeometryEntryRoundtrip()
+    {
+        // Registered and marshalled like its neighbours but, until this case,
+        // with no signature pinned anywhere — so a field reorder in the struct
+        // would have shipped silently. It shares its shape with
+        // WindowGeometryEntry, which makes a transposition between the two
+        // especially easy to introduce and impossible to see by eye.
+        PhosphorProtocol::registerWireTypes();
+        PhosphorProtocol::PreTileGeometryEntry entry{
+            QStringLiteral("org.kde.konsole"), 10, 20, 640, 480, QStringLiteral("DP-2")};
+
+        const QString sig = dbusSignature(entry);
+        QCOMPARE(sig, QStringLiteral("(siiiis)"));
+
+        const int typeId = qMetaTypeId<PhosphorProtocol::PreTileGeometryEntry>();
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
+
+        QCOMPARE(entry.appId, QStringLiteral("org.kde.konsole"));
+        QCOMPARE(entry.x, 10);
+        QCOMPARE(entry.y, 20);
+        QCOMPARE(entry.width, 640);
+        QCOMPARE(entry.height, 480);
+        QCOMPARE(entry.screenId, QStringLiteral("DP-2"));
+        // The accessor the consumers actually use, so a field swap that kept
+        // the signature valid still fails here.
+        QCOMPARE(entry.toRect(), QRect(10, 20, 640, 480));
+
+        PhosphorProtocol::PreTileGeometryEntry defaultEntry;
+        QVERIFY(defaultEntry.appId.isEmpty());
+        QCOMPARE(defaultEntry.x, 0);
+        QCOMPARE(defaultEntry.y, 0);
+        QCOMPARE(defaultEntry.width, 0);
+        QCOMPARE(defaultEntry.height, 0);
+        QVERIFY(defaultEntry.screenId.isEmpty());
+    }
+
+    // =================================================================
     // D-Bus types: PhosphorProtocol::WindowGeometryEntry roundtrip
     // =================================================================
 
@@ -75,9 +160,14 @@ private Q_SLOTS:
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(siiiis)"));
 
-        // Verify metatype is registered (needed for QVariant D-Bus transport)
+        // Verify the type is registered with the D-BUS metatype system, which
+        // is what QVariant transport actually needs. Asserting qMetaTypeId()
+        // is not UnknownType proves nothing: that call self-registers the
+        // Q_DECLARE_METATYPE'd type on the spot and can never fail, so it
+        // passed identically whether or not registerWireTypes() had run.
+        // typeToSignature returns null until qDBusRegisterMetaType has.
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowGeometryEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         // Verify aggregate construction preserves all fields
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
@@ -113,15 +203,34 @@ private Q_SLOTS:
                                                  QStringLiteral("screen-0"),
                                                  true,
                                                  false,
-                                                 QStringLiteral("lastOnTop")};
+                                                 true,
+                                                 QStringLiteral("lastOnTop"),
+                                                 QStringLiteral("right"),
+                                                 -240,
+                                                 4000,
+                                                 120,
+                                                 true,
+                                                 QStringLiteral("konsole|9"),
+                                                 true};
 
-        // Verify D-Bus signature: (siiiissbbs) = string + 4 ints + 2 strings + 2 bools + string
+        // FIELD-ORDER PROBE, not a legal payload: monocle and
+        // windowedFullscreen both true is rejected by validationError()
+        // (disjoint producers). What this fixture pins is the STRUCT's
+        // declaration order via aggregate initialization — the per-field
+        // compares below never cross a marshaller, so wire transposition
+        // coverage lives in the bus round-trip's two payloads instead. Do
+        // not copy this fixture into a validator test.
+        //
+        // Verify D-Bus signature: (siiiissbbbssiiibsb) = string + 4 ints + 2
+        // strings + 3 bools (monocle, floating, windowedFullscreen) +
+        // stacking + scrollEdge + viewDelta + the visual position pair and
+        // its validity flag + tabFrom + viewImmediate
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbs)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibsb)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         // Verify aggregate construction preserves all fields
         QCOMPARE(entry.windowId, QStringLiteral("konsole|7"));
@@ -133,14 +242,176 @@ private Q_SLOTS:
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
+        QCOMPARE(entry.windowedFullscreen, true);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
+        QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
+        QCOMPARE(entry.viewDelta, -240);
+        QCOMPARE(entry.visualX, 4000);
+        QCOMPARE(entry.visualY, 120);
+        QCOMPARE(entry.hasVisualPos, true);
+        QCOMPARE(entry.tabFrom, QStringLiteral("konsole|9"));
+        QCOMPARE(entry.viewImmediate, true);
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
+        QCOMPARE(defaultEntry.windowedFullscreen, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
+        QVERIFY(defaultEntry.scrollEdge.isEmpty());
+        QCOMPARE(defaultEntry.viewDelta, 0);
+        QCOMPARE(defaultEntry.hasVisualPos, false);
+        // Pinned alongside the flag that guards them: a reader is only allowed
+        // to look at these when hasVisualPos is set, so their default is what
+        // a reader that forgets would see.
+        QCOMPARE(defaultEntry.visualX, 0);
+        QCOMPARE(defaultEntry.visualY, 0);
+        QVERIFY(defaultEntry.tabFrom.isEmpty());
+        QCOMPARE(defaultEntry.viewImmediate, false);
+    }
+
+    // A real bus round-trip so operator>> is exercised too — the signature
+    // check above only drives operator<<, which is exactly where a
+    // field-order divergence between the two would hide after a widening
+    // like scrollEdge's.
+    void testTileRequestEntryBusRoundtrip()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        TileRequestEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        // NOTE: QCOMPARE inside this lambda returns from the LAMBDA, not the
+        // test slot — a payload-A failure still runs payload B. Safe as
+        // written (every early return precedes the argument deref), but do
+        // not add code after a compare that assumes the test aborted.
+        const auto roundTrip = [&bus, &path](const PhosphorProtocol::TileRequestEntry& sent) {
+            QDBusMessage call =
+                QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+            call << QVariant::fromValue(sent);
+            const QDBusMessage reply = bus.call(call);
+            QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+            QCOMPARE(reply.arguments().size(), 1);
+            const auto got = qdbus_cast<PhosphorProtocol::TileRequestEntry>(reply.arguments().at(0));
+            QCOMPARE(got.windowId, sent.windowId);
+            QCOMPARE(got.x, sent.x);
+            QCOMPARE(got.y, sent.y);
+            QCOMPARE(got.width, sent.width);
+            QCOMPARE(got.height, sent.height);
+            QCOMPARE(got.zoneId, sent.zoneId);
+            QCOMPARE(got.screenId, sent.screenId);
+            QCOMPARE(got.monocle, sent.monocle);
+            QCOMPARE(got.floating, sent.floating);
+            QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
+            QCOMPARE(got.stacking, sent.stacking);
+            QCOMPARE(got.scrollEdge, sent.scrollEdge);
+            QCOMPARE(got.viewDelta, sent.viewDelta);
+            QCOMPARE(got.visualX, sent.visualX);
+            QCOMPARE(got.visualY, sent.visualY);
+            QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
+            QCOMPARE(got.tabFrom, sent.tabFrom);
+            QCOMPARE(got.viewImmediate, sent.viewImmediate);
+        };
+
+        // TWO legal payloads, because no single legal payload can cover the
+        // three bool slots: validationError rejects windowedFullscreen
+        // beside either monocle or floating, so wf=true forces the other
+        // two false. Payload A (wf=true) catches a floating-for-wf or
+        // monocle-for-wf transposition in either operator; payload B
+        // (monocle=true) catches the monocle-for-floating swap A cannot
+        // see. Between them, a transposition introduced in EITHER operator
+        // alone fails loudly. (A matching swap in both operators is an
+        // identity round-trip no bus test can see — the realistic
+        // regression is the single-operator edit, and that is what these
+        // two payloads pin.)
+        // (The signature probe above pins struct DECLARATION order via its
+        // aggregate init; only these bus trips pin the two marshallers
+        // agreeing.)
+        PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"), 50, 100, 640, 480,
+                                                QStringLiteral("{zone-uuid}"), QStringLiteral("screen-0"), false, false,
+                                                true, QStringLiteral("lastOnTop"), QStringLiteral("left"), 512, -900,
+                                                64, true, QStringLiteral("konsole|9"),
+                                                // viewImmediate true on payload A and false on payload B,
+                                                // so BOTH values cross the bus: the trailing bool is the
+                                                // one field the signature probe cannot pin (a dropped
+                                                // operator>> read leaves the signature intact and
+                                                // false == false green).
+                                                true};
+        roundTrip(sent);
+        sent.monocle = true;
+        sent.windowedFullscreen = false;
+        sent.viewImmediate = false;
+        roundTrip(sent);
+
+        bus.unregisterObject(path);
+    }
+
+    void testSwapTargetResultBusRoundtrip()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        SwapTargetResultEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/swaptargetecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        // Every field distinct — the two int quadruples especially, so a
+        // window1/window2 transposition or an x/y/w/h shuffle inside either
+        // quadruple fails on a specific compare.
+        PhosphorProtocol::SwapTargetResult sent;
+        sent.success = true;
+        sent.reason = QStringLiteral("reason-r");
+        sent.windowId1 = QStringLiteral("app|one");
+        sent.x1 = 11;
+        sent.y1 = 12;
+        sent.w1 = 13;
+        sent.h1 = 14;
+        sent.zoneId1 = QStringLiteral("{zone-1}");
+        sent.windowId2 = QStringLiteral("app|two");
+        sent.x2 = 21;
+        sent.y2 = 22;
+        sent.w2 = 23;
+        sent.h2 = 24;
+        sent.zoneId2 = QStringLiteral("{zone-2}");
+        sent.screenName = QStringLiteral("DP-1");
+        sent.sourceZoneId = QStringLiteral("{zone-src}");
+        sent.targetZoneId = QStringLiteral("{zone-dst}");
+        sent.screenName2 = QStringLiteral("DP-2");
+
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+        call << QVariant::fromValue(sent);
+        const QDBusMessage reply = bus.call(call);
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        const auto got = qdbus_cast<PhosphorProtocol::SwapTargetResult>(reply.arguments().at(0));
+        QCOMPARE(got.success, sent.success);
+        QCOMPARE(got.reason, sent.reason);
+        QCOMPARE(got.windowId1, sent.windowId1);
+        QCOMPARE(got.x1, sent.x1);
+        QCOMPARE(got.y1, sent.y1);
+        QCOMPARE(got.w1, sent.w1);
+        QCOMPARE(got.h1, sent.h1);
+        QCOMPARE(got.zoneId1, sent.zoneId1);
+        QCOMPARE(got.windowId2, sent.windowId2);
+        QCOMPARE(got.x2, sent.x2);
+        QCOMPARE(got.y2, sent.y2);
+        QCOMPARE(got.w2, sent.w2);
+        QCOMPARE(got.h2, sent.h2);
+        QCOMPARE(got.zoneId2, sent.zoneId2);
+        QCOMPARE(got.screenName, sent.screenName);
+        QCOMPARE(got.sourceZoneId, sent.sourceZoneId);
+        QCOMPARE(got.targetZoneId, sent.targetZoneId);
+        QCOMPARE(got.screenName2, sent.screenName2);
+
+        bus.unregisterObject(path);
     }
 
     // =================================================================
@@ -164,7 +435,7 @@ private Q_SLOTS:
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapAllResultEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         // Verify aggregate construction preserves all fields
         QCOMPARE(entry.windowId, QStringLiteral("dolphin|3"));
@@ -207,9 +478,30 @@ private Q_SLOTS:
 
     void testTileRequestToRect()
     {
-        PhosphorProtocol::TileRequestEntry entry{
-            QStringLiteral("app|5"), 15,    25,    640,      480, QStringLiteral("{z}"),
-            QStringLiteral("s0"),    false, false, QString()};
+        // Trailing members spelled out BY CONVENTION, not by compiler
+        // enforcement: every field of this struct carries a default member
+        // initializer, and GCC suppresses -Wmissing-field-initializers for
+        // NSDMI'd members, so a wire widening does NOT warn here — each new
+        // field has to be added to these fixtures by hand (the viewImmediate
+        // widening shipped past exactly this gap before the audit caught it).
+        PhosphorProtocol::TileRequestEntry entry{QStringLiteral("app|5"),
+                                                 15,
+                                                 25,
+                                                 640,
+                                                 480,
+                                                 QStringLiteral("{z}"),
+                                                 QStringLiteral("s0"),
+                                                 false,
+                                                 false,
+                                                 false,
+                                                 QString(),
+                                                 QString(),
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 false,
+                                                 QString(),
+                                                 false};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 
@@ -257,7 +549,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sssbsasb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowStateEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-1}"));
@@ -287,7 +579,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bassiiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::UnfloatRestoreResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.found, true);
         QCOMPARE(entry.zoneIds.size(), 2);
@@ -314,7 +606,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(iiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::ZoneGeometryRect>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.x, 50);
         QCOMPARE(entry.y, 100);
@@ -353,7 +645,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(siiiiiibsssdd)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::EmptyZoneEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-abc}"));
         QCOMPARE(entry.toRect(), QRect(10, 20, 400, 300));
@@ -387,7 +679,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(ssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapAssistCandidate>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("konsole|7"));
         QCOMPARE(entry.compositorHandle, QStringLiteral("kwin-handle-42"));
@@ -408,7 +700,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(siiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::NamedZoneGeometry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-left}"));
         QCOMPARE(entry.toRect(), QRect(0, 0, 960, 1080));
@@ -440,7 +732,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sssbbbbdibsbbb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::AlgorithmInfoEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.id, QStringLiteral("master-stack"));
         QCOMPARE(entry.name, QStringLiteral("Master-Stack"));
@@ -531,7 +823,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::BridgeRegistrationResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.apiVersion, QStringLiteral("1"));
         QCOMPARE(entry.bridgeName, QStringLiteral("kwin"));
@@ -559,7 +851,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bssiiiiss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::MoveTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QVERIFY(entry.reason.isEmpty());
@@ -587,7 +879,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bsssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::FocusTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowIdToActivate, QStringLiteral("dolphin|3"));
@@ -610,7 +902,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::CycleTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowIdToActivate, QStringLiteral("kate|5"));
@@ -625,47 +917,53 @@ private Q_SLOTS:
     void testSwapTargetResultRoundtrip()
     {
         PhosphorProtocol::registerWireTypes();
+        // Every value DISTINCT, deliberately: an aggregate init pins struct
+        // declaration order, and a declaration-order swap between two
+        // members holding the same value ships green. The earlier fixture
+        // reused {zone-left}/{zone-right} for sourceZoneId/targetZoneId and
+        // shared y/w/h across the two windows, so exactly those swaps were
+        // invisible.
         PhosphorProtocol::SwapTargetResult entry{true,
                                                  QString(),
                                                  QStringLiteral("firefox|1"),
                                                  0,
-                                                 0,
-                                                 960,
-                                                 1080,
+                                                 1,
+                                                 961,
+                                                 1081,
                                                  QStringLiteral("{zone-left}"),
                                                  QStringLiteral("konsole|2"),
                                                  960,
-                                                 0,
-                                                 960,
-                                                 1080,
+                                                 2,
+                                                 962,
+                                                 1082,
                                                  QStringLiteral("{zone-right}"),
                                                  QStringLiteral("screen-0"),
-                                                 QStringLiteral("{zone-left}"),
-                                                 QStringLiteral("{zone-right}"),
+                                                 QStringLiteral("{zone-src}"),
+                                                 QStringLiteral("{zone-dst}"),
                                                  QStringLiteral("screen-1")};
 
         const QString sig = dbusSignature(entry);
         QCOMPARE(sig, QStringLiteral("(bssiiiissiiiisssss)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SwapTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.windowId1, QStringLiteral("firefox|1"));
         QCOMPARE(entry.x1, 0);
-        QCOMPARE(entry.y1, 0);
-        QCOMPARE(entry.w1, 960);
-        QCOMPARE(entry.h1, 1080);
+        QCOMPARE(entry.y1, 1);
+        QCOMPARE(entry.w1, 961);
+        QCOMPARE(entry.h1, 1081);
         QCOMPARE(entry.zoneId1, QStringLiteral("{zone-left}"));
         QCOMPARE(entry.windowId2, QStringLiteral("konsole|2"));
         QCOMPARE(entry.x2, 960);
-        QCOMPARE(entry.y2, 0);
-        QCOMPARE(entry.w2, 960);
-        QCOMPARE(entry.h2, 1080);
+        QCOMPARE(entry.y2, 2);
+        QCOMPARE(entry.w2, 962);
+        QCOMPARE(entry.h2, 1082);
         QCOMPARE(entry.zoneId2, QStringLiteral("{zone-right}"));
         QCOMPARE(entry.screenName, QStringLiteral("screen-0"));
-        QCOMPARE(entry.sourceZoneId, QStringLiteral("{zone-left}"));
-        QCOMPARE(entry.targetZoneId, QStringLiteral("{zone-right}"));
+        QCOMPARE(entry.sourceZoneId, QStringLiteral("{zone-src}"));
+        QCOMPARE(entry.targetZoneId, QStringLiteral("{zone-dst}"));
         QCOMPARE(entry.screenName2, QStringLiteral("screen-1")); // cross-output: window2's target screen
     }
 
@@ -682,7 +980,7 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(bbiiii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::RestoreTargetResult>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
 
         QCOMPARE(entry.success, true);
         QCOMPARE(entry.found, true);
@@ -707,9 +1005,13 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(ssii)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::WindowOpenedEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
+        // typeToSignature, not an UnknownType compare: qMetaTypeId
+        // self-registers on the spot and can never fail (this file's own
+        // rule near the top), so only the D-Bus signature probe proves
+        // registerWireTypes actually registered the LIST type's a(ssii).
         const int listTypeId = qMetaTypeId<PhosphorProtocol::WindowOpenedList>();
-        QVERIFY(listTypeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(listTypeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
@@ -737,9 +1039,11 @@ private Q_SLOTS:
         QCOMPARE(sig, QStringLiteral("(sssb)"));
 
         const int typeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationEntry>();
-        QVERIFY(typeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(typeId)) != nullptr);
+        // Same typeToSignature probe as the WindowOpenedList above; the
+        // UnknownType compare is a tautology for Q_DECLARE_METATYPE'd types.
         const int listTypeId = qMetaTypeId<PhosphorProtocol::SnapConfirmationList>();
-        QVERIFY(listTypeId != QMetaType::UnknownType);
+        QVERIFY(QDBusMetaType::typeToSignature(QMetaType(listTypeId)) != nullptr);
 
         QCOMPARE(entry.windowId, QStringLiteral("kate|7"));
         QCOMPARE(entry.zoneId, QStringLiteral("{zone-1}"));
@@ -749,6 +1053,52 @@ private Q_SLOTS:
         PhosphorProtocol::SnapConfirmationEntry defaultEntry;
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.isRestore, false);
+    }
+
+    // =================================================================
+    // a{sv} replies: toMap() vs qdbus_cast
+    // =================================================================
+
+    // The daemon returns several maps as a{sv} (getAllQuickLayoutSlots is the
+    // one the page-reset path reads). Off the wire the argument is a
+    // QDBusArgument, so QVariant::toMap() returns an empty map instead of
+    // failing — the discriminating case below. qdbus_cast is the demarshalling
+    // that actually works, and it must also survive a value that is already a
+    // QVariantMap because an in-process caller never crosses the bus.
+    void testVariantMapReplyNeedsQdbusCast()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        VariantMapEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/variantmapecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        QVariantMap sent;
+        sent.insert(QStringLiteral("1"), QStringLiteral("{layout-a}"));
+        sent.insert(QStringLiteral("2"), QString());
+
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoMap"));
+        call << QVariant::fromValue(sent);
+        const QDBusMessage reply = bus.call(call);
+        bus.unregisterObject(path);
+
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        const QVariant raw = reply.arguments().at(0);
+
+        // Negative case: the plain accessor loses the whole map.
+        QVERIFY(raw.toMap().isEmpty());
+
+        const QVariantMap got = qdbus_cast<QVariantMap>(raw);
+        QCOMPARE(got.size(), 2);
+        QCOMPARE(got.value(QStringLiteral("1")).toString(), QStringLiteral("{layout-a}"));
+        QVERIFY(got.value(QStringLiteral("2")).toString().isEmpty());
+
+        // Already-converted input degrades to a plain qvariant_cast.
+        QCOMPARE(qdbus_cast<QVariantMap>(QVariant::fromValue(sent)), sent);
     }
 };
 

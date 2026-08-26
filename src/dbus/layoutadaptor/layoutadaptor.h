@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
+#include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -147,9 +149,15 @@ public Q_SLOTS:
     QString createLayoutFromJson(const QString& layoutJson);
 
     // Editor launch
-    void openEditor();
-    void openEditorForScreen(const QString& screenId);
-    void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    // The four launch verbs answer whether the editor process was actually
+    // spawned, so a caller can surface a missing or broken binary instead of
+    // a silent no-op. Validation refusals answer false too.
+    bool openEditor();
+    bool openEditorForScreen(const QString& screenId);
+    bool openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    /// Launch the editor in scrolling-template mode. An empty id opens a new
+    /// template; otherwise the stored template with that id is edited.
+    bool openEditorForScrollingTemplate(const QString& templateId);
 
     // Screen assignments
     QString getLayoutForScreen(const QString& screenId);
@@ -206,14 +214,21 @@ public Q_SLOTS:
     /// the current value is. Screens resolving to no layout are omitted.
     QVariantMap getActiveLayoutsForScreens();
 
-    QVariantMap getAllDesktopAssignments(); // Get all per-desktop assignments as key -> layoutId
-    QVariantMap getAllActivityAssignments(); // Get all per-activity assignments as key -> layoutId
+    // The three batch getters below answer key -> {layoutId, scrollingTemplate}
+    // maps, deliberately wider than the plain layoutId string their matching
+    // batch setters read. The template rides the getter for readback only; it
+    // is written through setScrollingTemplateLayout.
+    QVariantMap getAllDesktopAssignments(); // Per-desktop, key "screenId|desktop"
+    QVariantMap getAllActivityAssignments(); // Per-activity, key "screenId|activityId"
     // Combined-context (screen + desktop + activity); key format
     // "screen|desktop|activity"; pure-Activity / pure-Desktop / Monitor
     // rules are not included.
     QVariantMap getAllCombinedAssignments();
 
-    // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping, 1 = Autotile)
+    // Quick layout slots (1-9), keyed by tiling mode (0 = Snapping,
+    // 1 = Autotile, 2 = Scrolling). Each mode has its OWN slot array (see
+    // LayoutRegistry::slotIndexFor); Scrolling's array (index 2) holds native
+    // ScrollingTemplate UUIDs, not layout ids. Other mode values are rejected.
     QString getQuickLayoutSlot(int mode, int slotNumber);
     void setQuickLayoutSlot(int mode, int slotNumber, const QString& layoutId);
     void setAllQuickLayoutSlots(int mode, const QVariantMap& slots); // Batch set - saves once
@@ -281,12 +296,49 @@ public Q_SLOTS:
     void clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                  const QString& activityId);
 
+    // Scrolling template ASSIGNMENT (the native ScrollingTemplate whose
+    // vocabularies and blueprint the strip consumes). The setter flips the
+    // context to Scrolling, refuses ids the store does not know, and accepts
+    // an empty id as "clear the template". The getter resolves through the
+    // cascade and then through the configured default-template provider, so
+    // it answers empty for non-Scrolling contexts and when neither the
+    // context nor the configured default names a template the store holds.
+    void setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
+                                    const QString& layoutId);
+    QString getScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId);
+
+    // Scrolling template STORE CRUD (daemon-first, like the layout verbs:
+    // the settings app never writes template JSON itself). The three mutating
+    // verbs (save, delete, duplicate) emit scrollingTemplatesChanged through
+    // the store's own change signal; getScrollingTemplates is a pure read.
+    // The store's save is emit-on-change, so a save whose stored result equals
+    // the existing entry rewrites nothing and stays silent — the settings
+    // pages re-save on every field commit and would otherwise fan a change out
+    // to every picker each time. Impls in assignment.cpp beside the assignment
+    // pair above.
+    QString getScrollingTemplates();
+    QString saveScrollingTemplate(const QString& templateJson);
+    bool deleteScrollingTemplate(const QString& id);
+    QString duplicateScrollingTemplate(const QString& id);
+
     /**
      * @brief Get current mode, layout, and algorithm for all screens
      *
      * Returns a JSON array with one object per screen:
-     *   screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile),
-     *   layoutId, layoutName, algorithmId, algorithmName.
+     *   screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile,
+     *   2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId,
+     *   algorithmName, algorithmIdExplicit, scrollingTemplateId,
+     *   scrollingTemplateName, scrollingTemplateExplicit.
+     *
+     * layoutId / algorithmId carry the RESOLVED values (cascade and default
+     * fallbacks included; layoutId is empty for a Scrolling context — the
+     * default-layout fallback would name a layout the screen does not use).
+     * The *Explicit booleans say whether this exact (screen, desktop,
+     * activity) tuple pins the field itself, so a caller can tell an
+     * inherited value from an assigned one. scrollingTemplateId reads the
+     * stored entry field rather than the mode-gated resolver, so a template
+     * preserved across a mode toggle is reported even while another mode
+     * runs.
      *
      * @return JSON string
      */
@@ -304,7 +356,10 @@ Q_SIGNALS:
      *
      * Emitted by @c updateLayout (the editor's save path) and by active-layout
      * switches, where the client genuinely needs the whole serialized layout.
-     * Carries the complete JSON payload (5–20 KB in prod).
+     * Usually carries the complete layout JSON (5–20 KB in prod); when the
+     * update targeted an AUTOTILE entry the payload is the caller's raw
+     * autotile-override object (id "autotile:&lt;algorithmId&gt;", not a
+     * serialized layout), so subscribers must not blindly parse it as one.
      *
      * @c createLayoutFromJson does NOT emit this — a new layout announces
      * itself with @c layoutCreated(id) instead. An active-layout switch is not
@@ -349,6 +404,11 @@ Q_SIGNALS:
     void layoutPropertyChanged(const QString& layoutId, const QString& property, const QDBusVariant& value);
 
     void layoutListChanged();
+
+    /// Relayed from the daemon's ScrollingTemplateStore change signal (the
+    /// composition root wires it) so the settings app can refresh its
+    /// template views on store CRUD from any process.
+    void scrollingTemplatesChanged();
 
     /**
      * @brief Emitted when a new layout is created.
@@ -559,6 +619,23 @@ private:
     std::optional<QUuid> parseAndValidateUuid(const QString& id, const QString& operation) const;
 
     /**
+     * @brief Whether @p layoutId is an id the manual-layout validation applies to.
+     *
+     * False for every id that names something other than a zone layout: an
+     * autotile id, a scrolling id, and the reserved snapping opt-out word.
+     * Those must skip the UUID parse and the registry existence check, or the
+     * assign verbs would refuse to write back the very values their own
+     * getters emit — and the batch setters, which drop and rebuild, would
+     * DELETE an opted-out screen on a get-then-set round trip.
+     *
+     * Named because the test is spelled at eight call sites across this
+     * class's two translation units, plus a ninth in the registry. A future
+     * fourth non-manual id form would otherwise need every one of them found
+     * and edited in lockstep.
+     */
+    static bool requiresManualLayoutValidation(const QString& layoutId);
+
+    /**
      * @brief Get layout by ID string with full validation
      * @param id UUID string
      * @param operation Description for error logging
@@ -599,7 +676,9 @@ private:
      * @param args Command line arguments for the editor
      * @param description Description for logging (e.g., "for screen: DP-1")
      */
-    void launchEditor(const QStringList& args, const QString& description);
+    /// Spawn the editor process. False when startDetached failed (missing or
+    /// unexecutable binary) — the four public launch verbs forward this.
+    bool launchEditor(const QStringList& args, const QString& description);
 
     /**
      * @brief Build activity info JSON object
@@ -629,12 +708,16 @@ private:
     /// getLayoutPreview* D-Bus output).
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
 
-    // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
-    // the KCM initiated the change and doesn't need the echo back.
+    // Suppress screenLayoutChanged D-Bus signal while a settings-driven save
+    // batch is in flight (armed via the setSaveBatchMode slot around a batch
+    // of assignment writes) — the settings app initiated the change and
+    // doesn't need the echo back.
     bool m_suppressScreenLayoutSignal = false;
 
     // Track which screens had assignments modified during the current batch.
-    // Populated by setAssignmentEntry/clearAssignment, consumed by applyAssignmentChanges.
+    // Populated by every assignment writer in assignment.cpp (single-context
+    // setters/clears, the batch setters, setScrollingTemplateLayout, ...),
+    // consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
 
     // Resolved active layout id per effective screen, pushed by the daemon via

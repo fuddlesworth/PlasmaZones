@@ -9,15 +9,16 @@
   <project_license>GPL-3.0-or-later</project_license>
 
   <name>PlasmaZones Layout Editor</name>
-  <summary>Create and edit window zone layouts</summary>
+  <summary>Create and edit zone layouts and scrolling templates</summary>
 
   <description>
     <p>
       The PlasmaZones Layout Editor is the visual companion to the
-      PlasmaZones window-tiling system for KDE Plasma. Use it to author
+      PlasmaZones window placement system for KDE Plasma. Use it to author
       named zone layouts, drag zone boundaries on a live canvas, assign
       shaders, configure per-zone appearance, and pick the layout that
-      should activate on each monitor.
+      should activate on each monitor. It also edits the scrolling
+      templates that set the starting columns of a strip.
     </p>
     <p>Features:</p>
     <ul>
@@ -26,6 +27,7 @@
       <li>Per-zone shader effects with live previews</li>
       <li>Per-monitor and per-activity layout assignments</li>
       <li>Import / export layout JSON for sharing</li>
+      <li>Starting columns and size presets for scrolling templates</li>
     </ul>
   </description>
 
@@ -42,6 +44,7 @@
     <keyword>zones</keyword>
     <keyword>layout</keyword>
     <keyword>snap</keyword>
+    <keyword>scrolling</keyword>
   </keywords>
 
   <url type="homepage">https://github.com/fuddlesworth/PlasmaZones</url>

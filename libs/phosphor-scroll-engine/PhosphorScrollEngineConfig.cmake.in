@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt — Core, PhosphorEngine (the
+# IPlacementEngine contract the ScrollEngine implements), and PhosphorProtocol
+# (StripAxis.h includes its ScrollAxis enum).
+#
+# The link itself is only PhosphorProtocol::Types, the QtCore-only half, but
+# this finds the whole PhosphorProtocol package, which drags in Qt6::DBus and
+# PhosphorDBus. A third-party consumer that wants nothing but the strip model
+# therefore has to have both present to configure. Narrowing it needs a
+# COMPONENTS split across two installed packages on the PhosphorProtocol side,
+# which is a change to that library's install contract rather than to this
+# file, so the constraint is recorded here and left alone.
+find_dependency(Qt6 6.10 COMPONENTS Core)
+find_dependency(PhosphorEngine)
+find_dependency(PhosphorProtocol)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorScrollEngineTargets.cmake")
+
+check_required_components(PhosphorScrollEngine)

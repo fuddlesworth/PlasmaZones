@@ -21,7 +21,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="toggleAutotileForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Toggle between snapping and autotile mode for a screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle between snapping and autotile mode for a screen, at the screen level (all desktops, all activities). This is a bare mode switch: it also clears whatever snapping layout and tiling algorithm that context had pinned, so the toggled mode resolves through the assignment cascade and the global default. A scrolling template assigned to the context is left intact. Callers that need the pinned slots kept should drive org.plasmazones.LayoutRegistry.setAssignmentEntry directly and pass them back."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to toggle."/>
             </arg>
@@ -40,6 +40,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="report" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Markdown-formatted support report with config, screens, and logs."/>
             </arg>
+        </method>
+        <method name="quit">
+            <annotation name="org.gtk.GDBus.DocString" value="Ask the daemon to shut down cleanly. Quits the event loop, so the daemon runs its ordinary teardown on the main thread rather than tearing down inside the call. This is what `plasmazonesd --replace` calls on the running instance before claiming the bus name. Calling it while a shutdown is already in flight is a no-op."/>
         </method>
     </interface>
 </node>

@@ -17,6 +17,7 @@
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QFutureWatcher>
 #include <QJsonDocument>
@@ -96,7 +97,14 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
         // returned at the top of this method, so an unknown screen reaches the
         // apply unchanged and is refused (or ignored) downstream.
         const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
-        // setAssignmentEntry(screenId, desktop=0 (current), activity="" (current), mode, layout, algorithm)
+        // setAssignmentEntry(screenId, desktop=0 (screen level), activity="" (all activities), mode, layout, algorithm)
+        //
+        // The two empty strings WIPE the context's stored snapping layout and
+        // tiling algorithm — that is this verb's contract, not an oversight:
+        // it is a bare mode switch with no layout arguments of its own, so it
+        // cannot carry the slots forward, and the toggled mode resolves
+        // through the cascade instead. The scrolling template survives
+        // because setAssignmentEntry seeds the entry from the stored one.
         m_layoutAdaptor->setAssignmentEntry(screenId, 0, QString(), newMode, QString(), QString());
         // Apply this ONE screen explicitly rather than calling
         // applyAssignmentChanges, which drains the shared client buffer: that
@@ -263,6 +271,16 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
     }));
 
     return {}; // Ignored — reply sent asynchronously
+}
+
+void ControlAdaptor::quit()
+{
+    qCInfo(lcDbus) << "Shutdown requested over D-Bus (org.plasmazones.Control.quit)";
+    // Return to main(), which owns the teardown order: Daemon::stop() then the
+    // explicit window destroy loop. Doing either from here would run it inside
+    // a D-Bus dispatch, with this adaptor's own parent among the objects torn
+    // down under it.
+    QCoreApplication::quit();
 }
 
 } // namespace PlasmaZones

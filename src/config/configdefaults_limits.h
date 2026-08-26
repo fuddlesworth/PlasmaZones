@@ -147,6 +147,10 @@ public:
     // so exclude-transient defaults on; no size threshold was ever applied, so
     // the min-size axes default off (0). On upgrade nothing changes until the
     // user opts into decorating transients or into a size threshold.
+    //
+    // Plasma-shell surfaces (panels, applet popups) carry no toggle here: the
+    // decoration tree's `shell` subtree is baseline-isolated, so engaging a
+    // chain on the Decoration → Shell page is their whole opt-in.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool decorationExcludeTransientWindows()

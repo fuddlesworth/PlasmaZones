@@ -54,12 +54,14 @@ PhosphorConfig::Schema makeMigrationSchema()
     PhosphorConfig::Schema s;
     s.version = ConfigSchemaVersion;
     s.versionKey = ConfigKeys::versionKey();
+    // clang-format off — one entry per line keeps the version-ordered
+    // registry greppable and every future bump a one-line diff.
     s.migrations = {
-        {1, &ConfigMigration::migrateV1ToV2},
-        {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4},
-        {4, &ConfigMigration::migrateV4ToV5},
+        {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
+        {5, &ConfigMigration::migrateV5ToV6},
     };
+    // clang-format on
     return s;
 }
 } // namespace
@@ -97,6 +99,28 @@ std::atomic<bool> s_migrated{false};
 QString legacyAssignmentsFilePath()
 {
     return QFileInfo(ConfigDefaults::rulesFilePath()).absolutePath() + QStringLiteral("/assignments.json");
+}
+
+/// A quarantine target that does not overwrite an existing one. A user who hit
+/// the corrupt path, restored a file by hand, and hit it again would otherwise
+/// lose the first quarantine to the second — the two failures are usually
+/// different, and the first copy is the one closest to the last good state.
+/// Falls back to the bare path after 99 suffixes. That does NOT overwrite:
+/// QFile::rename refuses an existing target, so the caller takes its
+/// failed-to-quarantine branch, leaves the file where it is and aborts — which
+/// is the right outcome for a directory in that state.
+QString uniqueQuarantinePath(const QString& preferred)
+{
+    if (!QFile::exists(preferred)) {
+        return preferred;
+    }
+    for (int n = 2; n < 100; ++n) {
+        const QString candidate = preferred + QLatin1Char('.') + QString::number(n);
+        if (!QFile::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return preferred;
 }
 
 /// Pre-flight check for the legacy assignments.json sidecar: if the file
@@ -150,8 +174,7 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
     // Corrupt: quarantine to .corrupt.bak (NOT .migrated — that name implies
     // a successful migration). Preserve the original bytes so the user can
     // hand-repair and re-run.
-    const QString corruptBak = assignmentsPath + QStringLiteral(".corrupt.bak");
-    QFile::remove(corruptBak); // clear any stale backup from a prior failed run
+    const QString corruptBak = uniqueQuarantinePath(assignmentsPath + QStringLiteral(".corrupt.bak"));
     if (QFile::rename(assignmentsPath, corruptBak)) {
         qCritical(
             "ConfigMigration: %s is malformed (%s) — quarantined to %s. "
@@ -181,10 +204,18 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
 /// log at critical, and return false so the caller aborts before any
 /// stub-rule write happens. Mirrors the assignments.json contract.
 ///
-/// Returns true if the file is absent, empty, parses as a v4 rule set, or
-/// parses as any JSON object the rule loader will inspect downstream. The
-/// only false case is a file that exists, is non-empty, but fails to parse
-/// as a JSON object — that's the data-loss trigger we exist to prevent.
+/// Returns true if the file is absent, empty, or loads as a v4 rule set. The
+/// false case is a file that exists, is non-empty, and does NOT load — that's
+/// the data-loss trigger we exist to prevent.
+///
+/// The check is `RuleSet::loadFromFile(...).has_value()`, deliberately the
+/// SAME predicate the caller gates on rather than a weaker "is it a JSON
+/// object". A well-formed object can still fail to load — a `_version` that is
+/// the wrong type, or a schema version this build does not know because the
+/// user ran a newer build and then went back (`RuleSet::fromJson` requires an
+/// exact `SchemaVersion` match), or a file over the loader's size cap. Gating
+/// on JSON-parses-only let every one of those fall through to the rebuild and
+/// overwrite the user's entire rule store with a seeded one.
 bool prevalidateRulesFile(const QString& rulesPath)
 {
     if (!QFile::exists(rulesPath)) {
@@ -204,27 +235,29 @@ bool prevalidateRulesFile(const QString& rulesPath)
     if (bytes.trimmed().isEmpty()) {
         return true;
     }
-    QJsonParseError err;
-    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
-    if (err.error == QJsonParseError::NoError && doc.isObject()) {
+    if (PhosphorRules::RuleSet::loadFromFile(rulesPath).has_value()) {
         return true;
     }
+    // Only for the log line — the load above is what decides.
+    QJsonParseError err;
+    QJsonDocument::fromJson(bytes, &err);
+    const QString reason =
+        err.error == QJsonParseError::NoError ? QStringLiteral("does not load as a v4 rule set") : err.errorString();
 
-    const QString corruptBak = rulesPath + QStringLiteral(".corrupt.bak");
-    QFile::remove(corruptBak);
+    const QString corruptBak = uniqueQuarantinePath(rulesPath + QStringLiteral(".corrupt.bak"));
     if (QFile::rename(rulesPath, corruptBak)) {
         qCritical(
             "ConfigMigration: %s is malformed (%s) — quarantined to %s. "
             "Aborting v4 conversion to prevent destroying user-authored "
             "rules. Inspect/repair the file and rename it back to "
             "rules.json, then re-run.",
-            qPrintable(rulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+            qPrintable(rulesPath), qPrintable(reason), qPrintable(corruptBak));
     } else {
         qCritical(
             "ConfigMigration: %s is malformed (%s) — also failed to "
             "quarantine to %s. Aborting v4 conversion. Move or repair "
             "the file by hand.",
-            qPrintable(rulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+            qPrintable(rulesPath), qPrintable(reason), qPrintable(corruptBak));
     }
     return false;
 }
@@ -386,12 +419,7 @@ bool ConfigMigration::ensureJsonConfigImpl()
         // error can be one stray character in an otherwise valid file).
         // Asymmetric "rename if no INI, silent rm if INI exists" was a trap.
         if (corrupt) {
-            const QString corruptBak = jsonPath + QStringLiteral(".corrupt.bak");
-            if (QFile::exists(corruptBak) && !QFile::remove(corruptBak)) {
-                qWarning("ConfigMigration: failed to remove old %s — leaving corrupt JSON in place",
-                         qPrintable(corruptBak));
-                return false;
-            }
+            const QString corruptBak = uniqueQuarantinePath(jsonPath + QStringLiteral(".corrupt.bak"));
             if (!QFile::rename(jsonPath, corruptBak)) {
                 qWarning("ConfigMigration: failed to rename corrupt JSON to %s — leaving it in place",
                          qPrintable(corruptBak));
@@ -441,12 +469,14 @@ bool ConfigMigration::ensureJsonConfigImpl()
     }
 
     qInfo("ConfigMigration: migration complete");
-    // The in-memory chain above ran through migrateV4ToV5, a pure config→config
-    // transform (it folds the per-mode appearance/gap values into the unified
-    // "Windows" / "Gaps" groups in-place and creates no rules), so only the v4
-    // finalizer runs here. finalizeV4Conversion also adopts a legacy
-    // windowrules.json as rules.json (a first-step, all-paths action) and prunes
-    // the retired provider-default rule.
+    // The in-memory chain above ran through migrateV4ToV5 and migrateV5ToV6,
+    // both pure config→config transforms (v5 folds the per-mode
+    // appearance/gap values into the unified "Windows" / "Gaps" groups; v6
+    // converts the snapping zone colours to theme-fallback strings; neither
+    // creates rules), so only the v4 finalizer runs here.
+    // finalizeV4Conversion also adopts a legacy windowrules.json as
+    // rules.json (a first-step, all-paths action) and prunes the retired
+    // provider-default rule.
     return finalizeV4Conversion(jsonPath);
 }
 

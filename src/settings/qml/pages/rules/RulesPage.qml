@@ -29,8 +29,8 @@ import org.plasmazones.settings
  * drag. Browsing is served by narrowing instead: the search field, the section
  * filter button, and the read-only monitor overview strip (clicking a tile
  * filters the list). Category stays legible via a per-row section badge. (The
- * reusable GroupSortBar / GroupSortLogic / SegmentedViewSwitch components live on
- * for the Layouts page and any future use.)
+ * reusable GroupSortBar / GroupSortLogic components live on for the library
+ * pages and any future use.)
  */
 SettingsFlickable {
     id: page
@@ -96,6 +96,9 @@ SettingsFlickable {
     // pickers read `screens` and `activities`.
     readonly property QtObject _editorAppSettings: QtObject {
         readonly property var layouts: settingsController.layouts
+        // Backs the ActiveLayout match leaf's picker and the read-only tree's
+        // id-to-name resolution. Without it both degrade to raw wire ids.
+        readonly property var activeLayoutMatchOptions: settingsController.activeLayoutMatchOptions
         readonly property var screens: settingsController.screens
         readonly property var activities: settingsController.activities
         // Backs the RouteToDesktop action's virtual-desktop picker.
@@ -250,10 +253,11 @@ SettingsFlickable {
     // empty-roles fallback never sees — omitting it would leave the reordered
     // rows in their stale pre-move order. The remaining entries (Section /
     // ScreenIds / ConditionCount / ActionCount / IsComposite /
-    // ValidationIssueCount) are also read when building the rows but currently
+    // ValidationIssueCount / InertAnimationActionCount) are also read when
+    // building the rows but currently
     // change only through the roles-less updateRule path; they're kept so a
     // future targeted emitter carrying them rebuilds without a second edit here.
-    readonly property var _summaryRoles: [RuleModel.SectionRole, RuleModel.MatchSummaryRole, RuleModel.ActionSummaryRole, RuleModel.ScreenIdsRole, RuleModel.ConditionCountRole, RuleModel.ActionCountRole, RuleModel.IsCompositeRole, RuleModel.ValidationIssueCountRole, RuleModel.PriorityRole]
+    readonly property var _summaryRoles: [RuleModel.SectionRole, RuleModel.MatchSummaryRole, RuleModel.ActionSummaryRole, RuleModel.ScreenIdsRole, RuleModel.ConditionCountRole, RuleModel.ActionCountRole, RuleModel.IsCompositeRole, RuleModel.ValidationIssueCountRole, RuleModel.InertAnimationActionCountRole, RuleModel.PriorityRole]
 
     contentHeight: mainCol.implicitHeight
     clip: true
@@ -378,14 +382,8 @@ SettingsFlickable {
     ColorDialog {
         id: colorParamDialog
 
+        title: i18n("Choose Color")
         options: ColorDialog.ShowAlphaChannel
-
-        // Seed imperatively at open: ColorDialog writes selectedColor itself as
-        // the user drags, and that JS-side write severs a declarative binding.
-        function openFor(c) {
-            colorParamDialog.selectedColor = c;
-            colorParamDialog.open();
-        }
     }
 
     // Page-level curve editor for ActionRow's curve-param slots, exposed via the
@@ -521,8 +519,8 @@ SettingsFlickable {
                 onTextChanged: page.searchText = text
             }
 
-            // Multi-select filter, modeled on the Layouts page filter button —
-            // same group ORDER as the Layouts menu: source first (built-in before
+            // Multi-select filter, modeled on the library pages' filter button —
+            // same group ORDER as their menus: source first (built-in before
             // user), then the categories, then the status/type pair. Three groups:
             // source (system vs user-created), category sections, status (active
             // vs disabled). Section labels/order come from the controller (C++).

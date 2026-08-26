@@ -13,6 +13,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
+
 namespace PhosphorContext {
 class IContextResolver;
 } // namespace PhosphorContext
@@ -72,7 +74,7 @@ public:
     /**
      * @brief Clear the engine pointer during shutdown
      *
-     * Disconnects all signals. Mirrors AutotileAdaptor::clearEngine().
+     * Disconnects all signals. Mirrors TilingAdaptor::clearEngine().
      * Called by Daemon::stop() before the SnapEngine unique_ptr is reset.
      */
     void clearEngine();
@@ -152,8 +154,9 @@ public Q_SLOTS:
      *                   Forwarded to SnapEngine for protocol compatibility; the unified
      *                   placement record now carries the kind, so it no longer gates restore.
      */
-    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
-                              int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
+    void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
+                              bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY, int& snapWidth,
+                              int& snapHeight, bool& shouldSnap);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / snap-all D-Bus slots
@@ -312,6 +315,27 @@ public:
     /// Resolve a resnap filter into the concrete list of snap-mode screens.
     QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
+    /// Cross-screen tiling-engine reclaim hook, invoked as (windowId,
+    /// openingScreenId) → claimed. This channel exists because the tiling
+    /// dispatch only ever hears about ENGINE-MANAGED screens: a session
+    /// window KWin dropped on a SNAP-mode screen while its placement record
+    /// homes it TILED elsewhere would otherwise never be offered to the
+    /// engine that owns it. The effect drives resolveWindowRestore for a
+    /// window on a non-managed screen, and for a managed-screen window that
+    /// is also a snap-restore candidate; both are gated on canSnapRestore
+    /// (kwin-effect/plasmazoneseffect/window_lifecycle.cpp), so a window
+    /// failing that gate — minimized at open, or a multi-instance sibling
+    /// with a different pid — reaches this channel not at all and is covered
+    /// only by the tiling dispatch. Wired by the daemon over both pipeline
+    /// engines' claimCrossScreenReopen; cleared in clearEngine and in
+    /// Daemon::stop (same contract as the engines' injected closures).
+    /// Unset → no reclaim (headless/test path).
+    void setCrossScreenTileReclaim(
+        std::function<bool(const QString& windowId, const QString& screenId, int minWidth, int minHeight)> hook)
+    {
+        m_crossScreenTileReclaim = std::move(hook);
+    }
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
@@ -336,9 +360,17 @@ private:
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
+    /// One-shot latch for the "called before panel geometry ready" warning, so
+    /// the four snap-restore slots log it once between them and then fall back
+    /// to debug. Per-adaptor rather than a function-local static: a static is
+    /// process-wide, and a ctest binary running several fixtures would see the
+    /// warning only for whichever fixture happened to hit the path first.
+    bool m_snapNotReadyWarned = false;
     /// Late-bound by Daemon via setContextResolver — replaces the inline
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
+    /// See setCrossScreenTileReclaim.
+    std::function<bool(const QString&, const QString&, int, int)> m_crossScreenTileReclaim;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

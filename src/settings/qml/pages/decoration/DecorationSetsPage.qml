@@ -28,7 +28,9 @@ ShaderSetsPage {
     descriptionFieldAccessibleName: i18n("Decoration set description")
 
     // Coverage chips are keyed on the root segment of a surface path
-    // ("window.tiled" → "window"), matching the three Decoration surface pages.
+    // ("window.tiled" → "window"), matching the four Decoration surface pages.
+    // A root with no case here renders its raw untranslated token, so a new
+    // surface root needs a case added the same day it ships.
     coverageLabel: function (token) {
         switch (token) {
         case "window":
@@ -37,6 +39,8 @@ ShaderSetsPage {
             return i18nc("@label decoration surface group", "OSDs");
         case "popup":
             return i18nc("@label decoration surface group", "Popups");
+        case "shell":
+            return i18nc("@label decoration surface group", "Plasma shell");
         default:
             return token;
         }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -28,13 +29,12 @@
 
 #include <climits>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
-
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) const
 {
@@ -141,10 +141,71 @@ KWin::LogicalOutput* PlasmaZonesEffect::windowOutput(KWin::EffectWindow* w) cons
     return output ? output : w->screen();
 }
 
+KWin::LogicalOutput* PlasmaZonesEffect::outputForScreenId(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return nullptr;
+    }
+    // Virtual screens subdivide one output, so match on the physical part.
+    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    for (const auto& output : KWin::effects->screens()) {
+        if (outputScreenId(output) == physId) {
+            return output;
+        }
+    }
+    return nullptr;
+}
+
+const QSet<QString>& PlasmaZonesEffect::connectedPhysicalIds() const
+{
+    if (!m_idCaches.connectedPhysicalIdsValid) {
+        m_idCaches.connectedPhysicalIds.clear();
+        for (const auto* output : KWin::effects->screens()) {
+            const QString physId = outputScreenId(output);
+            if (!physId.isEmpty()) {
+                m_idCaches.connectedPhysicalIds.insert(physId);
+            }
+        }
+        m_idCaches.connectedPhysicalIdsValid = true;
+    }
+    return m_idCaches.connectedPhysicalIds;
+}
+
 QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w) const
 {
     if (!w) {
         return QString();
+    }
+    // The id is built ONLY when the override below can actually consult it,
+    // preserving the no-scrolling session's pure positional path (no id-cache
+    // probe per call). An empty id reaching the overload means "no id
+    // available" and skips the override exactly as this short-circuit does.
+    return getWindowScreenId(w, m_tilingHandler->hasScrollingScreens() ? getWindowId(w) : QString());
+}
+
+QString PlasmaZonesEffect::getWindowScreenId(KWin::EffectWindow* w, const QString& windowId) const
+{
+    if (!w) {
+        return QString();
+    }
+    // Engine-authoritative override for scroll-managed windows: the strip
+    // parks off-viewport columns and hidden tabs ENTIRELY outside their
+    // screen rect, so a parked frame's centre lands inside a NEIGHBOUR
+    // output's geometry and the position-derived resolution below would
+    // misattribute the window (wrong minimize routing, wrong close/float
+    // record, wrong Mode stamp). Scroll windows change screens only through
+    // engine-driven handoffs, which update the tracked screen first.
+    // hasScrollingScreens short-circuit keeps the common no-scrolling
+    // session on the pure positional path (no id-cache lookups per call).
+    // Both invariant gates (tiled membership AND connected output) live in
+    // scrollTrackedScreenFor itself. m_tilingHandler is constructed first
+    // and lives for the effect's lifetime (the VS re-resolve loop below
+    // derefs it unguarded for the same reason).
+    if (!windowId.isEmpty() && m_tilingHandler->hasScrollingScreens()) {
+        const QString tracked = m_tilingHandler->scrollTrackedScreenFor(windowId);
+        if (!tracked.isEmpty()) {
+            return tracked;
+        }
     }
     const QPointF cf = w->frameGeometry().center();
     const QPoint c(qRound(cf.x()), qRound(cf.y()));
@@ -293,11 +354,18 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 // contract above), but the invalidate+sweep is not: a superseded
                 // reply leaves the keyspace exactly as it found it, so sweeping for
                 // it would re-fold every decoration for nothing.
+                // A live reply arriving while a startup batch is still outstanding
+                // must NOT open the gate: the batch owns it and countdownVsGate is
+                // the only thing entitled to flip it once the last reply lands.
+                // Opening it here would let crossing detection run against a
+                // half-populated m_virtualScreenDefs.
                 const auto restoreReadyIfLive = [self, generation](bool defsMutated) {
                     if (generation != 0) {
                         return;
                     }
-                    self->m_daemonGate.virtualScreensReady = true;
+                    if (self->m_daemonGate.pendingVsConfigReplies == 0) {
+                        self->m_daemonGate.virtualScreensReady = true;
+                    }
                     if (!defsMutated) {
                         return;
                     }
@@ -432,14 +500,25 @@ void PlasmaZonesEffect::reresolveTrackedScreens()
         }
         // Position-based resolution (getWindowScreenId), consistent
         // with the daemon — do not trust window->screen() for
-        // identical-model monitors.
+        // identical-model monitors. For SCROLL-managed windows this
+        // re-resolve is deliberately inert: getWindowScreenId answers from
+        // the engine's tracked screen (a parked frame's position is
+        // meaningless), so writing it back re-keys nothing. That is
+        // acceptable, not a gap: the daemon retiles every scrolling screen
+        // on a VS reconfigure, and the tile-apply path rewrites both maps
+        // with the new effective ids — the daemon, not this loop, is the
+        // re-keying authority for strip windows.
+        const QString windowId = getWindowId(window);
+        if (!m_tilingHandler->scrollTrackedScreenFor(windowId).isEmpty()) {
+            continue;
+        }
         const QString newScreenId = getWindowScreenId(window);
         if (!newScreenId.isEmpty()) {
             it.value() = newScreenId;
             // Also update the autotile handler's notified screen map
             // so slotWindowFrameGeometryChanged does not compare against
             // the stale pre-config-change screen ID.
-            m_autotileHandler->updateNotifiedScreen(getWindowId(window), newScreenId);
+            m_tilingHandler->updateNotifiedScreen(windowId, newScreenId);
         }
     }
 }
@@ -471,28 +550,6 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
             ++it;
     }
 
-    // Prune the per-screen active-layout cache on the same rule. The daemon
-    // normally announces a departing screen with an empty id and the broadcast
-    // handler removes the entry, so this is the belt to that braces: it covers a
-    // screen that goes away while the daemon is down or mid-restart, when no
-    // broadcast is coming. Entries are keyed by EFFECTIVE screen id, so a
-    // subdivided monitor's "<phys>/vs:N" children have to be matched by their
-    // physical prefix rather than by a direct lookup.
-    for (auto it = m_activeLayoutByScreen.begin(); it != m_activeLayoutByScreen.end();) {
-        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key());
-        if (!currentPhysIds.contains(physId)) {
-            // Named, because the other way to reach this line is the daemon and
-            // the effect spelling the same monitor's id differently — the entry
-            // then looks like a departed screen and is dropped on every fetch,
-            // silently disabling ActiveLayout matching for a connected monitor.
-            qCDebug(lcEffect) << "Pruning active-layout entry for absent screen:" << it.key() << "(physical" << physId
-                              << ")";
-            it = m_activeLayoutByScreen.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
     if (physIds.isEmpty()) {
         // No physical screens to query — gate opens immediately
         m_daemonGate.virtualScreensReady = true;
@@ -517,6 +574,7 @@ void PlasmaZonesEffect::onVirtualScreensChanged(const QString& physicalScreenId)
 {
     qCInfo(lcEffect) << "Virtual screens changed for" << physicalScreenId;
     m_idCaches.screenIdCache.clear();
+    m_idCaches.connectedPhysicalIdsValid = false;
     m_lastEffectiveScreenId.clear();
     // Temporarily disable VS-aware crossing detection while the async fetch is in-flight.
     // Without this, slotWindowFrameGeometryChanged uses stale boundary definitions from the
@@ -541,6 +599,11 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Hotplug is the earliest signal in the cascade (before any per-window
+    // outputChanged): the connected-physical-id set must invalidate HERE or
+    // scrollTrackedScreenFor's liveness gate answers from the pre-plug set
+    // for the whole cascade.
+    clearScreenIdCache();
     // Construct a bound clock for this output. Idempotent: if the same
     // output arrives twice (rare, but possible on some compositors'
     // hotplug sequences) we keep the existing clock rather than
@@ -551,6 +614,14 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
         return;
     }
     m_motionClocksByOutput.emplace(output, std::make_unique<CompositorClock>(output));
+    // The painter's per-output state was dropped with the old output, and
+    // noteScrollTabOutputRemoved dropped that screen's payload with it, so
+    // for a plain re-plug this re-seeds nothing until the daemon's next
+    // strips broadcast names the screen again. It covers the narrower case
+    // of a payload that arrived between the remove and this add (the
+    // handler's fetch replies are not tied to the output object), and it
+    // re-rasters every other screen's model, which is harmless.
+    m_tilingHandler->rebuildAllScrollTabIndicators();
 }
 
 void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
@@ -558,13 +629,41 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (!output) {
         return;
     }
+    // Resolve the dying connector's id BEFORE the cache is dropped: resolving
+    // it afterwards would re-populate the fresh cache with the very entry this
+    // handler exists to purge.
+    const QString removedScreenId = outputScreenId(output);
+    // Unplug twin of the onScreenAdded invalidation: KWin fires
+    // screenRemoved BEFORE the per-window outputChanged cascade, and the
+    // connected-output gate in scrollTrackedScreenFor exists for exactly
+    // that cascade — a stale cached set would keep answering the dead
+    // screen for every scroll-tiled window's close/minimize/drag routing.
+    clearScreenIdCache();
+
+    // Rebuild the connected set eagerly, MINUS the dying output. The lazy
+    // rebuild in connectedPhysicalIds() reads KWin::effects->screens(), which
+    // still lists this output while screenRemoved is being delivered, so the
+    // first caller anywhere in the rest of the cascade would re-insert the
+    // connector that is going away. The next add/remove/reconfigure
+    // invalidates this again.
+    m_idCaches.connectedPhysicalIds.clear();
+    for (const auto* other : KWin::effects->screens()) {
+        if (other == output) {
+            continue;
+        }
+        const QString physId = outputScreenId(other);
+        if (!physId.isEmpty()) {
+            m_idCaches.connectedPhysicalIds.insert(physId);
+        }
+    }
+    m_idCaches.connectedPhysicalIdsValid = true;
 
     // Drop this output's per-screen desktop dedup entry, symmetric with the
     // daemon's VirtualDesktopManager::removeScreenDesktop (#648): otherwise
     // reportScreenDesktop's m_lastScreenDesktop cache retains a stale value for
     // a disconnected connector. Runs before the motion-clock early-return below
     // so it fires even for an output that never had an animation clock.
-    m_lastScreenDesktop.remove(outputScreenId(output));
+    m_lastScreenDesktop.remove(removedScreenId);
 
     // Drop any live desktop-switch transition on this output. A disconnected
     // LogicalOutput* left in the transition manager's active map would dangle:
@@ -573,6 +672,24 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // before the motion-clock early-return so it fires even for an output that
     // never had an animation clock.
     m_desktopTransition.outputRemoved(output);
+
+    // Drop any strip-pass entry for this output for the same dangling-key
+    // reason; its sibling spring state goes with the forgetOutput below.
+    m_stripTransition.outputRemoved(output);
+
+    // Drop this output's strip view accumulator. The map is keyed by
+    // LogicalOutput*, so a disconnected one would leave an entry whose key can
+    // be reused by a later hotplug landing at the same address — the next
+    // scroll on the new output would then spring from the dead one's baseline.
+    // Runs before the motion-clock early-return so it fires even for an output
+    // that never had an animation clock, same as the two clears above.
+    m_stripViewAnimator->forgetOutput(output);
+    // A pill on the dying output may hold the hover and the override cursor;
+    // the handler's clear releases both with the painter's state and drops
+    // the screen's model and overrides (a re-plug is re-seeded by the
+    // daemon's replay or the next relayout). Takes the id resolved above
+    // rather than re-resolving, for the same cache reason.
+    m_tilingHandler->noteScrollTabOutputRemoved(output, removedScreenId);
 
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
@@ -584,12 +701,19 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     if (it == m_motionClocksByOutput.end()) {
         return;
     }
-    // m_windowAnimator is a unique_ptr initialized in the ctor and
-    // never reset except during ~PlasmaZonesEffect; any screenRemoved
-    // signal posted after our destruction is auto-disconnected by
-    // QObject's teardown, so a nullptr guard here would be dead
-    // code rather than defensive. Assert the invariant instead.
+    // Both animators are unique_ptrs initialized in the ctor and never reset
+    // except during ~PlasmaZonesEffect; any screenRemoved signal posted after
+    // our destruction is auto-disconnected by QObject's teardown, so this
+    // should be unreachable. Asserted so a debug build says so loudly, and
+    // guarded so a release build cannot dereference null on the reap below if
+    // the invariant is ever broken — the clock is already out of the map here,
+    // so returning early leaks nothing.
     Q_ASSERT(m_windowAnimator);
+    Q_ASSERT(m_stripViewAnimator);
+    if (!m_windowAnimator || !m_stripViewAnimator) {
+        qCWarning(lcEffect) << "onScreenRemoved: animator missing during output teardown; skipping reap";
+        return;
+    }
 
     // Ordering matters: extract the unique_ptr and erase the map
     // entry BEFORE calling reap. A re-entrant `onAnimationReaped` hook
@@ -606,6 +730,12 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     std::unique_ptr<CompositorClock> dyingClock = std::move(it->second);
     m_motionClocksByOutput.erase(it);
     m_windowAnimator->reapAnimationsForClock(dyingClock.get());
+    // The strip view spring binds to the same per-output clocks, so it owes the
+    // same reap. forgetOutput() above already dropped this output's entry and
+    // the strip resolver has no fallback, so nothing else can be holding this
+    // clock — the reap is the belt to that braces, and it also covers a leg
+    // started re-entrantly during the erase above.
+    m_stripViewAnimator->reapAnimationsForClock(dyingClock.get());
     // dyingClock destroyed at scope exit — at this point reap has
     // cleared every animation that captured the pointer, so the
     // destruction cannot strand a dangling MotionSpec::clock.

@@ -18,10 +18,13 @@
 // test compiles that branch through the driver, closing the gap.
 //
 // It assembles the variant the way the runtime does: entry scaffold → include
-// expansion → param preamble → the KWin `#extension`/`#define` block. It
-// replicates that final block locally (see kwinDefineBlock) rather than linking
-// ShaderInternal::injectKwinDefineAfterVersion, which lives in a KWin-linked TU;
-// the two are equivalent for every bundled pack (all lead with a bare
+// expansion → param preamble → the KWin `#extension`/`#define` block. That
+// final block comes from PhosphorShaders::kwinDefineBlock(), the same function
+// the compositor's injector and the offline validator splice, so this gate
+// cannot drift into accepting a dialect the compositor rejects. It splices the
+// block with plain spliceAfterVersion rather than linking
+// ShaderInternal::injectKwinDefineAfterVersion, which lives in a KWin-linked
+// TU; the two are equivalent for every bundled pack (all lead with a bare
 // `#version 450`, the only input where injectKwinDefineAfterVersion's BOM /
 // comment-scan branches would diverge from a plain post-#version splice).
 //
@@ -77,18 +80,16 @@ class TestAnimationShaderKwinBake : public QObject
         return eff;
     }
 
-    // Replicates the block ShaderInternal::injectKwinDefineAfterVersion splices in
-    // after #version on the KWin path (kwin-effect/plasmazoneseffect/
-    // shader_transitions.cpp is the source of truth). Equivalent to calling that
-    // helper for every bundled pack, which all lead with a bare `#version 450`;
-    // the ARB `: enable` directives select explicit-location layouts in the
-    // vertex stage and are no-ops in the fragment stage.
+    // The block ShaderInternal::injectKwinDefineAfterVersion splices in after
+    // #version on the KWin path. Taken from PhosphorShaders rather than spelled
+    // out here: the compositor's injector and the offline validator's
+    // compositor bake splice the SAME function, so this test cannot drift into
+    // accepting a dialect the compositor rejects. Equivalent to calling that
+    // injector for every bundled pack, which all lead with a bare
+    // `#version 450`.
     static QString kwinDefineBlock()
     {
-        return QStringLiteral(
-            "#extension GL_ARB_explicit_attrib_location : enable\n"
-            "#extension GL_ARB_separate_shader_objects : enable\n"
-            "#define PLASMAZONES_KWIN\n");
+        return PhosphorShaders::kwinDefineBlock();
     }
 
     QOffscreenSurface* m_surface = nullptr;

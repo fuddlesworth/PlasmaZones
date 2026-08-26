@@ -9,9 +9,22 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, v3, v3.1, v3.2]
+    branches: [main, develop, v3, v3.1, v3.2, v3.3, v3.4]
+    # Release tags too. Every build job in release.yml configures with
+    # -DBUILD_TESTING=OFF and release.yml has no test job, so without this a
+    # tag pushed at a commit that never landed on one of the branches above
+    # shipped to GitHub Releases, the AUR and OBS with no test evidence at all.
+    #
+    # This is evidence, NOT a gate. release.yml does not depend on this
+    # workflow, so the two run concurrently on a tag push and a red CI run does
+    # not stop the release from publishing; it just means the failure is on the
+    # record next to the tag. The workflow_dispatch release path is not covered
+    # at all, since dispatching against an existing tag pushes nothing. Making
+    # it a real gate means adding a test job inside release.yml that the
+    # `release` job needs.
+    tags: ["v*"]
   pull_request:
-    branches: [main, v3, v3.1, v3.2]
+    branches: [main, v3, v3.1, v3.2, v3.3, v3.4]
     # `labeled` is opt-in for the draft-PKGBUILD job below — it gates
     # on `github.event.label.name == 'build-draft'`. The other jobs
     # (build / lint / nix) skip the `labeled` action subtype via their
@@ -62,7 +75,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
             kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
             plasma-activities \
             vulkan-headers vulkan-icd-loader glslang \
             xorg-server-xvfb mesa cava ffmpeg
@@ -164,7 +177,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             qt6-wayland wayland plasma-wayland-protocols wayland-protocols \
             kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
             plasma-activities \
             vulkan-headers vulkan-icd-loader glslang \
             xorg-server-xvfb mesa cava ffmpeg \
@@ -550,7 +563,7 @@ jobs:
             qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
             qt6-wayland wayland \
             kwin \
-            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            kconfig kconfigwidgets kcmutils kglobalaccel kcolorscheme kirigami \
             plasma-activities \
             vulkan-headers vulkan-icd-loader
 
@@ -664,11 +677,12 @@ jobs:
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
-              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              'kcmutils' 'kglobalaccel' 'kcolorscheme' 'qt6-wayland'
               'kwin>=6.7.0'
           )
-          makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
-          optdepends=('plasma-activities: activity-based layouts')
+          makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland' 'vulkan-headers' 'vulkan-icd-loader')
+          optdepends=('plasma-activities: activity-based layouts'
+                      'hwdata: readable GPU names in the rendering device picker')
           provides=("plasmazones=$pkgver")
           conflicts=('plasmazones' 'plasmazones-git' 'plasmazones-bin')
           source=()
@@ -759,11 +773,12 @@ jobs:
           depends=(
               'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
               'kconfig' 'kconfigwidgets' 'kirigami'
-              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              'kcmutils' 'kglobalaccel' 'kcolorscheme' 'qt6-wayland'
               'kwin>=6.7.0'
           )
-          makedepends=('git' 'cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland')
-          optdepends=('plasma-activities: activity-based layouts')
+          makedepends=('git' 'cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland' 'vulkan-headers' 'vulkan-icd-loader')
+          optdepends=('plasma-activities: activity-based layouts'
+                      'hwdata: readable GPU names in the rendering device picker')
           provides=("plasmazones=\$pkgver")
           conflicts=('plasmazones' 'plasmazones-git' 'plasmazones-bin')
           source=("\$pkgname::git+\$url.git#branch=${BRANCH}")

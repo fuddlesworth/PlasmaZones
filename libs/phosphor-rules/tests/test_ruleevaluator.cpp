@@ -42,7 +42,7 @@ private Q_SLOTS:
 
     // ExcludeAnimations rules authored over the new IsNotification / IsTransient
     // / Width match fields resolve to isExcluded() through the full evaluator —
-    // e.g. the built-in "Don't animate small windows" template (Width < 300).
+    // e.g. a `Width < 300` leaf, to leave small windows unanimated.
     void testExcludeAnimationsOverNewFields()
     {
         const auto excludeAnimations = []() {
@@ -150,23 +150,24 @@ private Q_SLOTS:
     void testModeConditionResolvesPerMode()
     {
         // The flagship per-mode behavior, end-to-end through resolve(): a
-        // `Mode Equals "tiling"` gap rule fills its slot only when the query's
-        // placement mode is "tiling", and stays inert for "snapping" / no mode.
+        // `Mode Equals ModeToken::Tiling` gap rule fills its slot only when the
+        // query's placement mode is that token, and stays inert for Snapping /
+        // no mode.
         RuleSet set;
         set.addRule(makeRule(QStringLiteral("tiling inner gap"), 100,
-                             MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+                             MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QString(ModeToken::Tiling)),
                              {innerGap(14)}));
         RuleEvaluator eval(set);
 
         WindowQuery tiled = konsoleQuery();
-        tiled.mode = QStringLiteral("tiling");
+        tiled.mode = QString(ModeToken::Tiling);
         const ResolvedActions tiledResult = eval.resolve(tiled);
         QVERIFY(tiledResult.hasSlot(QString(ActionSlot::InnerGap)));
         QCOMPARE(tiledResult.slot(QString(ActionSlot::InnerGap))->params.value(QString(ActionParam::Value)).toInt(),
                  14);
 
         WindowQuery snapped = konsoleQuery();
-        snapped.mode = QStringLiteral("snapping");
+        snapped.mode = QString(ModeToken::Snapping);
         QVERIFY(!eval.resolve(snapped).hasSlot(QString(ActionSlot::InnerGap)));
 
         // No placement mode (floating / mode-agnostic) → also inert.
@@ -306,6 +307,84 @@ private Q_SLOTS:
         QVERIFY(result.hasSlot(QString(ActionSlot::EngineMode)));
     }
 
+    // ── Terminal-action scope (full-store evaluators) ──
+
+    void testTerminalScope_outOfScopeTerminalDoesNotStopWalk()
+    {
+        // The WTA/full-store shape: a decoration-only opt-out at high
+        // priority must NOT cancel a lower-priority rule's placement policy
+        // when the evaluator honours only the placement family. The
+        // out-of-scope terminal is inert — no exclusion, no slot fill, walk
+        // continues.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("deco-optout"), 500, MatchExpression{}, {excludeDecorationsAction()}));
+        set.addRule(makeRule(QStringLiteral("restore"), 100, MatchExpression{}, {restorePosition(true)}));
+        RuleEvaluator eval(set);
+        eval.setTerminalActionScope({QString(ActionType::Exclude), QString(ActionType::ExcludePlacement)});
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(!result.isExcluded());
+        QVERIFY(result.hasSlot(QString(ActionSlot::RestorePosition)));
+        QVERIFY(!result.hasSlot(QString(ActionSlot::DecorationExclude)));
+    }
+
+    void testTerminalScope_outOfScopeTerminalOnMixedRuleKeepsSiblingActions()
+    {
+        // A hand-edited mixed rule (scoped exclusion + a non-terminal
+        // action): with the exclusion out of scope, the rule's OTHER actions
+        // still apply — the terminal is skipped, not the rule.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("mixed"), 100, MatchExpression{},
+                             {excludeDecorationsAction(), restorePosition(true)}));
+        RuleEvaluator eval(set);
+        eval.setTerminalActionScope({QString(ActionType::Exclude), QString(ActionType::ExcludePlacement)});
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(!result.isExcluded());
+        QVERIFY(result.hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
+    void testTerminalScope_inScopeTerminalStillStops()
+    {
+        // The scope narrows which terminal actions fire, never whether an
+        // in-scope one does: ExcludePlacement inside the placement scope
+        // behaves exactly like the unscoped evaluator's Exclude.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("placement-optout"), 500, MatchExpression{}, {excludePlacementAction()}));
+        set.addRule(makeRule(QStringLiteral("restore"), 100, MatchExpression{}, {restorePosition(true)}));
+        RuleEvaluator eval(set);
+        eval.setTerminalActionScope({QString(ActionType::Exclude), QString(ActionType::ExcludePlacement)});
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(result.isExcluded());
+        QVERIFY(!result.hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
+    void testTerminalScope_unsetHonoursEveryTerminal()
+    {
+        // The sliced-evaluator default: with no scope set, ANY terminal
+        // action stops the walk — the pre-scope behaviour every dedicated
+        // exclusion evaluator relies on.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("deco-optout"), 500, MatchExpression{}, {excludeDecorationsAction()}));
+        set.addRule(makeRule(QStringLiteral("restore"), 100, MatchExpression{}, {restorePosition(true)}));
+        RuleEvaluator eval(set);
+        const ResolvedActions result = eval.resolve(konsoleQuery());
+        QVERIFY(result.isExcluded());
+        QVERIFY(!result.hasSlot(QString(ActionSlot::RestorePosition)));
+    }
+
+    void testTerminalScope_setterDropsMatchCache()
+    {
+        // The per-window memo caches verdicts computed under the scope in
+        // force at resolve time — setting a scope afterwards must not serve
+        // the stale verdict.
+        RuleSet set;
+        set.addRule(makeRule(QStringLiteral("deco-optout"), 500, MatchExpression{}, {excludeDecorationsAction()}));
+        RuleEvaluator eval(set);
+        const QString windowId = QStringLiteral("app|1");
+        QVERIFY(eval.resolveCached(windowId, konsoleQuery()).isExcluded());
+        eval.setTerminalActionScope({QString(ActionType::Exclude)});
+        QVERIFY(!eval.resolveCached(windowId, konsoleQuery()).isExcluded());
+    }
+
     // ── Animation event-scoped slots ──
 
     void testAnimationEventSlotsIndependent()
@@ -347,6 +426,72 @@ private Q_SLOTS:
         other.windowClass = QStringLiteral("firefox");
         other.screenId = QStringLiteral("DP-2");
         QVERIFY(!eval.hasAnyMatch(other));
+    }
+
+    // ── hasAnyMatchFiltered ──
+
+    /// The admit predicate gates the RESULT, not the match.
+    ///
+    /// The KWin window filter force-animates a window whose rule matches, on
+    /// the reasoning that authoring a matching rule is the opt-in signal. A
+    /// rule whose every appearance action is inert signals nothing, so the
+    /// filter needs "matches AND is worth honouring" rather than plain
+    /// "matches" — otherwise it overrides the user's own size and exclusion
+    /// settings on behalf of a rule that cannot change anything.
+    void testHasAnyMatchFiltered()
+    {
+        RuleSet set;
+        set.addRule(
+            makeRule(QStringLiteral("konsole"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("konsole")),
+                     {floatAction()}));
+        RuleEvaluator eval(set);
+
+        // Matches and is admitted.
+        QVERIFY(eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule&) {
+            return true;
+        }));
+        // Matches but is refused — the whole point of the overload.
+        QVERIFY(!eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule&) {
+            return false;
+        }));
+
+        // Does not match, so admission is never consulted.
+        WindowQuery other;
+        other.windowClass = QStringLiteral("firefox");
+        other.screenId = QStringLiteral("DP-2");
+        bool admitCalled = false;
+        QVERIFY(!eval.hasAnyMatchFiltered(other, [&admitCalled](const Rule&) {
+            admitCalled = true;
+            return true;
+        }));
+        QVERIFY2(!admitCalled, "admit ran for a rule that did not match — the match must gate the predicate");
+
+        // A null predicate degrades to plain hasAnyMatch rather than refusing
+        // everything, so a caller with nothing to filter on is not surprised.
+        QVERIFY(eval.hasAnyMatchFiltered(konsoleQuery(), nullptr));
+    }
+
+    /// A refused rule must not mask an admitted one later in the set.
+    void testHasAnyMatchFilteredScansPastARefusedRule()
+    {
+        RuleSet set;
+        set.addRule(
+            makeRule(QStringLiteral("refused"), 100,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("konsole")),
+                     {floatAction()}));
+        set.addRule(
+            makeRule(QStringLiteral("admitted"), 200,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("konsole")),
+                     {floatAction()}));
+        RuleEvaluator eval(set);
+
+        QVERIFY(eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule& r) {
+            return r.name == QLatin1String("admitted");
+        }));
+        QVERIFY(!eval.hasAnyMatchFiltered(konsoleQuery(), [](const Rule& r) {
+            return r.name == QLatin1String("neither");
+        }));
     }
 
     // ── hasMatchTargetingFields ──

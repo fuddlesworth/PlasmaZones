@@ -3,6 +3,8 @@
 
 #include "helpers/SnapEngineTestFixture.h"
 
+#include <PhosphorRules/ExclusionRules.h>
+
 /**
  * @brief SnapEngine exclusion + cross-mode handoff coverage: setExcludeRuleSet
  *        wiring, isWindowExcluded full-query/size checks, the resolveWindowRestore
@@ -70,6 +72,65 @@ private Q_SLOTS:
         // Non-matching appId resolves to not-excluded against the same
         // bound set — the evaluator differentiates correctly.
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    void testExcludeWiring_excludePlacementRuleReturnsTrue()
+    {
+        // End-to-end for the scoped placement exclusion: an ExcludePlacement
+        // rule in the borrowed set makes the engine refuse the app exactly
+        // like a blanket Exclude — markExcluded fires for any terminal
+        // action, so the SLICER is the only discriminator (pinned by the
+        // negative case below).
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorRules::RuleSet set;
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("exclude-placement-deskflow");
+        rule.enabled = true;
+        rule.match =
+            PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::AppId, PhosphorRules::Operator::AppIdMatches,
+                                                     QStringLiteral("org.deskflow.deskflow"));
+        PhosphorRules::RuleAction action;
+        action.type = QString(PhosphorRules::ActionType::ExcludePlacement);
+        rule.actions.append(action);
+        QVERIFY(set.addRule(rule));
+
+        engine.setExcludeRuleSet(&set);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("org.deskflow.deskflow")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    void testExcludeWiring_decorationOnlyRuleSetDoesNotExclude()
+    {
+        // The guard with real value: because ANY terminal action trips
+        // markExcluded, feeding the engine a set containing a decoration-only
+        // exclusion would silently unmanage the window. The daemon prevents
+        // that by binding excludePlacementRulesFrom, which never admits an
+        // ExcludeDecorations-only rule; this pins the consequence at the
+        // engine seam — someone widening the daemon's slice back to the
+        // unfiltered store fails HERE, not in a live session.
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorRules::RuleSet fullStore;
+        PhosphorRules::Rule decoRule;
+        decoRule.id = QUuid::createUuid();
+        decoRule.name = QStringLiteral("undecorate-mpv");
+        decoRule.enabled = true;
+        decoRule.match = PhosphorRules::MatchExpression::makeLeaf(
+            PhosphorRules::Field::AppId, PhosphorRules::Operator::AppIdMatches, QStringLiteral("mpv"));
+        PhosphorRules::RuleAction decoAction;
+        decoAction.type = QString(PhosphorRules::ActionType::ExcludeDecorations);
+        decoRule.actions.append(decoAction);
+        QVERIFY(fullStore.addRule(decoRule));
+
+        // What the daemon actually binds: the placement slice of that store,
+        // which is empty — so the engine must not exclude the app.
+        PhosphorRules::RuleSet placementSlice;
+        placementSlice.setRules(PhosphorRules::ExclusionRules::excludePlacementRulesFrom(fullStore).rules());
+        QVERIFY(placementSlice.isEmpty());
+        engine.setExcludeRuleSet(&placementSlice);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("mpv")));
     }
 
     void testExcludeWiring_pointerChangeRebindsEvaluator()

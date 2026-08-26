@@ -284,6 +284,7 @@ set(phosphorcontrol_qml_FILES
     qml/Breadcrumbs.qml
     qml/UnsavedChangesFooter.qml
     qml/PageHost.qml
+    qml/PageLoadingIndicator.qml
     qml/DiscardChangesDialog.qml
     qml/AboutPageShell.qml
 )

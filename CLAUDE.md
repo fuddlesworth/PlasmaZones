@@ -1,8 +1,16 @@
 # PlasmaZones — Claude Code Configuration
-# KDE/Plasma Window Tiling — Qt6/C++20/QML/Kirigami
+# KDE/Plasma Window Placement — Qt6/C++20/QML/Kirigami
 
 ## Project
-PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami, C++20, Wayland-only.
+PlasmaZones: window snapping, tiling and scrolling for KDE Plasma. Qt6, KF6, Kirigami, C++20, Wayland-only.
+
+### Placement Modes
+Three mutually exclusive modes. Each screen runs exactly one, resolved per (screen, desktop, activity):
+- **Snapping** — drag a window with a modifier held, drop it into a user-drawn zone. Engine: `libs/phosphor-snap-engine`. Artifacts: layouts (`data/layouts`, user copies in `~/.local/share/plasmazones/layouts/`).
+- **Tiling** — windows place themselves via a scripted algorithm. Engine: `libs/phosphor-tile-engine` running Luau through `phosphor-tiles` / `phosphor-scripting`. Artifacts: algorithms (`data/algorithms/*.luau`).
+- **Scrolling** — windows form columns on an endless strip, modeled on niri. Engine: `libs/phosphor-scroll-engine`. Artifacts: templates (`data/scrolling-templates`).
+
+Shared placement policy lives in `libs/phosphor-engine`. A verdict from one mode never gates another — see the float-is-per-mode invariant, written up at `libs/phosphor-engine/include/PhosphorEngine/WindowPlacement.h` (each engine keeps its own float slot and state, independent of the others). When adding a cross-cutting feature, check whether all three modes need an arm before calling it done.
 
 ## Behavioral Rules (Always Enforced)
 - NEVER question or doubt what the user says they did (installed, restarted, tested, etc.) — trust them and focus on the code
@@ -27,7 +35,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Use `/examples` for example code
 
 ## License
-- SPDX headers on ALL files: `// SPDX-FileCopyrightText: 2026 fuddlesworth`
+- SPDX headers on every file whose format supports comments: `// SPDX-FileCopyrightText: 2026 fuddlesworth`. Data assets in formats with no comment syntax are exempt, which in practice means `data/**/*.json` and the `manifest.json.in` fixtures under `libs/phosphor-registry/tests/` — never add a header to those, it makes the file invalid.
 - License identifier depends on the tree:
   - **App / daemon / editor / settings / KCM / examples / top-level tests** (`src/**`, `kcm/**`, `kwin-effect/**`, `examples/**`, top-level `tests/**`): `GPL-3.0-or-later`
   - **Reusable libraries, including their own tests** (`libs/phosphor-*/**`, which subsumes `libs/phosphor-*/tests/**`): `LGPL-2.1-or-later`
@@ -51,6 +59,7 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Forward declare in headers; group includes: own header → project → KDE → Qt
 - `PLASMAZONES_EXPORT` on public API classes
 - Keep files under 1000 lines, with a 15% grace (hard ceiling 1150). Under 1000 is the target; 1000–1150 is tolerated and not a review finding on its own. Past 1150, split by concern.
+- The ceiling binds NEW files and files being substantially rewritten. Around 39 existing files are already over it (the largest are `kwin-effect/plasmazoneseffect/plasmazoneseffect.h`, `kwin-effect/tilinghandler/tiling.cpp` and `src/config/settings.h`); those are grandfathered. Do not raise an existing overrun as a review finding on its own, and do not split one as a drive-by. Growing one further, or adding a new file over the ceiling, is a finding.
 - Input validation at system boundaries
 
 ### Qt6 String Literals (CRITICAL)
@@ -69,7 +78,8 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Zone IDs (QUuid), never indices — `Accessible.name` on interactive elements
 
 ## Architecture
-- Service-oriented: `ILayoutService`, `ZoneManager`, `SnappingService`; DI via constructor
+- Service-oriented with DI via constructor (the editor's `ILayoutService`, `ZoneManager`, `SnappingService` are the reference shape)
+- Placement runs in the daemon behind the three engines above; the KWin effect draws overlays, decorations, and tab indicators
 - Business logic in C++, UI in QML; controllers bridge via `Q_PROPERTY`
 - Zone IDs everywhere, never indices
 - JSON persistence in `~/.local/share/plasmazones/layouts/` with relative geometry (0.0–1.0)
@@ -81,7 +91,9 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Extract: `cmake --build build --target update-ts`
 
 ## User-Facing Text (Plain Prose)
-User-facing strings MUST read like plain, human-written prose with no LLM tics. This applies to every surface a user reads: `description`/`name` fields in `data/**/*.json` (animation, shader, layout metadata), `data/whatsnew.json` highlights, `data/algorithms/*.luau` `description` fields, `CHANGELOG.md` entries, and every translatable string (`PhosphorI18n::tr()`, QML `i18n()`/`i18nc()`).
+User-facing strings MUST read like plain, human-written prose with no LLM tics. This applies to every surface a user reads: `description`/`name` fields in `data/**/*.json` (animation, shader, layout, and scrolling-template metadata), `data/whatsnew.json` highlights, `data/algorithms/*.luau` `description` fields, `CHANGELOG.md` entries, the `.desktop` `Name`/`GenericName`/`Comment` fields, AppStream `.metainfo.xml` summaries and descriptions, packaging descriptions (`packaging/**` pkgdesc / Summary / %description / Debian Description / Nix meta), and every translatable string (`PhosphorI18n::tr()`, QML `i18n()`/`i18nc()`). SVG `<desc>` elements in `icons/**` count too, since screen readers announce them.
+
+`README.md` is deliberately OUT of scope, along with the other developer-facing repo docs (`CLAUDE.md`, `docs/**`, `tools/**/README.md`). The README uses em-dashes structurally throughout and pulling it under this rule would need a full punctuation rewrite first. Do not "fix" README em-dashes to satisfy the bullets below.
 
 - NEVER use an em-dash (`—`, or the `—` escape) to splice clauses or tack on an appositive. Write two sentences, or join with a plain word (and, with, where, so, because).
 - NEVER use a clause-splicing semicolon to join two independent clauses. Split into sentences or use "and". Semicolons inside backticked code, and semicolons separating genuine comma-bearing list items, are fine.
@@ -99,10 +111,10 @@ User-facing strings MUST read like plain, human-written prose with no LLM tics. 
 - Editor settings: separate, in `EditorController` (separate process)
 
 ### Adding a Setting
-1. `configdefaults.h` — static default accessor + `xxxKey()` accessor for the config key string
+1. `src/config/configdefaults.h` — static default accessor + `xxxKey()` accessor for the config key string
 2. `src/core/interfaces/isettings.h` — signal in ISettings
-3. `settings.h` — Q_PROPERTY + getter + setter + member
-4. `settings.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`
+3. `src/config/settings.h` — Q_PROPERTY + getter + setter + member
+4. The matching `src/config/settings/*.cpp` — setter (check changed, emit), load/save/reset using `ConfigDefaults::xxx()`. Setters live in that directory split by concern (`setters.cpp`, `shortcuts.cpp`, `storescalars.cpp`, `scrolling.cpp`, `triggers.cpp`, `perscreen.cpp`, `disable.cpp`, and so on), NOT in `src/config/settings.cpp`. Pick the file matching the setting's concern; `loadsave.cpp` holds the load/save/reset arms. Note three different files in the tree are named `settings.cpp` (`src/config/`, `src/daemon/overlayservice/`, `src/editor/controller/`), so always use the full path.
 
 ### Config Key Strings
 - ALL config group names and key strings MUST use `ConfigDefaults::` accessors — never inline `QStringLiteral("...")`
@@ -148,37 +160,63 @@ docker run --rm -v "$PWD":/src plasmazones-build ctest --output-on-failure
 On Linux (native):
 
 ```bash
+# Configure. BUILD_TESTING defaults to OFF, so a build dir configured without
+# it produces NO tests and ctest then reports "No tests were found" — which
+# reads like success. Pass it explicitly or the "always run tests" rule above
+# silently runs nothing. BUILD_TOOLS=ON adds shader-render and friends.
+#
+# TEST-TIME DEPENDENCY: the shader_validate_animations gate shells out to
+# `glslangValidator` (or the newer `glslang`; either name works) to compile the
+# compositor-only animation packs, and HARD-FAILS when neither is on PATH
+# rather than skipping. Install your distro's glslang package before running
+# ctest. Not needed to build, and not needed with BUILD_TESTING=OFF.
+cmake -B build -DBUILD_TESTING=ON
+
 # Build
 cmake --build build --parallel $(nproc)
 
 # Test
-cd build && ctest --output-on-failure
+ctest --test-dir build --output-on-failure
 
 # Lint (pre-commit hooks handle clang-format + qmlformat)
 ```
 
 - CMake with `CMAKE_AUTOMOC/AUTORCC/AUTOUIC ON`
-- `qt6_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
+- `qt_add_qml_module()` — ALL QML files must be listed (missing = runtime "not a type" error)
 - `cmake -DUSE_KDE_FRAMEWORKS=ON` (default) or `OFF` for portable Qt-only build
-- KF6 deps when ON: `KCMUtils`, `GlobalAccel`; optional: `Activities`
+- KF6 deps when ON: `KCMUtils`, `GlobalAccel`, `ColorScheme` (the KWin effect's KColorScheme); optional: `Activities`
 - Pluggable backends: `IConfigBackend`, `PhosphorShortcuts::IBackend`, `IWallpaperProvider`
 - Standalone settings app (`plasmazones-settings`) + minimal KCM launcher
 
 ### Directory Structure
 ```
 src/core/        — Domain models (Zone, Layout, ScreenManager)
-src/daemon/      — Background service
-src/editor/      — Layout editor
+src/daemon/      — Background service; hosts the three placement engines
+src/editor/      — Layout editor (zone layouts + scrolling templates)
 src/settings/    — Standalone settings app
+src/shell/       — Shell process entry point (hosts the OSD / picker / selector surfaces, whose QML lives in src/ui)
+src/ui/          — Shared QML controls, including the OSD, picker and selector content
 src/dbus/        — D-Bus adaptors
 src/config/      — Configuration backends
-src/autotile/    — Tiling algorithms (scripted Luau via phosphor-tiles)
+src/common/      — Cross-target helpers
+src/shared/      — Code shared between daemon and apps
+src/shaderpreview/  — Shader preview host
+src/shadervalidate/ — plasmazones-shader-validate pack validator
+libs/            — phosphor-* component libraries (LGPL; see License above)
 kcm/             — System Settings module
 kwin-effect/     — KWin effect (C++)
 tests/           — Unit tests (Qt Test)
-data/layouts/    — Default layout templates (JSON)
-data/algorithms/ — Bundled Luau tiling algorithms
+tools/           — Developer tools (shader-render); built with -DBUILD_TOOLS=ON
+data/layouts/    — Default layout templates (JSON) — snapping
+data/algorithms/ — Bundled Luau tiling algorithms — tiling
+data/scrolling-templates/ — Bundled strip templates — scrolling
+data/animations/ — Window animation shader packs
+data/overlays/   — Zone overlay shader packs
+data/surface/    — Window/shell decoration packs
+data/curves/     — Animation easing curves
+data/schemas/    — JSON schemas for the bundled data assets
 ```
+Not exhaustive: `scripts/`, `packaging/`, `translations/`, `dbus/`, `icons/` and `extern/` also exist at the top level.
 
 ## Testing
 - Qt Test: `QTEST_MAIN`, `QCOMPARE`, `QVERIFY`
@@ -201,11 +239,17 @@ data/algorithms/ — Bundled Luau tiling algorithms
 
 ## Concurrency: 1 MESSAGE = ALL RELATED OPERATIONS
 - All operations MUST be concurrent/parallel in a single message
-- Use Claude Code's Task tool for spawning agents, not just MCP
+- Use Claude Code's subagent tool for spawning agents, not just MCP. That tool is
+  now named `Agent`; "Task tool" throughout this section is its former name and
+  means the same thing.
 - ALWAYS batch ALL todos in ONE TodoWrite call (5-10+ minimum)
 - ALWAYS spawn ALL agents in ONE message with full instructions via Task tool
-- ALWAYS batch ALL file reads/writes/edits in ONE message
-- ALWAYS batch ALL Bash commands in ONE message
+- ALWAYS batch INDEPENDENT file reads/writes/edits in ONE message
+- ALWAYS batch INDEPENDENT Bash commands in ONE message
+- "Independent" is the operative word, and it is what keeps this section from
+  contradicting "ALWAYS read a file before editing it" above. A read and the
+  edit that depends on it cannot go in the same message; batch the reads, then
+  batch the edits.
 
 ## Swarm Orchestration
 - MUST initialize the swarm using CLI tools when starting complex tasks
@@ -323,5 +367,6 @@ npx @claude-flow/cli@latest doctor --fix
 - Keep files under 1000 lines (15% grace, hard ceiling 1150) — Keep QML for UI, C++ for logic
 
 ## Support
-- Documentation: https://github.com/ruvnet/claude-flow
-- Issues: https://github.com/ruvnet/claude-flow/issues
+- Documentation: https://phosphor-works.github.io/plasmazones/
+- Repository: https://github.com/fuddlesworth/PlasmaZones
+- Issues: https://github.com/fuddlesworth/PlasmaZones/issues

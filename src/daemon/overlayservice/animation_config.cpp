@@ -349,9 +349,14 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Two existing surface types do NOT have a per-role config registered
-    // and therefore fall back to the empty default (no shader effect, the
-    // library-default 150 ms OutCubic motion):
+    // phosphor_roles.h defines nine roles. PassiveShell is not counted here:
+    // it is the HOST surface, and its doc records that per-content motion is
+    // resolved through the role-override beginShow / beginHide overloads, so
+    // it never carries an animation config of its own. Of the eight per-content
+    // roles that remain, applyShaderProfilesToAnimator registers five (Osd,
+    // LayoutPicker, ZoneSelector, SnapAssist, Cheatsheet) and these three do
+    // NOT have a per-role config, so they fall back to the empty default (no
+    // shader effect, the library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the
     //     animator (overlay.cpp passes PhosphorRoles::ZoneOverlay to
     //     beginShow/beginHide on the passive-shell slot) but the default
@@ -359,6 +364,10 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
+    //   - ScrollDropIndicator (drag re-insert drop target): the
+    //     animation-profile taxonomy defines no domain for it, so the library
+    //     default is the intended motion for both legs, and the role doc
+    //     points back at this list.
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
@@ -378,8 +387,9 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // m_shellHost->registerConfigForRole before the host was up.
     if (!m_shellHost) {
         qFatal(
-            "OverlayService::setupSurfaceAnimator: m_shellHost must be constructed first "
-            "(applyShaderProfilesToAnimator dereferences it on every call)");
+            "OverlayService::setupSurfaceAnimator: the shell host must be constructed first "
+            "(applyShaderProfilesToAnimator dereferences m_shellHost on every call, and a host "
+            "without an animator cannot run hideSlot)");
     }
     m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
     // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor

@@ -19,11 +19,13 @@ namespace PlasmaZones {
 /// (@c buildOsdConfig / @c buildLayoutPickerConfig /
 /// @c buildZoneSelectorConfig / @c buildSnapAssistConfig /
 /// @c buildCheatsheetConfig; a
-/// @c tryBeginShaderForEvent(...) call under
-/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the open, close and
-/// focus legs, window_connections for move and maximize, daemon_apply for
-/// minimize); or a
+/// @c tryBeginShaderForEvent(...) call (window_lifecycle for the open, close
+/// and focus legs, window_connections for move and maximize, daemon_apply for
+/// minimize — all under @c kwin-effect/plasmazoneseffect/ — and
+/// @c kwin-effect/tilinghandler/tiling.cpp for the tab-switch leg); or a
 /// @c resolveShaderWithDefault(tree, ...) call, which drives the
+/// scrolling strip's view pass from the tiling batch path
+/// (@c kwin-effect/tilinghandler/tiling.cpp), the
 /// screen-level desktop legs from
 /// @c kwin-effect/plasmazoneseffect/lifecycle_wiring.cpp, the snap geometry
 /// legs through @c applyWindowGeometry in
@@ -89,8 +91,38 @@ inline QStringList shaderConsumedLeafEventPaths()
         // per-window tryBeginShaderForEvent leg. Its shaders are the two-texture
         // desktop class (appliesTo ["desktop"]).
         PP::DesktopSwitch,
-        // Show-desktop peek — same manager, resolved in the
-        // showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
+        // Strip scroll — consumed by the kwin-effect's StripTransitionManager:
+        // the tiling batch path resolves resolveShaderWithDefault(tree,
+        // ScrollingView) beside its motion-profile resolve (tilinghandler/
+        // tiling.cpp) and arms a per-output post-process pass over the live
+        // scene capture while the view spring is in flight. Its shaders are
+        // the one-scene strip class (appliesTo ["strip"]).
+        PP::ScrollingView,
+        // Tab swap inside a tabbed column — a per-window leg, unlike its
+        // scrolling sibling above: the tiling batch path installs it through
+        // tryBeginShaderForEvent on the ARRIVING tab and seeds uOldWindow from
+        // a capture of the outgoing one (tilinghandler/tiling.cpp), so the two
+        // tabs cross-fade instead of hard-cutting. Its shaders are the opt-in
+        // two-texture tab class (appliesTo ["tab"]), which resolves in
+        // isolation — see shaderPathResolvesInIsolation.
+        PP::ScrollingTabSwitch,
+        // Plasma applet popups — the launcher, the tray flyouts, a widget's
+        // expanded view. Installed from a window surface's lifecycle hooks like
+        // the window family above, but NOT per-window in the sense
+        // ProfilePaths::eventPathResolvesPerWindow means: these resolve
+        // WINDOWLESS, which is what keeps the rule tier off them. Same
+        // windowAdded / windowClosed hooks in window_lifecycle.cpp:
+        // tryBeginShaderForEvent routes a shell surface's open and close onto
+        // these paths instead of window.appearance.{open,close}, so what the
+        // user chose for their windows never plays on plasmashell's surfaces.
+        // The subtree resolves inside itself — see shaderPathIsolationRoot —
+        // which is also why these are appearance-class leaves rather than a
+        // class of their own: the surface is ordinary, its owner is not.
+        PP::ShellAppletPopupShow,
+        PP::ShellAppletPopupHide,
+        // Show-desktop peek — DesktopTransitionManager again (the entry two
+        // above; the strip block in between has its own manager), resolved in
+        // the showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both
         // legs: the hide leg blends the windows scene into the bare desktop,
         // and the show-back leg replays that same blend with time reversed
         // (its bare-desktop endpoint comes from the hide leg's cache).
@@ -179,8 +211,16 @@ inline bool eventPathSupportsShaderLeg(const QString& path)
 /// layer means an affected config can never SERVE a stale entry (the read prunes
 /// it), though the entry itself lingers in the file until an unrelated edit
 /// forces a write — the write-side compare happens after pruning on both
-/// sides, so a prune-only delta is not itself a reason to write. And a
-/// fresh write coming from a Q_INVOKABLE that bypasses the UI gate
+/// sides, so a prune-only delta is not itself a reason to write. Note what that
+/// second half means for a path REMOVED from the SSOT rather than never added:
+/// the user's override survives only until the next write, which ERASES it. That
+/// is the intended trade (a stale entry that shadows a live one is the worse
+/// failure), but it is sharpest for the `shell` subtree, which is baseline- and
+/// global-isolated and carries no built-in default, so an erased override there
+/// falls back to no shader at all rather than to an inherited one. Downgrading to
+/// a build without these paths therefore loses an engaged shell pack silently.
+///
+/// And a fresh write coming from a Q_INVOKABLE that bypasses the UI gate
 /// (e.g. a future scripting hook) still cannot stamp unsupported-path
 /// entries onto disk.
 inline PhosphorAnimationShaders::ShaderProfileTree

@@ -19,7 +19,12 @@ class ShellState;
 } // namespace PhosphorOverlay
 
 class QQuickItem;
+class QQuickWindow;
 class QScreen;
+
+namespace PhosphorLayer {
+class Surface;
+} // namespace PhosphorLayer
 
 namespace PlasmaZones {
 
@@ -61,6 +66,7 @@ struct PerScreenOverlayState
     QQuickItem* zoneSelectorSlot() const;
     QQuickItem* mainOverlaySlot() const;
     QQuickItem* cheatsheetSlot() const;
+    QQuickItem* scrollDropIndicatorSlot() const;
 
     // overlayPhysScreen != nullptr is the sentinel for "main overlay
     // mode is active on this screen" - set in createOverlayWindow,
@@ -84,6 +90,22 @@ struct PerScreenOverlayState
     QRect zoneSelectorGeometry;
 };
 
+/// Per-screen layout-family filter used for the zone selector. `manual`
+/// enables PhosphorZones layout entries, `autotile` enables algorithm
+/// previews, and `templates` enables native scrolling-template cards. The
+/// first two default true and the third false, so the unnarrowed answer is
+/// "every non-template family". The resolver narrows to a single family
+/// when the screen has an explicit assignment.
+struct LayoutIncludeFlags
+{
+    bool manual = true;
+    bool autotile = true;
+    /// Native scrolling-template entries — default false: only a
+    /// live-Templates (scrolling) screen offers them, and it offers ONLY
+    /// them.
+    bool templates = false;
+};
+
 /// Shared property-push parameters for layout-OSD content. Used by both
 /// OverlayService::showLayoutOsdImpl (PhosphorZones::Layout* path) and the
 /// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
@@ -99,12 +121,28 @@ struct LayoutOsdContentParams
     bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
     bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
     bool locked = false; ///< draws lock badge + " (Locked)" suffix
+    /// True on a live-Templates (scrolling) screen: the layout shown is the
+    /// screen's sizing TEMPLATE, and the OSD captions it "Column template"
+    /// so a template pick never reads as a snap-layout switch.
+    bool isTemplate = false;
     qreal screenAspectRatio = 16.0 / 9.0;
     QString aspectRatioClass = QStringLiteral("any");
     bool showMasterDot = false;
     bool producesOverlappingZones = false;
     QString zoneNumberDisplay = QStringLiteral("all");
     int masterCount = 1;
+    /// Strip axis ticks on the preview: "none" (every layout card), or
+    /// "horizontal" / "vertical" for a scrolling one. A populated card draws a
+    /// chevron on each edge the strip continues past; an empty one hands the
+    /// same axis to the empty state's arrow instead, since the two would
+    /// otherwise double up in one well. Either way the card says which way its
+    /// columns run.
+    QString stripAxisHint = QStringLiteral("none");
+    /// Non-empty replaces the zone preview with the shared StripEmptyState:
+    /// the axis arrow plus THIS caption. The caller supplies the wording
+    /// because an empty well has several causes and they do not mean the same
+    /// thing — see StripEmptyState.qml. Empty (the default) draws zones.
+    QString stripEmptyCaption;
     QString screenId; ///< effective screen id, resolves the context overlay-appearance override
 };
 
@@ -142,6 +180,25 @@ struct LayerSurfaceParams
     /// the warm-up commit. Forwarded verbatim to
     /// SurfaceConfig::initialSize, including the empty-as-unset sentinel.
     QSize initialSize = {};
+};
+
+/**
+ * @brief Everything OverlayService::prepareLayoutOsdWindow resolves for an
+ *        OSD show: the shell window/surface/slot, the backing physical
+ *        screen, the (virtual-screen-aware) geometry, its clamped aspect
+ *        ratio and the effective screen id the per-screen context lookups
+ *        must use. Returned as std::optional (nullopt = preparation failed),
+ *        replacing the earlier seven-out-parameter signature — same
+ *        params-struct convention as LayerSurfaceParams above.
+ */
+struct PreparedLayoutOsdWindow
+{
+    QQuickWindow* window = nullptr;
+    PhosphorLayer::Surface* surface = nullptr;
+    QQuickItem* osdSlot = nullptr;
+    QRect screenGeom = {};
+    qreal aspectRatio = 0.0;
+    QString effectiveScreenId = {};
 };
 
 } // namespace PlasmaZones

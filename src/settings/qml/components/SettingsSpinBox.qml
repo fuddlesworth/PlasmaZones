@@ -19,9 +19,16 @@ RowLayout {
     property int to: 100
     property int stepSize: 1
     property int value: 0
-    property string unitText: "px"
+    property string unitText: i18nc("pixels unit suffix in a spin box", "px")
     property string tooltipText
     property var textFromValue: null
+    //* @brief Opt-in typing (QQC2 editable). Off by default because it is
+    //* only safe with a textFromValue whose output the DEFAULT valueFromText
+    //* can parse back — the plain localized number. Hosts that embed a unit
+    //* suffix in textFromValue must leave this off (or pair a matching
+    //* valueFromText), so it is per-instance rather than blanket-on.
+    //* Wide-range spins (hundreds of button steps end to end) want it on.
+    property alias editable: spinBox.editable
     //* @brief Screen-reader name for the INNER SpinBox (the focusable control).
     //* Setting Accessible.name on this RowLayout wrapper never reaches the
     //* SpinBox, so callers use this instead (mirrors SettingsSlider).
@@ -41,7 +48,11 @@ RowLayout {
     SpinBox {
         id: spinBox
 
-        Accessible.name: root.accessibleName
+        // Fold the unit into the spoken name. The unit is a sibling Label, so
+        // a screen reader parked on the spin box would otherwise announce a
+        // bare number with no idea whether it is pixels, milliseconds or a
+        // count.
+        Accessible.name: root.accessibleName.length > 0 && root.unitText.length > 0 ? root.accessibleName + " " + root.unitText : root.accessibleName
         from: root.from
         to: root.to
         stepSize: root.stepSize

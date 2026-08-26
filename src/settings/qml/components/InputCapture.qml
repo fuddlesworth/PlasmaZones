@@ -193,6 +193,13 @@ Control {
             }
         }
 
+        // Black on purpose, not a theme colour. A modal scrim darkens what it
+        // covers in every scheme, which is what QQC2's own default does; a
+        // theme-derived tint follows the scheme instead and inverts on one
+        // side of it (backgroundColor washes the page with its own colour,
+        // textColor brightens a dark page rather than dimming it). The
+        // overlay is also parented to the window, not to this item, so the
+        // colour set in effect here is not the one behind it.
         Overlay.modal: Rectangle {
             color: Qt.rgba(0, 0, 0, 0.4)
         }
@@ -303,7 +310,7 @@ Control {
                 Timer {
                     id: unsupportedButtonHintTimer
 
-                    interval: 3000
+                    interval: Kirigami.Units.humanMoment
                     onTriggered: unsupportedButtonHint.visible = false
                 }
             }

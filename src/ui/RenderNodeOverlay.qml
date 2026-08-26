@@ -35,6 +35,7 @@ Window {
     property var bufferShaderPaths: []
     property bool bufferFeedback: false
     property real bufferScale: 1
+    property bool halfFloatBuffers: true
     property string bufferWrap: "clamp"
     property var zones: []
     property int zoneCount: 0
@@ -74,11 +75,27 @@ Window {
     // shader hot-reload path (settings.cpp::shadersChanged handler) can
     // distinguish a preview window from the main overlay's shell window.
     property bool isShaderOverlay: false
+    // Mirror-contract completion: nothing writes _idled on a preview window
+    // today (the daemon's idle paths target mainOverlaySlot only), but the
+    // header contract above promises a 1:1 surface, and a missing name turns
+    // a future C++ write into a dead dynamic property with no warning. The
+    // hosted content's _idled binding below folds Window visibility into it,
+    // which is the preview's only reliable wake edge for the idle park
+    // (Item.visible inside a hidden Window is not guaranteed to flip).
+    property bool _idled: false
 
     /// Forward to the hosted content's reloadShader() — invoked by the
     /// hot-reload path via QMetaObject::invokeMethod on the window root.
     function reloadShader() {
         hostedContent.reloadShader();
+    }
+
+    /// Forward to the hosted content's releaseIdleGraphicsResources(), the
+    /// same 1:1 contract as reloadShader: the daemon's quiesce loop only
+    /// targets the per-screen slots today, but a preview window left alive
+    /// must not be the one surface whose shader FBOs cannot be released.
+    function releaseIdleGraphicsResources() {
+        hostedContent.releaseIdleGraphicsResources();
     }
 
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
@@ -97,6 +114,7 @@ Window {
         bufferShaderPaths: root.bufferShaderPaths
         bufferFeedback: root.bufferFeedback
         bufferScale: root.bufferScale
+        halfFloatBuffers: root.halfFloatBuffers
         bufferWrap: root.bufferWrap
         zones: root.zones
         zoneCount: root.zoneCount
@@ -105,6 +123,10 @@ Window {
         highlightedZoneIds: root.highlightedZoneIds
         shaderParams: root.shaderParams
         zoneDataVersion: root.zoneDataVersion
+        // Fold Window visibility in: a hidden preview is idled, so the idle
+        // park latched while it was hidden is guaranteed a true->false edge
+        // (and an on_IdledChanged wake) when the window is shown again.
+        _idled: root._idled || !root.visible
         iTime: root.iTime
         iTimeDelta: root.iTimeDelta
         iFrame: root.iFrame

@@ -1,0 +1,248 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+<node>
+    <!-- Engine-neutral transport shared by the tiling-family placement
+         engines (autotile, scrolling). Engine-specific verbs live on
+         org.plasmazones.Autotile and org.plasmazones.Scrolling. -->
+    <interface name="org.plasmazones.Tiling">
+        <annotation name="org.gtk.GDBus.DocString" value="Shared tiling-family transport: the engine-managed screen set, window lifecycle notifications from the KWin effect, and geometry/focus/float requests to it. Engine-specific control lives on org.plasmazones.Autotile and org.plasmazones.Scrolling."/>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Properties
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <property name="enabled" type="b" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="Whether any tiling-family engine is active on any screen (read-only, derived from assignments)."/>
+        </property>
+        <property name="managedScreens" type="as" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="UNION of every tiling-family engine's screens. org.plasmazones.Scrolling names the scrolling subset."/>
+        </property>
+        <property name="activeLayouts" type="a{sv}" access="read">
+            <annotation name="org.qtproject.QtDBus.QtTypeName" value="QVariantMap"/>
+            <annotation name="org.gtk.GDBus.DocString" value="Per-screen RULES-VISIBLE active layout id (screenId to string): a snapping layout UUID, autotile:&lt;algorithmId&gt;, scrolling:&lt;templateUuid&gt; for a templated scrolling context, the bare scrolling: sentinel when no template resolves, the reserved word &quot;none&quot; for a Snapping context explicitly set to no layout, or &quot;autotile:none&quot; for an Autotile context explicitly set to no algorithm. Pushed by the daemon so effect-evaluated window rules see the same ActiveLayout vocabulary as daemon-evaluated context rules. Covers EVERY effective screen, not just engine-managed ones. Changes are announced on the activeLayoutsChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
+        </property>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Tiling Operations
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="retile">
+            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of windows on a screen, or all screens if empty."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to retile, or empty for all screens."/>
+            </arg>
+        </method>
+
+        <method name="retileAllScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of all engine-managed screens. Convenience method equivalent to retile with an empty screen ID."/>
+        </method>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Window Event Notifications (called by KWin effect)
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="notifyWindowFocused">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates the owning engine's focus tracking and window-to-screen mapping."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located (for window-to-screen mapping update)."/>
+            </arg>
+        </method>
+
+        <method name="windowOpened">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was opened (called from KWin effect)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window appeared."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum width in pixels (0 if unconstrained)."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum height in pixels (0 if unconstrained)."/>
+            </arg>
+        </method>
+
+        <method name="windowsOpenedBatch">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch window-opened notifications: process multiple windowOpened in one D-Bus call. Used on daemon startup/restart and mode toggle-on. Array of (windowId, screenId, minWidth, minHeight)."/>
+            <arg name="entries" type="a(ssii)" direction="in">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PhosphorProtocol::WindowOpenedList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of window-opened entry structs."/>
+            </arg>
+        </method>
+
+        <method name="windowMinSizeUpdated">
+            <annotation name="org.gtk.GDBus.DocString" value="Update a window's minimum size at runtime. Called by KWin effect when a window's minimum size changes after initial windowOpened. Triggers retiling if the value differs."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New minimum width in pixels (0 if unconstrained)."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New minimum height in pixels (0 if unconstrained)."/>
+            </arg>
+        </method>
+
+        <method name="windowClosed">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was closed (called from KWin effect)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+        </method>
+
+        <method name="releaseWindowTracking">
+            <annotation name="org.gtk.GDBus.DocString" value="Drop a LIVE window from engine tracking without a close (drag-bypass revert). Unlike windowClosed, no placement capture runs: the window is not dying and its current frame is transient drag state, not a placement."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+        </method>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Scrolling Tab Indicators (replay queries for the KWin effect)
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="scrollTabStrips">
+            <annotation name="org.gtk.GDBus.DocString" value="Every screen's current tab-indicator model, as a map of effective screen id to the JSON string described on scrollTabStripsChanged. The replay half of that signal, for an effect that loads (or reloads) after the strips were last laid out and would otherwise paint nothing until the next relayout. Screens with no tabbed column are absent from the map rather than present with an empty array."/>
+            <arg name="strips" type="a{sv}" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of effective screen id to tab-strip JSON string."/>
+            </arg>
+        </method>
+
+        <method name="scrollTabPaintOverrides">
+            <annotation name="org.gtk.GDBus.DocString" value="Every screen's current tab-indicator paint overrides resolved from context rules (a Set tab style / gaps / corner radius / colour / label-font rule scoped to a screen, desktop or activity), as a map of effective screen id to a map of paint key to value. Keys are tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor, urgentColor, fontFamily, fontWeight, fontItalic, fontUnderline and fontStrikeout. An empty fontFamily is a set value meaning the system font, not an absent override. Only the keys a rule actually set are present, and each layers over the matching global Scrolling.TabIndicator setting for that screen alone. The replay half of scrollTabPaintOverridesChanged. Screens with no override are absent."/>
+            <arg name="overrides" type="a{sv}" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Map of effective screen id to a paint-key map."/>
+            </arg>
+        </method>
+
+        <method name="scrollTabColors">
+            <annotation name="org.gtk.GDBus.DocString" value="Per-window tab colours resolved from the window rules, keyed activeColor / inactiveColor / urgentColor with colour strings as values. An EMPTY map means no rule sets a tab colour for this window and the painter must use its own defaults. Only the keys a rule actually sets are present, so a caller reads each key independently. Rules that pair a tab colour with a ScreenId or Mode condition are inert on this path, because the query carries no screen or mode stamp."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to resolve colours for."/>
+            </arg>
+            <arg name="colors" type="a{sv}" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Colour key to colour string, empty when no rule applies."/>
+            </arg>
+        </method>
+
+        <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
+             all float operations are now routed through the unified methods —
+             org.plasmazones.Snap.toggleFloatForWindow for toggle,
+             org.plasmazones.WindowTracking.setWindowFloatingForScreen for directional -->
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Signals
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <signal name="enabledChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the pipeline enabled state changes (any engine active/inactive)."/>
+            <arg name="enabled" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="New enabled state."/>
+            </arg>
+        </signal>
+
+        <signal name="managedScreensChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of engine-managed screens changes. Also RE-EMITTED with an unchanged set on a desktop/activity switch between contexts with identical NON-EMPTY managed sets (isDesktopSwitch=true) so the effect's catch-scan can re-add windows moved here while the user was away — an empty identical set skips the re-emit, and receivers must be idempotent for the same-set case."/>
+            <arg name="screenIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently engine-managed."/>
+            </arg>
+            <arg name="isDesktopSwitch" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the change is due to desktop/activity switch (effect should skip geometry restore/re-notification)."/>
+            </arg>
+        </signal>
+
+        <signal name="activeLayoutsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any screen's rules-visible active layout changes (see the activeLayouts property for the value vocabulary). Deduplicated: the daemon pushes on every screen-set recompute and only actual map changes reach the wire."/>
+            <arg name="activeLayouts" type="a{sv}">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Full screenId to rules-visible layout id map after the change."/>
+            </arg>
+        </signal>
+
+        <signal name="tilingChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when tiling layout changes for a screen."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen that was retiled."/>
+            </arg>
+        </signal>
+
+        <signal name="windowsTileRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
+            <arg name="tileRequests" type="a(siiiissbbbssiiibsb)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::TileRequestList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, windowedFullscreen, stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos, tabFrom, viewImmediate). zoneId is reserved and currently always empty on this signal. windowedFullscreen means the effect flips KWin fullscreen state on the client while committing the column rect (scrolling windowed fullscreen). scrollEdge is the side a parked scrolling column departs towards, one of {left, right, top, bottom}, and empty for any placement that is not a scrolling park. viewDelta is how far a scrolling strip's view slid since the last batch, in logical pixels, for this entry's screen. It is a signed scalar along THAT screen's own strip axis, so it reads as a horizontal slide on a horizontal strip and a vertical one on a vertical strip, and a consumer must take the axis from the screen rather than assuming x. Zero for every other placement and for a window the view does not carry. visualX/visualY, valid only when hasVisualPos is true, are where a PARKED scrolling column really sits on the strip: the committed rect stays the safe off-monitor park while this is the position to paint at, so the column is seen travelling with the rest of the strip. tabFrom, set only on a tab being activated in a tabbed column, names the tab it is replacing: the outgoing tab parks and this one takes the rect it vacated, and the pair is not recoverable from the rects alone, so the compositor cross-fades the two instead of hard-cutting between them. viewImmediate marks a batch whose view travel is user-driven continuous motion (the drag edge auto-scroll heartbeat): the compositor applies viewDelta outright instead of animating it, because the per-tick commits are the motion."/>
+            </arg>
+        </signal>
+
+        <signal name="focusWindowRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window should be focused by the KWin effect."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to focus."/>
+            </arg>
+        </signal>
+
+        <signal name="windowsReleasedFromTiling">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from engine management (e.g., screen left an engine-managed mode). External contract surface only: the PlasmaZones KWin effect does not subscribe, because the restore runs through the daemon-internal windowsReleased wiring and the resnap path."/>
+            <arg name="windowIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs no longer under engine control."/>
+            </arg>
+        </signal>
+
+        <signal name="windowFloatingChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's floating state changes."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID whose floating state changed."/>
+            </arg>
+            <arg name="isFloating" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="Whether the window is now floating."/>
+            </arg>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
+            </arg>
+        </signal>
+
+        <signal name="scrollTabStripsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="A screen's tab-indicator model changed. stripsJson is a JSON array with one object per VISIBLE tabbed column: x, y, width and height give the indicator bar's rect on that column in absolute logical coordinates (the rect the engine resolved for the pills, not the column rect), position is where the indicator sits on that column (0 Left, 1 Right, 2 Top, 3 Bottom), activeIndex is the zero-based index of the tab currently showing, and tabs is the column's window IDs in strip order. The array is empty (the two characters []) when the screen has no tabbed column, which is how a screen's indicators are retracted. Emitted after every strip relayout that changes the model, so a receiver may treat each payload as the complete state for that screen."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen id the model belongs to."/>
+            </arg>
+            <arg name="stripsJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of tabbed-column entries, or [] when the screen has none."/>
+            </arg>
+        </signal>
+
+        <signal name="scrollTabPaintOverridesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="A screen's context-rule tab-indicator paint overrides changed. Same eleven-key set as scrollTabPaintOverrides (tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor, urgentColor, fontFamily, fontWeight, fontItalic, fontUnderline, fontStrikeout). An empty map means the screen has no override and the global settings apply to it again."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Effective screen id."/>
+            </arg>
+            <arg name="overrides" type="a{sv}">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Paint key to value, empty to clear."/>
+            </arg>
+        </signal>
+
+        <signal name="scrollTabColorsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Tab colours resolved from window rules changed. Two shapes. The BROADCAST has an empty windowId and an empty colors map and means every cached scrollTabColors answer is stale and must be re-queried for the windows the receiver is painting. It is sent when a rules save or a colour-scheme flip moves the verdict for every window at once. The TARGETED form names one window and carries its resolved colour map, and is sent when that window's title changes or its first metadata record lands while it is a tab. An unchanged map is not re-sent. The map may itself be empty, meaning the window has no tab-colour rule, so windowId alone tells the two shapes apart."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose colours changed. Empty for the all-windows broadcast."/>
+            </arg>
+            <arg name="colors" type="a{sv}">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="QVariantMap"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Resolved colours for the named window, keyed activeColor, inactiveColor and urgentColor. Empty for the broadcast, and empty when the named window has no tab-colour rule."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

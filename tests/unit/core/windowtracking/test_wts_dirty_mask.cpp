@@ -68,9 +68,8 @@ private Q_SLOTS:
         m_layoutManager->addLayout(m_layout);
         m_zone1Id = zone1->id().toString();
 
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr,
-                                                                 m_virtualDesktopManager, nullptr,
-                                                                 PhosphorPlacement::PlacementConfig{}, m_parent);
+        m_service = new PhosphorPlacement::WindowTrackingService(
+            m_layoutManager, nullptr, m_virtualDesktopManager, nullptr, PhosphorPlacement::PlacementConfig{}, m_parent);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
         // Construction leaves mask = DirtyAll; clear so subsequent mutator
@@ -100,18 +99,17 @@ private Q_SLOTS:
     {
         // Fresh service starts DirtyAll so the first save after construction
         // writes every field. Build a fully-isolated fixture (independent
-        // parent, layout manager, stubs, etc.) so construction / teardown
-        // cannot interfere with the shared m_* fixture used by other
-        // tests in this class.
+        // parent, layout manager, virtual-desktop manager) so construction /
+        // teardown cannot interfere with the shared m_* fixture used by other
+        // tests in this class. No zone detector: the service does not take
+        // one, and the dirty mask this pins does not depend on zones.
         auto guard = std::make_unique<IsolatedConfigGuard>();
         QObject freshParent;
         auto* freshLayoutManager =
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &freshParent);
         auto* freshVirtualDesktopManager = new PhosphorWorkspaces::VirtualDesktopManager(&freshParent);
-        auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
-        PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr,
-                                                       freshVirtualDesktopManager, nullptr,
+        PhosphorPlacement::WindowTrackingService fresh(freshLayoutManager, nullptr, freshVirtualDesktopManager, nullptr,
                                                        PhosphorPlacement::PlacementConfig{}, &freshParent);
         PhosphorSnapEngine::SnapState freshSnapState(QString(), nullptr);
         fresh.setSnapState(&freshSnapState);
@@ -294,6 +292,49 @@ private Q_SLOTS:
         // bits are set — the zone bit is best-effort.
     }
 
+    void testPlacementStoreMutators_markWindowPlacementsDirty()
+    {
+        // The placement store is the single per-window restore state, and
+        // DirtyWindowPlacements is the ONLY bit gating its save block. Before
+        // this test the string "DirtyWindowPlacements" appeared nowhere in
+        // tests/, so deleting any one of these four markDirty calls left the
+        // mutation sitting in memory and silently dropped at saveState's
+        // DirtyNone early return — the same defect
+        // testPruneStaleAssignments_marksPersistedFieldsDirty pins for zone
+        // assignments.
+        const QString windowId = QStringLiteral("app|abc");
+        const QString screenId = QStringLiteral("DP-1");
+        const QRect geometry(10, 20, 300, 400);
+        const auto placementsBit = PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements;
+
+        // 1. recordFreeGeometry
+        m_service->clearDirty();
+        m_service->recordFreeGeometry(windowId, screenId, geometry, /*overwrite=*/true);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0, "recordFreeGeometry must mark DirtyWindowPlacements");
+
+        // 2. clearFreeGeometry(windowId, screenId) — the per-screen overload.
+        //    Seeded first so the clear has something to remove; otherwise a
+        //    no-op clear could pass without touching the mask.
+        m_service->recordFreeGeometry(windowId, screenId, geometry, /*overwrite=*/true);
+        m_service->clearDirty();
+        m_service->clearFreeGeometry(windowId, screenId);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0,
+                 "clearFreeGeometry(windowId, screenId) must mark DirtyWindowPlacements");
+
+        // 3. clearFreeGeometry(windowId) — the all-screens overload.
+        m_service->recordFreeGeometry(windowId, screenId, geometry, /*overwrite=*/true);
+        m_service->clearDirty();
+        m_service->clearFreeGeometry(windowId);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0,
+                 "clearFreeGeometry(windowId) must mark DirtyWindowPlacements");
+
+        // 4. recordFloatingClose — the authoritative close capture, which also
+        //    re-homes the record's managed screen.
+        m_service->clearDirty();
+        m_service->recordFloatingClose(windowId, QStringLiteral("HDMI-2"), geometry);
+        QVERIFY2((m_service->peekDirty() & placementsBit) != 0, "recordFloatingClose must mark DirtyWindowPlacements");
+    }
+
     void testMarkDirty_All_setsEveryBit()
     {
         // Phase 3 safety net: the DirtyAll constant covers every declared
@@ -308,8 +349,10 @@ private Q_SLOTS:
         QCOMPARE(mask,
                  static_cast<PhosphorPlacement::WindowTrackingService::DirtyMask>(
                      PhosphorPlacement::WindowTrackingService::DirtyAll));
-        // Every individual field bit must be included in DirtyAll so
-        // adding a new field without extending DirtyAll fails the test.
+        // Every bit listed here must be included in DirtyAll. The list is
+        // hand-maintained, so this catches a bit being DROPPED from DirtyAll,
+        // not a brand-new field that was never added to either — that one
+        // needs the new bit appended below by hand.
         for (const auto bit : {PhosphorPlacement::WindowTrackingService::DirtyActiveLayoutId,
                                PhosphorPlacement::WindowTrackingService::DirtyZoneAssignments,
                                PhosphorPlacement::WindowTrackingService::DirtyPendingRestores,
@@ -319,7 +362,20 @@ private Q_SLOTS:
                                PhosphorPlacement::WindowTrackingService::DirtyPreFloatScreens,
                                PhosphorPlacement::WindowTrackingService::DirtyUserSnapped,
                                PhosphorPlacement::WindowTrackingService::DirtyAutotileOrders,
-                               PhosphorPlacement::WindowTrackingService::DirtyAutotilePending}) {
+                               PhosphorPlacement::WindowTrackingService::DirtyAutotilePending,
+                               // The bit the header calls the sole per-window
+                               // restore state, and the only one gating the
+                               // placement-store save block. Its absence here
+                               // meant narrowing DirtyAll from 0xFFF to 0x7FF
+                               // still passed this test while every window's
+                               // restore state silently stopped persisting.
+                               PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements,
+                               // Same hole, reopened: this bit gates the
+                               // ScrollStrips save block, so narrowing DirtyAll
+                               // back to 0x0FFF passed while every scrolling
+                               // strip's structure stopped persisting across a
+                               // restart.
+                               PhosphorPlacement::WindowTrackingService::DirtyScrollStrips}) {
             QVERIFY2((mask & bit) != 0, "DirtyAll is missing a DirtyField bit — extend DirtyAll in the header");
         }
     }

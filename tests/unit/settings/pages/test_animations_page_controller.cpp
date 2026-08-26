@@ -222,6 +222,48 @@ private Q_SLOTS:
         QVERIFY2(!editorSnapInCategoryFlag, "'editor.snapIn' is a leaf: not a category");
     }
 
+    /// Pin the `acceptsWindowRules` KEY, not just the predicate behind it.
+    ///
+    /// The rule editor's event picker reads this off the entry as a JS property
+    /// (ActionParamEditors.qml), so a typo in the key name yields `undefined`,
+    /// which is falsy, which filters out EVERY event except the one already
+    /// stored — a total picker collapse with nothing else failing. The predicate
+    /// itself is pinned in test_profiletree; what is pinned here is that the
+    /// entry publishes it under the name QML looks for, with the right value.
+    void eventSections_publishesAcceptsWindowRulesKey()
+    {
+        AnimationsPageController c;
+        const QVariantList sections = c.eventSections();
+
+        bool sawPerWindowLeaf = false;
+        bool sawWindowlessLeaf = false;
+        int entriesMissingTheKey = 0;
+
+        for (const QVariant& sectionVar : sections) {
+            const QVariantMap section = sectionVar.toMap();
+            for (const QVariant& entryVar : section.value(QStringLiteral("paths")).toList()) {
+                const QVariantMap entry = entryVar.toMap();
+                if (!entry.contains(QStringLiteral("acceptsWindowRules"))) {
+                    ++entriesMissingTheKey;
+                    continue;
+                }
+                const QString path = entry.value(QStringLiteral("path")).toString();
+                const bool accepts = entry.value(QStringLiteral("acceptsWindowRules")).toBool();
+                if (path == QLatin1String("window.appearance.open")) {
+                    sawPerWindowLeaf = true;
+                    QVERIFY2(accepts, "window.appearance.open is one of the ten a rule can drive");
+                } else if (path == QLatin1String("desktop.switch")) {
+                    sawWindowlessLeaf = true;
+                    QVERIFY2(!accepts, "desktop.switch is resolved windowless, so no rule reaches it");
+                }
+            }
+        }
+
+        QCOMPARE(entriesMissingTheKey, 0);
+        QVERIFY(sawPerWindowLeaf);
+        QVERIFY(sawWindowlessLeaf);
+    }
+
     // ─── Override CRUD ────────────────────────────────────────────────────
 
     void setOverride_writesFileWithNameField()
@@ -965,6 +1007,23 @@ private Q_SLOTS:
         // popup/osd parents below are, not merely as an ancestor of a consumed
         // leaf.
         expect(QStringLiteral("desktop"), true);
+        // Shell family — the applet-popup legs the KWin effect installs from
+        // windowAdded / windowClosed once animationEventPathFor has routed a
+        // plasma-shell surface off the window paths, plus the two cascade
+        // ancestors the Shell page's "All Shell Surfaces" row binds. The root
+        // being supported is what makes that row able to set anything, and the
+        // leaves being supported is what stops the prune from dropping what it
+        // writes.
+        expect(QStringLiteral("shell.appletPopup.show"), true);
+        expect(QStringLiteral("shell.appletPopup.hide"), true);
+        expect(QStringLiteral("shell.appletPopup"), true);
+        expect(QStringLiteral("shell"), true);
+        // No panel legs: a panel is mapped for the session and hides by
+        // sliding, so no window-lifecycle hook ever installs one. Assignments
+        // there would be runtime-dead, which is what this half of the list is
+        // for.
+        expect(QStringLiteral("shell.panel"), false);
+        expect(QStringLiteral("shell.panel.show"), false);
 
         // Ancestors of consumed leaves — supported because the
         // resolver walks them on the way to the leaf, so a

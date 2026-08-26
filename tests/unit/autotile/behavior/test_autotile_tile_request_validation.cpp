@@ -6,7 +6,7 @@
  * @brief Producer-side guard for AutotileEngine::windowsTiled JSON.
  *
  * Phase 1B added PhosphorProtocol::TileRequestEntry::validationError(), and
- * AutotileAdaptor::slotWindowsTileRequested on the effect side drops any
+ * TilingAdaptor::slotWindowsTileRequested on the effect side drops any
  * batch entry that fails validation. The JSON producer in
  * AutotileEngine::applyTiling must therefore populate every field the
  * validator requires — screenId, non-zero windowId, non-zero size on
@@ -19,15 +19,17 @@
  * existing test_dbus_validation pinned the validator's behaviour but
  * never exercised a real producer, so the bug slipped through.
  *
- * This test mirrors the AutotileAdaptor::onWindowsTiled parse logic
- * exactly (same field names, same optional flags) so a drift in either
- * producer or consumer that broke round-tripping would fail here too.
+ * This test mirrors TilingAdaptor::relayTileRequestsJson's parse logic
+ * (same field names, same optional flags, same drop gates) so a drift in
+ * either producer or consumer that broke round-tripping would fail here
+ * too.
  */
 
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -44,12 +46,26 @@ using namespace PhosphorProtocol;
 
 namespace {
 
-/// Mirrors AutotileAdaptor::onWindowsTiled's JSON → PhosphorProtocol::TileRequestList parse.
-/// Kept in sync with src/dbus/autotileadaptor.cpp so the producer test
-/// exercises the exact same deserialization the D-Bus pipe performs.
+/// Mirrors TilingAdaptor::relayTileRequestsJson's JSON →
+/// PhosphorProtocol::TileRequestList parse. Kept in sync with
+/// src/dbus/tilingadaptor/tilingadaptor.cpp — the same field set this
+/// producer can emit (including the v6-v10 additions), the same
+/// duplicate-windowId and invalid-geometry drop
+/// gates — so the producer test exercises the same deserialization the
+/// D-Bus pipe performs and the validator assertions below actually see the
+/// fields the real relay would carry. Deliberately NOT mirrored: the
+/// validator drop and the visual-position floor check — the cases below
+/// assert validationError() per entry instead (a failing entry fails
+/// loudly), and this producer never emits visual positions. The duplicate
+/// gate here also records the id before validation, unlike the relay's
+/// first-VALID-entry-wins rule; no case emits duplicates, so the
+/// difference is unreachable. Nor is tabFrom, which the real relay does
+/// parse: this producer is the autotile engine, which never emits a tab
+/// target, so mirroring the field would add a branch no case can reach.
 PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
 {
     PhosphorProtocol::TileRequestList requests;
+    QSet<QString> seenWindowIds;
     QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
     if (!doc.isArray()) {
         return requests;
@@ -58,16 +74,34 @@ PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
         QJsonObject obj = val.toObject();
         PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
+        if (seenWindowIds.contains(entry.windowId)) {
+            continue;
+        }
         entry.floating = obj.value(QLatin1String("floating")).toBool(false);
         if (!entry.floating) {
             entry.x = obj.value(QLatin1String("x")).toInt();
             entry.y = obj.value(QLatin1String("y")).toInt();
             entry.width = obj.value(QLatin1String("width")).toInt();
             entry.height = obj.value(QLatin1String("height")).toInt();
+            if (entry.width <= 0 || entry.height <= 0) {
+                continue;
+            }
         }
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
+        entry.stacking = obj.value(QLatin1String("stacking")).toString();
+        entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
+        entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
+        const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
+        const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
+        if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {
+            entry.visualX = visualXVal.toInt(0);
+            entry.visualY = visualYVal.toInt(0);
+            entry.hasVisualPos = true;
+        }
+        seenWindowIds.insert(entry.windowId);
         requests.append(entry);
     }
     return requests;
@@ -87,7 +121,7 @@ private Q_SLOTS:
     // Set up an engine with a screen and two windows, force calculated
     // zones (bypassing real screen geometry which unit tests don't have),
     // run retile, capture the windowsTiled signal, parse each entry via
-    // the same path the AutotileAdaptor uses, and assert every entry
+    // the same path the TilingAdaptor uses, and assert every entry
     // passes validation.
     // ─────────────────────────────────────────────────────────────────────
     void applyTiling_populatesScreenIdOnEveryTiledEntry()
@@ -95,8 +129,10 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-1");
 
+        // No setAlgorithm: the zones are forced below and recalculateLayout
+        // bails on the missing screen geometry, so no algorithm ever runs.
+        // Naming one here would only imply coverage this file does not have.
         engine.setAutotileScreens({screenName});
-        engine.setAlgorithm(QLatin1String("master-stack"));
 
         engine.windowOpened(QStringLiteral("win-1"), screenName);
         engine.windowOpened(QStringLiteral("win-2"), screenName);
@@ -136,8 +172,9 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("HDMI-2");
+        // The monocle flag is derived from identical zone geometry, not from
+        // the selected algorithm, so no setAlgorithm here either.
         engine.setAutotileScreens({screenName});
-        engine.setAlgorithm(QLatin1String("monocle"));
 
         engine.windowOpened(QStringLiteral("win-a"), screenName);
         engine.windowOpened(QStringLiteral("win-b"), screenName);
@@ -173,15 +210,16 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-3");
         engine.setAutotileScreens({screenName});
-        engine.setAlgorithm(QLatin1String("master-stack"));
 
-        // Cap at 2 so a third window is forced into overflow.
-        engine.config()->maxWindows = 2;
-
+        // Open all three UNCAPPED first, then cap at 2: the overflow entry
+        // rides the batch only for NEWLY overflowed windows, so capping
+        // before the opens would spend the overflow on an emission the spy
+        // below never sees.
         engine.windowOpened(QStringLiteral("win-1"), screenName);
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
+        engine.config()->maxWindows = 2;
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
@@ -194,19 +232,24 @@ private Q_SLOTS:
         const PhosphorProtocol::TileRequestList entries = parseWindowsTiledJson(tiledSpy.last().first().toString());
         QVERIFY2(!entries.isEmpty(), "applyTiling emitted no entries");
 
-        bool sawFloating = false;
+        // Exact batch shape: all three windows present, exactly ONE
+        // floating entry, and it is the freshly-capped win-3 (the overflow
+        // manager reports only NEWLY overflowed windows).
+        QCOMPARE(entries.size(), 3);
+        int floatingCount = 0;
         for (const PhosphorProtocol::TileRequestEntry& entry : entries) {
             QVERIFY2(entry.validationError().isEmpty(), qPrintable(entry.validationError()));
             QCOMPARE(entry.screenId, screenName);
             if (entry.floating) {
-                sawFloating = true;
+                ++floatingCount;
+                QCOMPARE(entry.windowId, QStringLiteral("win-3"));
             }
         }
-        // The third window's overflow fate depends on which-window-got-capped
-        // order, which is stable under the same algo but not worth pinning
-        // here. What matters is that IF any overflow entry was emitted, it
-        // validated cleanly — the assertion above already covered that.
-        Q_UNUSED(sawFloating);
+        // Three windows under a maxWindows=2 cap MUST surface exactly one
+        // overflow entry: without this pin the overflow branch could stop
+        // emitting floating entries entirely and the per-entry validation
+        // above would pass vacuously on the two tiled ones.
+        QCOMPARE(floatingCount, 1);
     }
 };
 

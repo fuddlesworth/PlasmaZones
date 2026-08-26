@@ -22,11 +22,13 @@ namespace PhosphorZones {
 /**
  * @brief Category for layout type
  *
- * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
+ * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile,
+ * 2 = ScrollingTemplate.
  */
 enum class LayoutCategory {
     Manual = 0, ///< Traditional zone-based layout
-    Autotile = 1 ///< Dynamic auto-tiling algorithm
+    Autotile = 1, ///< Dynamic auto-tiling algorithm
+    ScrollingTemplate = 2 ///< Native scrolling template (preview family only)
 };
 
 /**
@@ -87,10 +89,30 @@ class PHOSPHORZONES_EXPORT Layout : public QObject
 public:
     explicit Layout(QObject* parent = nullptr);
     explicit Layout(const QString& name, QObject* parent = nullptr);
-    Layout(const Layout& other);
     ~Layout() override;
 
-    Layout& operator=(const Layout& other);
+    // A Layout is a QObject, so it is never copied or assigned. Duplication
+    // goes through clone(), which returns a heap object with an explicit owner
+    // the way every other Layout in the codebase is created.
+    Layout(const Layout&) = delete;
+    Layout& operator=(const Layout&) = delete;
+
+    /**
+     * @brief Deep-copy this layout into a new, independently owned Layout.
+     *
+     * The clone represents a distinct USER-owned layout: it gets a fresh id,
+     * and it deliberately carries over neither @c sourcePath nor
+     * @c systemSourcePath, so a clone of a system layout is a plain user layout
+     * and the "restore system original" path cannot mistake it for a user
+     * override of the same entry. Its zones are deep-copied (Zone::clone).
+     *
+     * @p parent is the clone's QObject owner and defaults to none. Pass the
+     * registry that will hold it, or leave it unparented and let the registry's
+     * addLayout() take ownership — do NOT pass the SOURCE's parent by reflex:
+     * the clone would appear as a child of a registry that never inserted it
+     * into its own layout list.
+     */
+    Layout* clone(QObject* parent = nullptr) const;
 
     // Identification
     QUuid id() const
@@ -339,6 +361,11 @@ public:
     Zone* zone(int index) const;
     Zone* zoneById(const QUuid& id) const;
     Zone* zoneByNumber(int number) const;
+    /// First zone (in zone-number order) whose name equals @p name after
+    /// trimming, compared case-insensitively. Zone names are not unique, so a
+    /// duplicate name resolves to the lowest-numbered zone. Returns nullptr for
+    /// a blank @p name or no match.
+    Zone* zoneByName(const QString& name) const;
 
     Q_INVOKABLE void addZone(Zone* zone);
     Q_INVOKABLE void removeZone(Zone* zone);

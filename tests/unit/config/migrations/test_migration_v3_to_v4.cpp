@@ -31,8 +31,10 @@
  *
  * The animation folds live in test_migration_v3_to_v4_animations.cpp; the
  * exclusion fold and zone-overlay group rename live in
- * test_migration_v3_to_v4_exclusions.cpp. The shared config/rules JSON
- * helpers are in MigrationV3V4Fixture.h.
+ * test_migration_v3_to_v4_exclusions.cpp; the premade Steam rule and its
+ * repair live in test_migration_v3_to_v4_steam.cpp; the malformed-input and
+ * data-loss failure paths live in test_migration_v3_to_v4_failures.cpp. The
+ * shared config/rules JSON helpers are in MigrationV3V4Fixture.h.
  */
 
 #include <QDir>
@@ -46,6 +48,7 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <optional>
 
 #include "config/configdefaults.h"
 #include "config/configkeys.h"
@@ -54,8 +57,11 @@
 
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/ExclusionRules.h>
+#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleSet.h>
+#include <PhosphorRules/WindowQuery.h>
 
 #include "MigrationV3V4Fixture.h"
 
@@ -84,9 +90,16 @@ private Q_SLOTS:
         const QJsonObject wr = readJson(ConfigDefaults::rulesFilePath());
         QCOMPARE(wr.value(QStringLiteral("_version")).toInt(), 4);
 
+        // And it actually PRODUCED rules. The slot is named for that, but a
+        // valid-but-rule-less store would satisfy the version stamp and the
+        // stash-key absences below on its own.
+        QVERIFY2(!rulesFromRules().isEmpty(), "the conversion must emit rules, not just a versioned shell");
+
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        // The migration chain now runs v3 → v4 → v5, so config.json lands at
-        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        // The chain runs past the v3→v4 step to ConfigSchemaVersion, so
+        // config.json lands at the current version whatever that is (the
+        // v3→v4 step still stamps 4 mid-chain). Asserted against the constant
+        // rather than a literal, so a future bump needs no edit here.
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         // All four temporary stash keys are stripped from config.json.
@@ -244,9 +257,9 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
 
-        // Same pattern in two layout files mapping to DIFFERENT zones. A global
-        // ordinal SnapToZone rule fires regardless of the active layout, so only
-        // the first (name-order) wins; the second is dropped.
+        // Same pattern in three layout files mapping to DIFFERENT zones. A
+        // global ordinal SnapToZone rule fires regardless of the active
+        // layout, so only the first in NAME order wins; the rest are dropped.
         const QString layoutsDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QLatin1Char('/') + ConfigDefaults::layoutsSubdir();
         writeJson(layoutsDir + QStringLiteral("/a-layout.json"),
@@ -257,6 +270,13 @@ private Q_SLOTS:
                   QJsonObject{{QStringLiteral("appRules"),
                                QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("mpv")},
                                                       {QStringLiteral("zoneNumber"), 4}}}}});
+        // A THIRD file whose name sorts before both. With only two files the
+        // winner is the same under name order, directory-enumeration order and
+        // first-encountered, so the claim below would not be falsifiable.
+        writeJson(layoutsDir + QStringLiteral("/0-layout.json"),
+                  QJsonObject{{QStringLiteral("appRules"),
+                               QJsonArray{QJsonObject{{QStringLiteral("pattern"), QStringLiteral("mpv")},
+                                                      {QStringLiteral("zoneNumber"), 7}}}}});
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -279,7 +299,7 @@ private Q_SLOTS:
             }
         }
         QCOMPARE(mpvRuleCount, 1);
-        QCOMPARE(winningZones, (QList<int>{1})); // a-layout.json wins on name order
+        QCOMPARE(winningZones, (QList<int>{7})); // 0-layout.json wins on name order
     }
 
     void testLayoutAppRules_idempotentRuleIds()
@@ -350,9 +370,7 @@ private Q_SLOTS:
     void testCascadePriorities_exactValues()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertFullV3Fixture());
 
         const QJsonArray rules = rulesFromRules();
 
@@ -366,14 +384,45 @@ private Q_SLOTS:
         // (a rule that sets an engine mode and does NOT disable an engine) keeps
         // the lookup unambiguous regardless.
 
+        // Each priority is tied to the assignment that produced it, by the
+        // dimensions its match pins. Asserting only that SOME assignment rule
+        // exists at each value would pass just as well if the nudges were
+        // scrambled across the four rules.
+        const auto leafAt = [&](int priority, const QString& field) {
+            return matchLeafValue(findAssignmentRuleByPriority(rules, priority), field);
+        };
+
         // Exact (screen+desktop+activity) → 306.
-        QVERIFY(hasAssignmentAtPriority(rules, 306));
+        QCOMPARE(leafAt(306, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QCOMPARE(leafAt(306, QStringLiteral("virtualDesktop")), QStringLiteral("2"));
+        QCOMPARE(leafAt(306, QStringLiteral("activity")), QStringLiteral("work-uuid"));
+
         // Screen + activity → 304 (activity nudge beats desktop).
-        QVERIFY(hasAssignmentAtPriority(rules, 304));
+        QCOMPARE(leafAt(304, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QCOMPARE(leafAt(304, QStringLiteral("activity")), QStringLiteral("play-uuid"));
+        QVERIFY(leafAt(304, QStringLiteral("virtualDesktop")).isEmpty());
+
         // Screen + desktop → 303.
-        QVERIFY(hasAssignmentAtPriority(rules, 303));
+        QCOMPARE(leafAt(303, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QCOMPARE(leafAt(303, QStringLiteral("virtualDesktop")), QStringLiteral("3"));
+        QVERIFY(leafAt(303, QStringLiteral("activity")).isEmpty());
+
         // Screen only → 301.
-        QVERIFY(hasAssignmentAtPriority(rules, 301));
+        QCOMPARE(leafAt(301, QStringLiteral("screenId")), QStringLiteral("DP-2"));
+        QVERIFY(leafAt(301, QStringLiteral("virtualDesktop")).isEmpty());
+        QVERIFY(leafAt(301, QStringLiteral("activity")).isEmpty());
+
+        // Exactly four, so a spurious fifth assignment rule (or a nudge that
+        // landed two of them on the same value) is caught rather than ignored.
+        int assignmentCount = 0;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            const QStringList types = actionTypes(r);
+            if (types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"))) {
+                ++assignmentCount;
+            }
+        }
+        QCOMPARE(assignmentCount, 4);
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -381,9 +430,7 @@ private Q_SLOTS:
     void testAssignmentRule_carriesAllThreeActions()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertFullV3Fixture());
 
         const QJsonArray rules = rulesFromRules();
 
@@ -392,11 +439,23 @@ private Q_SLOTS:
         // (300), so none collides with an assignment rule; the
         // assignment-filtered lookup is used uniformly so the three sites stay
         // consistent.
+        // The PAYLOADS are asserted alongside the type list, not just the
+        // types. "Lossless" is a claim about the values: a conversion that
+        // swapped snapping for autotile, emptied every layout id, or paired
+        // the wrong layout with the wrong rule would satisfy a type-list-only
+        // check exactly as well as a correct one does.
         const QJsonObject exact = findAssignmentRuleByPriority(rules, 306);
         QVERIFY(!exact.isEmpty());
         QCOMPARE(actionTypes(exact),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
                               QStringLiteral("setTilingAlgorithm")}));
+        QCOMPARE(actionParams(exact, QStringLiteral("setEngineMode")).value(QStringLiteral("mode")).toString(),
+                 QStringLiteral("autotile"));
+        QCOMPARE(actionParams(exact, QStringLiteral("setSnappingLayout")).value(QStringLiteral("layoutId")).toString(),
+                 QStringLiteral("{snap-exact}"));
+        QCOMPARE(
+            actionParams(exact, QStringLiteral("setTilingAlgorithm")).value(QStringLiteral("algorithm")).toString(),
+            QStringLiteral("dwindle"));
 
         // The screen+activity rule (304) had snapping mode + a layout, no
         // tiling algorithm → SetEngineMode + SetSnappingLayout only.
@@ -404,12 +463,26 @@ private Q_SLOTS:
         QVERIFY(!scrAct.isEmpty());
         QCOMPARE(actionTypes(scrAct),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
+        QCOMPARE(actionParams(scrAct, QStringLiteral("setEngineMode")).value(QStringLiteral("mode")).toString(),
+                 QStringLiteral("snapping"));
+        QCOMPARE(actionParams(scrAct, QStringLiteral("setSnappingLayout")).value(QStringLiteral("layoutId")).toString(),
+                 QStringLiteral("{snap-act}"));
+
+        // The screen+desktop rule (303) is the third distinct layout id, so a
+        // conversion that reused one payload across rules is caught.
+        const QJsonObject scrDesk = findAssignmentRuleByPriority(rules, 303);
+        QVERIFY(!scrDesk.isEmpty());
+        QCOMPARE(
+            actionParams(scrDesk, QStringLiteral("setSnappingLayout")).value(QStringLiteral("layoutId")).toString(),
+            QStringLiteral("{snap-desk}"));
 
         // The screen-only rule (301) was mode-only autotile (both layout
         // fields empty) → just SetEngineMode.
         const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 301);
         QVERIFY(!scrOnly.isEmpty());
         QCOMPARE(actionTypes(scrOnly), (QStringList{QStringLiteral("setEngineMode")}));
+        QCOMPARE(actionParams(scrOnly, QStringLiteral("setEngineMode")).value(QStringLiteral("mode")).toString(),
+                 QStringLiteral("autotile"));
     }
 
     // ─── Disable-list rules ───────────────────────────────────────────────
@@ -417,9 +490,7 @@ private Q_SLOTS:
     void testDisableListRules()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertFullV3Fixture());
 
         const QList<QJsonObject> disabled = disableRules(rulesFromRules());
 
@@ -491,9 +562,7 @@ private Q_SLOTS:
     void testDisableRulePriority_seededInContextBand()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertFullV3Fixture());
 
         const QList<QJsonObject> disabled = disableRules(rulesFromRules());
 
@@ -526,16 +595,20 @@ private Q_SLOTS:
         QCOMPARE(snapMonitor->value(QStringLiteral("priority")).toInt(),
                  PhosphorRules::ContextRuleBridge::kContextBandBase);
 
-        // makeDisableRule must agree with the migration output: every disable
-        // rule is seeded at the band base regardless of the pinned dimensions.
-        const PhosphorRules::Rule directDesktop =
-            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(),
-                                 QStringLiteral("snapping"), PhosphorRules::ContextRuleBridge::kContextBandBase);
-        QCOMPARE(directDesktop.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
-        const PhosphorRules::Rule directActivity =
-            CRB::makeDisableRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"),
-                                 QStringLiteral("autotile"), PhosphorRules::ContextRuleBridge::kContextBandBase);
-        QCOMPARE(directActivity.priority, PhosphorRules::ContextRuleBridge::kContextBandBase);
+        // Tie the migration's OUTPUT to the bridge's identity derivation.
+        // Asserting that makeDisableRule returns the priority it was handed
+        // would be tautological — it assigns the argument straight through —
+        // so pin the thing that can actually drift instead: the id the
+        // migration writes for a (screen, desktop, activity, mode) tuple must
+        // be the one the bridge derives for it, or a later run would emit a
+        // duplicate rule beside the user's instead of recognising it.
+        const auto ruleIdFor = [&](const QString& screenId, int desktop, const QString& activity, const QString& mode) {
+            return CRB::disableRuleIdFor(screenId, desktop, activity, mode).toString();
+        };
+        QCOMPARE(snapDesktop->value(QStringLiteral("id")).toString(),
+                 ruleIdFor(QStringLiteral("DP-1"), 4, QString(), QStringLiteral("snapping")));
+        QCOMPARE(autotileActivity->value(QStringLiteral("id")).toString(),
+                 ruleIdFor(QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile")));
     }
 
     // ─── Idempotency ──────────────────────────────────────────────────────
@@ -546,12 +619,22 @@ private Q_SLOTS:
         writeJson(ConfigDefaults::configFilePath(), makeV3Config());
         writeJson(assignmentsPath(), makeAssignments());
 
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-        const QByteArray firstRun = [&] {
-            QFile f(ConfigDefaults::rulesFilePath());
+        // Every file the conversion writes, not just rules.json: a second run
+        // that reordered a config.json key or re-touched the quick-layout
+        // sidecar would be invisible to a rules.json-only comparison.
+        const auto readBytes = [](const QString& path) {
+            QFile f(path);
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
-        }();
-        QVERIFY(!firstRun.isEmpty());
+        };
+        const QStringList written{ConfigDefaults::rulesFilePath(), ConfigDefaults::configFilePath(),
+                                  ConfigDefaults::quickLayoutsFilePath()};
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QList<QByteArray> firstRun;
+        for (const QString& path : written) {
+            firstRun.append(readBytes(path));
+        }
+        QVERIFY(!firstRun.at(0).isEmpty());
 
         // The process-level migration guard would normally short-circuit;
         // reset it so the second call re-runs the full logic against the
@@ -559,16 +642,14 @@ private Q_SLOTS:
         ConfigMigration::resetMigrationGuardForTesting();
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
-        const QByteArray secondRun = [&] {
-            QFile f(ConfigDefaults::rulesFilePath());
-            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
-        }();
         // The `rulesAlreadyConverted` probe loads rules.json as a
         // v4 RuleSet; on the second run it succeeds, so finalize takes
         // the already-converted branch and only retries the idempotent
-        // cleanup steps instead of rebuilding — rules.json is
+        // cleanup steps instead of rebuilding — every written file is
         // byte-identical.
-        QCOMPARE(secondRun, firstRun);
+        for (int i = 0; i < written.size(); ++i) {
+            QVERIFY2(readBytes(written.at(i)) == firstRun.at(i), qPrintable(written.at(i)));
+        }
     }
 
     // ─── No-assignments fixture ───────────────────────────────────────────
@@ -603,78 +684,6 @@ private Q_SLOTS:
         }
     }
 
-    // ─── Premade Steam rule ───────────────────────────────────────────────
-    // Every fresh install and every v3→v4 upgrade is seeded with the built-in
-    // Steam tiling fix: exclude every `steam`-class window whose title is NOT
-    // exactly "Steam" (Friends List, notification toasts, settings, chat),
-    // leaving the main library window tileable.
-
-    void testSteamDefaultRule_seeded()
-    {
-        IsolatedConfigGuard guard;
-        QJsonObject cfg;
-        cfg.insert(QStringLiteral("_version"), 3);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        const QJsonArray rules = rulesFromRules();
-        QJsonObject steam;
-        for (const QJsonValue& v : rules) {
-            const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("name")).toString() == QLatin1String("Steam")) {
-                steam = r;
-            }
-        }
-        QVERIFY2(!steam.isEmpty(), "premade Steam rule must be seeded on a fresh/migrated v4 config");
-        QVERIFY(steam.value(QStringLiteral("enabled")).toBool());
-
-        // Composite match (the None{} guard below makes it non-simple), so
-        // assignBandPrioritiesToZeroRules seeds it in the Advanced band [500,600)
-        // rather than the Application band the simple AppId excludes get.
-        const int steamPriority = steam.value(QStringLiteral("priority")).toInt();
-        QVERIFY(steamPriority >= 500 && steamPriority < 600);
-
-        // A single terminal Exclude action — the window is left unmanaged by
-        // snap/tile.
-        QCOMPARE(actionTypes(steam), (QStringList{QStringLiteral("exclude")}));
-
-        // Match shape: All{ WindowClass contains "steam", None{ Title equals "Steam" } }.
-        const QJsonObject match = steam.value(QStringLiteral("match")).toObject();
-        QVERIFY(match.contains(QStringLiteral("all")));
-        const QJsonArray all = match.value(QStringLiteral("all")).toArray();
-        QCOMPARE(all.size(), 2);
-
-        // WindowClass contains "steam" (matches KWin's raw "resourceName
-        // resourceClass" string case-insensitively).
-        QCOMPARE(matchLeafValueByOp(steam, QStringLiteral("windowClass"), QStringLiteral("contains")),
-                 QStringLiteral("steam"));
-
-        // None{ Title equals "Steam" } — the negative guard that keeps the
-        // main library window (title exactly "Steam") tileable.
-        bool foundTitleGuard = false;
-        for (const QJsonValue& v : all) {
-            const QJsonObject child = v.toObject();
-            if (!child.contains(QStringLiteral("none"))) {
-                continue;
-            }
-            const QJsonArray none = child.value(QStringLiteral("none")).toArray();
-            QCOMPARE(none.size(), 1);
-            const QJsonObject leaf = none.first().toObject();
-            QCOMPARE(leaf.value(QStringLiteral("field")).toString(), QStringLiteral("title"));
-            QCOMPARE(leaf.value(QStringLiteral("op")).toString(), QStringLiteral("equals"));
-            QCOMPARE(leaf.value(QStringLiteral("value")).toVariant().toString(), QStringLiteral("Steam"));
-            foundTitleGuard = true;
-        }
-        QVERIFY2(foundTitleGuard, "Steam rule must carry a None{ Title equals \"Steam\" } guard");
-
-        // The rule is sliced into the Exclude rule set the daemon/effect
-        // consume — i.e. it actually participates in the exclusion gate.
-        const auto set = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
-        QVERIFY(set.has_value());
-        QCOMPARE(PhosphorRules::ExclusionRules::excludeRulesFrom(*set).count(), 1);
-    }
-
     // ─── Superseding: assignments.json retired to .migrated ───────────────
 
     /// rules.json supersedes assignments.json — once the rule store is
@@ -691,9 +700,21 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         // rules.json written; assignments.json retired from its original
-        // location (renamed to .migrated, or in the fallback path removed).
+        // location.
         QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
         QVERIFY2(!QFile::exists(assignmentsPath()), "assignments.json must be retired once rules.json supersedes it");
+
+        // Retired NON-DESTRUCTIVELY. The rename to `.migrated` is the whole
+        // point of preferring it over a delete: a downgrade or a manual
+        // recovery needs the original bytes back. Asserting only that the old
+        // path is gone would pass for a plain remove.
+        const QString migrated = assignmentsPath() + QStringLiteral(".migrated");
+        QVERIFY2(QFile::exists(migrated), "assignments.json must be renamed to .migrated, not deleted");
+        QFile kept(migrated);
+        QVERIFY(kept.open(QIODevice::ReadOnly));
+        const QJsonObject recovered = QJsonDocument::fromJson(kept.readAll()).object();
+        kept.close();
+        QCOMPARE(recovered, makeAssignments());
     }
 
     // ─── Superseding: Display.*Disabled* keys removed ─────────────────────
@@ -704,9 +725,7 @@ private Q_SLOTS:
     void testSupersede_displayDisabledKeysRemoved()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertFullV3Fixture());
 
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         const QJsonObject display = cfg.value(QStringLiteral("Display")).toObject();
@@ -729,9 +748,7 @@ private Q_SLOTS:
     void testSupersede_quickLayoutsRelocatedToSidecar()
     {
         IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(ConfigMigration::ensureJsonConfig());
+        QVERIFY(convertFullV3Fixture());
 
         const QString sidecar = ConfigDefaults::quickLayoutsFilePath();
         QVERIFY2(QFile::exists(sidecar), "QuickLayouts must be relocated to quicklayouts.json");
@@ -742,12 +759,14 @@ private Q_SLOTS:
         QVERIFY2(slots.contains(QStringLiteral("autotile")), "the nested format always carries both mode keys");
         QVERIFY2(!slots.contains(QStringLiteral("3")), "slots must be nested by mode, not written flat");
 
-        // The QuickLayouts data must not have leaked into rules.json as
-        // a rule — it is not a rule.
-        const QJsonArray rules = rulesFromRules();
-        for (const QJsonValue& v : rules) {
-            QVERIFY(!actionTypes(v.toObject()).contains(QStringLiteral("quickLayout")));
-        }
+        // The QuickLayouts data must not have leaked into rules.json — it is
+        // not a rule. Checked on the slot VALUE rather than on an action type
+        // named "quickLayout": no such type exists in the vocabulary, so a
+        // guard on it could never have failed whatever the migration did.
+        const QJsonDocument rulesDoc(rulesFromRules());
+        QVERIFY2(
+            !QString::fromUtf8(rulesDoc.toJson(QJsonDocument::Compact)).contains(QStringLiteral("{quick-layout-id}")),
+            "a QuickLayouts slot value must not appear anywhere in rules.json");
     }
 
     // ─── Idempotency of the superseding behaviour ─────────────────────────
@@ -780,315 +799,6 @@ private Q_SLOTS:
             return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
         }();
         QCOMPARE(secondRun, firstRun);
-    }
-
-    // ─── Data-loss regression: delete-failure must not clobber the store ──
-    //
-    // Simulates the scenario where the assignments.json retire step fails (a
-    // read-only filesystem, a lock, a permissions error) so the legacy file is
-    // still present on the next startup. The conversion is already complete —
-    // rules.json exists as a valid v4 RuleSet, and the user has
-    // since authored an extra rule via the rule editor. Re-running
-    // finalizeV4Conversion MUST NOT rebuild-and-overwrite rules.json from
-    // the dead assignments.json: the user's rule must survive.
-    //
-    // The fix gates the rebuild on `!rulesAlreadyConverted` (probed by
-    // actually loading rules.json as a RuleSet), NOT on
-    // assignments.json's absence — so a permanently-undeletable assignments.json
-    // can no longer clobber the rule store on every launch.
-    void testDeleteFailure_doesNotOverwriteUserRules()
-    {
-        IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-
-        // First run: full conversion produces rules.json.
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
-
-        // The user authors a new rule via the rule editor — load the store,
-        // append a rule, persist it. This rule exists ONLY in rules.json;
-        // it has no counterpart in assignments.json.
-        auto setWithUserRule = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
-        QVERIFY2(setWithUserRule.has_value(), "rules.json must parse as a v4 rule set");
-        const PhosphorRules::Rule userRule =
-            CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
-                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"),
-                                 PhosphorRules::ContextRuleBridge::kContextBandBase);
-        const QUuid userRuleId = userRule.id;
-        QVERIFY(setWithUserRule->addRule(userRule));
-        QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::rulesFilePath()));
-        const int countWithUserRule = setWithUserRule->count();
-        QVERIFY(countWithUserRule > 0);
-
-        // Simulate the retire-step failure: assignments.json is still present
-        // on disk (as if QFile::remove / rename had failed on the first run).
-        // Without the fix, the old idempotency guard — gated on
-        // assignments.json's absence — would NOT short-circuit, so the rebuild
-        // path would re-run and overwrite rules.json, destroying the
-        // user's rule.
-        writeJson(assignmentsPath(), makeAssignments());
-        QVERIFY(QFile::exists(assignmentsPath()));
-
-        // Re-run the migration against the already-converted tree.
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY(ConfigMigration::ensureJsonConfig());
-
-        // The user's rule MUST survive — rules.json was not rebuilt.
-        auto afterRerun = PhosphorRules::RuleSet::loadFromFile(ConfigDefaults::rulesFilePath());
-        QVERIFY2(afterRerun.has_value(), "rules.json must still parse as a v4 rule set after the re-run");
-        QVERIFY2(afterRerun->ruleById(userRuleId).has_value(),
-                 "the user-authored rule must survive a re-run with assignments.json still present");
-        QCOMPARE(afterRerun->count(), countWithUserRule);
-
-        // The cleanup-only branch still retires the leftover assignments.json
-        // (quarantined to .migrated, or deleted) so it cannot loop forever.
-        QVERIFY2(!QFile::exists(assignmentsPath()),
-                 "the cleanup-only branch must retire the leftover assignments.json");
-    }
-
-    // ─── Data-loss regression: malformed rules.json aborts ─────────
-    //
-    // Sibling of testMalformedAssignmentsJsonAborts for the rebuild path's
-    // rules.json prevalidate. When rules.json exists but doesn't
-    // parse, the "already converted" probe (loadFromFile().has_value()) drops
-    // into the rebuild path, which would otherwise overwrite the corrupt-but-
-    // recoverable original with a stub seed-only rule set — destroying
-    // every user-authored rule. The new prevalidateRulesFile fires
-    // FIRST: quarantines to .corrupt.bak, refuses to commit, returns false.
-    void testMalformedRulesJsonAborts()
-    {
-        IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        // No legacy assignments file — this isolates the rules-only
-        // corruption path. A fresh install with a corrupt rules.json
-        // is the cleanest reproduction.
-        const QString corruptPath = ConfigDefaults::rulesFilePath();
-        QDir().mkpath(QFileInfo(corruptPath).absolutePath());
-        const QByteArray corruptBytes = QByteArrayLiteral("{ \"_version\": 4, \"rules\": [");
-        {
-            QFile f(corruptPath);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
-        }
-
-        QVERIFY2(!ConfigMigration::ensureJsonConfig(), "ensureJsonConfig must return false on a malformed rules.json");
-
-        // The corrupt file was quarantined to .corrupt.bak with bytes preserved.
-        const QString corruptBak = corruptPath + QStringLiteral(".corrupt.bak");
-        QVERIFY2(QFile::exists(corruptBak), "the malformed rules.json must be quarantined to .corrupt.bak");
-        {
-            QFile f(corruptBak);
-            QVERIFY(f.open(QIODevice::ReadOnly));
-            QCOMPARE(f.readAll(), corruptBytes);
-        }
-
-        // Original is gone (renamed). A new stub rules.json must NOT
-        // have been written — that's the data-loss class the guard exists for.
-        QVERIFY(!QFile::exists(corruptPath));
-
-        // config.json's chain step (migrateV3ToV4) DID run before finalize —
-        // it stamps `_version=4` and stashes any disable-list / animation-rule
-        // data. The chain step's idempotency guard then short-circuits the
-        // next attempt; the rebuild branch at finalize takes over (rules.json
-        // doesn't exist after quarantine, so the "already converted" probe
-        // returns false and rebuild retries from the stash). Both paths
-        // surface as a follow-up run after the user repairs the quarantine.
-        const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        // The migration chain now runs v3 → v4 → v5, so config.json lands at
-        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
-    }
-
-    // ─── Data-loss regression (B5): malformed assignments.json aborts ─────
-    //
-    // A corrupt assignments.json (truncation, power-loss, hand-edit error)
-    // must NOT silently produce a rules.json holding only the disable + seed
-    // rules — that would lose every pinned assignment AND
-    // the quick-layout slots. The migration aborts loudly: the corrupt file
-    // is quarantined to `.corrupt.bak` (NOT `.migrated`, which would imply a
-    // successful migration), rules.json is NOT written, and config.json
-    // keeps its v3 stamp so the next run can re-attempt after the user
-    // repairs the sidecar.
-    void testMalformedAssignmentsJsonAborts()
-    {
-        IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-
-        // Truncated / hand-edited corruption: a non-empty payload that fails
-        // to parse as JSON. Whitespace-only is intentionally NOT what we
-        // simulate — that case is treated as a fresh install (no assignments
-        // to migrate), not corruption.
-        const QString corruptPath = assignmentsPath();
-        QDir().mkpath(QFileInfo(corruptPath).absolutePath());
-        const QByteArray corruptBytes = QByteArrayLiteral("{ \"Assignment:DP-2\": { \"Mode\": 1, ");
-        {
-            QFile f(corruptPath);
-            QVERIFY(f.open(QIODevice::WriteOnly));
-            QCOMPARE(f.write(corruptBytes), static_cast<qint64>(corruptBytes.size()));
-        }
-
-        // Migration MUST abort.
-        QVERIFY2(!ConfigMigration::ensureJsonConfig(),
-                 "ensureJsonConfig must return false on a malformed assignments.json");
-
-        // rules.json must NOT have been created — silently writing a
-        // disable-only rule set would mask the data-loss.
-        QVERIFY2(!QFile::exists(ConfigDefaults::rulesFilePath()),
-                 "rules.json must not be written when the legacy sidecar is corrupt");
-
-        // The corrupt file was quarantined to .corrupt.bak with its original
-        // bytes preserved — the user can inspect and repair it.
-        const QString corruptBak = corruptPath + QStringLiteral(".corrupt.bak");
-        QVERIFY2(QFile::exists(corruptBak), "the malformed assignments.json must be quarantined to .corrupt.bak");
-        {
-            QFile f(corruptBak);
-            QVERIFY(f.open(QIODevice::ReadOnly));
-            QCOMPARE(f.readAll(), corruptBytes);
-        }
-
-        // NOT `.migrated`: that suffix implies a successful migration and
-        // would mask the failure on next inspection.
-        QVERIFY2(!QFile::exists(corruptPath + QStringLiteral(".migrated")),
-                 "the corrupt file must NOT be quarantined as .migrated");
-
-        // The original assignments.json no longer exists at its primary path
-        // (it was renamed to .corrupt.bak).
-        QVERIFY(!QFile::exists(corruptPath));
-
-        // config.json keeps its v3 stamp — the on-disk schema version was
-        // NOT bumped, so the next run will re-attempt the migration. The
-        // user's path forward: repair `.corrupt.bak`, rename it back to
-        // assignments.json, and re-run.
-        const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 3);
-    }
-
-    // ─── Data-loss regression: stalled chain refuses to commit ──────────
-    //
-    // Stalled-chain gate: when config.json is stamped at a pre-v4 version
-    // (chain stalled — e.g. migrateV1ToV2's side-effect writes failed and
-    // MigrationRunner::runOnFile returned true for a no-op chain),
-    // finalizeV4Conversion must refuse to commit a stub rules.json.
-    // Otherwise the next successful run would hit `rulesAlreadyConverted
-    // = true` in the cleanup branch and strip `_v4DisableStash` /
-    // `_v4AnimationRulesStash` without porting them into rules — silently
-    // losing the user's disable lists and animation app rules forever.
-    void testFinalizeV4Conversion_refusesToCommitWhenChainStalled()
-    {
-        IsolatedConfigGuard guard;
-
-        // Construct a v3-stamped config.json carrying both v4 scratch keys —
-        // the shape a partially-advanced chain would produce after migrateV3ToV4
-        // ran but the chain failed to bump version to 4 (synthetic, but exactly
-        // the on-disk shape the gate must catch).
-        QJsonObject cfg;
-        cfg.insert(ConfigKeys::versionKey(), 3);
-        QJsonObject disableStash;
-        // Use the real v4 stash wire shape: production moveDisableKey calls
-        // `display.value(configKey).toString()` and stashes that string verbatim
-        // (CSV), not an array. A downstream test that asserts "stash content
-        // was consumed into rules" would silently get a false positive if we
-        // used an array here — toString() returns "" for a JSON array, and
-        // appendMonitorRules's empty-input early-return would no-op.
-        disableStash.insert(QStringLiteral("snappingMonitors"), QStringLiteral("DP-1"));
-        disableStash.insert(QStringLiteral("autotileMonitors"), QStringLiteral("DP-1"));
-        cfg.insert(QStringLiteral("_v4DisableStash"), disableStash);
-        QJsonArray animStash;
-        QJsonObject animEntry;
-        animEntry.insert(QStringLiteral("classPattern"), QStringLiteral("firefox"));
-        animEntry.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
-        animEntry.insert(QStringLiteral("kind"), QStringLiteral("shader"));
-        animEntry.insert(QStringLiteral("effectId"), QStringLiteral("dissolve"));
-        animStash.append(animEntry);
-        cfg.insert(QStringLiteral("_v4AnimationRulesStash"), animStash);
-        writeJson(ConfigDefaults::configFilePath(), cfg);
-
-        // Call finalizeV4Conversion DIRECTLY so the chain doesn't get a
-        // chance to advance _version to 4 before finalize runs. This is
-        // the only way to exercise the chain-stalled gate at
-        // configmigration.cpp's `if (configVersion < ConfigSchemaVersion)`
-        // branch — ensureJsonConfig() runs the chain first, which on a
-        // clean fixture lands at v4 and routes finalize through the
-        // already-converted path.
-        const bool ok = ConfigMigration::finalizeV4Conversion(ConfigDefaults::configFilePath());
-        QVERIFY2(!ok, "finalizeV4Conversion must return false when _version < ConfigSchemaVersion");
-        QVERIFY2(!QFile::exists(ConfigDefaults::rulesFilePath()),
-                 "rules.json must NOT be committed when config.json is still below v4");
-        const QJsonObject onDisk = readJson(ConfigDefaults::configFilePath());
-        QVERIFY2(onDisk.value(ConfigKeys::versionKey()).toInt(0) == 3,
-                 "the v3 stamp must survive — finalize is not allowed to advance the version");
-        QVERIFY2(onDisk.contains(QStringLiteral("_v4DisableStash")),
-                 "stash keys must survive on disk so the next run can retry");
-        QVERIFY2(onDisk.contains(QStringLiteral("_v4AnimationRulesStash")),
-                 "animation stash must survive on disk so the next run can retry");
-    }
-
-    // ─── Data-loss regression (B4): QuickLayouts write failure is recoverable ─
-    //
-    // The v3→v4 conversion writes two files: quicklayouts.json (sidecar) and
-    // rules.json (the irreversible commit marker). Writing the sidecar
-    // FIRST means a sidecar failure aborts BEFORE committing rules.json
-    // — the user's slots stay recoverable from assignments.json on the next
-    // attempt. Writing rules.json first would gate the rebuild path off
-    // forever on the next run (the cleanup-only branch never re-attempts the
-    // QuickLayouts relocation), losing the slots to the .migrated quarantine.
-    //
-    // We simulate the sidecar write failure by pre-creating a DIRECTORY at
-    // the quicklayouts.json path: QSaveFile cannot replace a directory with a
-    // file, so the write fails deterministically.
-    void testQuickLayoutsWriteFailureRecoverable()
-    {
-        IsolatedConfigGuard guard;
-        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
-        writeJson(assignmentsPath(), makeAssignments());
-
-        // Wedge the sidecar write: a non-empty directory at the target path
-        // makes the atomic-write step fail. QSaveFile's commit() renames a
-        // temp file onto `quicklayouts.json`; renaming a file onto a non-empty
-        // directory fails deterministically on POSIX (ENOTEMPTY/EISDIR), and
-        // the directory stays failed for the duration of the first attempt.
-        const QString quickLayoutsPath = ConfigDefaults::quickLayoutsFilePath();
-        QDir().mkpath(QFileInfo(quickLayoutsPath).absolutePath());
-        QVERIFY(QDir().mkpath(quickLayoutsPath));
-        QVERIFY(QFileInfo(quickLayoutsPath).isDir());
-        // Pin the wedge: a child file makes the directory non-empty so
-        // rename() can't succeed on any filesystem.
-        {
-            QFile pin(quickLayoutsPath + QStringLiteral("/.pin"));
-            QVERIFY(pin.open(QIODevice::WriteOnly));
-            QCOMPARE(pin.write("x"), static_cast<qint64>(1));
-        }
-
-        // First attempt: the sidecar write fails, migration aborts BEFORE
-        // committing rules.json. The legacy sidecar must still be on
-        // disk (we never reach the retire step), so the data is recoverable.
-        QVERIFY2(!ConfigMigration::ensureJsonConfig(),
-                 "ensureJsonConfig must return false when the QuickLayouts sidecar write fails");
-        QVERIFY2(!QFile::exists(ConfigDefaults::rulesFilePath()),
-                 "rules.json must NOT be written when the sidecar write fails");
-        QVERIFY2(QFile::exists(assignmentsPath()),
-                 "assignments.json must remain on disk so the user can re-attempt the migration");
-
-        // Recovery: remove the wedge (delete the pin file, then the
-        // directory) so the next run can write the sidecar. The user's
-        // environment is otherwise unchanged.
-        QVERIFY(QFile::remove(quickLayoutsPath + QStringLiteral("/.pin")));
-        QVERIFY(QDir().rmdir(quickLayoutsPath));
-        QVERIFY(!QFileInfo::exists(quickLayoutsPath));
-
-        // Second attempt: full migration succeeds. rules.json is
-        // written, the sidecar is populated, and the legacy file is retired.
-        ConfigMigration::resetMigrationGuardForTesting();
-        QVERIFY2(ConfigMigration::ensureJsonConfig(),
-                 "the migration must succeed once the QuickLayouts sidecar write can complete");
-        QVERIFY(QFile::exists(ConfigDefaults::rulesFilePath()));
-        QVERIFY2(QFile::exists(quickLayoutsPath), "the QuickLayouts sidecar must be populated on the second attempt");
-        const QJsonObject slots = readJson(quickLayoutsPath);
-        QCOMPARE(slots.value(QStringLiteral("snapping")).toObject().value(QStringLiteral("3")).toString(),
-                 QStringLiteral("{quick-layout-id}"));
-        QVERIFY2(!QFile::exists(assignmentsPath()),
-                 "assignments.json must be retired once the full conversion completes");
     }
 };
 

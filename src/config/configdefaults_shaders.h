@@ -5,6 +5,8 @@
 
 #include "configdefaults_limits.h"
 
+#include <PhosphorCompositor/DecorationDefaults.h>
+
 namespace PlasmaZones {
 
 // Chain link 4: rendering-backend, audio-spectrum shader, decoration-shader, and
@@ -40,6 +42,23 @@ public:
         const QString normalized = raw.toLower().trimmed();
         return renderingBackendOptions().contains(normalized) ? normalized : renderingBackend();
     }
+
+    /// GPU the daemon (and editor) render on. "auto" = whatever the driver /
+    /// Qt picks; otherwise a lowercase hex PCI "vendor:device" pair (e.g.
+    /// "1002:164e"). Not an enum — the legal set is whatever GPUs the machine
+    /// has, so the schema stores a free string and the picker enumerates DRM
+    /// render nodes at runtime (GpuDeviceList).
+    static QString gpuDevice()
+    {
+        return QStringLiteral("auto");
+    }
+
+    /// Coerce to "auto" or a well-formed vendor:device hex pair. Anything
+    /// else (hand-edited garbage) falls back to "auto" so startup never acts
+    /// on a string DRI_PRIME / the Vulkan matcher can't parse. Defined in
+    /// configdefaults.cpp so this widely-included header doesn't pull in
+    /// QRegularExpression for one cold-path validator.
+    PLASMAZONES_EXPORT static QString normalizeGpuDevice(const QString& raw);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Shader Settings
@@ -284,17 +303,21 @@ public:
     // never lets the GPU leave its top performance state — measured at ~110 W and
     // +12 C over an idle desktop with the effect unloaded, on a GPU that is only
     // ~45% busy. What costs is not the work per frame but that there IS work every
-    // frame, so these bound WHEN the chain animates, not how much it does.
+    // frame, so most of these bound WHEN the chain animates. The one exception
+    // is the blur-scale multiplier below, which shrinks the per-frame work
+    // itself rather than gating when it happens.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Animate only the focused window's decoration; unfocused windows hold their
     /// last composite. Divides the continuous redraw by the number of decorated
-    /// windows on screen. Off by default: it visibly changes what the desktop
-    /// looks like (only the window you are using shimmers), so it is the user's
-    /// call, not ours.
+    /// windows on screen — the single biggest lever this group has while the user
+    /// is still at the machine. ON by default: on integrated GPUs the every-window
+    /// continuous redraw is the difference between a usable desktop and a lagging
+    /// one, and a user who wants every unfocused window shimmering is making the
+    /// deliberate (and cheap-to-make) choice, not the other way around.
     static bool decorationAnimateFocusedOnly()
     {
-        return false;
+        return true;
     }
 
     /// Stop animating the decoration chain once the session has been idle for
@@ -318,6 +341,33 @@ public:
     static constexpr int decorationIdleTimeoutSecMax()
     {
         return 3600;
+    }
+
+    /// Multiplier on the bufferScale a surface pack's metadata declares for its
+    /// buffer passes — the resolution the shared blur pyramid (and any other
+    /// decoration buffer pass) renders at, relative to the pack author's choice.
+    /// 1.0 leaves every pack at its declared density; 0.5 halves it (cheaper on
+    /// the GPU, softer blur edges under motion); 2.0 doubles it toward full
+    /// resolution (the effect clamps the product into the same
+    /// [kMinBufferScale, kMaxBufferScale] band it already clamps the raw
+    /// metadata into). A multiplier rather than an absolute override so packs
+    /// that deliberately run their buffers sharper keep their relative intent.
+    /// The values live in PhosphorCompositor::DecorationDefaults so the effect's
+    /// pre-settings-load seed and its D-Bus boundary clamp share this SSOT.
+    /// The legal band is deliberately wider than the settings UI's three tiers
+    /// (0.5 / 1.0 / 2.0): the headroom down to the minimum exists for hand
+    /// edits and scripted writes, and the UI highlights the nearest tier.
+    static constexpr qreal decorationBlurScaleMultiplier()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplier;
+    }
+    static constexpr qreal decorationBlurScaleMultiplierMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMin;
+    }
+    static constexpr qreal decorationBlurScaleMultiplierMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMax;
     }
 };
 

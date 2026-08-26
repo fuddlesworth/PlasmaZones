@@ -9,12 +9,15 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Filter bar for layout/algorithm grid — group by, sort by, filters, and text search.
  *
- * Options change dynamically based on viewMode (0 = Snapping, 1 = Tiling).
+ * Options are selected by viewMode (0 = Snapping, 1 = Tiling, 2 = Scrolling
+ * Templates), fixed per LayoutBrowserPage instance. All three modes persist
+ * through the one shared Settings category below, each under its own key
+ * prefix.
  */
 RowLayout {
     id: root
 
-    property int viewMode: 0
+    required property int viewMode
     // ── Exposed state: group / sort ─────────────────────────────────────────
     property int groupByIndex: 0
     property int sortByIndex: 0
@@ -34,6 +37,9 @@ RowLayout {
     property bool showManualLayouts: true
     property bool showBuiltInLayouts: true
     property bool showUserLayouts: true
+    // ── Exposed state: template filters ─────────────────────────────────────
+    property bool showBuiltInTemplates: true
+    property bool showUserTemplates: true
     // ── Exposed state: tiling filters ───────────────────────────────────────
     property bool showBuiltInAlgorithms: true
     property bool showUserAlgorithms: true
@@ -50,7 +56,7 @@ RowLayout {
     // Derived from the active mode's filter button rather than a hand-written
     // list: its `excluded` already tracks every bool filter that is off, via
     // _excludedKeys over the button's own group entries.
-    readonly property bool hasActiveFilters: filterText.length > 0 || (viewMode === 0 ? snappingFilterButton : tilingFilterButton).excluded.length > 0
+    readonly property bool hasActiveFilters: filterText.length > 0 || (viewMode === 2 ? templateFilterButton : (viewMode === 0 ? snappingFilterButton : tilingFilterButton)).excluded.length > 0
     // ── Group-by index constants (must match model order below) ───────────
     // Snapping
     readonly property int groupAspectRatio: 0
@@ -61,6 +67,10 @@ RowLayout {
     readonly property int groupSnappingNone: 5
     // Tiling. "Persistent" was dropped — it was a degenerate yes/no split already
     // covered by the Capability grouping's "Persistent (Memory)" bucket.
+    // Scrolling templates
+    readonly property int groupTemplateSource: 0
+    readonly property int groupTemplateNone: 1
+    // Tiling capability grouping
     readonly property int groupCapability: 0
     readonly property int groupTilingSource: 1
     readonly property int groupTilingVisibility: 2
@@ -68,22 +78,50 @@ RowLayout {
     // Static ComboBox models (avoids inline array recreation that resets currentIndex)
     readonly property var snappingGroupModel: [i18n("Aspect Ratio"), i18n("Zone Count"), i18n("Auto / Manual"), i18n("Source"), i18n("Visibility"), i18n("None")]
     readonly property var tilingGroupModel: [i18n("Capability"), i18n("Source"), i18n("Visibility"), i18n("None")]
+    readonly property var templateGroupModel: [i18n("Source"), i18n("None")]
     // "Priority" sorts by the order set on the Configuration → Priority page
     // (snappingLayoutOrder / tilingAlgorithmOrder). Falls back to Name order when
     // no priority has been set yet.
     readonly property var snappingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
     readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
+    // Width Count deliberately shares sort index 1 with Zone Count: the
+    // shared sort logic reads the same zoneCount field (a template's
+    // width count) so no template-specific comparator is needed.
+    readonly property var templateSortModel: [i18n("Name"), i18n("Width Count"), i18n("Priority")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
-    property int _previousViewMode: 0
     // Cached "a priority order exists for the current mode" — hasCustom*Order()
-    // is a non-reactive Q_INVOKABLE, so refresh it on completion, mode switch,
-    // and the staged-order signals. Drives the Priority sort option's availability
+    // is a non-reactive Q_INVOKABLE, so refresh it on completion and on the
+    // staged-order signals. Drives the Priority sort option's availability
     // in the GroupSortBar (its last sort entry).
     property bool _hasPriorityOrder: false
 
     function _refreshHasPriorityOrder() {
-        _hasPriorityOrder = viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder();
+        _hasPriorityOrder = viewMode === 2 ? settingsController.hasCustomScrollingOrder() : (viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder());
+        // Greying the Priority entry only blocks NEW picks (GroupSortBar makes
+        // selecting an unavailable entry a no-op) — a selection already on
+        // Priority survives the order's reset, leaving the closed combo
+        // reading "Priority" while the sort silently falls back to name.
+        // Coerce back to Name so the displayed sort matches the applied one.
+        // Persist directly: the Component.onCompleted caller runs AFTER
+        // loadState's own emit, and syncFromState assigns combo indices
+        // without emitting changed, so nothing downstream would re-save.
+        if (!_hasPriorityOrder && sortByIndex === 2) {
+            sortByIndex = 0;
+            groupSort.sortByIndex = 0;
+            groupSort.syncFromState();
+            saveState();
+        }
+    }
+
+    // The state map for this instance's fixed view mode — the one authority
+    // every save/load/reset walk uses, so a third view mode cannot be missed
+    // by one of them. Parameterless since the per-mode page split: viewMode is
+    // a required property fixed for the instance's lifetime.
+    function _stateMap() {
+        if (viewMode === 2)
+            return _templateStateMap;
+        return viewMode === 0 ? _snappingStateMap : _tilingStateMap;
     }
     // Property-name maps for data-driven save/load.
     // Each entry: [rootPropertyName, persistedStatePropertyName].
@@ -93,6 +131,7 @@ RowLayout {
     // note above _defaultValues below — keep both lists in sync).
     // hasActiveFilters needs no update: it derives from the button's excluded.
     readonly property var _snappingStateMap: [["groupByIndex", "snappingGroupByIndex"], ["sortByIndex", "snappingSortByIndex"], ["sortAscending", "snappingSortAscending"], ["showHidden", "snappingShowHidden"], ["showAspectAny", "snappingShowAspectAny"], ["showAspectStandard", "snappingShowAspectStandard"], ["showAspectUltrawide", "snappingShowAspectUltrawide"], ["showAspectSuperUltrawide", "snappingShowAspectSuperUltrawide"], ["showAspectPortrait", "snappingShowAspectPortrait"], ["showAutoLayouts", "snappingShowAutoLayouts"], ["showManualLayouts", "snappingShowManualLayouts"], ["showBuiltInLayouts", "snappingShowBuiltInLayouts"], ["showUserLayouts", "snappingShowUserLayouts"]]
+    readonly property var _templateStateMap: [["groupByIndex", "templateGroupByIndex"], ["sortByIndex", "templateSortByIndex"], ["sortAscending", "templateSortAscending"], ["showBuiltInTemplates", "templateShowBuiltIn"], ["showUserTemplates", "templateShowUser"]]
     readonly property var _tilingStateMap: [["groupByIndex", "tilingGroupByIndex"], ["sortByIndex", "tilingSortByIndex"], ["sortAscending", "tilingSortAscending"], ["showHidden", "tilingShowHidden"], ["showBuiltInAlgorithms", "tilingShowBuiltInAlgorithms"], ["showUserAlgorithms", "tilingShowUserAlgorithms"], ["showMasterCount", "tilingShowMasterCount"], ["showSplitRatio", "tilingShowSplitRatio"], ["showOverlapping", "tilingShowOverlapping"], ["showPersistent", "tilingShowPersistent"], ["showCustomParams", "tilingShowCustomParams"], ["showReflowsOnResize", "tilingShowReflowsOnResize"], ["showScriptState", "tilingShowScriptState"], ["showSingleWindow", "tilingShowSingleWindow"], ["showReflowsOnFocus", "tilingShowReflowsOnFocus"]]
     // Default values for all resettable filter properties (not group/sort).
     // Adding a filter requires updating: property declaration, _defaultValues,
@@ -109,6 +148,8 @@ RowLayout {
         "showManualLayouts": true,
         "showBuiltInLayouts": true,
         "showUserLayouts": true,
+        "showBuiltInTemplates": true,
+        "showUserTemplates": true,
         "showBuiltInAlgorithms": true,
         "showUserAlgorithms": true,
         "showMasterCount": true,
@@ -140,7 +181,9 @@ RowLayout {
     // Open the filter checkbox menu for the current view mode. Invoked by the
     // page's filter button (the button moved to the search row).
     function popupFilterMenu() {
-        if (viewMode === 0)
+        if (viewMode === 2)
+            templateFilterButton.popup();
+        else if (viewMode === 0)
             snappingFilterButton.popup();
         else
             tilingFilterButton.popup();
@@ -183,8 +226,8 @@ RowLayout {
         searchDebounce.stop();
         searchCleared();
         filterText = "";
-        // Only reset properties relevant to the current view mode
-        let map = viewMode === 0 ? _snappingStateMap : _tilingStateMap;
+        // Only reset properties relevant to this instance's view mode
+        let map = _stateMap();
         for (let i = 0; i < map.length; i++) {
             let prop = map[i][0];
             if (prop in _defaultValues)
@@ -194,21 +237,21 @@ RowLayout {
         filterSettingsChanged();
     }
 
-    function saveState(mode) {
-        let map = mode === 0 ? _snappingStateMap : _tilingStateMap;
+    function saveState() {
+        let map = _stateMap();
         for (let i = 0; i < map.length; i++)
             persistedState[map[i][1]] = root[map[i][0]];
     }
 
-    function loadState(mode) {
+    function loadState() {
         _resetting = true;
         // filterText is intentionally not persisted — always start with empty search
         searchDebounce.stop();
         searchCleared();
         filterText = "";
-        let map = mode === 0 ? _snappingStateMap : _tilingStateMap;
-        let maxGroup = (mode === 0 ? snappingGroupModel : tilingGroupModel).length - 1;
-        let maxSort = (mode === 0 ? snappingSortModel : tilingSortModel).length - 1;
+        let map = _stateMap();
+        let maxGroup = (viewMode === 2 ? templateGroupModel : (viewMode === 0 ? snappingGroupModel : tilingGroupModel)).length - 1;
+        let maxSort = (viewMode === 2 ? templateSortModel : (viewMode === 0 ? snappingSortModel : tilingSortModel)).length - 1;
         for (let i = 0; i < map.length; i++) {
             let prop = map[i][0];
             let val = persistedState[map[i][1]];
@@ -228,25 +271,11 @@ RowLayout {
 
     onFilterSettingsChanged: {
         if (!_resetting)
-            saveState(viewMode);
+            saveState();
     }
     spacing: Kirigami.Units.smallSpacing
-    // Save current mode state, then load the new mode's persisted state.
-    // Guard: skip if called during _resetting to avoid saving partial state.
-    onViewModeChanged: {
-        if (_resetting)
-            return;
-
-        saveState(_previousViewMode);
-        _previousViewMode = viewMode;
-        loadState(viewMode);
-        // The new mode has its own priority order — refresh the Priority sort
-        // option's availability for the mode we just switched to.
-        _refreshHasPriorityOrder();
-    }
     Component.onCompleted: {
-        _previousViewMode = viewMode;
-        loadState(viewMode);
+        loadState();
         _refreshHasPriorityOrder();
     }
 
@@ -257,15 +286,31 @@ RowLayout {
     // effectiveTilingOrder), which only reruns on filterSettingsChanged, so
     // emit that too or a staged reorder leaves the cards in the stale order
     // while Priority sort is active. Not folded into _refreshHasPriorityOrder:
-    // its other two callers (Component.onCompleted, onViewModeChanged) already
-    // sit next to a loadState() that emits, and would rebuild twice.
+    // its other caller (Component.onCompleted) already sits next to a
+    // loadState() that emits, and would rebuild twice.
+    //
+    // Each handler is gated on this instance's mode: all three live library
+    // pages hear every signal, and an ungated handler rebuilt every group
+    // model (and rewrote every Settings block) for a reorder that only one
+    // mode's cards can even sort by.
     Connections {
         function onStagedSnappingOrderChanged() {
+            if (root.viewMode !== 0)
+                return;
             root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
         }
 
         function onStagedTilingOrderChanged() {
+            if (root.viewMode !== 1)
+                return;
+            root._refreshHasPriorityOrder();
+            root.filterSettingsChanged();
+        }
+
+        function onStagedScrollingOrderChanged() {
+            if (root.viewMode !== 2)
+                return;
             root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
         }
@@ -282,10 +327,10 @@ RowLayout {
     GroupSortBar {
         id: groupSort
 
-        groupModel: root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel
-        sortModel: root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel
+        groupModel: root.viewMode === 2 ? root.templateGroupModel : (root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel)
+        sortModel: root.viewMode === 2 ? root.templateSortModel : (root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel)
         sortItemAvailable: [true, true, root._hasPriorityOrder]
-        disabledSortTooltip: i18n("Set a layout order on the Priority page first")
+        disabledSortTooltip: i18n("Set a priority order on the Priority page first")
         onChanged: {
             root.groupByIndex = groupByIndex;
             root.sortByIndex = sortByIndex;
@@ -376,6 +421,32 @@ RowLayout {
         }
     }
 
+    // ── Template Filter Menu ────────────────────────────────────────────────
+    FilterMenuButton {
+        id: templateFilterButton
+
+        visible: false
+        menuTitle: i18n("Filter Templates")
+        externalFilterActive: root.filterText.length > 0
+        groups: [[
+                {
+                    "key": "showBuiltInTemplates",
+                    "label": i18n("Built-in")
+                },
+                {
+                    "key": "showUserTemplates",
+                    "label": i18n("Your Templates")
+                }
+            ]]
+        onFilterToggled: (key, included) => root._applyFilterToggle(key, included)
+        onResetTriggered: root.resetFilters()
+
+        Binding on excluded {
+            value: root._excludedKeys(templateFilterButton.groups)
+            restoreMode: Binding.RestoreNone
+        }
+    }
+
     // ── Tiling Filter Menu ──────────────────────────────────────────────────
     FilterMenuButton {
         id: tilingFilterButton
@@ -462,6 +533,12 @@ RowLayout {
         property bool snappingShowManualLayouts: true
         property bool snappingShowBuiltInLayouts: true
         property bool snappingShowUserLayouts: true
+        // Scrolling-template mode
+        property int templateGroupByIndex: 0
+        property int templateSortByIndex: 0
+        property bool templateSortAscending: true
+        property bool templateShowBuiltIn: true
+        property bool templateShowUser: true
         // Tiling mode
         property int tilingGroupByIndex: 0
         property int tilingSortByIndex: 0

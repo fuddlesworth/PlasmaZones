@@ -9,12 +9,22 @@
 
 namespace PlasmaZones::RuleTemplates {
 
-/// Default priority bases by section. They seed the starting priority of the
-/// seeded templates / empty rules, and `RuleController::bandBaseForSection`
-/// reuses them to seed where a newly added rule inserts (so a new Advanced rule
-/// starts high). Priority renormalization itself is flat global list-order, not
-/// banded (see `RuleController::renormalizePriorities`); these only set sensible
-/// defaults, the user reorders freely afterwards.
+/// Default priority bases by section.
+///
+/// Two separate uses, and only the second one reaches the stored rule.
+/// The `rule.priority` each builder below stamps is what the editor sheet's
+/// Priority row SHOWS while the rule is being created; it does not survive the
+/// commit, because `RuleController::addRuleFromJson` calls
+/// `renormalizePriorities()` unconditionally and that re-stamps every
+/// non-managed rule from its list position. Editing an EXISTING rule goes
+/// through `updateRuleFromJson` and does keep the value.
+///
+/// What actually places a new rule is `RuleController::bandBaseForSection`,
+/// which `bandSeededInsertIndex` derives from the rule's SECTION (its match and
+/// action shape), never from the priority field. Renormalization itself is a
+/// flat global list-order, not banded — see
+/// `RuleController::renormalizePriorities`. The user reorders freely
+/// afterwards.
 constexpr int kContextBandBase = 300;
 constexpr int kApplicationBandBase = 200;
 constexpr int kAnimationBandBase = 100;

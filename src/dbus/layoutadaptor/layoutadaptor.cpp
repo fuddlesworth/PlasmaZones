@@ -19,6 +19,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 #include "core/platform/logging.h"
 #include "core/interfaces/shaderregistry.h"
@@ -37,16 +38,32 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <QUuid>
 
+#include <optional>
+
 namespace PlasmaZones {
 
 namespace {
 
-// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile) to
-// the registry's AssignmentEntry::Mode. Any other value clamps to Snapping.
-PhosphorZones::AssignmentEntry::Mode quickSlotMode(int mode)
+// Map the D-Bus quick-slot mode wire value (0 = Snapping, 1 = Autotile,
+// 2 = Scrolling) to the registry's AssignmentEntry::Mode, or nullopt for
+// anything else. Every mode owns a SEPARATE slot array
+// (LayoutRegistry::slotIndexFor is the one authority; Scrolling is index 2):
+// the scrolling slots hold native ScrollingTemplate UUIDs, validated against
+// the template store on write, and applying one swaps the context's template
+// rather than its layout. Out-of-range values are still rejected rather than
+// clamped (input validation at the system boundary).
+std::optional<PhosphorZones::AssignmentEntry::Mode> quickSlotMode(int mode)
 {
-    return mode == PhosphorZones::AssignmentEntry::Autotile ? PhosphorZones::AssignmentEntry::Autotile
-                                                            : PhosphorZones::AssignmentEntry::Snapping;
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return PhosphorZones::AssignmentEntry::Snapping;
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return PhosphorZones::AssignmentEntry::Autotile;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return PhosphorZones::AssignmentEntry::Scrolling;
+    default:
+        return std::nullopt;
+    }
 }
 
 // `getLayout` is contractually a *Layout*-schema endpoint: its sole consumer
@@ -237,6 +254,12 @@ std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, cons
     return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
 }
 
+bool LayoutAdaptor::requiresManualLayoutValidation(const QString& layoutId)
+{
+    return !PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)
+        && layoutId != PhosphorZones::NoSnappingLayout;
+}
+
 PhosphorZones::Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
 {
     auto uuidOpt = parseAndValidateUuid(id, operation);
@@ -306,12 +329,20 @@ QString LayoutAdaptor::getActiveLayout()
 
 QStringList LayoutAdaptor::getLayoutList()
 {
+    // Sort order is pull-model: this re-sorts from the current ordering
+    // settings on every call, and no layoutListChanged is wired to an
+    // ordering change (none of the three order signals reaches the emit
+    // sites — same contract as the pre-existing snapping/tiling orders).
+    // A client that caches the list keeps its old order until the next
+    // layout mutation broadcast; the shipping settings app is unaffected
+    // because it writes orders through its own in-process Settings.
     QStringList result;
 
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, /*includeAutotile=*/true,
-        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true),
-        m_autotileLayoutSource);
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true,
+                                                     /*includeScrollingTemplates=*/true),
+        m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_layoutManager->scrollingTemplateStore());
     for (const auto& entry : entries) {
         QJsonObject json = PlasmaZones::toJson(entry);
 
@@ -319,13 +350,20 @@ QStringList LayoutAdaptor::getLayoutList()
         // LayoutPreview doesn't carry (hasSystemOrigin, hiddenFromSelector,
         // defaultOrder, allow-lists).
         auto uuidOpt = Utils::parseUuid(entry.id);
-        if (uuidOpt) {
+        if (uuidOpt && entry.isScrollingTemplate) {
+            // Template entries share the unprefixed braced-UUID id form with layouts but
+            // have no Layout object; their one enrichment is the shadow mark
+            // (a user copy of a bundled template), read from the store.
+            if (const auto* store = m_layoutManager->scrollingTemplateStore()) {
+                json[PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = store->templateById(*uuidOpt).hasSystemOrigin;
+            }
+        } else if (uuidOpt) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
-                json[QStringLiteral("hasSystemOrigin")] = layout->hasSystemOrigin();
-                json[QStringLiteral("hiddenFromSelector")] = layout->hiddenFromSelector();
+                json[PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
+                json[PhosphorZones::ZoneJsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
                 if (layout->defaultOrder() != PhosphorZones::Layout::DefaultOrderUnset) {
-                    json[QStringLiteral("defaultOrder")] = layout->defaultOrder();
+                    json[PhosphorZones::ZoneJsonKeys::DefaultOrder] = layout->defaultOrder();
                 }
 
                 // Include allow-lists so KCM can show the filter badge
@@ -340,7 +378,7 @@ QStringList LayoutAdaptor::getLayoutList()
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(entry.id);
             if (!algoId.isEmpty()) {
                 const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
-                json[QStringLiteral("hiddenFromSelector")] =
+                json[PhosphorZones::ZoneJsonKeys::HiddenFromSelector] =
                     overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
             }
         }
@@ -548,13 +586,19 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
 {
-    // Same slot-range guard the getQuickLayoutSlot / setQuickLayoutSlot siblings
-    // apply at this boundary. The mode needs none: quickSlotMode maps anything
-    // that is not Autotile onto Snapping.
+    // Same range refusal as the get/set/batch slot verbs. The registry treats
+    // an out-of-range number as an unset slot and no-ops silently, so without
+    // this the caller gets no trace of a typo'd slot number.
     if (number < 1 || number > PhosphorProtocol::Service::QuickLayoutSlotCount) {
         qCWarning(lcDbusLayout)
             << "Invalid quick layout slot number:" << number
             << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+        return;
+    }
+
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "applyQuickLayout: mode" << mode << "carries no quick slots — ignored";
         return;
     }
     // No screenId guard: an empty screen is legal here, and LayoutRegistry
@@ -562,8 +606,7 @@ void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screen
     // and just updates the global active layout, which is what the caller with no
     // focused screen wants (LayoutRegistry::cycleLayoutImpl relies on the same
     // behaviour).
-    m_layoutManager->applyQuickLayout(quickSlotMode(mode), number,
-                                      PhosphorScreens::ScreenIdentity::idForName(screenId));
+    m_layoutManager->applyQuickLayout(*slotMode, number, PhosphorScreens::ScreenIdentity::idForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -617,7 +660,16 @@ void LayoutAdaptor::deleteLayout(const QString& id)
 
     QUuid uuid = layout->id();
     const QString deletedId = uuid.toString();
-    m_layoutManager->removeLayoutById(uuid);
+    // The registry REFUSES the removal when it cannot keep the layout, its
+    // file and its settings sidecar mutually consistent (an unwritable
+    // sidecar, an undeletable layout file). The layout is then still
+    // registered and still in the list, so announcing the deletion would make
+    // subscribers evict per-layout state for a layout that still exists —
+    // and no layoutsChanged follows to put it back.
+    if (!m_layoutManager->removeLayoutById(uuid)) {
+        qCWarning(lcDbusLayout) << "Layout removal refused by the registry — keeping layout" << id;
+        return;
+    }
 
     m_cachedLayoutJson.remove(uuid);
     if (m_cachedActiveLayoutId == uuid) {
@@ -625,6 +677,12 @@ void LayoutAdaptor::deleteLayout(const QString& id)
         m_cachedActiveLayoutJson.clear();
     }
     qCInfo(lcDbusLayout) << "Deleted layout" << id;
+    // removeLayoutById's purge also sweeps quick slots bound to the deleted
+    // layout; subscribers holding slot state (the settings quick-shortcut
+    // cards) refresh only on this signal, so bump their revision. It fires for
+    // any successful removal, whether or not a slot actually held this id — a
+    // spare refresh is harmless.
+    Q_EMIT quickLayoutSlotsChanged();
     // Deletion-specific companion to layoutListChanged — lets subscribers
     // evict per-layout state keyed by UUID before the list refresh lands.
     Q_EMIT layoutDeleted(deletedId);
@@ -680,7 +738,12 @@ QString LayoutAdaptor::getQuickLayoutSlot(int mode, int slotNumber)
     }
 
     // Return raw assignment ID (UUID string or autotile ID)
-    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "getQuickLayoutSlot: mode" << mode << "carries no quick slots";
+        return QString();
+    }
+    auto slots = m_layoutManager->quickLayoutSlots(*slotMode);
     return slots.value(slotNumber);
 }
 
@@ -701,8 +764,16 @@ void LayoutAdaptor::setQuickLayoutSlot(int mode, int slotNumber, const QString& 
         }
     }
 
-    m_layoutManager->setQuickLayoutSlot(quickSlotMode(mode), slotNumber, layoutId);
-    qCInfo(lcDbusLayout) << "Set quick layout slot" << slotNumber << "mode" << mode << "to" << layoutId;
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "setQuickLayoutSlot: mode" << mode << "carries no quick slots — ignored";
+        return;
+    }
+    m_layoutManager->setQuickLayoutSlot(*slotMode, slotNumber, layoutId);
+    // Attempt wording, not success: the registry returns void and refuses a
+    // layout/template id it cannot resolve, warning on its own way out. A
+    // "Set ... to" line here would claim a write that never happened.
+    qCInfo(lcDbusLayout) << "Requested quick layout slot" << slotNumber << "mode" << mode << "set to" << layoutId;
     Q_EMIT quickLayoutSlotsChanged();
 }
 
@@ -730,7 +801,12 @@ void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
         parsedSlots[slotNumber] = layoutId;
     }
 
-    m_layoutManager->setAllQuickLayoutSlots(quickSlotMode(mode), parsedSlots);
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "setAllQuickLayoutSlots: mode" << mode << "carries no quick slots — ignored";
+        return;
+    }
+    m_layoutManager->setAllQuickLayoutSlots(*slotMode, parsedSlots);
     qCInfo(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots mode" << mode;
     Q_EMIT quickLayoutSlotsChanged();
 }
@@ -738,7 +814,12 @@ void LayoutAdaptor::setAllQuickLayoutSlots(int mode, const QVariantMap& slots)
 QVariantMap LayoutAdaptor::getAllQuickLayoutSlots(int mode)
 {
     QVariantMap result;
-    auto slots = m_layoutManager->quickLayoutSlots(quickSlotMode(mode));
+    const auto slotMode = quickSlotMode(mode);
+    if (!slotMode) {
+        qCWarning(lcDbusLayout) << "getAllQuickLayoutSlots: mode" << mode << "carries no quick slots";
+        return result;
+    }
+    auto slots = m_layoutManager->quickLayoutSlots(*slotMode);
     for (auto it = slots.begin(); it != slots.end(); ++it) {
         result[QString::number(it.key())] = it.value();
     }

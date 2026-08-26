@@ -1,0 +1,10 @@
+{
+    "id": "{a1e3f0d2-6b6a-4f6e-9b1c-0d8f4c2a7e01}",
+    "name": "Thirds",
+    "description": "The classic scrolling rhythm. New columns open at half the strip and the width shortcut cycles through one third, one half, and two thirds.",
+    "columns": [],
+    "defaultColumnWidth": { "kind": 3, "value": 0.5, "presetIndex": 1 },
+    "defaultColumnDisplay": 0,
+    "presetColumnWidths": [0.33333, 0.5, 0.66667],
+    "presetWindowHeights": [0.33333, 0.5, 0.66667]
+}

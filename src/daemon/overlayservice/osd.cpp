@@ -17,6 +17,8 @@
 #include <QGuiApplication>
 #include <QPalette>
 
+#include <optional>
+
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "phosphor_roles.h"
@@ -61,43 +63,40 @@ void sizeOsdToScreen(QQuickWindow* window, const QRect& targetGeom)
 
 } // namespace
 
-bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface,
-                                            QQuickItem*& outOsdSlot, QScreen*& outPhysScreen, QRect& screenGeom,
-                                            qreal& aspectRatio, QString& outEffectiveScreenId, const QString& screenId)
+std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(const QString& screenId)
 {
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for layout OSD";
-        return false;
+        return std::nullopt;
     }
 
-    outPhysScreen = physScreen;
+    PreparedLayoutOsdWindow prep;
 
     // Use virtual screen geometry if applicable, otherwise physical
-    screenGeom = resolveScreenGeometry(m_screenManager, screenId);
-    if (!screenGeom.isValid()) {
-        screenGeom = physScreen->geometry();
+    prep.screenGeom = resolveScreenGeometry(m_screenManager, screenId);
+    if (!prep.screenGeom.isValid()) {
+        prep.screenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
-    outEffectiveScreenId = effectiveId;
+    prep.effectiveScreenId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
-    auto* state = ensurePassiveShellFor(effectiveId, physScreen);
+    auto* state = ensurePassiveShellFor(prep.effectiveScreenId, physScreen);
     if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
-        qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
-        return false;
+        qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << prep.effectiveScreenId;
+        return std::nullopt;
     }
 
     // Force-hide any zone selector on this screen so a fading-out
     // selector doesn't stack translucently behind the incoming OSD.
     // Slot-level animator hide; the shell surface stays Shown for the
     // OSD that follows.
-    hideZoneSelectorSlotOnScreen(effectiveId);
+    hideZoneSelectorSlotOnScreen(prep.effectiveScreenId);
 
-    window = state->shell->shellWindow();
-    outSurface = state->shell->shellSurface();
-    outOsdSlot = state->osdSlot();
+    prep.window = state->shell->shellWindow();
+    prep.surface = state->shell->shellSurface();
+    prep.osdSlot = state->osdSlot();
 
     // Mode is NOT written here - callers write data properties first, then
     // set mode. This ensures the Loader's freshly instantiated content
@@ -106,13 +105,41 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     // values from the previous show (or from QML property initialisers on
     // the first-ever show).
 
-    assertWindowOnScreen(window, physScreen, screenGeom);
+    assertWindowOnScreen(prep.window, physScreen, prep.screenGeom);
 
-    aspectRatio =
-        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+    prep.aspectRatio = (prep.screenGeom.height() > 0)
+        ? static_cast<qreal>(prep.screenGeom.width()) / prep.screenGeom.height()
+        : (16.0 / 9.0);
+    prep.aspectRatio = qBound(0.5, prep.aspectRatio, 4.0);
 
-    return true;
+    return prep;
+}
+
+void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface* surface, QQuickItem* osdSlot,
+                                   const QRect& screenGeom)
+{
+    sizeOsdToScreen(window, screenGeom);
+    // Disarm the render-pipeline prime first so its queued hide doesn't
+    // race this real show - see primeSurfaceRenderPipeline.
+    cancelSurfacePrime(surface);
+    // Only the slot's opacity animates. Map the wl_surface via
+    // Surface::show() (idempotent on subsequent shows; keepMappedOnHide
+    // is effects-gated - see createWarmedOsdSurface - so the wl_surface
+    // stays mapped between slot animations while shaders or animations
+    // are enabled, and unmaps between shows otherwise).
+    if (!surface->isLogicallyShown()) {
+        surface->show();
+    }
+    osdSlot->setVisible(true);
+    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
+    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
+    // OSD slots don't grab input (they auto-dismiss; keeping the input
+    // region active for the OSD's lifetime would block clicks on every
+    // background window for several seconds). Re-evaluate the input
+    // region now that the OSD slot is visible - `syncPassiveShellSurfaceState`
+    // counts only modal slots toward `anyInputGrabbing`.
+    syncPassiveShellSurfaceStateForSurface(surface);
+    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
 }
 
 void OverlayService::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
@@ -136,17 +163,16 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << layout->name();
         return;
     }
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     // Pass the actual screen geometry so fixed-mode zones normalize against
     // the screen we're about to render on, not Layout::lastRecalcGeometry()
@@ -158,38 +184,156 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     p.zones = layout->zones().isEmpty()
         ? QVariantList()
         : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full, QRectF(screenGeom));
-    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Manual);
-    p.autoAssign = layout->autoAssign();
-    p.globalAutoAssign = m_settings && m_settings->autoAssignAllLayouts();
+    // Since the native-template pivot this path serves NON-template screens
+    // only: a template apply carries no Layout* and routes to
+    // showScrollingTemplateOsd instead, and every producer of this overload
+    // gates on the context's mode not being Scrolling (applyEntry refuses a
+    // manual layout on a Templates screen, the lock/unlock and KCM-apply
+    // sites take their template arm first). Category is therefore Manual in
+    // practice.
+    //
+    // The live-capability read below is defence in depth for that invariant.
+    // The Auto badge advertises snap-to-empty-zone, whose ONLY behavioural
+    // consumer is the snap engine, so if a Templates screen ever does reach
+    // here the badge, the category and the caption are corrected rather than
+    // left claiming a behaviour the screen cannot perform. Category and
+    // isTemplate move together — a "Manual" badge beside a "Column template"
+    // caption is a contradiction on one card.
+    // Polarity is deliberate and DIFFERS from the `!resolver ||` sibling
+    // sites in overlayservice.cpp: those sit inside an isScrolling(assignment)
+    // arm where the raw read already says scrolling, so missing-resolver
+    // defaults to trusting it. Here there is NO assignment gate — the
+    // resolver alone decides — and `!resolver ||` would classify EVERY
+    // screen, snapping included, as Templates.
+    const bool templatesScreen =
+        m_layoutSupportResolver && m_layoutSupportResolver(effectiveScreenId) == LayoutSupportTemplates;
+    p.category = static_cast<int>(templatesScreen ? PhosphorZones::LayoutCategory::ScrollingTemplate
+                                                  : PhosphorZones::LayoutCategory::Manual);
+    p.autoAssign = !templatesScreen && layout->autoAssign();
+    p.globalAutoAssign = !templatesScreen && m_settings && m_settings->autoAssignAllLayouts();
+    p.isTemplate = templatesScreen;
     p.locked = locked;
     p.screenAspectRatio = aspectRatio;
     p.aspectRatioClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
-    sizeOsdToScreen(window, screenGeom);
-    // Disarm the render-pipeline prime first so its queued hide doesn't
-    // race this real show - see primeSurfaceRenderPipeline.
-    cancelSurfacePrime(surface);
-    // Only the slot's opacity animates. Map the wl_surface via
-    // Surface::show() (idempotent on subsequent shows; keepMappedOnHide
-    // is effects-gated - see createWarmedOsdSurface - so the wl_surface
-    // stays mapped between slot animations while shaders or animations
-    // are enabled, and unmaps between shows otherwise).
-    if (!surface->isLogicallyShown()) {
-        surface->show();
-    }
-    osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
-    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
-    // OSD slots don't grab input (they auto-dismiss; keeping the input
-    // region active for the OSD's lifetime would block clicks on every
-    // background window for several seconds). Re-evaluate the input
-    // region now that the OSD slot is visible - `syncPassiveShellSurfaceState`
-    // counts only modal slots toward `anyInputGrabbing`.
-    syncPassiveShellSurfaceStateForSurface(surface);
-    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
+    finishOsdShow(window, surface, osdSlot, screenGeom);
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
+}
+
+void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+                                              bool verticalAxis, const QString& screenId, bool locked)
+{
+    // The native-template twin of showLayoutOsdImpl: no Layout* backs a
+    // ScrollingTemplate, so the caller supplies the id, name and the
+    // blueprint-derived preview zones. Always captioned as a template; the
+    // Auto badge never applies (snap-to-empty-zone cannot happen on a
+    // Templates screen).
+    //
+    // Empty-preview bail matching showLayoutOsdImpl: a card with no columns
+    // to draw is a blank rectangle. The locked variant still shows, because
+    // there the lock badge is the message and the preview is decoration.
+    if (!locked && zones.isEmpty()) {
+        qCDebug(lcOverlay) << "Skipping OSD for empty template=" << name;
+        return;
+    }
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
+        return;
+    }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
+
+    LayoutOsdContentParams p;
+    p.screenId = effectiveScreenId;
+    p.id = id;
+    p.name = name;
+    p.zones = zones;
+    // Category 2, matching what the wire serializer stamps for a template
+    // card: the QML badge arm keys on this, and Manual(0) made the OSD
+    // announce a native template as a zone layout.
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate);
+    p.autoAssign = false;
+    p.globalAutoAssign = false;
+    p.isTemplate = true;
+    p.locked = locked;
+    p.screenAspectRatio = aspectRatio;
+    // A template has no authored aspect class; classify the live screen so
+    // the preview renders at the same canonical ratio the sibling OSD paths
+    // use (see the autotile rationale in the string overload below).
+    p.aspectRatioClass =
+        PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    // Same axis the caller laid the bands along, so this card carries the edge
+    // ticks the picker's template cards do. Without it the same template is
+    // chevroned in the picker and bare here.
+    p.stripAxisHint = verticalAxis ? QStringLiteral("vertical") : QStringLiteral("horizontal");
+    pushLayoutOsdContent(osdSlot, p);
+    writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
+
+    finishOsdShow(window, surface, osdSlot, screenGeom);
+    qCInfo(lcOverlay) << (locked ? "Locked template" : "Template") << "OSD: template=" << name << "screen=" << screenId
+                      << "vertical=" << verticalAxis;
+}
+
+void OverlayService::showScrollingStripOsd(const QString& name, const QVariantList& zones, bool verticalAxis,
+                                           const QString& emptyCaption, const QString& screenId)
+{
+    // NO empty-zones bail, unlike every sibling above. An empty strip is a
+    // state worth showing, and the card shows it as an axis arrow plus the
+    // caller's caption. What would be wrong is showing it as an invented
+    // three-column sketch, which is what this path used to do.
+    //
+    // What IS refused is empty zones with no caption: the QML gates the empty
+    // state on the caption, so that pair renders bare edge ticks over a blank
+    // well — the "failed to load" picture the empty state exists to replace.
+    // Enforcing it here rather than trusting the doc comment, because the
+    // renderer has no way to invent the reason the strip is blank.
+    if (zones.isEmpty() && emptyCaption.isEmpty()) {
+        qCWarning(lcOverlay) << "Refusing strip OSD with no zones and no caption: screen=" << screenId;
+        return;
+    }
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
+        return;
+    }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+
+    LayoutOsdContentParams p;
+    p.screenId = prep->effectiveScreenId;
+    // No id, deliberately, matching the settings thumbnail's throwaway card
+    // literal: a live strip snapshot has no persisted identity, and a stable
+    // id only invites code elsewhere to treat it as a real layout.
+    p.name = name;
+    p.zones = zones;
+    // Autotile: the renderer reads it as "generated, not editable", which is
+    // exactly what a live strip snapshot is.
+    p.category = static_cast<int>(PhosphorZones::LayoutCategory::Autotile);
+    p.autoAssign = false;
+    p.globalAutoAssign = false;
+    p.locked = false;
+    p.screenAspectRatio = aspectRatio;
+    p.aspectRatioClass =
+        PhosphorLayout::ScreenClassification::toString(PhosphorLayout::ScreenClassification::classify(aspectRatio));
+    p.stripAxisHint = verticalAxis ? QStringLiteral("vertical") : QStringLiteral("horizontal");
+    // Only meaningful with no zones; pushed as empty otherwise so the QML
+    // gate is the caption itself rather than a second flag that could
+    // disagree with it.
+    p.stripEmptyCaption = zones.isEmpty() ? emptyCaption : QString();
+    pushLayoutOsdContent(osdSlot, p);
+    writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
+
+    finishOsdShow(window, surface, osdSlot, screenGeom);
+    qCInfo(lcOverlay) << "Scrolling strip OSD: screen=" << screenId << "zones=" << zones.size()
+                      << "vertical=" << verticalAxis;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -201,17 +345,16 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         return;
     }
 
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     // Resolve aspectRatioClass.
     //
@@ -249,6 +392,12 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     p.name = name;
     p.zones = zones;
     p.category = category;
+    // Category and isTemplate move together (showLayoutOsdImpl and
+    // showScrollingTemplateOsd both enforce it): derive rather than default,
+    // so a caller passing the ScrollingTemplate category cannot produce the
+    // "Manual badge beside a Column template caption" contradiction. Both
+    // current callers pass Autotile, so this is latent-proofing.
+    p.isTemplate = (category == static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate));
     p.autoAssign = autoAssign;
     // Forward the global master toggle (#370) only for manual layouts.
     // Autotile screens never reach calculateSnapToEmptyZone, so the global
@@ -265,21 +414,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
-    sizeOsdToScreen(window, screenGeom);
-    cancelSurfacePrime(surface);
-    if (!surface->isLogicallyShown()) {
-        surface->show();
-    }
-    osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
-    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
-    // OSD slots don't grab input (they auto-dismiss; keeping the input
-    // region active for the OSD's lifetime would block clicks on every
-    // background window for several seconds). Re-evaluate the input
-    // region now that the OSD slot is visible - `syncPassiveShellSurfaceState`
-    // counts only modal slots toward `anyInputGrabbing`.
-    syncPassiveShellSurfaceStateForSurface(surface);
-    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
+    finishOsdShow(window, surface, osdSlot, screenGeom);
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
 
@@ -293,6 +428,7 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     // would otherwise leave `locked` or `disabled` stuck on.
     resetOsdOverlayState(osdSlot);
     writeQmlProperty(osdSlot, QStringLiteral("locked"), p.locked);
+    writeQmlProperty(osdSlot, QStringLiteral("isTemplate"), p.isTemplate);
     writeQmlProperty(osdSlot, QStringLiteral("layoutId"), p.id);
     writeQmlProperty(osdSlot, QStringLiteral("layoutName"), p.name);
     writeQmlProperty(osdSlot, QStringLiteral("screenAspectRatio"), p.screenAspectRatio);
@@ -305,6 +441,11 @@ void OverlayService::pushLayoutOsdContent(QObject* osdSlot, const LayoutOsdConte
     writeQmlProperty(osdSlot, QStringLiteral("autoAssign"), p.autoAssign);
     writeQmlProperty(osdSlot, QStringLiteral("globalAutoAssign"), p.globalAutoAssign);
     writeAutotileMetadata(osdSlot, p.showMasterDot, p.producesOverlappingZones, p.zoneNumberDisplay, p.masterCount);
+    // Both written unconditionally: the OSD slot Item is reused across show
+    // calls, so a prior strip card would otherwise leave its ticks or its
+    // empty-state caption on the next layout card.
+    writeQmlProperty(osdSlot, QStringLiteral("stripAxisHint"), p.stripAxisHint);
+    writeQmlProperty(osdSlot, QStringLiteral("stripEmptyCaption"), p.stripEmptyCaption);
     writeQmlProperty(osdSlot, QStringLiteral("zones"), p.zones);
     writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
     // Zone preview colors and opacities follow the same settings pipeline as
@@ -524,17 +665,16 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
 {
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     // Reset overlay state then set disabled. locked stays false (mutually
     // exclusive with disabled; also enforced in QML). The disabled state
@@ -570,23 +710,12 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     pushLayoutOsdContent(osdSlot, p);
     writeQmlProperty(osdSlot, QStringLiteral("disabled"), true);
     writeQmlProperty(osdSlot, QStringLiteral("disabledReason"), reason);
+    // Written explicitly rather than left to the QML default: the slot is
+    // REUSED across shows, so the glyph must be re-stated on each one.
+    writeQmlProperty(osdSlot, QStringLiteral("disabledIcon"), QStringLiteral("dialog-cancel"));
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("layout-osd"));
 
-    sizeOsdToScreen(window, screenGeom);
-    cancelSurfacePrime(surface);
-    if (!surface->isLogicallyShown()) {
-        surface->show();
-    }
-    osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(surface, osdSlot, PhosphorRoles::Osd, []() { });
-    // Surface::show() above unconditionally clears Qt::WindowTransparentForInput.
-    // OSD slots don't grab input (they auto-dismiss; keeping the input
-    // region active for the OSD's lifetime would block clicks on every
-    // background window for several seconds). Re-evaluate the input
-    // region now that the OSD slot is visible - `syncPassiveShellSurfaceState`
-    // counts only modal slots toward `anyInputGrabbing`.
-    syncPassiveShellSurfaceStateForSurface(surface);
-    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
+    finishOsdShow(window, surface, osdSlot, screenGeom);
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
 
@@ -678,20 +807,21 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason << "screen=" << screenId
                        << "success=" << success;
 
-    // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
-    if (!physScreen) {
-        qCWarning(lcOverlay) << "No screen available for navigation OSD";
+    // Shared window preparation (screen resolve, passive shell, geometry).
+    // Runs BEFORE the dedup check because it is the source of effectiveId;
+    // that is safe — on the duplicate path the first show already created
+    // the shell and hid the zone selector, so the helper's side effects are
+    // no-ops there. The bundle's aspect ratio is unused: the nav card is
+    // text-sized, not preview-sized.
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
-
-    // Use virtual screen geometry if applicable, otherwise physical
-    QRect navScreenGeom = resolveScreenGeometry(m_screenManager, screenId);
-    if (!navScreenGeom.isValid()) {
-        navScreenGeom = physScreen->geometry();
-    }
-
-    QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const navSurface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect navScreenGeom = prep->screenGeom;
+    const QString effectiveId = prep->effectiveScreenId;
 
     // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
     // Keyed on effectiveId (resolved from physScreen if the caller passed an
@@ -718,7 +848,23 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // 100 ms shortcut debounce rate. (The window halves that to ~200 ms
     // rather than suppressing the repeat outright — the dedup clock is only
     // stamped on a shown OSD, so a suppressed one does not extend it.)
-    const QString actionKey = action + QLatin1Char(':') + reason;
+    // The fullscreen action's reason is a resulting-state token ("on"/"off")
+    // and its window rides sourceZoneId, so two DIFFERENT windows toggled to
+    // the same state within the window are distinct events — key them apart.
+    // Other actions keep the plain key: their reasons discriminate the
+    // event. (The float-family actions carry WINDOW ids in the zone fields,
+    // but they stay on the plain key deliberately. On snap and autotile a
+    // key-auto-repeat switch re-resolves the same leg and target before the
+    // focus report lands, so suppressing the identical repeat OSD is the
+    // desired outcome. The scroll engine's eager floatingHasFocus clear
+    // flips the derivation on the float-to-tiled press only, and the return
+    // leg is armed by the genuine focus report — so scroll alternates legs
+    // when the report keeps up with the repeat rate, with distinct reasons
+    // shown, and otherwise dedups like its siblings.)
+    QString actionKey = action + QLatin1Char(':') + reason;
+    if (action == QLatin1String("fullscreen")) {
+        actionKey += QLatin1Char(':') + sourceZoneId;
+    }
     const bool dedupEligible = !(success && action == QLatin1String("span"));
     if (dedupEligible && actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
         && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {
@@ -728,45 +874,56 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
+    // "fullscreen", "tabbed", "resize", "center", "scroll", "consume" and
+    // "expel" belong here too: their success arms render plain text and never
+    // consult zone data, so the missing-layout bail below could only ever
+    // swallow their feedback (for the scrolling-only ones that takes a
+    // screen whose strip-zone provider answers empty, but the hardening
+    // costs nothing).
     static const QSet<QString> noLayoutActions{
         QStringLiteral("float"),       QStringLiteral("rotate"),       QStringLiteral("focus_master"),
         QStringLiteral("swap_master"), QStringLiteral("master_ratio"), QStringLiteral("master_count"),
-        QStringLiteral("retile"),      QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
+        QStringLiteral("retile"),      QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs"),
+        QStringLiteral("fullscreen"),  QStringLiteral("tabbed"),       QStringLiteral("resize"),
+        QStringLiteral("center"),      QStringLiteral("scroll"),       QStringLiteral("consume"),
+        QStringLiteral("expel")};
     // Failure OSDs never need layout/zone data: every failure branch in
     // NavigationOsdContent.qml renders plain text (and reasons like
     // "no_zones" / "no_active_layout" fire precisely when no layout is
     // resolvable), so gating them on a layout would drop the feedback the
     // engine emitted them for.
     const bool needsLayout = success && !noLayoutActions.contains(action);
+    // Scrolling screens have no zone layout of their own; the daemon-injected
+    // provider supplies the strip's visible-tile-number model instead, so
+    // "Zone %1" copy resolves and the missing-layout bail below must not
+    // swallow the feedback.
+    //
+    // Resolved lazily and memoised. What the laziness actually saves is ONE
+    // path: the ensurePassiveShellFor bail below, which returns before the
+    // zones are written. Every OSD that renders — failures and no-layout
+    // actions included — still reaches the zones write and pays the walk
+    // once, because skipping it there would change the zones QML receives.
+    std::optional<QVariantList> scrollZonesCache;
+    const auto scrollZonesFor = [this, &scrollZonesCache, &effectiveId]() -> const QVariantList& {
+        if (!scrollZonesCache.has_value()) {
+            scrollZonesCache = m_scrollZonesProvider ? m_scrollZonesProvider(effectiveId) : QVariantList();
+        }
+        return *scrollZonesCache;
+    };
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(effectiveId);
-    if (needsLayout && (!screenLayout || screenLayout->zones().isEmpty())) {
+    if (needsLayout && scrollZonesFor().isEmpty() && (!screenLayout || screenLayout->zones().isEmpty())) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
                            << "zones=" << (screenLayout ? screenLayout->zones().size() : 0) << "action=" << action;
         return;
     }
 
-    // Reuse the per-screen passive shell (create only if not in map).
-    // The shell is kept mapped across hides while shaders or animations
-    // are enabled (effects-gated keepMappedOnHide); per-show the
-    // SurfaceAnimator's beginShow on (shellSurface, osdSlot,
-    // PhosphorRoles::Osd) replays the fade-in, and
-    // restartDismissTimer extends the auto-hide. Cleanup happens only
-    // on screen removal / shutdown via the shell's surface destroy
-    // path; the dismiss path is QML → osdDismissRequested → animator
-    // beginHide.
-    auto* navState = ensurePassiveShellFor(effectiveId, physScreen);
-    if (!navState || !navState->shell || !navState->shell->shellWindow() || !navState->shell->shellSurface()
-        || !navState->osdSlot()) {
-        qCDebug(lcOverlay) << "No passive shell for navigation OSD on screen=" << effectiveId;
-        return;
-    }
-
-    hideZoneSelectorSlotOnScreen(effectiveId);
-
-    auto* window = navState->shell->shellWindow();
-    auto* navSurface = navState->shell->shellSurface();
-    auto* osdSlot = navState->osdSlot();
+    // The passive shell, window, surface and slot all came from
+    // prepareLayoutOsdWindow above (which also hid any fading zone
+    // selector on this screen). The shell is kept mapped across hides
+    // while shaders or animations are enabled (effects-gated
+    // keepMappedOnHide); per-show the SurfaceAnimator's beginShow replays
+    // the fade-in and restartDismissTimer extends the auto-hide.
 
     // Process reason field - for rotation, extract the window count.
     // Format: "clockwise:N" or "counterclockwise:N" where N is window count.
@@ -807,9 +964,18 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // lookup (only need zoneId and zoneNumber, not name/appearance). Pass
     // navScreenGeom so fixed-mode zones normalize against the navigated-to
     // screen rather than Layout::lastRecalcGeometry().
-    QVariantList zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(
-        screenLayout, PhosphorZones::ZoneField::Minimal, QRectF(navScreenGeom));
+    QVariantList zonesList = scrollZonesFor();
+    if (zonesList.isEmpty()) {
+        zonesList = PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal,
+                                                                   QRectF(navScreenGeom));
+    }
     writeQmlProperty(osdSlot, QStringLiteral("zones"), zonesList);
+
+    // User overlay font settings: navigation OSDs do not route through
+    // pushLayoutOsdContent, so without this explicit write the slot keeps
+    // whatever the last layout-OSD show left there and the nav card ignores
+    // the user's family/scale entirely.
+    writeFontProperties(osdSlot, m_settings, /*includeLabelFontColor=*/false);
 
     // Stage d: resolve + push the OSD surface decoration. Navigation OSDs do
     // not route through pushLayoutOsdContent, so apply it explicitly here (same
@@ -818,33 +984,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Write mode AFTER data properties so the Loader-instantiated
     // NavigationOsdContent picks up correct values on first binding pass.
+    // (assertWindowOnScreen already ran inside prepareLayoutOsdWindow.)
     writeQmlProperty(osdSlot, QStringLiteral("mode"), QStringLiteral("navigation-osd"));
 
-    // Ensure the window is on the correct Wayland output (must come before sizing -
-    // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight).
-    assertWindowOnScreen(window, physScreen, navScreenGeom);
-
-    // Window dimensions match the active screen rect; layer-shell anchors +
-    // margins were set once at warm-up time (createWarmedOsdSurface).
-    sizeOsdToScreen(window, navScreenGeom);
-
-    // Slot-level show: Surface::show() (idempotent) maps the shell
-    // wl_surface on first call; thereafter the SurfaceAnimator's
-    // beginShow on (shellSurface, osdSlot) drives the visual fade-in
-    // via the per-(Surface, target) keying. restartDismissTimer kicks
-    // the QML auto-dismiss Timer that emits dismissRequested →
-    // animator beginHide on the slot (see osdDismissRequested wiring
-    // in wirePassiveShellSlots).
-    cancelSurfacePrime(navSurface);
-    if (!navSurface->isLogicallyShown()) {
-        navSurface->show();
-    }
-    osdSlot->setVisible(true);
-    m_surfaceAnimator->beginShow(navSurface, osdSlot, PhosphorRoles::Osd, []() { });
-    // OSDs don't grab input - see the matching syncPassiveShellSurfaceStateForSurface
-    // call in showLayoutOsdImpl for the rationale.
-    syncPassiveShellSurfaceStateForSurface(navSurface);
-    QMetaObject::invokeMethod(osdSlot, "restartDismissTimer");
+    finishOsdShow(window, navSurface, osdSlot, navScreenGeom);
 
     // Update dedup state AFTER the Surface::show() + restartDismissTimer
     // dispatch. Every early-return above this point is a "no OSD shown"

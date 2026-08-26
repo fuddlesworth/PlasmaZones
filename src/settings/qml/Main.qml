@@ -31,7 +31,7 @@ PhosphorUi.SettingsAppWindow {
     // itself and it stays undefined (context properties sit at the bottom
     // of the lookup order). Wire such children from these names instead.
     // Same two names every page already uses for the same capture (see
-    // LayoutsPage / GeneralPage / TilingAlgorithmPage…), so there is one
+    // LayoutBrowserPage / GeneralPage / TilingAlgorithmPage…), so there is one
     // spelling for one idea across the settings tree.
     readonly property var controllerBridge: settingsController
     readonly property var settingsBridge: appSettings
@@ -48,7 +48,7 @@ PhosphorUi.SettingsAppWindow {
     readonly property alias defaultsConfirmDialog: confirmDialogs.defaults
     // Aspect-ratio labels consumed by the layout context menu's submenu, kept
     // at window scope rather than inside the Menu so future consumers
-    // (Per-Screen Override picker, Layouts page) can bind to the same
+    // (Per-Screen Override picker, the library pages) can bind to the same
     // canonical i18n strings without duplicating them.
     //
     // Kept as an object literal for back-compat with any QML reader that
@@ -149,10 +149,17 @@ PhosphorUi.SettingsAppWindow {
             // for unrelated reasons: one could not read the daemon's slot map,
             // the other could not clear an override while a discard still owns
             // it. Naming the daemon on the second would be a false explanation.
-            const title = settingsController.app.registry.pageData(page).title || "";
+            const resetData = settingsController.app.registry.pageData(page);
+            const title = (resetData && resetData.title) ? resetData.title : "";
             const named = title.length > 0;
             if (reason === "overrides-not-cleared") {
                 window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
+                return;
+            }
+            // A failed factory reset is a config WRITE failure, not a daemon
+            // problem; naming the service here would be a false explanation.
+            if (reason === "reset-not-written") {
+                window.showToast(i18n("Your settings could not be written, so nothing was reset."));
                 return;
             }
             window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
@@ -163,7 +170,8 @@ PhosphorUi.SettingsAppWindow {
         // override file still being written), so there is no daemon-unreachable
         // branch to distinguish here.
         function onPageDiscardFailed(page, reason) {
-            const title = settingsController.app.registry.pageData(page).title || "";
+            const discardData = settingsController.app.registry.pageData(page);
+            const title = (discardData && discardData.title) ? discardData.title : "";
             const named = title.length > 0;
             window.showToast(named ? i18n("Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so they were left unchanged. Try again in a moment."));
         }
@@ -253,6 +261,11 @@ PhosphorUi.SettingsAppWindow {
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
+            // Same latch hazard the profile switcher below documents: a header
+            // delegate torn down with the dropdown open would leave the
+            // suppression flag stuck true and kill nav shortcuts for the
+            // session.
+            Component.onDestruction: window._searchOpen = false
             // App-level action results. Ids come from seedSearchCatalog
             // (searchcatalog.cpp); dispatch lives here because actions act
             // on window chrome the library knows nothing about.
@@ -387,12 +400,25 @@ PhosphorUi.SettingsAppWindow {
     // default (no stored value yet) reads the controller's own default at
     // startup, so "what mode does a brand-new user get" is defined in ONE
     // place: SettingsController::m_advancedMode. The stored value is pushed
-    // into the controller at startup (Component.onCompleted below) and the
-    // sidebar footer toggle writes user flips back here.
+    // into the controller at startup (Component.onCompleted below) and every
+    // later controller-side flip writes back through the Connections below.
     Settings {
         id: uiModeSettings
         category: "UiMode"
         property bool advancedMode: settingsController.advancedMode
+    }
+
+    // Persist EVERY mode change regardless of what drove it — the sidebar
+    // footer toggle or a search result activated in the other mode (which
+    // flips the controller directly). The Settings property's binding above
+    // only supplies the first-run default: a stored value (or any explicit
+    // write) severs it, so the binding alone cannot be the persistence path.
+    Connections {
+        target: settingsController
+
+        function onAdvancedModeChanged() {
+            uiModeSettings.advancedMode = settingsController.advancedMode;
+        }
     }
 
     Component.onCompleted: {
@@ -423,6 +449,12 @@ PhosphorUi.SettingsAppWindow {
         // over _mainItems / _childItems for this — the framework now
         // exposes the same lookup as one Q_INVOKABLE on the controller.
         window._drillIntoActivePage();
+
+        // Seed the profile-aware Save footer. The store only emits
+        // profilesChanged on a later edit, so without this first read the
+        // footer says the generic "Unsaved changes" for the whole session
+        // when nothing touches the profile list.
+        window._refreshPendingProfileName();
     }
 
     // Drill into the deepest non-collapsible ancestor of the current
@@ -434,9 +466,10 @@ PhosphorUi.SettingsAppWindow {
     // the chain-walk so future tweaks happen in one place.
     // Re-run on a mode flip: the flat rail has no scopes, but flipping back
     // to the tree rail must restore the drill scope for the active page.
-    // Without this a mode-agnostic page (Rules, Layouts) leaves the rail at
-    // top level while the active page is nested — the counterpart pages only
-    // get there incidentally, via the redirect's activePageChanged.
+    // Without this a page visible in both modes (Rules, the per-mode library
+    // pages) leaves the rail at top level while the active page is nested —
+    // the counterpart pages only get there incidentally, via the redirect's
+    // activePageChanged.
     Connections {
         function onAdvancedModeChanged() {
             // Deferred: `sidebar.flattenTree` is bound to the same property
@@ -453,8 +486,9 @@ PhosphorUi.SettingsAppWindow {
     }
 
     function _drillIntoActivePage() {
-        // Flat simple-mode rail has no drill scopes — every page is a
-        // top-level row, so there is nothing to restore into.
+        // Flat simple-mode rail has no drill scopes, so there is nothing to
+        // restore into (multi-leaf drill parents render as expandable headers
+        // there, not as scopes).
         if (window.sidebar.flattenTree)
             return;
         const chain = settingsController.app.parentChainFor(settingsController.activePage);
@@ -530,7 +564,7 @@ PhosphorUi.SettingsAppWindow {
             // titles list when the error array is empty (older
             // domains that don't emit per-domain text).
             if (errors && errors.length > 0)
-                window.showToast(i18n("Save did not complete: %1", errors.join("; ")));
+                window.showToast(i18n("Save did not complete. %1", errors.join(". ")));
             else if (titles.length === 0)
                 window.showToast(i18n("Save did not complete. Some pages still have unsaved changes."));
             else
@@ -544,8 +578,8 @@ PhosphorUi.SettingsAppWindow {
             // errors array, but mirror the apply-on-close guard shape
             // here so a future library refactor that loosens that
             // check can't surface a `null.join(...)` runtime error.
-            const detail = (errors && errors.length > 0) ? errors.join("; ") : i18n("(no details)");
-            window.showToast(i18n("Discard did not complete: %1", detail));
+            const detail = (errors && errors.length > 0) ? errors.join(". ") : i18n("No details were reported.");
+            window.showToast(i18n("Discard did not complete. %1", detail));
         }
 
         target: window
@@ -563,6 +597,27 @@ PhosphorUi.SettingsAppWindow {
         target: settingsController
     }
 
+    // Fallback reporter for layoutOperationFailed while NO library page is
+    // current. The library instances gate their own handler on visibility —
+    // each consults its own wizard copy for the inline-vs-toast decision, and
+    // that covers every CRUD emitter, which all start from the current page.
+    // But save() also emits this signal when flushing staged assignment
+    // changes fails, and the footer Save runs from any page, so without this
+    // the failure would leave no UI trace. The two predicates partition
+    // exactly on the active page id: a current library page means its visible
+    // instance reports and this handler bows out.
+    Connections {
+        function onLayoutOperationFailed(reason) {
+            // The predicate lives in C++ (isLibraryPage) so a fourth library
+            // page cannot be added there and silently missed here.
+            if (settingsController.isLibraryPage(settingsController.activePage))
+                return;
+            window.showToast(reason);
+        }
+
+        target: settingsController
+    }
+
     // Auto-drill-out when a feature is disabled while inside its sub-sidebar.
     Connections {
         function onSnappingEnabledChanged() {
@@ -572,6 +627,11 @@ PhosphorUi.SettingsAppWindow {
 
         function onAutotileEnabledChanged() {
             if (!appSettings.autotileEnabled && window.sidebar.currentParentId === "tiling")
+                window.sidebar.drillOut();
+        }
+
+        function onScrollingEnabledChanged() {
+            if (!appSettings.scrollingEnabled && window.sidebar.currentParentId === "scrolling")
                 window.sidebar.drillOut();
         }
 
@@ -773,10 +833,13 @@ PhosphorUi.SettingsAppWindow {
     //      without having to drill in.
     //   2. Inline SettingsSwitch on the snapping / tiling rows so a
     //      whole feature can be disabled without drilling in.
-    // Simple mode gets a completely flat rail: every visible page as one
-    // top-level row, no category headers or drill-downs. Advanced mode
-    // keeps the full tree. The window-appearance leaf is registered as
-    // Decorations → "General"; standing alone it must read "Appearance".
+    // Simple mode gets a mostly flat rail: category headers dissolve and
+    // every visible page becomes a top-level row, except that a multi-leaf
+    // drill parent (the three placement modes, each showing General + its
+    // library leaf) keeps its own expandable header row with the enable
+    // toggle — see SidebarRows' flat walk. Advanced mode keeps the full
+    // tree. The window-appearance leaf is registered as Decorations →
+    // "General"; standing alone it must read "Appearance".
     //
     // The override titles are backed by a QtObject for the same reason
     // aspectRatioLabelsObject is: the map itself is a `property var` bound to
@@ -818,6 +881,12 @@ PhosphorUi.SettingsAppWindow {
 
             property bool compact: false
 
+            // Names the CURRENT mode, not the switch's target: the switch
+            // position already reads as simple/advanced, so the label tracks
+            // it like the daemon row's Running label. Shared by the wide
+            // rail's label and the compact rail's tooltip.
+            readonly property string modeLabel: settingsController.advancedMode ? i18n("Advanced") : i18n("Simple")
+
             implicitHeight: advancedModeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
 
             RowLayout {
@@ -849,7 +918,7 @@ PhosphorUi.SettingsAppWindow {
                     visible: !advancedModeFooter.compact
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    text: i18n("Advanced")
+                    text: advancedModeFooter.modeLabel
                     elide: Text.ElideRight
                 }
 
@@ -857,9 +926,11 @@ PhosphorUi.SettingsAppWindow {
                     Layout.alignment: Qt.AlignVCenter
                     checked: settingsController.advancedMode
                     accessibleName: i18n("Toggle advanced settings")
+                    // Persistence rides the controller's advancedModeChanged
+                    // connection by uiModeSettings — one write path for every
+                    // mode-change source.
                     onToggled: function (newValue) {
                         settingsController.advancedMode = newValue;
-                        uiModeSettings.advancedMode = newValue;
                     }
 
                     HoverHandler {
@@ -868,7 +939,7 @@ PhosphorUi.SettingsAppWindow {
 
                     // Tooltip stands in for the hidden label, matching the
                     // compact rail rows.
-                    ToolTip.text: i18n("Advanced")
+                    ToolTip.text: advancedModeFooter.modeLabel
                     ToolTip.visible: advancedModeFooter.compact && advancedModeHover.hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
@@ -894,13 +965,14 @@ PhosphorUi.SettingsAppWindow {
             // "id" to "pageId" (the prior name shadowed the QML id:
             // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            // Match the drill-parent rows AND their simple-mode counterparts:
-            // simple mode builds the rail through SidebarRows' FLAT walk,
-            // which emits every visible leaf at depth 0, so there the
-            // "Snapping"/"Tiling" rows carry the simple leaf's own pageId.
-            // The inline enable toggles must stay with them.
-            readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
-            readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
+            // Match the three placement-mode parent rows. Both rails render
+            // them as rows of their own now — the advanced tree as drill
+            // parents, the simple flat rail as expandable multi-leaf headers
+            // (see SidebarRows' flat walk) — so the inline enable toggle
+            // keys off exactly these three ids in both modes.
+            readonly property bool isSnapping: entry && entry.pageId === "snapping"
+            readonly property bool isTiling: entry && entry.pageId === "tiling"
+            readonly property bool isScrolling: entry && entry.pageId === "scrolling"
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -914,10 +986,14 @@ PhosphorUi.SettingsAppWindow {
             readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
             // The section-toggle's own scope, deliberately NOT dirtyScopeId.
             // pendingSection feeds discardPage() / beginExternalEdit() and a
-            // subtitle that names one of exactly two features, so it must stay
-            // bounded to the two ids those consumers handle. dirtyScopeId is an
-            // unbounded walk result and could hop past them.
-            readonly property string sectionId: isSnapping ? "snapping" : "tiling"
+            // subtitle that names one of exactly three features, so it must
+            // stay bounded to the three ids those consumers handle.
+            // dirtyScopeId is an unbounded walk result and could hop past them.
+            // Spelled out rather than defaulting to "scrolling" in the else
+            // branch: the three flags are not exhaustive over every row, and
+            // an empty id is a visibly inert scope rather than a silent write
+            // to scrollingEnabled from a row that is none of the three.
+            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : ""))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -979,13 +1055,17 @@ PhosphorUi.SettingsAppWindow {
                 }
             }
 
-            // ── Snapping / Tiling toggle ────────────────────────────
+            // ── Snapping / Tiling / Scrolling toggle ────────────────
             SettingsSwitch {
                 id: sectionToggle
 
-                visible: trailingRow.isSnapping || trailingRow.isTiling
-                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
-                accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
+                visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : false))
+                // "Enable Snapping", not the bare feature name: the row itself
+                // already announces the title (SidebarRow's Accessible.name),
+                // so the switch has to name the ACTION or the two controls are
+                // indistinguishable to a screen reader.
+                accessibleName: trailingRow.entry ? i18n("Enable %1", trailingRow.entry.title) : ""
                 onToggled: function (newValue) {
                     // Disabling from the sidebar is a destructive shortcut
                     // when the page underneath has unsaved edits — those
@@ -1015,8 +1095,10 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.beginExternalEdit(trailingRow.sectionId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
-                    else
+                    else if (trailingRow.isTiling)
                         appSettings.autotileEnabled = newValue;
+                    else if (trailingRow.isScrolling)
+                        appSettings.scrollingEnabled = newValue;
                     settingsController.endExternalEdit();
                 }
             }

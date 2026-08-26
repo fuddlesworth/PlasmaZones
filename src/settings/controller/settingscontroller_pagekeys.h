@@ -19,6 +19,7 @@
 #include "config/settings.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QString>
 #include <QtGlobal>
@@ -37,7 +38,7 @@ namespace PlasmaZones {
 ///
 /// DEFINED HERE, not in a .cpp: it is constructed from three TUs
 /// (settingscontroller_pagestate.cpp, settingscontroller_pagereset.cpp and
-/// settingscontroller_session.cpp), and a TU-local copy in one of them only
+/// settingscontroller_lifecycle.cpp), and a TU-local copy in one of them only
 /// ever linked because CMAKE_UNITY_BUILD merged the files into one batch. Same
 /// rationale as SettingsController::DirtyEmitScope.
 class ScopedFlag
@@ -51,13 +52,26 @@ public:
     }
     ~ScopedFlag()
     {
-        m_flag = m_previous;
+        release();
+    }
+    /// Restore the flag NOW instead of at end of scope, for a caller whose last
+    /// step has to run with the flag already down (defaults() recomputes the
+    /// dirty set outside the gate it held over the reset itself). Idempotent:
+    /// the destructor calls this too, and a second call is a no-op rather than
+    /// a second restore.
+    void release()
+    {
+        if (m_active) {
+            m_active = false;
+            m_flag = m_previous;
+        }
     }
     Q_DISABLE_COPY_MOVE(ScopedFlag)
 
 private:
     bool& m_flag;
     bool m_previous;
+    bool m_active = true;
 };
 
 /// Which drag-to-reorder page this is, or None. Returns the KIND rather than a
@@ -70,11 +84,23 @@ enum class OrderingPageKind {
     None,
     Snapping,
     Tiling,
+    Scrolling,
 };
 OrderingPageKind orderingPageKind(const QString& page);
 
-/// The two Quick Shortcuts pages. Same shared-classification rationale.
+/// The three Quick Shortcuts pages. Same shared-classification rationale.
 bool isShortcutsPage(const QString& page);
+
+/// The wire values the daemon's quick-layout slot map is keyed on. Named
+/// aliases of AssignmentEntry::Mode so the reset loop, the per-slot accessors
+/// and the Save-time flush all spell the same mode the same way instead of
+/// carrying bare 0/1/2 literals with a comment each. The enum's numbering is
+/// frozen (see the AssignmentEntry::Mode doc), so these are stable on the wire.
+/// PascalCase rather than UPPER_SNAKE on purpose, matching the other named
+/// constants in this header and the repo's wider precedent (ReasonDaemonUnreachable).
+constexpr int QuickSlotModeSnapping = static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
+constexpr int QuickSlotModeTiling = static_cast<int>(PhosphorZones::AssignmentEntry::Autotile);
+constexpr int QuickSlotModeScrolling = static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling);
 
 /// Quick-layout slots are numbered 1..QUICK_LAYOUT_SLOT_COUNT. Shared by the
 /// slot accessors' bounds checks (settingscontroller_session.cpp) and the
@@ -83,6 +109,17 @@ bool isShortcutsPage(const QString& page);
 /// constant the daemon validates against (layoutadaptor.cpp), so the two trees
 /// cannot disagree about how many slots exist either.
 constexpr int QUICK_LAYOUT_SLOT_COUNT = PhosphorProtocol::Service::QuickLayoutSlotCount;
+
+/// The three per-mode library pages (snapping-layouts / tiling-library /
+/// scrolling-templates). They browse and manage separate stores that write
+/// immediately, so they carry no staged config state of their own and are
+/// never dirty; the one config write their context menu performs (set the
+/// family's default) is attributed to the page that owns the key through an
+/// external-edit envelope. Consumers: isPageDirty's never-dirty early return,
+/// dirtyScopeFor's hoist count (settingscontroller_pagetopology.cpp), and —
+/// through the SettingsController::isLibraryPage Q_INVOKABLE bridge — the
+/// window-scoped layoutOperationFailed fallback in Main.qml.
+bool isLibraryPage(const QString& page);
 
 /// Every animation leaf shares one staging domain and one ShaderProfileTree
 /// key, but Reset/Discard/dirty are scoped per leaf — see animationPageScope.

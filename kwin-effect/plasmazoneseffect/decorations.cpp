@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -12,7 +13,7 @@
 
 #include <epoxy/gl.h>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -23,10 +24,12 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QColor>
 #include <QGuiApplication>
+#include <QLoggingCategory>
 #include <QPalette>
 #include <QtMath> // qCeil, resolving the chain's outer padding
 #include <QTimer> // deferDecorationTeardownWhileAnimated poll
@@ -252,8 +255,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
 
     // APP-WINDOW GATE: decoration-specific filter (shouldDecorateWindow), NOT
-    // the snapping shouldHandleWindow. It rejects the always-wrong surfaces
-    // (docks, panels, desktop, OSDs, notifications, portal / plasma-shell,
+    // the snapping shouldHandleWindow. It admits plasmashell's panels and
+    // applet popups up front (the shell carve-out — see the header doc), then
+    // rejects the always-wrong surfaces (desktop, OSDs, notifications,
+    // portal / other plasma-shell, other docks,
     // our own overlays) and honours the user Exclude rules, but the
     // transient family and a minimum-size threshold are user-tunable via the
     // Decorations.WindowFiltering settings (m_decorationExcludeTransientWindows /
@@ -280,13 +285,15 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // added to a chain).
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
-    const QString surfacePath = resolveSurfacePathFor(windowId);
+    const QString surfacePath = resolveSurfacePathFor(windowId, w);
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
     QStringList userPacks = resolvedProfile.enabledChain();
 
     // Rule-resolved decoration-chain override: a matched
     // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
-    // (its empty-chain sentinel blocks decoration outright), and its
+    // (its empty-chain sentinel strips the CUSTOM packs and falls back to
+    // easy mode's config-backed layers — see the mode split below; turning
+    // decorations off entirely is ExcludeDecorations' job), and its
     // per-pack params override the tree profile's map below. A rule chain may
     // name any pack, "border" / "opacity-tint" included, and the tree's
     // per-layer disable set deliberately does not apply — a
@@ -294,8 +301,28 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
     // desktop changes).
+    //
+    // SHELL SURFACES resolve chain-only — the tree node is their whole
+    // decoration, and neither the rule chain here nor the easy-mode appearance
+    // below applies to them. Both are keyed to APP identity: a rule's match
+    // expression walks appId / class / title / role / PID / window state, none
+    // of which describes plasmashell's panel, and the easy-mode config
+    // defaults are scoped by placement (Tiled / Normal / All) which a panel is
+    // outside of. `All` in particular would otherwise put a border on the
+    // panel the instant the user enabled the opt-in, which is not what
+    // enabling "decorate panels" asks for. Keyed off the resolved surface path
+    // rather than a second classify so the two cannot disagree.
+    //
+    // The skip also leaves `sharedQuery` disengaged for a shell surface, which
+    // is correct and not a missed memoisation: shouldDecorateWindow answers
+    // these kinds structurally before it reaches the rule slice, so nothing
+    // filled the slot and nothing below reads it. The shell subtree is
+    // baseline-isolated, so an unconfigured shell surface resolves an empty
+    // chain here and falls out at the decorate gate below — engaging a chain
+    // on the Decoration → Shell page is the whole opt-in.
+    const bool isShellSurface = PhosphorSurfaceShaders::decorationPathIsBaselineIsolated(surfacePath);
     const std::optional<ResolvedDecorationChain> ruleChain =
-        resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
+        isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
     if (ruleChain) {
         userPacks = ruleChain->chain;
     }
@@ -325,7 +352,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     std::optional<ResolvedWindowAppearance> appearance;
     bool showBorder = false;
     bool showOpacityTint = false;
-    if (userPacks.isEmpty()) {
+    if (userPacks.isEmpty() && !isShellSurface) {
         appearance = resolveEffectiveWindowAppearance(w, windowId);
         showBorder = appearance->showBorder.value_or(false);
         showOpacityTint = appearance->showOpacityTint.value_or(false);
@@ -374,6 +401,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     WindowDecoration wb;
     wb.chain = chain;
     wb.basePackId = basePackId;
+    wb.isShellSurface = isShellSurface;
 
     // Resolve THIS window's param values for every pack in the chain. Windows
     // on different surface paths (window.tiled / window.snapped /
@@ -397,7 +425,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     // Shared accent fallback for the plain layers below: the live system
     // accent when the daemon has delivered one, else the Breeze default.
-    const QColor accentOr = m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
+    const QColor accentOr = m_borderAccentColor.isValid()
+        ? m_borderAccentColor
+        : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackAccentHex));
     if (showBorder) {
         // Easy mode: the resolved border appearance rides the built-in
         // "border" pack's OWN declared parameters (borderWidth / cornerRadius /
@@ -420,7 +450,14 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
                             appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));
         borderParams.insert(QStringLiteral("cornerRadius"),
                             appearance->borderRadius.value_or(PhosphorCompositor::DecorationDefaults::BorderRadius));
+        // Pin BOTH host-consumed theme flags, not just useSystemAccent: the
+        // resolver checks useThemeNeutral FIRST and falls back to the PACK'S
+        // declared default when the caller supplies no override. The shipped
+        // metadata declares it false, but pack metadata is an installable
+        // boundary — a third-party "border" pack shipping useThemeNeutral=true
+        // would otherwise silently discard the accent-resolved colours here.
         borderParams.insert(QStringLiteral("useSystemAccent"), false);
+        borderParams.insert(QStringLiteral("useThemeNeutral"), false);
         const QColor active = appearance->activeColor.value_or(accentOr);
         borderParams.insert(QStringLiteral("activeColor"), active);
         borderParams.insert(QStringLiteral("inactiveColor"), appearance->inactiveColor.value_or(active));
@@ -456,14 +493,27 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
+    // AND over the chain's DRAWING packs: a registry-unknown pack draws
+    // nothing, so it neither qualifies nor vetoes. An all-unknown chain folds
+    // nothing and presents the raw capture, whose interior is exactly the
+    // client's content — interior-opaque by construction, so `true` is the
+    // right answer there too.
+    bool chainInteriorOpaque = true;
     // Theme colours for the pack flag resolver (below). Accent / inactive come
     // from the daemon-plumbed border colours (same source the plain-border layer
     // uses); background / foreground come from the compositor's palette, which
     // tracks the active colour scheme. Built once for the whole chain.
+    // Known refresh gap, accepted: the effect installs no palette listener of
+    // its own, so with all four zone colours PINNED (no daemon
+    // settingsChanged on a scheme switch) the two palette-derived entries
+    // refresh only on the next unrelated decoration update. Closing it needs
+    // an effect-side ApplicationPaletteChange filter → scheduleBorderSweep.
     const QPalette pal = QGuiApplication::palette();
     const PhosphorSurfaceShaders::SurfaceThemeColors themeColors{
-        m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9")),
-        m_borderInactiveColor.isValid() ? m_borderInactiveColor : QColor(QStringLiteral("#ff5c6370")),
+        m_borderAccentColor.isValid() ? m_borderAccentColor
+                                      : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackAccentHex)),
+        m_borderInactiveColor.isValid() ? m_borderInactiveColor
+                                        : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackInactiveHex)),
         pal.color(QPalette::Active, QPalette::Window), pal.color(QPalette::Active, QPalette::WindowText)};
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);
@@ -473,6 +523,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
+        chainInteriorOpaque = chainInteriorOpaque && eff.interiorOpaque;
         QVariantMap packOverrides = allPackParams.value(packId).toMap();
         // Honour the pack's host-consumed theme flags (border useThemeNeutral /
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
@@ -501,6 +552,17 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
+    wb.chainInteriorOpaque = chainInteriorOpaque;
+    if (chainInteriorOpaque && !chain.isEmpty()) {
+        // interiorOpaque comes verbatim from installable pack metadata (an
+        // XDG_DATA_HOME boundary, "input validation at system boundaries"): a
+        // third-party pack that declares it while thinning interior texels
+        // produces stale-framebuffer ghosting behind this window with nothing
+        // else naming the cause. This line makes the symptom attributable to
+        // the chain that asserted the contract.
+        qCDebug(lcEffect) << "decoration chain declares interiorOpaque (occlusion hint kept) for" << windowId << ":"
+                          << chain;
+    }
     // The plain opacity-tint layer folds the window's resolved opacity
     // (config default, SetOpacity rule winning) into its pack param — the
     // chain BAKES the window's opacity. The flag's one runtime job is the
@@ -645,6 +707,15 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
+    // Compositor teardown: KWin::effects can be null when a caller driven by a
+    // file watcher or a D-Bus reply fires during shutdown (the registry
+    // hot-reload handler documents exactly this case before its own guarded
+    // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
+    // walk below would deref the null.
+    if (!KWin::effects) {
+        return;
+    }
+
     // Snapshot which windows are decorated BEFORE the reconcile. This serves the post-loop
     // sweep, and nothing else: it is how the sweep finds the entries this pass did not
     // revisit. (It used to also feed a "was this decorated?" hint into
@@ -710,23 +781,55 @@ void PlasmaZonesEffect::updateAllDecorations()
     // close ever reaching us. These are genuine teardowns, so they release the GL
     // working set and the surface state.
     //
-    // Entries riding a live shader transition are skipped, exactly as the old bulk
-    // clear skipped them. The close path deliberately keeps a closing window's
-    // decoration + multipass state alive so the chain can composite under the close
-    // animation, and this reconcile runs within milliseconds of every close (the
+    // Entries riding a CLOSE ANIMATION are skipped, exactly as the old bulk clear
+    // skipped the transition half of them. The close path deliberately keeps a closing
+    // window's decoration + multipass state alive so the chain can composite under the
+    // close animation, and this reconcile runs within milliseconds of every close (the
     // focus shift alone triggers it). The frozen reverse mapping resolves the deleted
     // window; endShaderTransition's teardown or the windowDeleted backstop erases the
     // entry when the animation is done.
+    //
+    // isDeleted covers the second half of that keep: a decoration riding a FOREIGN
+    // close animation (KWin's fade, sliding-popups on a Plasma applet popup) has no
+    // transition of ours to test for. The loop above already skipped every deleted
+    // window, so without this the sweep would undo slotWindowClosed's keep on the
+    // first focus change — which lands in the same millisecond as the close.
     for (const QString& wid : previouslyDecorated) {
         if (revisited.contains(wid)) {
             continue;
         }
         KWin::EffectWindow* w = m_idCaches.windowIdReverse.value(wid);
-        if (w && m_shaderManager.findTransition(w)) {
+        if (w && (w->isDeleted() || m_shaderManager.findTransition(w))) {
             continue;
         }
         removeWindowDecoration(wid, w);
     }
+}
+
+bool PlasmaZonesEffect::hasDecorationTreeContent() const
+{
+    // enabledChain(), the SAME accessor updateWindowDecoration renders from, not
+    // effectiveChain(): the latter keeps packs the user toggled off, so a tree
+    // whose baseline chain exists but has every pack disabled would report
+    // "content" and make every snap / float / zone change do full per-window
+    // reconcile work for a configuration that can decorate nothing.
+    if (!m_decorationTree.resolve(QString()).enabledChain().isEmpty()) {
+        return true;
+    }
+    // The override half asks the same question per registered path, rather than
+    // taking overriddenPaths().isEmpty() as the answer: that accessor reports
+    // every path that carries an override with no inspection of its chain at
+    // all, so an override with every pack disabled kept exactly the cost the
+    // baseline half above was changed to remove. resolve() rather than
+    // directOverride() so a path whose own profile only retunes parameters
+    // still sees the chain it inherits from its ancestors.
+    const QStringList paths = m_decorationTree.overriddenPaths();
+    for (const QString& path : paths) {
+        if (!m_decorationTree.resolve(path).enabledChain().isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
@@ -736,12 +839,34 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 
 QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
 {
+    // findWindowByIdExact, never findWindowById — the fuzzy appId fallback
+    // could resolve a same-app sibling for a dead id and mis-route a real
+    // window onto a shell path. Callers that already hold the EffectWindow*
+    // use the overload below instead of paying (and risking) this lookup.
+    return resolveSurfacePathFor(windowId, findWindowByIdExact(windowId));
+}
+
+QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId, KWin::EffectWindow* w) const
+{
+    // SHELL SURFACES resolve by kind, before any placement lookup: plasmashell's
+    // panel is never in either engine's tiled bucket, so without this it would
+    // fall through to "window.floating" and wear whatever the user styled their
+    // floating app windows with.
+    switch (shellSurfaceKindFor(w)) {
+    case ShellSurfaceKind::Panel:
+        return PhosphorSurfaceShaders::decorationShellPanelPath();
+    case ShellSurfaceKind::AppletPopup:
+        return PhosphorSurfaceShaders::decorationShellAppletPopupPath();
+    case ShellSurfaceKind::None:
+        break;
+    }
+
     // MEMBERSHIP-only resolution: isTiledWindow tests bucket membership, and the
     // resolved profile's enabledChain() (an empty chain = no decoration) is the
     // sole render gate (see updateWindowDecoration) — there is no separate show-border
     // gate. Autotile-first precedence; falls back to window.floating for an
     // unmanaged window.
-    if (m_autotileHandler->isTiledWindow(windowId)) {
+    if (m_tilingHandler->isTiledWindow(windowId)) {
         return QStringLiteral("window.tiled");
     }
     if (m_snapHandler->isTiledWindow(windowId)) {

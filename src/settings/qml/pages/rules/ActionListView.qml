@@ -77,6 +77,67 @@ ColumnLayout {
         return e ? e.params : [];
     }
 
+    /// The advisory `max` a param descriptor publishes, or no cap when it
+    /// carries none (never a second copy of the constant). SnapToZone's two
+    /// params publish the ordinal cap and the per-name character cap this way,
+    /// and RouteToDesktop its desktop cap, so the read-only view filters on the
+    /// same bounds the validator and the C++ summary apply.
+    function _paramBound(param) {
+        return param && param.max !== undefined ? param.max : Number.POSITIVE_INFINITY;
+    }
+
+    /// The SnapToZone target entries of `action` under `param` that the
+    /// validator accepts — ordinals as integers in 1..max, names non-blank and
+    /// at most max characters after trimming — deduplicated (ordinals by value,
+    /// names case-insensitively, first spelling kept) so the pill never claims
+    /// a target the runtime discards nor counts one twice, the same bounds and
+    /// dedupe the C++ summary in rulemodel_labels.cpp applies. Empty for any
+    /// other kind.
+    function _validZoneTargets(param, action) {
+        var raw = action ? action[param.key] : undefined;
+        if (!Array.isArray(raw))
+            return [];
+        var out = [];
+        // A prototype-less object: a zone literally named "constructor" must
+        // not read as already seen.
+        var seen = Object.create(null);
+        var max = root._paramBound(param);
+        for (var i = 0; i < raw.length; ++i) {
+            if (param.kind === "zoneOrdinals") {
+                // A JSON number only: the C++ summary and the validator both
+                // refuse a string or bool ordinal rather than coercing it.
+                if (typeof raw[i] !== "number")
+                    continue;
+                var n = raw[i];
+                if (Number.isInteger(n) && n >= 1 && n <= max && !seen[n]) {
+                    seen[n] = true;
+                    out.push(n);
+                }
+            } else if (param.kind === "zoneNames") {
+                var name = typeof raw[i] === "string" ? raw[i].trim() : "";
+                var key = name.toLowerCase();
+                if (name.length > 0 && name.length <= max && !seen[key]) {
+                    seen[key] = true;
+                    out.push(name);
+                }
+            }
+        }
+        return out;
+    }
+
+    /// Whether a param row renders at all. SnapToZone carries two target
+    /// lists (numbers and names) and a rule usually fills only one; an empty
+    /// or all-invalid list would otherwise render as a labelled blank pill.
+    /// Other kinds keep their pill even when empty so an unset picker is
+    /// still visible as such. ONE predicate for both the row's `visible` and
+    /// the first-visible-index scan below; two copies would drift and a drift
+    /// here silently misaligns the THEN column against the WHEN tree.
+    function _paramVisible(param, action) {
+        if (param.kind !== "zoneOrdinals" && param.kind !== "zoneNames")
+            return true;
+        return root._validZoneTargets(param, action).length > 0;
+    }
+
     /// Resolve a single param value to the user-facing string the rule
     /// editor would show. The mapping per `kind` mirrors the editor's
     /// pickers — see `ActionRow.qml` for the source of truth.
@@ -87,6 +148,15 @@ ColumnLayout {
 
         var kind = param.kind;
         var rawStr = String(raw);
+        // A few params treat an explicit empty value as a real choice — the tab
+        // label font's empty family selects the system font. The descriptor
+        // publishes the word for that state, so the pill names it rather than
+        // rendering blank. Gated on the descriptor and NOT on the kind: every
+        // other string param's empty value means unset, and a `kind ===
+        // "string"` branch here would put this label on all of them, now and in
+        // future.
+        if (rawStr === "" && param.emptyLabel)
+            return param.emptyLabel;
         if (kind === "enum") {
             var opts = param.options || [];
             for (var i = 0; i < opts.length; ++i) {
@@ -95,7 +165,15 @@ ColumnLayout {
             }
             return rawStr;
         }
-        if (kind === "snappingLayout" || kind === "tilingAlgorithm") {
+        if ((kind === "scrollingTemplate" || kind === "snappingLayout" || kind === "tilingAlgorithm") && (rawStr === "none" || (kind === "tilingAlgorithm" && rawStr === "autotile:none"))) {
+            // The reserved "explicitly none" token (NoScrollingTemplate /
+            // NoSnappingLayout / NoTilingAlgorithm in AssignmentEntry.h,
+            // one spelling for all three) is the value every None pick
+            // writes, not an id; the rules-list summary and the editors'
+            // pickers all show it as None.
+            return i18nc("@item rule action layout value, explicitly none at all", "None");
+        }
+        if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate") {
             // Layouts are serialised via `toVariantMap(LayoutPreview)` which
             // stamps the friendly title under `displayName`. The previous
             // `.name` read returned undefined, leaving the read-only rule
@@ -105,8 +183,10 @@ ColumnLayout {
             // layout, etc.) so the user can SEE what the rule contains
             // rather than an empty pill.
             var layouts = root.appSettings && root.appSettings.layouts ? root.appSettings.layouts : [];
-            // Snapping layouts are stored by UUID, which keys the layouts list
-            // directly. Tiling-algorithm actions store the BARE registry token
+            // Snapping layouts and scrolling templates are stored by raw
+            // braced UUID, which keys the layouts list directly (template
+            // rows ride the same list flagged isScrollingTemplate).
+            // Tiling-algorithm actions store the BARE registry token
             // ("bsp"), while the layouts list keys autotile entries as
             // "autotile:<token>" — so prefix before matching, mirroring the C++
             // summary resolver (SettingsController::resolveTilingAlgorithmLookup)
@@ -136,7 +216,10 @@ ColumnLayout {
                 var paths = sections[s].paths || [];
                 for (var p = 0; p < paths.length; ++p) {
                     if (paths[p].path === raw && !paths[p].isCategory)
-                        return sections[s].label + " · " + paths[p].label;
+                        // Composed inside one i18nc so translators control the
+                        // order and the separator, rather than a hardcoded
+                        // join around two translated halves.
+                        return i18nc("animation section, then the event inside it", "%1 · %2", sections[s].label, paths[p].label);
                 }
             }
             return rawStr;
@@ -156,10 +239,16 @@ ColumnLayout {
         if (kind === "decorationChain") {
             // Surface-pack ids resolve through the decoration pack catalog
             // (mirrors ActionRow's _decorationChainEditor source); unknown ids
-            // render verbatim. An empty chain is the "no decoration" sentinel.
+            // render verbatim. An empty chain clears the CUSTOM packs and
+            // falls back to the config-backed layers — same wording as the
+            // rules-list summary; turning decorations off entirely is
+            // ExcludeDecorations' job.
             var chainIds = raw || [];
+            // A bare "None": the label column already says "Decoration packs",
+            // unlike the rules-list summary, which has no separate label and
+            // spells the whole phrase.
             if (!chainIds.length)
-                return i18n("Block decoration");
+                return i18nc("@item no decoration packs in the chain", "None");
             var decoCtl = root.appSettings ? root.appSettings.decorationPage : null;
             var packs = decoCtl ? (decoCtl.availableShaderEffects() || []) : [];
             var names = [];
@@ -200,14 +289,34 @@ ColumnLayout {
             var f = parseFloat(raw);
             if (isFinite(f)) {
                 var scale = param.scale || 1;
-                return Math.round(f / scale) + "%";
+                var display = f / scale;
+                // The descriptor's display-unit bounds are what the validator
+                // enforces on the wire; a hand-edited value outside them is
+                // one the runtime discards, so say so rather than print
+                // "300%" as if it applied (the rules-list summary renders the
+                // same value as invalid).
+                if ((param.min !== undefined && display < param.min) || (param.max !== undefined && display > param.max))
+                    return i18nc("@item an action value the rule runtime rejects", "(invalid)");
+                // Through i18nc rather than a JS append: locales differ on
+                // where the sign sits and whether a space precedes it.
+                return i18nc("a whole-number percentage", "%1%", Math.round(display));
             }
             return rawStr;
         }
         if (kind === "zoneOrdinals") {
-            // `raw` is a JS array of 1-based zone ordinals; render "1, 2".
+            // `raw` is a JS array of 1-based zone ordinals; render the valid
+            // ones as "1, 2" (the row hides when none survive).
             if (Array.isArray(raw))
-                return raw.join(", ");
+                return root._validZoneTargets(param, action).join(", ");
+            return rawStr;
+        }
+        if (kind === "zoneNames") {
+            // `raw` is a JS array of zone-name strings; quote each valid one so
+            // a name made of digits cannot read as an ordinal.
+            if (Array.isArray(raw))
+                return root._validZoneTargets(param, action).map(function (n) {
+                    return i18nc("a quoted zone name", "“%1”", n);
+                }).join(", ");
             return rawStr;
         }
         if (kind === "screenId") {
@@ -226,9 +335,18 @@ ColumnLayout {
             // else just the number.
             var names = root.appSettings && root.appSettings.virtualDesktopNames ? root.appSettings.virtualDesktopNames : [];
             var num = parseInt(raw, 10);
-            if (num >= 1 && names.length >= num && names[num - 1])
-                return num + ": " + names[num - 1];
-            return num > 0 ? String(num) : rawStr;
+            // Bounded on both ends like the C++ summary: the descriptor
+            // publishes the ordinal cap as `max`, and a hand-edited ordinal
+            // outside 1..max is one the loader rejects, so it echoes raw rather
+            // than printing as a real target.
+            if (!(num >= 1) || num > root._paramBound(param))
+                return rawStr;
+            if (names.length >= num && names[num - 1])
+                // Same one-i18nc composition as the desktop pickers in
+                // MatchLeafEditor and ActionParamEditors, so the summary and
+                // the editors render a desktop identically.
+                return i18nc("virtual desktop number, then its name", "%1: %2", num, names[num - 1]);
+            return String(num);
         }
         if (kind === "color") {
             // "accent" is the follow-the-system-accent sentinel; otherwise a
@@ -264,6 +382,17 @@ ColumnLayout {
             // free for the inner param Repeater's delegates.
             readonly property var _action: actionDelegate.modelData
             readonly property var _params: root._paramsFor(_action.type)
+            // Index of the first param row that renders, so the 8-gridUnit
+            // label floor (which keeps the first value pill in the WHEN value
+            // column) follows the first VISIBLE param rather than index 0 —
+            // a names-only SnapToZone hides index 0.
+            readonly property int _firstVisibleParamIndex: {
+                for (var i = 0; i < _params.length; ++i) {
+                    if (root._paramVisible(_params[i], _action))
+                        return i;
+                }
+                return -1;
+            }
             // True for the bottom-most action — its tree-line vertical
             // stops at row-mid instead of running to the row bottom,
             // matching the "last child" terminator in WHEN.
@@ -375,20 +504,31 @@ ColumnLayout {
                         required property int index
 
                         spacing: Kirigami.Units.largeSpacing
+                        // See root._paramVisible: SnapToZone hides a target
+                        // list with no valid entry, every other kind always
+                        // renders.
+                        visible: root._paramVisible(paramRow.modelData, actionDelegate._action)
 
                         Label {
                             Layout.alignment: Qt.AlignVCenter
-                            // First param keeps the 8-gridUnit floor so its
-                            // value pill lands in the same column as WHEN's
-                            // value pills (visual alignment with the operator
-                            // column above). Subsequent params shrink to
-                            // their text width — leaving the 8 gu floor on
+                            // The first VISIBLE param keeps the 8-gridUnit
+                            // floor so its value pill lands in the same column
+                            // as WHEN's value pills (visual alignment with the
+                            // operator column above). Subsequent params shrink
+                            // to their text width — leaving the 8 gu floor on
                             // every param turned the gap between a short
                             // label like "SHADER EFFECT" and its value pill
                             // into dead space because the label box itself
                             // padded out to 8 gu before the largeSpacing to
                             // the pill kicked in.
-                            Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
+                            Layout.minimumWidth: paramRow.index === actionDelegate._firstVisibleParamIndex ? Kirigami.Units.gridUnit * 8 : 0
+                            // Cap and elide: the bool params carry the longest
+                            // labels in the table ("Focus the window when it
+                            // opens (off = keep the current focus)") and render
+                            // all-caps in an anchored row, so an uncapped label
+                            // pushes its value pill off the row.
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 16
+                            elide: Text.ElideRight
                             text: paramRow.modelData.label
                             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
                             // illegal duplicate binding that fails the whole document. FontUtils
@@ -403,6 +543,10 @@ ColumnLayout {
                             Layout.alignment: Qt.AlignVCenter
                             implicitWidth: pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2
                             implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
+                            // Cap matching the WHEN-side value pill so a long
+                            // decoration-pack list or a raw id elides inside the
+                            // pill rather than running past the row edge.
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
                             radius: Kirigami.Units.smallSpacing
                             Kirigami.Theme.colorSet: Kirigami.Theme.View
                             Kirigami.Theme.inherit: false
@@ -414,6 +558,12 @@ ColumnLayout {
                                 id: pillContent
 
                                 anchors.centerIn: parent
+                                // Fit inside the (possibly capped) pill so the
+                                // value label below has something to elide
+                                // against. Not a loop: the pill sizes from this
+                                // row's implicitWidth, which eliding does not
+                                // change.
+                                width: Math.min(implicitWidth, parent.width - Kirigami.Units.largeSpacing * 2)
                                 spacing: Kirigami.Units.smallSpacing
 
                                 // Colour swatch for `color`-kind params — the raw
@@ -436,8 +586,17 @@ ColumnLayout {
                                     id: valueLabel
 
                                     Layout.alignment: Qt.AlignVCenter
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
                                     text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
                                     font.family: Kirigami.Theme.smallFont.family
+                                    ToolTip.text: valueLabel.text
+                                    ToolTip.visible: valueHover.hovered && valueLabel.truncated
+                                    ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                                    HoverHandler {
+                                        id: valueHover
+                                    }
                                 }
                             }
                         }
@@ -449,6 +608,13 @@ ColumnLayout {
                 // condition) as the rule editor's action row, so the saved-rule
                 // summary flags the conflict too, not just the editor.
                 StockAnimationConflictChip {
+                    action: actionDelegate._action
+                    animationsController: root.appSettings ? root.appSettings.animationsController : null
+                }
+
+                // Same shared component as the editor's action row, so a saved
+                // rule naming a windowless event is flagged in the summary too.
+                InertAnimationEventChip {
                     action: actionDelegate._action
                     animationsController: root.appSettings ? root.appSettings.animationsController : null
                 }

@@ -67,7 +67,6 @@ SettingsFlickable {
 
                     ModifierAndMouseCheckBoxes {
                         width: root.sliderPreferredWidth
-                        allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: root.settingsBridge.snapAssistTriggers
                         defaultTriggers: root.settingsBridge.defaultSnapAssistTriggers
@@ -76,6 +75,22 @@ SettingsFlickable {
                             root.settingsBridge.snapAssistTriggers = triggers;
                         }
                     }
+                }
+
+                SettingsSeparator {
+                    enabled: !snapAssistAlwaysSwitch.checked
+                }
+
+                TriggerGraceRow {
+                    title: i18n("Release grace period")
+                    searchAnchor: "snapAssistReleaseGracePeriod"
+                    description: i18n("How long after the trigger is released a drop still counts as holding it. The picker is decided at the moment you let go of the window, which is when a trigger held by the same hand has usually lifted already. Set 0 to turn it off.")
+                    accessibleName: i18n("Release grace period for the snap assist picker")
+                    enabled: !snapAssistAlwaysSwitch.checked
+                    minMs: root.settingsBridge.triggerGraceMsMin
+                    maxMs: root.settingsBridge.triggerGraceMsMax
+                    graceMs: appSettings.snapAssistGraceMs
+                    onGraceModified: value => appSettings.snapAssistGraceMs = value
                 }
             }
         }

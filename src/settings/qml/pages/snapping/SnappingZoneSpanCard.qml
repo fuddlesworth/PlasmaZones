@@ -19,7 +19,7 @@ SettingsCard {
     required property var settingsBridge
     property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
 
-    headerText: i18n("Zone Span")
+    headerText: i18n("Zone span")
     searchAnchor: "zoneSpan"
     showToggle: true
     toggleChecked: appSettings.zoneSpanEnabled
@@ -38,7 +38,6 @@ SettingsCard {
 
             ModifierAndMouseCheckBoxes {
                 width: card.sliderPreferredWidth
-                allowMultiple: true
                 acceptMode: acceptModeAll
                 triggers: card.settingsBridge.zoneSpanTriggers
                 defaultTriggers: card.settingsBridge.defaultZoneSpanTriggers
@@ -57,12 +56,30 @@ SettingsCard {
             description: i18n("Tap the span modifier once to start spanning, tap again to stop, instead of holding it")
 
             SettingsSwitch {
+                id: spanToggleSwitch
+
                 checked: appSettings.zoneSpanToggleMode
                 accessibleName: i18n("Zone span toggle mode")
                 onToggled: function (newValue) {
                     appSettings.zoneSpanToggleMode = newValue;
                 }
             }
+        }
+
+        SettingsSeparator {
+            enabled: !spanToggleSwitch.checked
+        }
+
+        TriggerGraceRow {
+            title: i18n("Release grace period")
+            searchAnchor: "zoneSpanReleaseGracePeriod"
+            description: i18n("How long spanning stays active after the span modifier is released, so a window dropped just after letting go of it still takes the painted zones. Helps when the modifier is a mouse button released with the drop. Set 0 to turn it off.")
+            accessibleName: i18n("Zone span release grace period")
+            enabled: !spanToggleSwitch.checked
+            minMs: card.settingsBridge.triggerGraceMsMin
+            maxMs: card.settingsBridge.triggerGraceMsMax
+            graceMs: appSettings.zoneSpanGraceMs
+            onGraceModified: value => appSettings.zoneSpanGraceMs = value
         }
 
         SettingsSeparator {}

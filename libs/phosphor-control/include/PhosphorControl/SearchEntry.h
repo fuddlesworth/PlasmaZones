@@ -36,7 +36,20 @@ struct SearchEntry
         Action
     };
 
+    /// Which UI mode(s) can reach this entry. COMPUTED by
+    /// SearchController::buildIndex from the host page's registry tier ANDed
+    /// with the entry's own `advancedOnly` flag — producers never set it.
+    /// The index carries every entry regardless of the live mode; this tag is
+    /// what the results surface exposes so the UI can badge a mode-specific
+    /// result and switch the mode before navigating to it.
+    enum class Mode {
+        Both, ///< Reachable in simple and advanced mode alike.
+        SimpleOnly, ///< Lives on a SimpleOnly page (a condensed simple surface).
+        AdvancedOnly ///< On an AdvancedOnly page, or an advanced-gated row.
+    };
+
     Kind kind = Kind::Page;
+    Mode mode = Mode::Both;
     /// Navigation target page id (must be a registered page). Empty for
     /// Kind::Action entries.
     QString pageId;
@@ -56,9 +69,11 @@ struct SearchEntry
     QStringList keywords;
     /// True when the target row/card is only rendered in advanced mode, on a
     /// page that itself shows in BOTH modes. The registry's page-level tier
-    /// cannot express this: the host page is visible, so without this flag a
-    /// simple-mode search offers a result that reveals nothing. Producers set
-    /// it to mirror the row's own advanced-only declaration.
+    /// cannot express this: the host page shows in simple mode too, so
+    /// without this flag the entry would classify as Mode::Both and a
+    /// simple-mode activation would reveal a collapsed row instead of
+    /// switching to advanced first. Producers set it to mirror the row's own
+    /// advanced-only declaration.
     bool advancedOnly = false;
 
     /// Search-folded copies of the matched fields, filled by

@@ -4,6 +4,7 @@
 #include "layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include "core/platform/logging.h"
@@ -21,6 +22,20 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace {
+/// D-Bus boundary guard shared by every per-desktop slot in this file:
+/// 0 = the base (all-desktops) context, negatives are never a valid desktop
+/// number. The batch setters carry their own equivalent checks.
+bool validDesktopArg(int virtualDesktop, const char* method)
+{
+    if (virtualDesktop < 0) {
+        qCWarning(lcDbusLayout) << method << "- negative virtualDesktop" << virtualDesktop;
+        return false;
+    }
+    return true;
+}
+} // namespace
 
 QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) const
 {
@@ -54,7 +69,10 @@ QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 
     // Check for autotile assignment first (layoutForScreen returns nullptr for autotile)
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, desktop, activity);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
 
@@ -85,7 +103,11 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     // For manual layouts, validate UUID and verify layout exists
     PhosphorZones::Layout* layout = nullptr;
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    // The reserved snapping opt-out word skips the UUID/existence validation:
+    // assignLayoutById is taught the word (it upserts the opt-out entry), the
+    // resolved getters emit it, and refusing it here made setAssignmentEntry
+    // the only verb able to write back what these verbs' own getters return.
+    if (requiresManualLayoutValidation(layoutId)) {
         layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
         if (!layout) {
             return;
@@ -128,123 +150,6 @@ void LayoutAdaptor::clearAssignment(const QString& screenId)
     m_changedScreenIds.insert(resolvedId);
 }
 
-void LayoutAdaptor::markScreensWithStoredAssignments(AssignmentFamily family)
-{
-    // Every batch setter routes through LayoutRegistry::applyBatchAssignments,
-    // which DROPS every rule of the family before rebuilding from the incoming
-    // map. A screen whose assignment is removed by being absent from that map
-    // therefore changes, but marking only the map's own keys never recorded it —
-    // so it was never resnapped and never appeared in assignmentChangesApplied,
-    // and it kept its old placement until something unrelated moved it.
-    //
-    // Scoped to the family being replaced. A setter that rebuilds the Desktop
-    // rules leaves the Monitor-only, Activity and Combined rules untouched, so
-    // marking a screen because it holds one of THOSE costs a resnap and a
-    // per-screen OSD for a screen whose resolved assignment cannot have moved.
-    //
-    // The three context families are read from the registry's own family
-    // readers, the round-trip counterparts of the batch setters. That also
-    // closes the old coverage gap: those readers enumerate every context a
-    // family holds, where probing one context per screen from here missed a
-    // screen whose only stored entry was for a desktop the user is not
-    // currently on. The base family has no such reader, so it is probed per
-    // screen with the exact monitor-only tuple.
-    //
-    // The three family readers return every screen id the registry has EVER stored
-    // a rule for, including monitors that are not connected now. The base branch is
-    // naturally free of those because it walks the live screen list; the readers are
-    // not, so they are intersected with it. Marking a disconnected monitor would put
-    // it into the resnap set and the per-screen OSD run for a screen that cannot be
-    // resnapped or shown anything, widening the blast radius past what this pass had
-    // before the readers replaced the per-screen probe.
-    const QStringList liveScreenIds = m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList();
-    const QSet<QString> liveScreens(liveScreenIds.cbegin(), liveScreenIds.cend());
-    // Without a screen manager (degraded single-argument-constructor mode, test
-    // fixtures) there is no live set to filter against. Mark unfiltered, as this
-    // pass always did, rather than silently marking nothing.
-    const bool filterToLiveScreens = m_screenManager != nullptr;
-    const auto markScreen = [this, &liveScreens, filterToLiveScreens](const QString& screenId) {
-        if (!filterToLiveScreens || liveScreens.contains(screenId)) {
-            m_changedScreenIds.insert(screenId);
-        }
-    };
-    switch (family) {
-    case AssignmentFamily::Base: {
-        if (!m_screenManager) {
-            // Degraded single-argument-constructor mode (test fixtures). Say so
-            // rather than returning silently: the batch still replaces the base
-            // family, so a screen dropped from the incoming map goes unmarked.
-            qCWarning(lcDbusLayout) << "markScreensWithStoredAssignments: no screen manager — base-family screens "
-                                       "dropped by this batch will not be marked as changed";
-            return;
-        }
-        for (const QString& screenId : liveScreenIds) {
-            // Exact monitor-only shape (desktop 0, no activity) — not the
-            // cascade, which would also report a Desktop or Activity rule this
-            // setter does not touch.
-            if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
-                m_changedScreenIds.insert(screenId);
-            }
-        }
-        break;
-    }
-    case AssignmentFamily::Desktop: {
-        const auto assignments = m_layoutManager->desktopAssignments();
-        for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
-            markScreen(it.key().first);
-        }
-        break;
-    }
-    case AssignmentFamily::Activity: {
-        const auto assignments = m_layoutManager->activityAssignments();
-        for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
-            markScreen(it.key().first);
-        }
-        break;
-    }
-    case AssignmentFamily::Combined: {
-        const auto assignments = m_layoutManager->combinedAssignments();
-        for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
-            markScreen(it.key().screenId);
-        }
-        break;
-    }
-    }
-}
-
-void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
-{
-    markScreensWithStoredAssignments(AssignmentFamily::Base);
-    QHash<QString, QString> parsedAssignments;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenIdOrName = it.key();
-        QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch screen assignment"));
-            if (!uuidOpt) {
-                continue;
-            }
-        }
-        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        parsedAssignments[resolvedId] = layoutId;
-        m_changedScreenIds.insert(resolvedId);
-    }
-
-    m_layoutManager->setAllScreenAssignments(parsedAssignments);
-    // Update global active layout for the primary screen so zone overlay/drag see the new layout
-    // immediately (same as assignLayoutToScreen). KCM Save uses this path.
-    QScreen* primary = Utils::primaryScreen();
-    if (primary) {
-        PhosphorZones::Layout* primaryLayout =
-            m_layoutManager->resolveLayoutForScreen(PhosphorScreens::ScreenIdentity::identifierFor(primary));
-        if (primaryLayout) {
-            m_layoutManager->setActiveLayout(primaryLayout);
-        }
-    }
-
-    qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
-}
-
 QStringList LayoutAdaptor::getAvailableScreenIds()
 {
     return m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList();
@@ -271,25 +176,50 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // Per-screen base entry — only emit when explicitly stored.
         // assignmentEntryForScreen would happily synthesize the user's
         // global default here (per-368 fallback), but this JSON is the
-        // KCM's view of *stored* state and may be round-tripped back
-        // through SetAllScreenAssignments on save. Persisting the
-        // synthesized default would shadow future global-default
-        // changes and defeat the "synthesized fallback only" intent.
+        // KCM's view of *stored* state, which it stages and writes back
+        // through the per-context setters (this shape is not what
+        // setAllScreenAssignments accepts, so it is a readback, not a
+        // round-trip). Reporting the synthesized default as stored would
+        // shadow future global-default changes on that write-back and
+        // defeat the "synthesized fallback only" intent.
         if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
             hasAnyStored = true;
-            auto entry = m_layoutManager->assignmentEntryForScreen(screenId, 0, QString());
+            // exactContextEntry, NOT assignmentEntryForScreen: the gate above
+            // is blind to the rule's enabled flag, while the cascade resolvers
+            // skip disabled rules and fall through to the synthesized default.
+            // Pairing them reported that default as if the user had stored it
+            // — the very shadowing this block's comment says it avoids — and
+            // the KCM stages this JSON and writes it back per context, so a
+            // save round trip overwrote a DISABLED pin's payload with the
+            // default's id. getScreenStates already sources its explicit
+            // markers from this same enabled-blind reader.
+            auto entry = m_layoutManager->exactContextEntry(screenId, 0, QString());
             QString effectiveId = entry.activeLayoutId();
             if (!effectiveId.isEmpty()) {
                 screenObj[QLatin1String("default")] = effectiveId;
             }
-            // Expose both fields so the KCM can populate snapping AND tiling assignments
+            // Expose all payload fields so the KCM can populate snapping,
+            // tiling AND scrolling-template assignments
             if (!entry.snappingLayout.isEmpty()) {
                 screenObj[QLatin1String("snappingLayout")] = entry.snappingLayout;
             }
             if (!entry.tilingAlgorithm.isEmpty()) {
                 screenObj[QLatin1String("tilingAlgorithm")] = entry.tilingAlgorithm;
             }
-            screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+            if (!entry.scrollingTemplateLayout.isEmpty()) {
+                screenObj[QLatin1String("scrollingTemplate")] = entry.scrollingTemplateLayout;
+            }
+            // Only when the rule actually DECLARES a mode. exactContextEntry
+            // decodes through a helper that starts every entry at Snapping, so
+            // a layout-only pin — a SetSnappingLayout or SetScrollingTemplate
+            // with no SetEngineMode, a shape the exact-context lookup admits
+            // on purpose — would otherwise be published as an explicit
+            // Snapping choice the user never made. Since this JSON is staged
+            // and written back per context, that would stamp the pin with a
+            // mode and change what it means.
+            if (m_layoutManager->exactContextDeclaresEngineMode(screenId, 0, QString())) {
+                screenObj[QLatin1String("mode")] = static_cast<int>(entry.mode);
+            }
         }
 
         // Per-desktop entries (desktop > 0) — only include explicitly assigned
@@ -297,9 +227,22 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // desktop row in the KCM would show the display default redundantly.
         for (int desktop = 1; desktop <= desktopCount; ++desktop) {
             if (m_layoutManager->hasExplicitAssignment(screenId, desktop, QString())) {
-                QString desktopId = m_layoutManager->assignmentIdForScreen(screenId, desktop, QString());
+                // Enabled-blind read, for the same reason as the base entry
+                // above: the gate admits a disabled pin, so resolving through
+                // the cascade would report the synthesized default as stored.
+                const auto desktopEntry = m_layoutManager->exactContextEntry(screenId, desktop, QString());
+                const QString desktopId = desktopEntry.activeLayoutId();
+                // A mode-only SNAPPING pin resolves to an EMPTY id — Snapping
+                // is the only mode with no bare sentinel to stand in for it
+                // (Autotile and Scrolling answer "autotile:" / "scrolling:").
+                // Such a pin carries no id to publish under this flat
+                // desktop-keyed shape, so it stays unrepresented here. It must
+                // still mark the screen as carrying stored state, or a screen
+                // whose ONLY stored entry is that pin disappeared from the
+                // readback altogether. The omission of the row itself is
+                // documented on the method in org.plasmazones.LayoutRegistry.xml.
+                hasAnyStored = true;
                 if (!desktopId.isEmpty()) {
-                    hasAnyStored = true;
                     screenObj[QString::number(desktop)] = desktopId;
                 }
             }
@@ -329,9 +272,15 @@ QString LayoutAdaptor::getAllScreenAssignments()
 // Per-Virtual-Desktop Assignments
 QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getLayoutForScreenDesktop")) {
+        return QString();
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, QString());
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, QString());
@@ -340,6 +289,9 @@ QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int vi
 
 void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
+    if (!validDesktopArg(virtualDesktop, "assignLayoutToScreenDesktop")) {
+        return;
+    }
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout to desktop"))) {
         return;
     }
@@ -348,7 +300,11 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    // The reserved snapping opt-out word skips the UUID/existence validation:
+    // assignLayoutById is taught the word (it upserts the opt-out entry), the
+    // resolved getters emit it, and refusing it here made setAssignmentEntry
+    // the only verb able to write back what these verbs' own getters return.
+    if (requiresManualLayoutValidation(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop"));
         if (!layout) {
             return;
@@ -370,7 +326,7 @@ void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
         return;
     }
-    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("clear assignment"))) {
+    if (!validDesktopArg(virtualDesktop, "clearAssignmentForScreenDesktop")) {
         return;
     }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
@@ -381,24 +337,36 @@ void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int
 
 bool LayoutAdaptor::hasExplicitAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "hasExplicitAssignmentForScreenDesktop")) {
+        return false;
+    }
     return m_layoutManager->hasExplicitAssignment(PhosphorScreens::ScreenIdentity::idForName(screenId), virtualDesktop,
                                                   QString());
 }
 
 int LayoutAdaptor::getModeForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getModeForScreenDesktop")) {
+        return static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
+    }
     return static_cast<int>(m_layoutManager->modeForScreen(PhosphorScreens::ScreenIdentity::idForName(screenId),
                                                            virtualDesktop, QString()));
 }
 
 QString LayoutAdaptor::getSnappingLayoutForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getSnappingLayoutForScreenDesktop")) {
+        return QString();
+    }
     return m_layoutManager->snappingLayoutForScreen(PhosphorScreens::ScreenIdentity::idForName(screenId),
                                                     virtualDesktop, QString());
 }
 
 QString LayoutAdaptor::getTilingAlgorithmForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validDesktopArg(virtualDesktop, "getTilingAlgorithmForScreenDesktop")) {
+        return QString();
+    }
     return m_layoutManager->tilingAlgorithmForScreen(PhosphorScreens::ScreenIdentity::idForName(screenId),
                                                      virtualDesktop, QString());
 }
@@ -436,11 +404,13 @@ QString LayoutAdaptor::getScreenStates()
         obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
 
         // Snapping layout — use the resolved layout (includes the default
-        // fallback), EXCEPT when the default is suppressed for this context: then
-        // report no layout so the settings/KCM monitor view shows the screen as
-        // unassigned instead of the default-layout fallback.
+        // fallback), EXCEPT when the default is suppressed for this context
+        // or the context is Scrolling: for Scrolling, layoutForScreen would
+        // fall through its settled-nullptr arm to defaultLayout() and the
+        // monitor view would render a layout the screen does not use.
         PhosphorZones::Layout* resolvedLayout =
-            m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktop, activity)
+            (entry.mode == PhosphorZones::AssignmentEntry::Scrolling
+             || m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktop, activity))
             ? nullptr
             : m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (resolvedLayout) {
@@ -450,17 +420,82 @@ QString LayoutAdaptor::getScreenStates()
             obj[QLatin1String("layoutId")] = QString();
             obj[QLatin1String("layoutName")] = QString();
         }
+        // The cascade entry's field beside the resolved pair above (raw in
+        // the sense of untranslated — assignmentEntryForScreen synthesizes
+        // the default entry on a cascade miss, so a non-empty value here is
+        // not proof of stored state; layoutIdExplicit below is that proof).
+        // Same shape scrollingTemplateId takes below and for the same
+        // reason: the resolved layoutId cannot distinguish "explicitly none"
+        // (the reserved word, which resolves to no layout) from "nothing
+        // assigned and no default in force" (both answer empty), and the
+        // Monitors page needs this value to seat its selector on the None
+        // row.
+        obj[QLatin1String("snappingLayoutId")] = entry.snappingLayout;
 
-        // Tiling algorithm — use resolved algorithm (includes fallback)
+        // Per-slot explicit markers: whether THIS exact context tuple pins
+        // the field, as opposed to the resolved value arriving through the
+        // cascade/default. The Monitors page gates its lossless mode-toggle
+        // sibling carry on these, so a pure mode switch can never freeze a
+        // cascade default into an explicit assignment.
+        //
+        // exactContextEntry scans the assignment list, so this loop is O(screens
+        // × assignments). Left as is on purpose: getScreenStates is a
+        // settings-UI / shortcut-rate call over a handful of screens, and an
+        // index would add a cache to keep in sync with every assignment write
+        // for no measurable gain.
+        const PhosphorZones::AssignmentEntry exactEntry =
+            m_layoutManager->exactContextEntry(screenId, desktop, activity);
+        obj[QLatin1String("layoutIdExplicit")] = !exactEntry.snappingLayout.isEmpty();
+        obj[QLatin1String("algorithmIdExplicit")] = !exactEntry.tilingAlgorithm.isEmpty();
+
+        // Scrolling template — read the RAW entry field, not the mode-gated
+        // scrollingTemplateForContext resolver: a template PRESERVED across a
+        // mode toggle (the lossless contract) is exactly the state the
+        // Monitors page needs to show, and the resolver deliberately answers
+        // nullptr for non-Scrolling contexts.
+        //
+        // Deliberate divergence from getScrollingTemplateLayout: the raw field
+        // also skips the resolver's configured DEFAULT-template fallback, so a
+        // context that pins no template of its own reports empty here while the
+        // strip runs the default. The page needs "what this context stores" to
+        // drive its explicit/inherited affordances, not the resolved value.
+        obj[QLatin1String("scrollingTemplateId")] = entry.scrollingTemplateLayout;
+        if (!entry.scrollingTemplateLayout.isEmpty()) {
+            // Name from the native template STORE (templates are no longer
+            // layouts). A deleted template answers an empty name, which is
+            // what tells the Monitors page it is looking at a context pinned
+            // to a template the store no longer holds. The reserved
+            // no-template word produces the same wire shape (non-empty id,
+            // empty name), so the page tests the word FIRST and treats the
+            // empty-name shape as a dangling template only after that; it
+            // says so in prose rather than printing the raw id.
+            const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+            obj[QLatin1String("scrollingTemplateName")] =
+                store ? store->templateById(QUuid::fromString(entry.scrollingTemplateLayout)).name : QString();
+        } else {
+            obj[QLatin1String("scrollingTemplateName")] = QString();
+        }
+        obj[QLatin1String("scrollingTemplateExplicit")] = !exactEntry.scrollingTemplateLayout.isEmpty();
+
+        // Tiling algorithm — use resolved algorithm (includes fallback).
+        // The reserved word rides through verbatim (the resolver never
+        // translates it), so the id field can carry "none" — the page's
+        // selector needs exactly that — while the name stays empty below:
+        // the registry lookup would miss and print the raw word as a
+        // display name.
         const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
         obj[QLatin1String("algorithmId")] = algoId;
         // Null-tolerant: D-Bus clients can hit getScreenStates before the
         // composition root finishes wiring setAlgorithmRegistry. Mirror the
         // null-fallback the layoutId branch above does (algoId without a
         // registry yields an empty algorithmName rather than a crash).
-        if (!algoId.isEmpty() && m_algorithmRegistry) {
+        if (!algoId.isEmpty() && algoId != PhosphorZones::NoTilingAlgorithm && m_algorithmRegistry) {
             PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algoId);
-            obj[QLatin1String("algorithmName")] = algo ? algo->name() : algoId;
+            // A registry miss (uninstalled algorithm, removed Luau file,
+            // hand-edited id) answers an empty name, matching the layoutName
+            // convention above — a dangling id is as un-displayable as the
+            // reserved word the outer condition already excludes.
+            obj[QLatin1String("algorithmName")] = algo ? algo->name() : QString();
         } else {
             obj[QLatin1String("algorithmName")] = QString();
         }
@@ -469,63 +504,6 @@ QString LayoutAdaptor::getScreenStates()
     }
 
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-}
-
-void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
-{
-    markScreensWithStoredAssignments(AssignmentFamily::Desktop);
-    QHash<QPair<QString, int>, QString> parsedAssignments;
-
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        // Split on '|' delimiter (screen IDs contain colons, so ':' is not safe)
-        int sep = it.key().lastIndexOf(QLatin1Char('|'));
-        if (sep < 0) {
-            // Backward compat: try legacy ':' delimiter for old KCM round-trips.
-            // lastIndexOf is correct here because desktop numbers are always the
-            // last component (e.g., "DP-2:3"), and screen IDs contain colons
-            // (e.g., "DEL:DELL U2722D:115107:3" → last ':' before "3").
-            // Warning: virtual screen IDs (physId/vs:N) also contain ':' — the
-            // numeric guard below may misparse "physId/vs:0" as desktop=0.
-            // This is caught by the virtualDesktop < 1 check on line below.
-            sep = it.key().lastIndexOf(QLatin1Char(':'));
-            // Guard: verify the desktop part is actually a number, not part of a screen ID
-            if (sep > 0) {
-                bool isDesktop = false;
-                it.key().mid(sep + 1).toInt(&isDesktop);
-                if (!isDesktop) {
-                    qCWarning(lcDbusLayout) << "Desktop assignment key has non-numeric desktop part"
-                                            << "with ':' delimiter:" << it.key();
-                    sep = -1;
-                }
-            }
-        }
-        if (sep < 1) {
-            qCWarning(lcDbusLayout) << "Invalid desktop assignment key format:" << it.key();
-            continue;
-        }
-
-        QString screenIdOrName = it.key().left(sep);
-        bool ok;
-        int virtualDesktop = it.key().mid(sep + 1).toInt(&ok);
-        if (!ok || virtualDesktop < 1) {
-            qCWarning(lcDbusLayout) << "Invalid virtual desktop number:" << it.key().mid(sep + 1);
-            continue;
-        }
-
-        QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch desktop assignment"));
-            if (!uuidOpt) {
-                continue;
-            }
-        }
-        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        parsedAssignments[qMakePair(resolvedId, virtualDesktop)] = layoutId;
-        m_changedScreenIds.insert(resolvedId);
-    }
-
-    m_layoutManager->setAllDesktopAssignments(parsedAssignments);
-    qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "desktop assignments";
 }
 
 QVariantMap LayoutAdaptor::getActiveLayoutsForScreens()
@@ -595,7 +573,8 @@ QVariantMap LayoutAdaptor::getAllDesktopAssignments()
         // getAllActivityAssignments below; convert the desktop int to
         // a string up-front so both helpers use the same call shape.
         QString key = QStringLiteral("%1|%2").arg(it.key().first, QString::number(it.key().second));
-        result[key] = it.value();
+        result[key] = QVariantMap{{QStringLiteral("layoutId"), it.value().activeLayoutId()},
+                                  {QStringLiteral("scrollingTemplate"), it.value().scrollingTemplateLayout}};
     }
 
     return result;
@@ -608,7 +587,8 @@ QVariantMap LayoutAdaptor::getAllActivityAssignments()
     const auto assignments = m_layoutManager->activityAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         QString key = QStringLiteral("%1|%2").arg(it.key().first, it.key().second);
-        result[key] = it.value();
+        result[key] = QVariantMap{{QStringLiteral("layoutId"), it.value().activeLayoutId()},
+                                  {QStringLiteral("scrollingTemplate"), it.value().scrollingTemplateLayout}};
     }
 
     return result;
@@ -678,7 +658,10 @@ QString LayoutAdaptor::getLayoutForScreenActivity(const QString& screenId, const
 {
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, 0, activityId);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, 0, activityId);
@@ -696,7 +679,11 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    // The reserved snapping opt-out word skips the UUID/existence validation:
+    // assignLayoutById is taught the word (it upserts the opt-out entry), the
+    // resolved getters emit it, and refusing it here made setAssignmentEntry
+    // the only verb able to write back what these verbs' own getters return.
+    if (requiresManualLayoutValidation(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen activity"));
         if (!layout) {
             return;
@@ -735,110 +722,42 @@ bool LayoutAdaptor::hasExplicitAssignmentForScreenActivity(const QString& screen
     return m_layoutManager->hasExplicitAssignment(PhosphorScreens::ScreenIdentity::idForName(screenId), 0, activityId);
 }
 
-void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
-{
-    markScreensWithStoredAssignments(AssignmentFamily::Activity);
-    QHash<QPair<QString, QString>, QString> parsedAssignments;
-
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        // Split on '|' delimiter (screen IDs contain colons, so ':' is not safe)
-        int sep = it.key().indexOf(QLatin1Char('|'));
-        if (sep < 0) {
-            // Backward compat: try legacy ':' delimiter for old configs.
-            // Use lastIndexOf because activity IDs are UUIDs (contain hyphens, no colons),
-            // so the last ':' correctly separates "DEL:DELL U2722D:115107:activity-uuid"
-            // into screen ID + activity. For connector-name keys ("DP-2:activity-uuid"),
-            // lastIndexOf also works correctly since there's only one ':'.
-            // New KCM always sends '|', so this path only triggers for pre-migration data.
-            sep = it.key().lastIndexOf(QLatin1Char(':'));
-        }
-        if (sep < 1) {
-            qCWarning(lcDbusLayout) << "Invalid activity assignment key format:" << it.key();
-            continue;
-        }
-
-        QString screenIdOrName = it.key().left(sep);
-        QString activityId = it.key().mid(sep + 1);
-        if (screenIdOrName.isEmpty() || activityId.isEmpty()) {
-            qCWarning(lcDbusLayout) << "Empty screen or activity in assignment key:" << it.key();
-            continue;
-        }
-
-        QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch activity assignment"));
-            if (!uuidOpt) {
-                continue;
-            }
-        }
-        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        parsedAssignments[qMakePair(resolvedId, activityId)] = layoutId;
-        m_changedScreenIds.insert(resolvedId);
-    }
-
-    m_layoutManager->setAllActivityAssignments(parsedAssignments);
-    qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "activity assignments";
-}
-
 QVariantMap LayoutAdaptor::getAllCombinedAssignments()
 {
     QVariantMap result;
     const auto assignments = m_layoutManager->combinedAssignments();
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
+        // Emit only FULL triples: the setter rejects desktop <= 0 / empty
+        // activity, so a base-context entry surfaced here would be silently
+        // dropped on a client's read-modify-write round trip. Base-context
+        // assignments travel through their own per-axis getters instead.
+        if (it.key().virtualDesktop <= 0 || it.key().activity.isEmpty()) {
+            continue;
+        }
         // Key format mirrors the setter: "screen|desktop|activity". '|' is
         // safe because screen ids may carry ':' (manufacturer:model:serial)
         // and activity ids are UUIDs.
         const QString key =
             QStringLiteral("%1|%2|%3").arg(it.key().screenId).arg(it.key().virtualDesktop).arg(it.key().activity);
-        result[key] = it.value();
+        result[key] = QVariantMap{{QStringLiteral("layoutId"), it.value().activeLayoutId()},
+                                  {QStringLiteral("scrollingTemplate"), it.value().scrollingTemplateLayout}};
     }
     return result;
-}
-
-void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
-{
-    markScreensWithStoredAssignments(AssignmentFamily::Combined);
-    QHash<PhosphorZones::CombinedAssignmentKey, QString> parsed;
-    for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
-        const QString& rawKey = it.key();
-        // Split on '|' boundaries — exactly three segments
-        // (screen, desktop, activity). Anything else is malformed.
-        const int firstSep = rawKey.indexOf(QLatin1Char('|'));
-        const int secondSep = (firstSep >= 0) ? rawKey.indexOf(QLatin1Char('|'), firstSep + 1) : -1;
-        if (firstSep < 1 || secondSep <= firstSep + 1 || secondSep == rawKey.size() - 1) {
-            qCWarning(lcDbusLayout) << "Invalid combined assignment key format:" << rawKey;
-            continue;
-        }
-        const QString screenIdOrName = rawKey.left(firstSep);
-        bool ok = false;
-        const int virtualDesktop = rawKey.mid(firstSep + 1, secondSep - firstSep - 1).toInt(&ok);
-        const QString activityId = rawKey.mid(secondSep + 1);
-        if (!ok || virtualDesktop <= 0 || activityId.isEmpty()) {
-            qCWarning(lcDbusLayout) << "Invalid combined assignment key fields:" << rawKey;
-            continue;
-        }
-        const QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch combined assignment"));
-            if (!uuidOpt) {
-                continue;
-            }
-        }
-        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
-        parsed.insert(PhosphorZones::CombinedAssignmentKey{resolvedId, virtualDesktop, activityId}, layoutId);
-        m_changedScreenIds.insert(resolvedId);
-    }
-    m_layoutManager->setAllCombinedAssignments(parsed);
-    qCInfo(lcDbusLayout) << "Batch set" << parsed.size() << "combined assignments";
 }
 
 // Full Assignments (Screen + Desktop + Activity)
 QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                          const QString& activityId)
 {
+    if (!validDesktopArg(virtualDesktop, "getLayoutForScreenDesktopActivity")) {
+        return QString();
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, activityId);
-    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId) || PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Autotile ids and the bare scrolling sentinel have no snap Layout*
+        // to resolve; report the id itself so the read path agrees with
+        // what the batch setters accept.
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, activityId);
@@ -848,6 +767,9 @@ QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId
 void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                         const QString& activityId, const QString& layoutId)
 {
+    if (!validDesktopArg(virtualDesktop, "assignLayoutToScreenDesktopActivity")) {
+        return;
+    }
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
         return;
     }
@@ -863,7 +785,11 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+    // The reserved snapping opt-out word skips the UUID/existence validation:
+    // assignLayoutById is taught the word (it upserts the opt-out entry), the
+    // resolved getters emit it, and refusing it here made setAssignmentEntry
+    // the only verb able to write back what these verbs' own getters return.
+    if (requiresManualLayoutValidation(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop activity"));
         if (!layout) {
             return;
@@ -887,7 +813,7 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
         return;
     }
-    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("clear assignment"))) {
+    if (!validDesktopArg(virtualDesktop, "clearAssignmentForScreenDesktopActivity")) {
         return;
     }
     // Same Combined-family key requirement as the assign sibling: an empty
@@ -902,6 +828,201 @@ void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& scree
                          << activityId;
 }
 
+void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virtualDesktop, const QString& activityId,
+                                               const QString& layoutId)
+{
+    // idForName passthrough: a connector name that matches no known screen
+    // comes back verbatim and IS stored — the same contract as every sibling
+    // assignment setter here, where a not-yet-connected monitor's assignment
+    // must survive until the screen appears.
+    QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    if (resolvedId.isEmpty()) {
+        qCWarning(lcDbusLayout) << "setScrollingTemplateLayout: empty screen ID for" << screenId;
+        return;
+    }
+    if (!validDesktopArg(virtualDesktop, "setScrollingTemplateLayout")) {
+        return;
+    }
+    // Empty clears the context's template, which makes the screen INHERIT the
+    // configured default again — every sibling slot setter has a clear form
+    // and clearAssignmentForScreenDesktopActivity would wipe the whole
+    // entry, which is the wrong tool for "just drop the template".
+    //
+    // The reserved PhosphorZones::NoScrollingTemplate word is the third form
+    // and passes the id check below untouched: it is stored verbatim and
+    // means "explicitly no template", which the resolver honours over the
+    // default. Validating it as a UUID would refuse the only spelling of
+    // that state.
+    //
+    // The clear is NOT mode-neutral: assignScrollingTemplate stamps
+    // AssignmentEntry::Scrolling on the entry it upserts whatever the
+    // template id is, so clearing on a Snapping context flips it to
+    // Scrolling and materializes an entry that was not there before. The
+    // published DocString states this; leaving the mode alone here would
+    // desync the clear form from the assigning form, which is why the
+    // side effect is contractual rather than guarded.
+    if (!layoutId.isEmpty() && layoutId != PhosphorZones::NoScrollingTemplate) {
+        // A non-empty id must name an existing native ScrollingTemplate:
+        // unlike the mode-only assignment setters there is no sentinel form
+        // to accept, and an unknown UUID passed through to the registry
+        // would be stored as the explicit no-template word, silently
+        // replacing the context's existing choice with an opt-out the caller
+        // never asked for. Refusing HERE keeps the prior template.
+        //
+        // The existence half is store-gated, matching the registry's own
+        // check: with no store wired (unit fixtures, embedders) only the
+        // UUID format is enforced and a well-formed unknown id IS stored.
+        // It stays inert — scrollingTemplateForContext resolves it through
+        // the same absent store and answers no template.
+        const QUuid parsed = QUuid::fromString(layoutId);
+        const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+        if (parsed.isNull() || (store && !store->contains(parsed))) {
+            qCWarning(lcDbusLayout) << "setScrollingTemplateLayout: unknown template" << layoutId << "— refusing";
+            return;
+        }
+    }
+    m_layoutManager->assignScrollingTemplate(resolvedId, virtualDesktop, activityId, layoutId);
+    m_changedScreenIds.insert(resolvedId);
+    qCInfo(lcDbusLayout) << (layoutId.isEmpty() ? "Cleared scrolling template" : "Set scrolling template") << layoutId
+                         << "for screen" << screenId << "desktop" << virtualDesktop << "activity" << activityId;
+}
+
+QString LayoutAdaptor::getScrollingTemplateLayout(const QString& screenId, int virtualDesktop,
+                                                  const QString& activityId)
+{
+    const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
+    if (resolvedId.isEmpty()) {
+        qCWarning(lcDbusLayout) << "getScrollingTemplateLayout: empty screen ID for" << screenId;
+        return QString();
+    }
+    if (!validDesktopArg(virtualDesktop, "getScrollingTemplateLayout")) {
+        return QString();
+    }
+    const PhosphorZones::ScrollingTemplate templ =
+        m_layoutManager->scrollingTemplateForContext(resolvedId, virtualDesktop, activityId);
+    return templ.isValid() ? templ.id.toString() : QString();
+}
+
+QString LayoutAdaptor::getScrollingTemplates()
+{
+    const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    if (!store) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray array;
+    const QList<PhosphorZones::ScrollingTemplate> templates = store->templates();
+    for (const PhosphorZones::ScrollingTemplate& templ : templates) {
+        QJsonObject json = templ.toJson();
+        // Wire-only enrichment: isSystem is store-derived load state, never
+        // part of the persisted schema, but the UI needs it to disable
+        // delete on bundled templates.
+        json.insert(PhosphorZones::TemplateJsonKeys::IsSystem, templ.isSystem);
+        array.append(json);
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QString LayoutAdaptor::saveScrollingTemplate(const QString& templateJson)
+{
+    PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    if (!store) {
+        qCWarning(lcDbusLayout) << "saveScrollingTemplate: no template store wired";
+        return QString();
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(templateJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        qCWarning(lcDbusLayout) << "saveScrollingTemplate: malformed JSON:" << parseError.errorString();
+        return QString();
+    }
+    PhosphorZones::ScrollingTemplate templ = PhosphorZones::ScrollingTemplate::fromJson(doc.object());
+    // D-Bus boundary clamp, same as createLayout / updateLayout apply to
+    // layout names. The editor mirrors these caps client-side (TopBar.qml's
+    // name field, TemplatePropertyPanel.qml's description maximumLength);
+    // this boundary clamp is the enforcement, since a direct D-Bus caller
+    // never goes through the editor and maximumLength truncates by UTF-16
+    // code units anyway.
+    templ.name = clampName(templ.name);
+    // The description is free text with no name-length counterpart, so it needs
+    // its own cap at the same boundary. clampName is the right tool for it too:
+    // the surrogate-safe cut is what keeps a truncated emoji out of the stored
+    // JSON.
+    templ.description = clampName(templ.description, MaxTemplateDescriptionLength);
+    // A missing/empty name is the one invalidity a fresh editor form can
+    // produce; the store refuses it (returns a null id) and the caller
+    // surfaces the refusal.
+    const QUuid id = store->saveTemplate(templ);
+    if (id.isNull()) {
+        qCWarning(lcDbusLayout) << "saveScrollingTemplate: store refused the template";
+        return QString();
+    }
+    qCInfo(lcDbusLayout) << "Saved scrolling template" << id;
+    return id.toString();
+}
+
+bool LayoutAdaptor::deleteScrollingTemplate(const QString& id)
+{
+    PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    const QUuid parsed = QUuid::fromString(id);
+    if (!store || parsed.isNull()) {
+        qCWarning(lcDbusLayout) << "deleteScrollingTemplate: no template store wired, or malformed id" << id;
+        return false;
+    }
+    if (!store->removeTemplate(parsed)) {
+        // The store warns for the bundled-template refusal itself; the unknown
+        // id is the arm that would otherwise return false with no trace at all.
+        qCWarning(lcDbusLayout) << "deleteScrollingTemplate: store refused to delete" << id;
+        return false;
+    }
+    // The id-keyed scrub the delete flow owes (same purge layout deletion
+    // drives): every assignment rule AND every quick slot referencing the
+    // deleted template loses that reference; only when the id no longer
+    // resolves at all — a user file shadowing a bundled template resurfaces
+    // the original under the SAME id, and scrubbing then would drop live
+    // assignments to it.
+    if (!store->contains(parsed)) {
+        // The purge answers true when it changed a rule OR swept a quick
+        // slot; either way subscribers holding slot state (the settings
+        // quick-shortcut cards) need a refresh hint, and this signal is
+        // their only revision bump.
+        if (m_layoutManager->purgeLayoutIdFromAssignments(parsed.toString())) {
+            Q_EMIT quickLayoutSlotsChanged();
+        }
+    }
+    qCInfo(lcDbusLayout) << "Deleted scrolling template" << id;
+    return true;
+}
+
+QString LayoutAdaptor::duplicateScrollingTemplate(const QString& id)
+{
+    PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+    const QUuid parsed = QUuid::fromString(id);
+    if (!store || parsed.isNull()) {
+        qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: no template store wired, or malformed id" << id;
+        return QString();
+    }
+    const PhosphorZones::ScrollingTemplate source = store->templateById(parsed);
+    if (!source.isValid()) {
+        qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: unknown template" << id;
+        return QString();
+    }
+    // Name the copy HERE rather than letting duplicateTemplate append the
+    // shared suffix itself: the store has no length cap, and once the suffix
+    // is on the name there is nothing left to clamp without cutting it off
+    // again. Trim the BASE to the reduced budget and re-append, the same shape
+    // duplicateLayout uses, so a long name cannot swallow the suffix and leave
+    // the copy visually identical to its source.
+    const QString suffix = PhosphorZones::LayoutRegistry::duplicateNameSuffix();
+    const QUuid copyId =
+        store->duplicateTemplate(parsed, clampName(source.name, MaxLayoutNameLength - suffix.size()) + suffix);
+    if (copyId.isNull()) {
+        qCWarning(lcDbusLayout) << "duplicateScrollingTemplate: store refused to copy" << id;
+        return QString();
+    }
+    qCInfo(lcDbusLayout) << "Duplicated scrolling template" << id << "to" << copyId;
+    return copyId.toString();
+}
+
 void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
                                        const QString& snappingLayout, const QString& tilingAlgorithm)
 {
@@ -910,9 +1031,15 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         qCWarning(lcDbusLayout) << "setAssignmentEntry: empty screen ID for" << screenId;
         return;
     }
+    if (!validDesktopArg(virtualDesktop, "setAssignmentEntry")) {
+        return;
+    }
 
-    // Validate snapping layout UUID if non-empty
-    if (!snappingLayout.isEmpty()) {
+    // Validate snapping layout UUID if non-empty. The reserved no-layout
+    // word is the documented third form (empty = inherit the default,
+    // UUID = that layout, "none" = explicitly no layout) and skips the UUID
+    // validation — a skip, not a rewrite, mirroring setScrollingTemplateLayout.
+    if (!snappingLayout.isEmpty() && snappingLayout != PhosphorZones::NoSnappingLayout) {
         QUuid uuid = QUuid::fromString(snappingLayout);
         if (uuid.isNull()) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: invalid snapping layout UUID:" << snappingLayout;
@@ -920,20 +1047,23 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         }
     }
 
-    // Validate tiling algorithm if non-empty
-    if (!tilingAlgorithm.isEmpty()) {
+    // Validate tiling algorithm if non-empty — with the same reserved-word
+    // exemption: "none" names the explicit opt-out, not an algorithm, so the
+    // registry existence check must not refuse it.
+    if (!tilingAlgorithm.isEmpty() && tilingAlgorithm != PhosphorZones::NoTilingAlgorithm) {
         if (!m_algorithmRegistry || !m_algorithmRegistry->algorithm(tilingAlgorithm)) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: unknown tiling algorithm:" << tilingAlgorithm;
             return;
         }
     }
 
-    // Reject an out-of-range mode like every other argument on this boundary
-    // (screenId / layout uuid / algorithm are validated-and-refused): a silent
-    // clamp would mis-map a caller's typo — or a future third mode — to
-    // Autotile.
-    if (mode < 0 || mode > 1) {
-        qCWarning(lcDbusLayout) << "setAssignmentEntry: mode out of range:" << mode;
+    // Reject rather than clamp, like every other argument on this boundary
+    // (screenId / layout uuid / algorithm are validated-and-refused):
+    // clamping an unknown mode int to the nearest enumerator would silently
+    // apply the WRONG engine (this bug shipped once — Scrolling(2) was clamped
+    // to Autotile(1) and the third mode button applied Tiling).
+    if (mode < 0 || mode > static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+        qCWarning(lcDbusLayout) << "setAssignmentEntry: out-of-range mode" << mode << "for" << resolvedId;
         return;
     }
 
@@ -945,9 +1075,22 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         return;
     }
 
-    PhosphorZones::AssignmentEntry entry;
+    // Seed from the stored entry so the SCROLLING TEMPLATE survives a
+    // Monitors-page save: this method's wire signature carries only
+    // mode/snapping/tiling, and building a fresh entry would wipe the
+    // template the moment the rule rebuild stopped carrying stale copies
+    // across (the carryOverNonAssignmentActions exclusion). Same seeding
+    // shape assignScrollingTemplate uses.
+    PhosphorZones::AssignmentEntry entry = m_layoutManager->exactContextEntry(resolvedId, virtualDesktop, activity);
     entry.mode = static_cast<PhosphorZones::AssignmentEntry::Mode>(mode);
-    entry.snappingLayout = snappingLayout;
+    // Canonicalize to the braced spelling: the purge sweep and the upsert
+    // no-op guard both compare exact strings against QUuid::toString().
+    // The reserved word must NOT pass through the normalization — it parses
+    // to a null QUuid whose toString is the null-uuid literal, which would
+    // silently turn "explicitly none" into a dangling id.
+    entry.snappingLayout = snappingLayout.isEmpty() || snappingLayout == PhosphorZones::NoSnappingLayout
+        ? snappingLayout
+        : QUuid::fromString(snappingLayout).toString();
     entry.tilingAlgorithm = tilingAlgorithm;
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);
@@ -955,7 +1098,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
 
     qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout
-                         << "tiling=" << tilingAlgorithm;
+                         << "tiling=" << tilingAlgorithm << "template=" << entry.scrollingTemplateLayout;
 }
 
 void LayoutAdaptor::setSaveBatchMode(bool enabled)

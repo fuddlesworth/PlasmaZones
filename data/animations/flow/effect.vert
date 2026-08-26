@@ -11,7 +11,7 @@
 // the window keeps deformation resolution constant regardless of zone
 // size, and lets this vertex stage displace each cell so the window
 // streams into its zone instead of sliding rigidly: the edge facing the
-// destination settles first, trailing rows lag by SPREAD and catch up.
+// destination settles first, trailing rows lag by `spread` and catch up.
 //
 // apply() emits texcoords relative to the destination FRAME (v = 0 at the
 // window's top before KWin's upload flip — see the re-flip note in main()).
@@ -48,24 +48,33 @@ void main() {
     // displacement and the content sampling so they stay aligned.
     vec2 cuv = vec2(texCoord.x, 1.0 - texCoord.y);
 
-    // Travel direction in screen space (y-down). A degenerate move (pure
-    // resize) defaults to downward so it still reads as a gentle settle.
-    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
-    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
-    vec2 travel = toC - fromC;
-    vec2 dir = (dot(travel, travel) > 1.0) ? normalize(travel) : vec2(0.0, 1.0);
+    // Travel direction in screen space (y-down). A pure resize has no rigid
+    // translation, so the direction comes from the growth axis instead; only
+    // a leg that neither moved nor resized falls through to downward.
+    // From the leg's RIGID translation, not its centre delta: a window
+    // pinned at one edge and grown moves its centre by half the size change
+    // while standing still, and reading that as travel staggers a stretch.
+    vec2 dir = legDirection(iFromRect, iToRect);
 
     // Phase along the travel axis: leading edge (toward the destination)
     // is 1, trailing edge is 0.
     float phase = clamp(dot(cuv - 0.5, dir) + 0.5, 0.0, 1.0);
 
     // Staggered local progress: the leading edge starts at t = 0, the
-    // trailing edge lags by SPREAD, and each ramps to 1 with a smoothstep
+    // trailing edge lags by `spread`, and each ramps to 1 with a smoothstep
     // settle. legProgress() keeps the direction correct on reverse legs.
+    // Scaled by how much of the leg is travel: the trailing lag is what
+    // makes a moving window flow, but on an anchored resize it only makes
+    // parts of one window reach their final extent at different times.
+    // A pure stretch therefore settles uniformly; a real slide is unchanged.
     const float SPREAD = 0.55;
+    float spread = SPREAD * legTravelShare(iFromRect, iToRect);
     float tt = legProgress();
-    float startT = (1.0 - phase) * SPREAD;
-    float localT = clamp((tt - startT) / max(1.0 - SPREAD, 1.0e-3), 0.0, 1.0);
+    float startT = (1.0 - phase) * spread;
+    // The max() is defensive rather than reachable: spread is at most SPREAD,
+    // so the divisor never drops under 0.45 today. It guards the day SPREAD
+    // is raised toward 1, and stretch carries the identical guard.
+    float localT = clamp((tt - startT) / max(1.0 - spread, 1.0e-3), 0.0, 1.0);
     float e = localT * localT * (3.0 - 2.0 * localT);
 
     // Each card point travels from its place in the old rect to its place

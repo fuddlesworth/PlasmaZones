@@ -49,6 +49,14 @@ ShaderSetsPage {
             return i18nc("@label motion event group", "Popups");
         case "panel":
             return i18nc("@label motion event group", "Panels");
+        case "scrolling":
+            return i18nc("@label motion event group", "Scrolling strip");
+        case "shell":
+            return i18nc("@label motion event group", "Plasma shell");
+        case "widget":
+            return i18nc("@label motion event group", "Widgets");
+        case "cursor":
+            return i18nc("@label motion event group", "Cursor");
         default:
             return token;
         }

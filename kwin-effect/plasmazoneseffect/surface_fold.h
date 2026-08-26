@@ -294,15 +294,22 @@ inline SurfaceCanvas surfaceCanvasFor(const QRectF& expandedOrFrame, qreal outer
 ///
 /// Deliberately introspective, never keyed on a pack id: the compiled shader's
 /// linked uniforms decide it, so a new pack is classified with no change here.
+/// Whether a compiled pass links any backdrop uniform (uBackdrop, uHasBackdrop,
+/// uBackdropRect). uHasBackdrop and uBackdropRect are as per-frame as uBackdrop
+/// itself: the gate flips when the window leaves an output and the sub-rect is
+/// recomputed by every capture, so a pack that reads either without sampling the
+/// texture must classify the same as one that samples it. Shared between
+/// packVariesPerFrame below and paintWindow's backdrop capture gate — the two
+/// MUST agree on what "reads the backdrop" means.
+inline bool linksBackdropUniforms(int backdrop, int hasBackdrop, int backdropRect)
+{
+    return backdrop >= 0 || hasBackdrop >= 0 || backdropRect >= 0;
+}
+
 inline bool packVariesPerFrame(const PlasmaZones::CompiledSurfacePack& pk, bool animating, bool audioDriving)
 {
-    // The backdrop half. uHasBackdrop and uBackdropRect are as per-frame as uBackdrop
-    // itself: the gate flips when the window leaves an output and the sub-rect is
-    // recomputed by every capture, so a pack that reads either without sampling the
-    // texture would otherwise be classified static, cached, and frozen on a stale rect.
-    const auto readsBackdrop = [](int backdrop, int hasBackdrop, int backdropRect) {
-        return backdrop >= 0 || hasBackdrop >= 0 || backdropRect >= 0;
-    };
+    // The backdrop half — see linksBackdropUniforms above.
+    const auto readsBackdrop = linksBackdropUniforms;
     // The half Decorations.Performance can freeze.
     //
     // @p audioDriving is audioReactiveDriving(): whether the spectrum is actually live. An

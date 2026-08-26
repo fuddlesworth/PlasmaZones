@@ -15,6 +15,7 @@
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
+#include <core/region.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
@@ -237,9 +238,6 @@ struct SurfaceFoldPlan
     /// The clock this fold pushes as iTime — the window's OWN, which stops while it is
     /// not animating. Never a raw shared-clock read. See SurfaceMultipassState.
     float foldTime = 0.0f;
-    /// Can the window capture be reused across frames? False under a live transition,
-    /// which re-captures every frame.
-    bool captureCacheable = true;
     /// Which texture the capture belongs in THIS fold — compositeTex[0] when no pack
     /// compiles (nothing folds, so the capture is the composite), captureTex otherwise.
     /// A chain can cross that line at runtime, and a capture cached on the wrong side of
@@ -262,9 +260,13 @@ struct SurfaceFoldPlan
 /// (renderSurfaceChainComposite): the raw window capture, the cached static-prefix
 /// fold, the ping-pong composite pair, the per-pack buffer-pass textures
 /// (chainBufferTex), the backdrop capture, and a framebuffer pooled beside every
-/// one of those textures. Keyed by getWindowId(w) in m_surfaceMultipass; freed by
+/// one of those textures — plus `parkedSinceMs`, which is not GL state but
+/// bookkeeping deliberately colocated with it so the reap disposes of both
+/// together. Keyed by getWindowId(w) in m_surfaceMultipass; freed by
 /// removeWindowDecoration (a decoration REFRESH keeps it — see its keepSurfaceState
-/// parameter) and by the windowDeleted backstop.
+/// parameter), by the windowDeleted backstop, and by the postPaintScreen park
+/// reap (a column parked off the viewport past its threshold surrenders the
+/// whole state via releaseSurfaceState).
 struct SurfaceMultipassState
 {
     // ── Multi-pack chain compositing path (renderSurfaceChainComposite) ──────
@@ -304,6 +306,28 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLTexture> captureTex;
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
+
+    /// Shell surfaces only (WindowDecoration::isShellSurface): the visible
+    /// content bounds of the last scanned capture, in LOGICAL px relative to
+    /// the window's frame top-left, top-down. Empty/invalid = never scanned or
+    /// nothing visible; consumers fall back to the full frame. Paired with the
+    /// frame size it was scanned at so a resize invalidates it instead of
+    /// serving stale bounds, and with the scan stamp that throttles the
+    /// readback (updateShellContentRect).
+    QRectF shellContentRect;
+    QSizeF shellContentFrameSize;
+    qint64 shellContentScanMs = -1;
+    /// The frame's offset inside the capture canvas (frame top-left minus the
+    /// canvas logical top-left) AT CAPTURE TIME, in logical px. The scan
+    /// measures its bounds inside the CAPTURED texture, and the frame's
+    /// texels sit at exactly this offset times the capture scale — a
+    /// move-invariant quantity, unlike either absolute origin: the canvas is
+    /// derived from the window's own geometry, so pairing the LIVE frame with
+    /// the capture-time canvas origin (or vice versa) errs by the whole move
+    /// delta on a still-valid capture, while the live frame/live canvas pair
+    /// carries a sub-device-pixel alignment residue at fractional scale.
+    /// Stamped by captureWindowSurface beside captureValid.
+    QPointF captureFrameOffset;
     /// WHICH texture the valid capture is sitting in.
     ///
     /// It has two possible homes: captureTex normally, or compositeTex[0] for the
@@ -443,8 +467,11 @@ struct SurfaceMultipassState
 
     /// Backdrop capture for needsBackdrop chains: the scene behind the
     /// window blitted from the live render target over the SAME padded
-    /// canvas as the composite (texel-aligned — a pack samples both with one
-    /// uv). Reallocated on size change; freed with the rest of this state in
+    /// canvas as the composite — canvas-aligned in normalized uv, so a pack
+    /// samples both with one uv; the capture's texel DENSITY may be lower
+    /// than the composite's (chainBackdropScale caps it at the densest
+    /// linked reader's bufferScale). Reallocated on size change; freed with
+    /// the rest of this state in
     /// removeWindowDecoration, and NEVER sampled on the deleted/close path (the
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
@@ -455,18 +482,42 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLFramebuffer> backdropFbo;
     QSize backdropSize;
     /// Valid sub-rect of backdropTex in TOP-DOWN normalized coords (xy=min,
-    /// zw=size) — the part actually blitted (canvas ∩ output). Zero-size
-    /// means "no capture this frame" and pushes uHasBackdrop = 0.
+    /// zw=size) — the part actually blitted (canvas ∩ output ∩ damage). Zero-size
+    /// means "no capture this frame" and pushes uHasBackdrop = 0. INVARIANT:
+    /// always fully inside backdropWritten, so a pack clamping into it can
+    /// never sample a texel still holding the allocation clear.
     QVector4D backdropRect;
 
-    /// Every output that has blitted into the CURRENT accumulation generation.
+    /// Texture-pixel region of backdropTex written since its allocation clear.
+    ///
+    /// backdropRect is one rect, but the captures feeding it are damage-clipped
+    /// slices that can be DISJOINT — and a bounding-box union of disjoint slices
+    /// on a freshly-cleared texture spans gap texels that still hold the
+    /// transparent clear, which packs would then sample as black patches in the
+    /// frost. So every successful blit records its destination here (grown by
+    /// 1 px to absorb the inward source rounding at fractional scale), and the
+    /// published backdropRect is only ever a rect this region fully contains —
+    /// the capture falls back to a smaller covered rect otherwise. Reset with
+    /// the texture's allocation clear; after the first full-canvas capture it
+    /// collapses to one rect covering the texture and the containment checks
+    /// are trivially true.
+    KWin::Region backdropWritten;
+
+    /// Every output that has blitted a FULL canvas slice into the CURRENT
+    /// accumulation generation.
     ///
     /// This, and NOT a clock, is what separates one generation from the next. A canvas
     /// straddling several outputs is blitted once per output, and those slices must UNION
-    /// into one valid rect — but a blit from an output ALREADY in this generation is the next
-    /// frame for that output and must RESTART the rect, or a window that has moved keeps
-    /// claiming canvas it no longer captures. Outputs have independent frame clocks, so no
-    /// clock can tell those two cases apart.
+    /// into one valid rect — but a FULL slice from an output ALREADY in this generation is
+    /// the next frame for that output and must RESTART the rect, or a window that has moved
+    /// keeps claiming canvas it no longer captures. Outputs have independent frame clocks,
+    /// so no clock can tell those two cases apart.
+    ///
+    /// Only FULL slices (damage covering the whole visible canvas) participate: the capture
+    /// is clipped to the frame's damage region, and a partial slice unions without touching
+    /// this set — restarting on one would collapse the valid rect to a damage sliver.
+    /// Contraction still happens promptly, because full slices are routine (the ~30fps
+    /// backdrop driver damages the whole canvas; animations force full repaints).
     ///
     /// A SET, not "the last output that blitted". With two outputs both covering the canvas
     /// the blits alternate A, B, A, B — so "different from the last one" is true every single
@@ -510,6 +561,20 @@ struct SurfaceMultipassState
     /// a fold every ~33ms instead of every vsync. Damage to the window
     /// itself still refolds immediately (its paint runs regardless).
     qint64 lastFoldMs = -1;
+
+    /// When this window's column was first seen parked off the viewport
+    /// (shader clock, ms); negative while visible. Stamped and read only by
+    /// the postPaintScreen repaint driver: a column parked past the reap
+    /// threshold has its whole surface state released (releaseSurfaceState),
+    /// reclaiming the full-canvas GL targets a window nobody can see was
+    /// holding. The timestamp lives HERE, not in a side map, precisely so
+    /// the reap erases it with everything else — after the reap there is no
+    /// state to re-reap and nothing stale to clean up. The threshold exists
+    /// so ping-pong scrolling between neighbour columns never pays the cold
+    /// re-capture + re-fold on return; only a column parked for a while
+    /// pays it, once, on a frame where scrolling is repainting everything
+    /// anyway.
+    qint64 parkedSinceMs = -1;
 };
 
 /// Per-window border + rounded corners, rendered by sampling the redirected
@@ -563,6 +628,22 @@ struct WindowDecoration
     /// of the old single global border shader.
     QString basePackId;
 
+    /// True when the window resolved onto a `shell.*` surface path (a
+    /// plasmashell panel or applet popup). Two consumers: the fold scans the
+    /// capture's visible-content bounds for these (updateShellContentRect),
+    /// and pushBorderUniforms substitutes those bounds for frameGeometry() so
+    /// packs hug what the user actually sees (a floating or Panel
+    /// Colorizer-styled panel is a rounded body inset in a mostly transparent
+    /// full-width window). Set by updateWindowDecoration from the same
+    /// resolved surface path that selected chain-only resolution.
+    ///
+    /// Deliberately NOT part of the fold plan's key set (FoldInputs): a live
+    /// window cannot flip it without also changing its resolved surface path
+    /// and hence (in practice) its chain, which IS compared — the
+    /// classification keys on KWin's window type plus the owning class,
+    /// neither of which mutates for a mapped panel or popup.
+    bool isShellSurface = false;
+
     /// Transparent OUTER MARGIN (logical px) the chain's packs need around
     /// the window to draw into — the max over each pack's resolved
     /// `paddingParam` value (e.g. the glow pack's glowSize). When > 0 the
@@ -611,6 +692,18 @@ struct WindowDecoration
     /// param.
     double foldedOpacity = 1.0;
 
+    /// Every drawing pack in the chain declares `interiorOpaque` (its output
+    /// never thins a texel inside the natural frame rect — shadow/glow, whose
+    /// halo is confined to the transparent margin). Computed by the
+    /// updateWindowDecoration chain sweep; a pack the registry does not know
+    /// draws nothing and cannot thin the interior, so it does not veto.
+    /// prePaintWindow uses this (with foldedOpacity at rest) to SKIP
+    /// setTranslucent(): the client's own opaque region stays truthful for
+    /// such a chain, and keeping it preserves KWin's occlusion culling —
+    /// both its damage-cull and paint-cull halves (verified against the KWin
+    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen).
+    bool chainInteriorOpaque = false;
+
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but
     /// not the margin band OUTSIDE them, so the glow would trail during a
@@ -619,6 +712,18 @@ struct WindowDecoration
     /// screen level; removeWindowDecoration disconnects.
     QRectF lastPaddedGeo;
     QMetaObject::Connection paddedGeoConnection;
+    /// Where drawWindow last painted the padded band under a FOREIGN paint
+    /// transform (KWin's sliding-popups slide, a stock fade), and the opacity
+    /// it painted it at. Null rect when the last draw carried no foreign
+    /// transform. drawWindow widens its scissor and damages only on a frame
+    /// where this CHANGES: a foreign effect that holds a static transform for
+    /// many frames (windowaperture while Peek at Desktop is held, the
+    /// translucency effect's inactive dim) would otherwise re-damage the band
+    /// every frame and drive a repaint loop at the refresh rate. The previous
+    /// band is what the next change frame damages so the slide leaves no
+    /// trail behind it.
+    QRectF lastForeignBand;
+    double lastForeignOpacity = 1.0;
     /// Clears SurfaceMultipassState::captureValid when the window's own content
     /// changes, so the fold re-captures. Connected for EVERY decorated window
     /// (not just padded ones); disconnected by removeWindowDecoration.

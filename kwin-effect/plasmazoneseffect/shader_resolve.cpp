@@ -19,6 +19,8 @@
 
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>
@@ -28,6 +30,8 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QtGlobal>
+
+#include <cmath> // std::isfinite, in resolveScrollFactor
 
 namespace PlasmaZones {
 
@@ -392,6 +396,66 @@ std::optional<QString> resolveWindowLayer(const PhosphorRules::ResolvedActions& 
         return std::nullopt;
     }
     return token;
+}
+
+std::optional<bool> resolveOpenFullscreen(const PhosphorRules::ResolvedActions& resolved)
+{
+    // Constant slot id — same static-hoist rationale as resolveWindowOpacity.
+    static const QString kOpenFullscreenSlot = QString(PhosphorRules::ActionSlot::OpenFullscreen);
+    const auto action = resolved.slot(kOpenFullscreenSlot);
+    if (!action) {
+        return std::nullopt;
+    }
+    // Strict-bool re-validation, mirroring resolveWindowLayer: a hand-edited
+    // non-bool payload must resolve to "no verdict", never to an implicit
+    // false (which would veto an app's own fullscreen with no rule saying so).
+    const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
+    if (!v.isBool()) {
+        return std::nullopt;
+    }
+    return v.toBool();
+}
+
+std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& resolved)
+{
+    // Constant slot id — same static-hoist rationale as resolveWindowOpacity.
+    static const QString kScrollFactorSlot = QString(PhosphorRules::ActionSlot::ScrollFactor);
+    const auto action = resolved.slot(kScrollFactorSlot);
+    if (!action) {
+        return std::nullopt;
+    }
+    // Reject-not-clamp against the shared bounds, mirroring the descriptor
+    // validator: an out-of-range hand-edit must fall back to unscaled
+    // delivery, not saturate to a 10x or 1/20th scroll.
+    const QJsonValue v = action->params.value(PhosphorRules::ActionParam::Value);
+    if (!v.isDouble()) {
+        return std::nullopt;
+    }
+    const double factor = v.toDouble();
+    // Finiteness FIRST: NaN compares false against both bounds, so the
+    // reject-not-clamp test below passes it straight through, and the input
+    // filter's `qint32(std::trunc(scaled))` on a NaN-scaled v120 delta is
+    // undefined behaviour. Infinities are equally out of contract and are
+    // caught here rather than relying on the range test's sign.
+    if (!std::isfinite(factor)) {
+        return std::nullopt;
+    }
+    if (factor < PhosphorRules::MinScrollFactor || factor > PhosphorRules::MaxScrollFactor) {
+        return std::nullopt;
+    }
+    return factor;
+}
+
+bool ruleCarriesLiveEffectAction(const PhosphorRules::Rule& rule)
+{
+    // The action walk is rule semantics and lives in phosphor-rules; this
+    // supplies the half only the compositor's taxonomy can answer.
+    return PhosphorRules::ruleHasLiveEffectAction(rule.actions, [](const QString& event) {
+        // An EMPTY event is unset rather than windowless, so it stays live. An
+        // event this build does not know names no leg any resolver asks for, so
+        // it is inert exactly like a windowless one.
+        return event.isEmpty() || PhosphorAnimation::ProfilePaths::eventPathResolvesPerWindow(event);
+    });
 }
 
 } // namespace PlasmaZones

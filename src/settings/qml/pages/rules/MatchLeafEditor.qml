@@ -20,14 +20,21 @@ RowLayout {
     /// The leaf JSON object — `{ field: "appId", op: "equals", value: ... }`.
     required property var node
     /// The RuleController (for operatorsForField).
-    required property var controller
+    required property QtObject controller
     /// The SettingsController — populates the screen / activity pickers.
-    required property var appSettings
+    required property QtObject appSettings
     // Each entry carries `{ value, wire, label, valueKind }` — the controller
     // owns the enum↔wire-string table; this component never reconstructs it.
     // Cached once at RuleEditorSheet (matchFields() is a Q_INVOKABLE that
     // allocates a fresh list per call) and threaded down via MatchExpressionEditor.
     required property var fieldOptions
+    // Widest operator label across the FULL operator vocabulary, in pixels —
+    // the operator dropdown is sized to this (not to the current field's
+    // operator subset) so the operator column lines up on every condition row
+    // and doesn't resize when the field changes. Measured once in
+    // RuleEditorBody and threaded down, because the sweep is field-independent
+    // and every leaf otherwise repeated the identical measurement.
+    required property real widestOperatorTextWidth
     // The current field's descriptor (by wire string), or undefined if the
     // stored field is unknown / legacy.
     readonly property var _fieldEntry: leaf._entryForWire(leaf.fieldOptions, leaf.node.field)
@@ -41,12 +48,13 @@ RowLayout {
     // Operator options depend on the current field's enum value.
     readonly property var _operatorOptions: leaf._fieldEntry !== undefined ? controller.operatorsForField(leaf._fieldEntry.value) : []
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
-    // Widest operator label across the FULL operator vocabulary, in pixels —
-    // the operator dropdown is sized to this (not to the current field's
-    // operator subset) so the operator column lines up on every condition row
-    // and doesn't resize when the field changes. Recomputed by
-    // _recalcOperatorWidth() on load and whenever the measuring font changes.
-    property real _widestOperatorTextWidth: 0
+
+    /// True when this condition may be removed. False at the ROOT of a match,
+    /// where there is no enclosing group to remove it from — `removeRequested`
+    /// has no handler there, so the button would do nothing at all. Every
+    /// guided starting point seeds a bare leaf as the whole match, so the root
+    /// case is the common one rather than an edge.
+    property bool removable: true
 
     signal leafChanged(var updatedLeaf)
     signal removeRequested
@@ -76,19 +84,6 @@ RowLayout {
             "op": op,
             "value": value
         });
-    }
-
-    /// Measure every operator label (the full vocabulary, via
-    /// controller.allOperators()) and cache the widest in pixels. The label
-    /// set is static, so this only needs to run on load and on font change.
-    function _recalcOperatorWidth() {
-        var ops = leaf.controller ? leaf.controller.allOperators() : [];
-        var maxW = 0;
-        for (var i = 0; i < ops.length; ++i) {
-            opMetrics.text = ops[i].label || "";
-            maxW = Math.max(maxW, opMetrics.advanceWidth);
-        }
-        leaf._widestOperatorTextWidth = maxW;
     }
 
     /// True when the running-windows picker has a mode that fills @p wire
@@ -159,18 +154,6 @@ RowLayout {
     }
 
     spacing: Kirigami.Units.smallSpacing
-
-    Component.onCompleted: leaf._recalcOperatorWidth()
-
-    // Non-visual measurer for _recalcOperatorWidth(). Matches the operator
-    // combo's font so the cached widths are pixel-accurate; re-measures if the
-    // font changes (e.g. a theme/scale switch).
-    TextMetrics {
-        id: opMetrics
-
-        font: opCombo.font
-        onFontChanged: leaf._recalcOperatorWidth()
-    }
 
     Kirigami.Icon {
         id: fieldInfoIcon
@@ -274,7 +257,7 @@ RowLayout {
         // subset and so renders a different width per field (e.g. Desktop's
         // numeric operators vs Monitor's string operators). The gridUnit * 3
         // chrome allowance mirrors WideComboBox's own popup-width formula.
-        Layout.preferredWidth: leaf._widestOperatorTextWidth + Kirigami.Units.gridUnit * 3
+        Layout.preferredWidth: leaf.widestOperatorTextWidth + Kirigami.Units.gridUnit * 3
         textRole: "label"
         valueRole: "wire"
         model: leaf._operatorOptions
@@ -323,6 +306,9 @@ RowLayout {
             if (leaf._valueKind === "orientation")
                 return orientationValueEditor;
 
+            if (leaf._valueKind === "colorScheme")
+                return colorSchemeValueEditor;
+
             if (leaf._valueKind === "layout")
                 return layoutValueEditor;
 
@@ -347,6 +333,7 @@ RowLayout {
     }
 
     ToolButton {
+        visible: leaf.removable
         icon.name: "edit-delete"
         Layout.alignment: Qt.AlignTop
         ToolTip.text: i18n("Remove condition")
@@ -417,12 +404,22 @@ RowLayout {
         id: numberValueEditor
 
         SpinBox {
+            // PositionX / PositionY are the only SIGNED numeric fields: a
+            // monitor placed left of or above the primary starts at a negative
+            // frame coordinate, so a floor of 0 made those two conditions
+            // impossible to author and displayed a stored -1920 as 0 while the
+            // rule kept matching -1920. Every other numeric field (Width,
+            // Height, Pid, Tiled window count, Desktop) is unsigned.
+            readonly property bool _signed: leaf.node.field === "positionX" || leaf.node.field === "positionY"
+
             // Numeric fields include Pid; the kernel pid_max ceiling is
             // 4194304, so 5e6 covers every possible PID with headroom. It is
             // written in scientific form because qmlformat rewrites large
             // decimal literals to 6-significant-figure scientific notation —
             // 5e6 is exact under that rounding (a plain 2147483647 is not).
-            from: 0
+            // The signed floor mirrors the ceiling so a coordinate has the same
+            // range in both directions.
+            from: _signed ? -5e+06 : 0
             to: 5e+06
             value: Number(leaf.node.value) || 0
             Accessible.name: i18n("Match value")
@@ -473,13 +470,16 @@ RowLayout {
             id: desktopCombo
 
             readonly property int _count: leaf.appSettings && leaf.appSettings.virtualDesktopCount > 0 ? leaf.appSettings.virtualDesktopCount : 1
-            readonly property var _names: leaf.appSettings ? leaf.appSettings.virtualDesktopNames : []
+            readonly property var _names: (leaf.appSettings && leaf.appSettings.virtualDesktopNames) || []
             model: {
                 var items = [];
                 for (var i = 1; i <= desktopCombo._count; ++i) {
                     var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
                     items.push({
-                        "label": name && name.length > 0 ? (i + ": " + name) : ("" + i),
+                        // Composed inside one i18nc so translators control the
+                        // order and the separator, the same way the monitor
+                        // picker below composes its primary marker.
+                        "label": name && name.length > 0 ? i18nc("virtual desktop number, then its name", "%1: %2", i, name) : ("" + i),
                         "value": i
                     });
                 }
@@ -518,11 +518,13 @@ RowLayout {
             // connector; append a Primary marker here (a plain ComboBox has no
             // badge surface like the monitor tiles do) so the user can tell the
             // primary monitor and which port each entry is on.
-            readonly property var _screens: leaf.appSettings ? leaf.appSettings.screens : []
+            readonly property var _screens: (leaf.appSettings && leaf.appSettings.screens) || []
             model: _screens.map(function (s) {
                 var label = s.displayLabel || s.name || "";
                 if (s.isPrimary)
-                    label += " · " + i18n("Primary");
+                    // Composed inside one i18nc so translators control the
+                    // order and the separator survives RTL bidi runs.
+                    label = i18nc("monitor name, then the primary-monitor marker", "%1 · %2", label, i18n("Primary"));
                 return {
                     "label": label,
                     "name": s.name
@@ -555,19 +557,21 @@ RowLayout {
         id: activityValueEditor
 
         WideComboBox {
+            id: activityCombo
+
             // Picker over `appSettings.activities`; the wire value stays the
-            // activity UUID so the rule store format is unchanged.
-            model: leaf.appSettings ? leaf.appSettings.activities : []
+            // activity UUID so the rule store format is unchanged. The `|| []`
+            // covers the property being absent as well as the bridge being
+            // null, matching the screen / layout pickers in this file.
+            readonly property var _activities: (leaf.appSettings && leaf.appSettings.activities) || []
+
+            model: _activities
             textRole: "name"
             valueRole: "id"
             currentIndex: {
-                if (!leaf.appSettings)
-                    return -1;
-
                 var target = leaf.node.value;
-                var list = leaf.appSettings.activities;
-                for (var i = 0; i < list.length; ++i) {
-                    if (list[i].id === target)
+                for (var i = 0; i < activityCombo._activities.length; ++i) {
+                    if (activityCombo._activities[i].id === target)
                         return i;
                 }
                 return -1;
@@ -639,7 +643,8 @@ RowLayout {
             // The field entry's `options` carry {value: token, wire: token,
             // label: localised} triples. Mode is a string field, so the value
             // persisted in the rule store IS the wire token ("snapping" /
-            // "tiling"; Floating was dropped from the Mode condition).
+            // "tiling" / "scrolling"; Floating was dropped from the Mode
+            // condition).
             readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
 
             model: _options
@@ -710,16 +715,55 @@ RowLayout {
     }
 
     Component {
+        id: colorSchemeValueEditor
+
+        WideComboBox {
+            // Colour scheme is a string field whose value IS the wire token
+            // ("light" / "dark"); the options carry {value, wire, label}
+            // triples, same shape as the orientation editor above.
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose a scheme…");
+                return String(v);
+            }
+            Accessible.name: i18n("Color scheme")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
         id: layoutValueEditor
 
         WideComboBox {
             id: layoutCombo
 
-            // Picker over `appSettings.layouts` (snapping layouts and autotile
-            // entries); the wire value stays the layout id (snap UUID or
-            // "autotile:<algo>") so it matches the id the daemon resolves for the
-            // screen. Mirrors the activity picker.
-            readonly property var _layouts: leaf.appSettings ? leaf.appSettings.layouts : []
+            // Picker over `appSettings.activeLayoutMatchOptions`: the layouts
+            // list with each native template row rewritten to its derived
+            // "scrolling:<uuid>" wire form, plus the bare "scrolling:"
+            // sentinel entry for a scrolling screen with no template. The
+            // wire value stays the id the daemon's context resolvers stamp
+            // for the screen (snap UUID, "autotile:<algo>", bare "scrolling:",
+            // or the prefixed template form). Mirrors the activity picker.
+            readonly property var _layouts: (leaf.appSettings && leaf.appSettings.activeLayoutMatchOptions) || []
 
             model: _layouts
             textRole: "displayName"

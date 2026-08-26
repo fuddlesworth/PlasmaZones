@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -28,6 +18,7 @@
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorZones/AssignmentEntry.h> // NoTilingAlgorithm — the reserved opt-out word
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "tileenginelogging.h"
@@ -37,6 +28,10 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QTimer>
 
 namespace PhosphorTileEngine {
 
@@ -66,6 +61,34 @@ constexpr int PendingOrderTimeoutMs = 10000;
 // the settings key (write-back never touches it), splitRatio/masterCount from
 // the engine scalars writeBackTuning writes to the settings just before this
 // filter runs.
+// The ambient-vs-override rule, in one place. A global still sitting at its
+// schema default is AMBIENT — it expresses no choice, so the algorithm's own
+// default applies. A global that has been moved is an explicit override and
+// wins. Both the write filter below and the on-demand read fallback in
+// refreshConfigFromSettings decide with it, and their agreement is what makes
+// a default-valued slot safe to drop from disk: whichever one drifts, a slot
+// the writer considered redundant reconstructs as something else on read (the
+// silent "max windows reverts to its default" class of bug).
+bool isAmbientMaxWindows(int globalMaxWindows)
+{
+    return globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
+}
+
+bool isAmbientSplitRatio(qreal globalSplitRatio)
+{
+    return qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio);
+}
+
+int reconstructedMaxWindows(int globalMaxWindows, const PhosphorTiles::TilingAlgorithm* algo)
+{
+    return (algo && isAmbientMaxWindows(globalMaxWindows)) ? algo->defaultMaxWindows() : globalMaxWindows;
+}
+
+qreal reconstructedSplitRatio(qreal globalSplitRatio, const PhosphorTiles::TilingAlgorithm* algo)
+{
+    return (algo && isAmbientSplitRatio(globalSplitRatio)) ? algo->defaultSplitRatio() : globalSplitRatio;
+}
+
 QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString, AlgorithmSettings>& saved,
                                                              PhosphorTiles::ITileAlgorithmRegistry* registry,
                                                              int globalMaxWindows, qreal globalSplitRatio,
@@ -76,17 +99,10 @@ QHash<QString, AlgorithmSettings> persistablePerAlgoSettings(const QHash<QString
         auto* algo = registry ? registry->algorithm(it.key()) : nullptr;
         bool matchesReconstruction = false;
         if (algo) {
-            // Mirror of the read fallback: a schema-default global is ambient,
-            // so the algorithm's own default applies; a non-default global is
-            // an explicit override. masterCount has no per-algorithm default,
-            // so its reconstruction is always the global.
-            const int fallbackMax = globalMaxWindows == PhosphorTiles::AutotileDefaults::DefaultMaxWindows
-                ? algo->defaultMaxWindows()
-                : globalMaxWindows;
-            const qreal fallbackRatio =
-                qFuzzyCompare(1.0 + globalSplitRatio, 1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio)
-                ? algo->defaultSplitRatio()
-                : globalSplitRatio;
+            // masterCount has no per-algorithm default, so its reconstruction
+            // is always the global.
+            const int fallbackMax = reconstructedMaxWindows(globalMaxWindows, algo);
+            const qreal fallbackRatio = reconstructedSplitRatio(globalSplitRatio, algo);
             matchesReconstruction = qFuzzyCompare(1.0 + it->splitRatio, 1.0 + fallbackRatio)
                 && it->masterCount == globalMasterCount && it->maxWindows == fallbackMax && it->customParams.isEmpty();
         }
@@ -207,6 +223,10 @@ QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
 
 QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
 {
+    // Same empty-id guard as its focus twin and as stateForScreen.
+    if (screenId.isEmpty()) {
+        return {};
+    }
     const TilingStateKey key = currentKeyForScreen(screenId);
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
     if (!state) {
@@ -228,6 +248,42 @@ QStringList AutotileEngine::capturedWindowOrder(const QString& screenId) const
         order.append(windowId);
     }
     return order;
+}
+
+QString AutotileEngine::managedFocusedWindow(const QString& screenId) const
+{
+    // Empty-id guard, matching the sibling non-creating accessor stateForScreen,
+    // which opens with the same check on the same body. No caller reaches it
+    // with an empty id today; the guard is here so the two accessors cannot
+    // drift apart on what they accept.
+    if (screenId.isEmpty()) {
+        return QString();
+    }
+    // Same non-creating, CURRENT-context lookup capturedWindowOrder uses, so
+    // the order and the focus a mode transition captures are read from one
+    // state. They share a KEY, not a membership: capturedWindowOrder omits
+    // genuine (non-minimized) floats, while this slot is shared by tiles and
+    // floats alike, so a screen whose focus sits on a floated window reports a
+    // focus that is not in the order shipped beside it. The receiving engine
+    // drops a seed naming a window its strip does not contain, so the effect is
+    // "no focus restored" rather than a wrong one — which is the safe direction,
+    // and the reason this is left as-is rather than falling back to the order's
+    // first entry: a float is not where the view belongs.
+    //
+    // stateForKey (not tilingStateForScreen) because the capture must never
+    // lazily materialise a state for a screen that has none.
+    //
+    // Reads the state's OWN focus tracker on purpose, and NavigationController's
+    // warning about that tracker being stale does not apply here. Navigation
+    // asks "which window is the user acting on right now" — one global answer,
+    // which is why those overrides take a daemon-supplied id. This asks "which
+    // window was active in THIS screen's state", which is per-screen and
+    // historical, and a state not currently holding compositor focus keeping the
+    // last focus it saw is exactly the answer wanted. Substituting the daemon's
+    // globally-focused window would seed every screen in a multi-screen flip
+    // with one id and lose the per-screen answer.
+    PhosphorTiles::TilingState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    return state ? state->focusedWindow() : QString();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -369,7 +425,17 @@ void AutotileEngine::refreshConfigFromSettings()
     // slot and writeBackTuning() persisted the corruption — the "max windows
     // reverts to its default" data loss of discussion #853.
     m_refreshingFromSettings = true;
-    setAlgorithm(s->defaultAutotileAlgorithm());
+    // The reserved no-algorithm word never reaches setAlgorithm: it would be
+    // coerced to the registry default (logging "unknown algorithm"), which
+    // both defeats the opt-out AND — because the id actually changes — drops
+    // m_userTunedSplitRatio / m_userTunedMasterCount for every screen without
+    // an Algorithm override on every settings refresh. Screens governed by a
+    // "none" default are excluded from the engine set upstream
+    // (updateEngineScreens), so the engine's live global id is simply left
+    // untouched here.
+    if (const QString defaultAlgo = s->defaultAutotileAlgorithm(); defaultAlgo != PhosphorZones::NoTilingAlgorithm) {
+        setAlgorithm(defaultAlgo);
+    }
     m_refreshingFromSettings = false;
     if (m_algorithmId != oldAlgorithmId) {
         configChanged = true;
@@ -396,11 +462,19 @@ void AutotileEngine::refreshConfigFromSettings()
             // ratio (a scripted algorithm shipping 0.6 must not be clamped to
             // the schema 0.5 by every routine refresh). masterCount has no
             // per-algorithm default, so the SYNC'd global stands for it.
-            if (s->autotileMaxWindows() == PhosphorTiles::AutotileDefaults::DefaultMaxWindows) {
+            // Shares the AMBIENCE TEST with the write filter — that predicate
+            // is the thing whose drift would make a dropped slot reconstruct
+            // as something else — while keeping the assignment conditional.
+            // The override case deliberately writes nothing: the live scalar
+            // and the settings global differ on purpose inside the write-back
+            // guard window (setAlgorithm can install an algorithm's own
+            // default without writing it back to the global key), and
+            // clobbering the live value there could later mint a per-algorithm
+            // slot recording a value the user never chose.
+            if (isAmbientMaxWindows(s->autotileMaxWindows())) {
                 m_config->maxWindows = algo->defaultMaxWindows();
             }
-            if (qFuzzyCompare(1.0 + s->autotileSplitRatio(),
-                              1.0 + PhosphorTiles::AutotileDefaults::DefaultSplitRatio)) {
+            if (isAmbientSplitRatio(s->autotileSplitRatio())) {
                 m_config->splitRatio = algo->defaultSplitRatio();
             }
         }

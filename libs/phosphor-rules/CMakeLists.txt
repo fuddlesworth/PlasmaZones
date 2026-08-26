@@ -70,6 +70,13 @@ set(phosphorrules_public_HDRS
     include/PhosphorRules/WindowQuery.h
     include/PhosphorRules/MatchExpression.h
     include/PhosphorRules/RuleAction.h
+    # The action vocabulary, split off RuleAction.h for file size. RuleAction.h
+    # includes all three, so a consumer that includes only RuleAction.h keeps
+    # compiling unchanged; they are installed by the glob below like every
+    # other public header.
+    include/PhosphorRules/ActionTypes.h
+    include/PhosphorRules/ActionParams.h
+    include/PhosphorRules/ActionSlots.h
     include/PhosphorRules/Rule.h
     include/PhosphorRules/RuleSet.h
     include/PhosphorRules/RuleEvaluator.h
@@ -95,6 +102,7 @@ set(phosphorrules_SRCS
     src/ruleaction_builtins_p.h
     src/ruleaction_builtins_engine.cpp
     src/ruleaction_builtins_appearance.cpp
+    src/ruleaction_builtins_indicators.cpp
     src/rule.cpp
     src/ruleset.cpp
     src/ruleevaluator.cpp

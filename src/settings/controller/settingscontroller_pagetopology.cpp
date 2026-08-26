@@ -21,6 +21,7 @@
 // unit, no API change.
 
 #include "settingscontroller.h"
+#include "settingscontroller_pagekeys.h"
 
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
@@ -38,14 +39,15 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level, fifteen
-    // in all. Top-level categories: placement, display, appearance. Mid-level
-    // virtual parents nested beneath them: snapping and tiling under placement;
-    // animations and decorations under appearance; animations-transitions,
-    // animations-motion and animations-library under animations;
-    // decorations-surfaces and decorations-library under decorations. Then the
-    // three *-cat collapsible headers (snapping-overlay-cat,
-    // snapping-config-cat, tiling-config-cat). Their children don't share their
+    // leaf to any group it belongs to. Covers parents at every level, sixteen
+    // in all. Top-level categories: placement, appearance. Mid-level
+    // virtual parents nested beneath them: snapping, tiling and scrolling under
+    // placement; animations and decorations under appearance, each of those two
+    // also a map key in its own right and not only a component of appearance;
+    // animations-transitions, animations-motion and animations-library under
+    // animations; decorations-surfaces and decorations-library under
+    // decorations. Then the four *-cat collapsible headers (snapping-overlay-cat,
+    // snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
     // name prefix, so the explicit set sidesteps the asymmetry between a
     // prefix-walk and a direct membership lookup.
     //
@@ -61,17 +63,17 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // that function is the
     // registry's source of truth for the page tree; this static map
     // exists because `isPageDirty()` is a hot path and the per-call walk
-    // over `m_app->pageRegistry()->allPages()` to derive the parent→leaf
+    // over `m_app->registry()` to derive the parent→leaf
     // mapping would otherwise re-scan every page on every dirty-check.
     // (The historical "_childItems" reference in Main.qml is obsolete —
     // the chrome now consumes registry topology directly via Sidebar.qml.)
     static const QSet<QString> kAnimationsTransitionsChildren{
         QStringLiteral("animations-windows"), QStringLiteral("animations-osds"), QStringLiteral("animations-overlays"),
-        QStringLiteral("animations-desktops")};
+        QStringLiteral("animations-desktops"), QStringLiteral("animations-shell")};
     static const QSet<QString> kAnimationsMotionChildren{
         QStringLiteral("animations-window-motion"), QStringLiteral("animations-window-dragging"),
-        QStringLiteral("animations-side-panels"), QStringLiteral("animations-widgets"),
-        QStringLiteral("animations-editor")};
+        QStringLiteral("animations-side-panels"),   QStringLiteral("animations-widgets"),
+        QStringLiteral("animations-editor"),        QStringLiteral("animations-scrolling")};
     static const QSet<QString> kAnimationsLibraryChildren{QStringLiteral("animations-presets"),
                                                           QStringLiteral("animations-motionsets"),
                                                           QStringLiteral("animations-shaders")};
@@ -89,6 +91,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),
         QStringLiteral("decorations-popups"),
+        QStringLiteral("decorations-shell"),
     };
     static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decorations-sets"),
                                                           QStringLiteral("decorations-shaders")};
@@ -114,6 +117,12 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // border / title-bar appearance moved to the shared top-level Window
     // Appearance page, so Snapping → Window is just the Behavior leaf now.
     static const QString kSnappingSimple = QStringLiteral("snapping-simple");
+    // The per-mode library pages (snapping-layouts / tiling-library /
+    // scrolling-templates) are deliberately ABSENT from these sets: they are
+    // never dirty (isLibraryPage — their stores write immediately, and the
+    // set-as-default config write is attributed to the key's owner page via
+    // the context menu's external-edit envelope), so including them would only
+    // add dead hops to the hot isPageDirty group walk.
     static const QString kSnappingZoneSelector = QStringLiteral("snapping-zoneselector");
     static const QString kSnappingWindowBehavior = QStringLiteral("snapping-window-behavior");
     static const QSet<QString> kSnappingConfigChildren{
@@ -136,16 +145,31 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     };
     static const QSet<QString> kTilingAllLeaves =
         QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
+    // The scrolling section's leaves; the peer of the two sets above.
+    static const QString kScrollingSimple = QStringLiteral("scrolling-simple");
+    static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
+    static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
+    static const QString kScrollingWindow = QStringLiteral("scrolling-window");
+    static const QString kScrollingZoneSelector = QStringLiteral("scrolling-zoneselector");
+    static const QSet<QString> kScrollingConfigChildren{
+        QStringLiteral("scrolling-ordering"),
+        QStringLiteral("scrolling-shortcuts"),
+    };
+    static const QSet<QString> kScrollingAllLeaves =
+        QSet<QString>{kScrollingSimple, kScrollingColumns, kScrollingTabs, kScrollingWindow, kScrollingZoneSelector}
+        + kScrollingConfigChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
-        // "placement" is the inline-collapsible parent of snapping + tiling;
-        // when collapsed its dirty badge must light if any snapping OR tiling
-        // leaf is dirty, so its leaf set is the union of both modes' leaves.
-        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves},
+        {QStringLiteral("scrolling"), kScrollingAllLeaves},
+        // "placement" is the inline-collapsible parent of the three placement
+        // modes; when collapsed its dirty badge must light if any snapping,
+        // tiling, or scrolling leaf is dirty, so its leaf set is their union.
+        {QStringLiteral("placement"), kSnappingAllLeaves + kTilingAllLeaves + kScrollingAllLeaves},
         {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
+        {QStringLiteral("scrolling-config-cat"), kScrollingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-transitions"), kAnimationsTransitionsChildren},
         {QStringLiteral("animations-motion"), kAnimationsMotionChildren},
@@ -157,14 +181,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // its collapsed badge lights if any of them is dirty.
         {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves},
         {QStringLiteral("decorations"), kDecorationAllLeaves},
-        // Top-level inline-collapsible parents must also propagate
-        // dirty state from their leaves — without these entries the
-        // sidebar's collapsed dirty badge stays cold even when a
-        // child page is dirty. Mirrors the registry topology in
-        // buildApplicationController() in the sibling _pageregistration.cpp.
-        {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        // No "rules" entry — Rules is a top-level leaf so its
-        // dirty state propagates without a parent-bucket intermediary.
+        // No "rules" or "virtualscreens" entries — both are top-level
+        // leaves, so their dirty state propagates without a parent-bucket
+        // intermediary.
     };
     return groups;
 }
@@ -191,15 +210,18 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // stages reverts through whichever surface owns each key — the manifest
     // pages here, or their own staged machinery for the special surfaces,
     // e.g. animation, decoration, ordering, shortcuts and virtual screens),
-    // the layouts page (separate-store), the controller-mediated ordering/shortcuts
-    // pages, the Animations tree, and the Decoration pages (whose three leaves
+    // the per-mode library pages (separate stores, never dirty — see
+    // isLibraryPage; their families' default keys are owned by
+    // snapping-window-behavior / tiling-algorithm / scrolling-columns below),
+    // the controller-mediated ordering/shortcuts
+    // pages, the Animations tree, and the Decoration pages (whose leaves
     // SHARE the one DecorationProfileTree key — the one-owner invariant above
     // forbids listing a shared key here) are deliberately absent because they
     // revert through their own machinery (the special-case branches in
     // reset/discardPage), not because Reset/Discard is unsupported —
     // pageSupportsReset returns true for everything except the read/browse pages
     // with no revertible config state. The condensed SimpleOnly pages
-    // (tiling-simple / snapping-simple) are also deliberately absent: they
+    // (tiling-simple / snapping-simple / scrolling-simple) are also absent: they
     // surface keys OWNED by their backing advanced pages, so listing them here
     // would break the one-owner invariant — their dirty/Reset/Discard delegate
     // through simplePageBackingPages() instead. The Windows appearance page IS
@@ -209,6 +231,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("general"),
          {
              {CD::renderingGroup(), CD::backendKey()},
+             {CD::renderingGroup(), CD::gpuKey()},
              // Shader Effects moved here from snapping-overlay-appearance, and
              // the Shaders.Audio group (the full CAVA parameter set) lives with
              // it: frame rate + audio spectrum drive EVERY shader category
@@ -245,7 +268,17 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-overlay-behavior"),
          {
+             // The mode's enable master switch. Owned HERE so the sidebar
+             // toggle's pending flip is visible to value-based dirtiness and
+             // survives an unrelated reconcile of this leaf (unowned, the
+             // toggle's dirty mark was erased by the next isPageDirty pass and
+             // the flip lost on exit). It is EXEMPT from per-page Reset via
+             // resetExemptModeEnableKeys() — Reset on a mode's page must not
+             // switch the mode itself off. Discard deliberately includes it:
+             // discarding pending changes includes a pending toggle.
+             {CD::snappingGroup(), CD::enabledKey()},
              {CD::snappingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::snappingBehaviorGroup(), CD::releaseGraceMsKey()},
              // The trigger LIST belongs to whichever page shows its picker, which is the
              // page that owns the matching toggle. All four lists were missing from this
              // manifest, so per-page Reset and Discard walked straight past them and left a
@@ -253,6 +286,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingBehaviorGroup(), CD::triggersKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::enabledKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::toggleActivationKey()},
+             {CD::snappingBehaviorZoneSpanGroup(), CD::releaseGraceMsKey()},
              {CD::snappingBehaviorZoneSpanGroup(), CD::triggersKey()},
              // Legacy modifier is rewritten by every triggers edit
              // (setZoneSpanTriggers syncs it from the first non-zero trigger),
@@ -265,7 +299,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-overlay-appearance"),
          {
-             {CD::snappingZonesColorsGroup(), CD::useSystemKey()},
              {CD::snappingZonesColorsGroup(), CD::highlightKey()},
              {CD::snappingZonesColorsGroup(), CD::inactiveKey()},
              {CD::snappingZonesColorsGroup(), CD::borderKey()},
@@ -294,26 +327,59 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingZoneSelectorGroup(), CD::maxRowsKey()},
              {CD::snappingZoneSelectorGroup(), CD::previewWidthKey()},
              {CD::snappingZoneSelectorGroup(), CD::previewHeightKey()},
+             // No editor row exists for this key (it is set over D-Bus or by
+             // hand), but it belongs to this page's group, so per-page
+             // Reset/Discard must cover it rather than walking past it.
+             {CD::snappingZoneSelectorGroup(), CD::previewLockAspectKey()},
+         }},
+        {QStringLiteral("scrolling-zoneselector"),
+         {
+             {CD::scrollingZoneSelectorGroup(), CD::enabledKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::triggerDistanceKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::positionKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::sizeModeKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::previewWidthKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::previewHeightKey()},
+             // No editor row exists for this key (it is set over D-Bus or by
+             // hand), but it belongs to this page's group, so per-page
+             // Reset/Discard must cover it rather than walking past it.
+             {CD::scrollingZoneSelectorGroup(), CD::previewLockAspectKey()},
          }},
         {QStringLiteral("snapping-window-behavior"),
          {
              {CD::snappingBehaviorSnapAssistGroup(), CD::featureEnabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::enabledKey()},
              {CD::snappingBehaviorSnapAssistGroup(), CD::triggersKey()},
+             {CD::snappingBehaviorSnapAssistGroup(), CD::releaseGraceMsKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::keepOnResolutionChangeKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::moveNewToLastZoneKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::autoAssignAllLayoutsKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreOnUnsnapKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreOnLoginKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::keepFloatingAboveKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::unfloatFallbackToZoneKey()},
              {CD::snappingBehaviorWindowHandlingGroup(), CD::stickyWindowHandlingKey()},
+             // The default snapping layout. No editor row exists for it on this
+             // page — it is set from a layout card's context menu on
+             // Snapping → Layouts — but the library page carries no staged
+             // config state of its own (isLibraryPage), so the key belongs to
+             // the page that owns the rest of its group, and the context menu
+             // attributes the write here through an external-edit envelope.
+             // Ownership covers dirty/save/Discard only: per-page Reset skips
+             // it via resetExemptDefaultSelectionKeys(), since this page shows
+             // no row a reset of the selection could be read from.
+             {CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()},
              {CD::snappingBehaviorGroup(), CD::focusNewWindowsKey()},
              {CD::snappingBehaviorGroup(), CD::focusFollowsMouseKey()},
          }},
         {QStringLiteral("tiling-behavior"),
          {
+             // Enable master switch: same ownership/exemption contract as the
+             // snapping-overlay-behavior entry documents.
+             {CD::tilingGroup(), CD::enabledKey()},
              {CD::tilingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::tilingBehaviorGroup(), CD::releaseGraceMsKey()},
              {CD::tilingBehaviorGroup(), CD::triggersKey()},
              {CD::tilingBehaviorGroup(), CD::insertPositionKey()},
              {CD::tilingBehaviorGroup(), CD::respectMinimumSizeKey()},
@@ -323,6 +389,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingBehaviorGroup(), CD::focusNewWindowsKey()},
              {CD::tilingBehaviorGroup(), CD::focusFollowsMouseKey()},
              {CD::tilingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::tilingBehaviorGroup(), CD::keepFloatingAboveKey()},
              {CD::tilingGapsGroup(), CD::smartGapsKey()},
          }},
         {QStringLiteral("tiling-algorithm"),
@@ -333,6 +400,144 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::tilingAlgorithmGroup(), CD::masterCountKey()},
              {CD::tilingAlgorithmGroup(), CD::maxWindowsKey()},
              {CD::tilingAlgorithmGroup(), CD::perAlgorithmSettingsKey()},
+         }},
+        // The three advanced scrolling leaves split the former single page's
+        // keys by concern; the one-owner invariant holds per (group, key).
+        // The master switch (Scrolling.enabled) is owned by scrolling-columns
+        // under the same ownership/exemption contract the
+        // snapping-overlay-behavior entry documents.
+        //
+        // Only the GLOBAL Scrolling.* keys are listed. The New columns card's
+        // per-monitor overrides live in the per-screen scrolling store, not in
+        // flat config keys, so — like the Tiling Algorithm page's per-monitor
+        // split/master/max overrides and the Gaps card's — they are NOT part of
+        // this page's per-page dirty/Reset/Discard. They are cleared through the
+        // card's scope chip, and the global footer Save/Discard handles them via
+        // the per-screen save path. Each card owns its own sub-domain of that
+        // store: the New columns card's chip clears the sizing keys
+        // (clearPerScreenScrollingSizingSettings), and the Strip direction card
+        // on the Window page clears the axis key alone
+        // (clearPerScreenScrollingAxisSettings).
+        {QStringLiteral("scrolling-columns"),
+         {
+             {CD::scrollingGroup(), CD::enabledKey()},
+             {CD::scrollingGroup(), CD::defaultColumnWidthKindKey()},
+             {CD::scrollingGroup(), CD::defaultColumnWidthValueKey()},
+             {CD::scrollingGroup(), CD::defaultColumnWidthPresetIndexKey()},
+             {CD::scrollingGroup(), CD::defaultColumnDisplayKey()},
+             {CD::scrollingGroup(), CD::defaultWindowHeightKindKey()},
+             {CD::scrollingGroup(), CD::defaultWindowHeightValueKey()},
+             {CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()},
+             // The two global preset lists: this page edits them, so it owns
+             // them. They are the vocabulary the cycling shortcuts walk on a
+             // screen with no template, which a screen can now be set to
+             // explicitly, so they are a live setting rather than the dormant
+             // fallback they briefly looked like.
+             {CD::scrollingGroup(), CD::presetColumnWidthsKey()},
+             {CD::scrollingGroup(), CD::presetWindowHeightsKey()},
+             // The default template. No editor row exists for it on this page —
+             // a template is made default (or cleared) from its card's context
+             // menu on Scrolling → Templates — but the library page carries no
+             // staged config state of its own (isLibraryPage), so the key
+             // belongs to the page that owns the rest of the Scrolling group,
+             // and the context menu attributes the write here through an
+             // external-edit envelope. Ownership covers dirty/save/Discard
+             // only: per-page Reset skips it via
+             // resetExemptDefaultSelectionKeys().
+             {CD::scrollingGroup(), CD::defaultTemplateKey()},
+         }},
+        // The Tabs leaf owns the whole Scrolling.TabIndicator subtree and
+        // nothing else, so its per-page Reset covers the indicator's
+        // visibility, layout and colours together rather than leaving a third
+        // of it behind. Every key of the subtree is listed for that reason;
+        // the one-owner invariant holds because no other page OWNS the group.
+        // ScrollingSimplePage surfaces three of these keys, but a simple page
+        // carries no pageOwnedConfigKeys entry of its own — it delegates
+        // through simplePageBackingPages, so ownership stays here.
+        {QStringLiteral("scrolling-tabs"),
+         {
+             {CD::scrollingTabIndicatorGroup(), CD::enabledKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::styleKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::positionKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::hideWhenSingleTabKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::placeWithinColumnKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::gapKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::widthKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::lengthProportionKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::gapsBetweenTabsKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::cornerRadiusKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::fontFamilyKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::fontWeightKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::fontItalicKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::fontUnderlineKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::fontStrikeoutKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::activeColorKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::inactiveColorKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::urgentColorKey()},
+         }},
+        // As on scrolling-columns, only the GLOBAL Scrolling.* keys are listed.
+        // The Strip direction card's per-monitor override lives in the
+        // per-screen scrolling store rather than in a flat config key, so it is
+        // NOT part of this page's per-page dirty/Reset/Discard. It is cleared
+        // through that card's own scope chip
+        // (clearPerScreenScrollingAxisSettings), and the global footer
+        // Save/Discard handles it via the per-screen save path.
+        {QStringLiteral("scrolling-window"),
+         {
+             // Scrolling — the viewport rows the Focus and view card carries
+             // (they followed the card over when the View leaf was folded in).
+             // Which way the strip runs — its own card above the Focus and
+             // view card, still on this page. Sits with the viewport rows
+             // because it changes what every "width"/"height" row means.
+             {CD::scrollingGroup(), CD::stripAxisKey()},
+             {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
+             {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},
+             // The crop-at-edge switch on the Focus and view card.
+             {CD::scrollingGroup(), CD::cropStraddlersKey()},
+             {CD::scrollingGroup(), CD::wheelFocusEnabledKey()},
+             {CD::scrollingGroup(), CD::wheelFocusInvertedKey()},
+             // The two scroll keys, on the same Focus and view card as the
+             // switches above.
+             {CD::scrollingWheelFocusGroup(), CD::triggersKey()},
+             {CD::scrollingWheelViewGroup(), CD::triggersKey()},
+             // Scrolling.Behavior — the strip's window-handling and focus
+             // knobs, smart gaps among them. The gap VALUES are shared and
+             // mode-neutral, but whether a lone column drops them is per-mode
+             // behaviour, so scrolling owns its own (group, key) pair here and
+             // tiling-behavior keeps the Tiling.Gaps one.
+             {CD::scrollingBehaviorGroup(), CD::insertPositionKey()},
+             {CD::scrollingBehaviorGroup(), CD::smartGapsKey()},
+             {CD::scrollingBehaviorGroup(), CD::focusNewWindowsKey()},
+             {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseKey()},
+             {CD::scrollingBehaviorGroup(), CD::focusFollowsMouseMaxScrollKey()},
+             {CD::scrollingBehaviorGroup(), CD::stickyWindowHandlingKey()},
+             {CD::scrollingBehaviorGroup(), CD::respectMinimumSizeKey()},
+             {CD::scrollingBehaviorGroup(), CD::restoreOnLoginKey()},
+             {CD::scrollingBehaviorGroup(), CD::restoreFloatedOnLoginKey()},
+             {CD::scrollingBehaviorGroup(), CD::keepFloatingAboveKey()},
+             {CD::scrollingBehaviorGroup(), CD::columnWidthStepPercentKey()},
+             {CD::scrollingBehaviorGroup(), CD::windowHeightStepPercentKey()},
+             {CD::scrollingBehaviorGroup(), CD::viewScrollStepPercentKey()},
+             // Drag re-insert triggers (the Triggers card on this page).
+             {CD::scrollingBehaviorGroup(), CD::triggersKey()},
+             {CD::scrollingBehaviorGroup(), CD::toggleActivationKey()},
+             {CD::scrollingBehaviorGroup(), CD::releaseGraceMsKey()},
+             // Scrolling.Behavior.DragScroll — the Edge auto-scroll card,
+             // between the two for the same reason: it runs only during that
+             // drag, and the drop indicator is what follows it.
+             {CD::scrollingDragScrollGroup(), CD::enabledKey()},
+             {CD::scrollingDragScrollGroup(), CD::triggerWidthKey()},
+             {CD::scrollingDragScrollGroup(), CD::delayMsKey()},
+             {CD::scrollingDragScrollGroup(), CD::maxSpeedKey()},
+             // Scrolling.DropIndicator — the Drop indicator card on this page.
+             // It lives beside the Triggers card because it only appears
+             // during the drag those triggers arm.
+             {CD::scrollingDropIndicatorGroup(), CD::enabledKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::colorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::borderColorKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::opacityKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::widthKey()},
+             {CD::scrollingDropIndicatorGroup(), CD::radiusKey()},
          }},
         // Only the GLOBAL Windows.* / Gaps.* keys are listed. Per-monitor gap
         // overrides live in the per-screen autotile store (AutotileScreen:*), not
@@ -353,12 +558,16 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
              {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
              {CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()},
-             // Decoration performance — the Performance card on this page. Bounds
-             // WHEN the decoration chain animates, which is what decides whether
-             // the GPU can leave its top power state at all.
+             // Decoration performance — the first three are the Performance
+             // card on this page, bounding WHEN the decoration chain animates
+             // (what decides whether the GPU can leave its top power state at
+             // all).
              {CD::decorationsPerformanceGroup(), CD::animateFocusedOnlyKey()},
              {CD::decorationsPerformanceGroup(), CD::pauseWhenIdleKey()},
              {CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()},
+             // Same config group, different card: the Blur card's quality
+             // multiplier, the per-frame cost lever.
+             {CD::decorationsPerformanceGroup(), CD::blurScaleMultiplierKey()},
              {CD::windowsAppearanceGroup(), CD::showOpacityTintKey()},
              {CD::windowsAppearanceGroup(), CD::opacityTintScopeKey()},
              {CD::windowsAppearanceGroup(), CD::opacityKey()},
@@ -396,6 +605,23 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     return manifest;
 }
 
+const Settings::ConfigKeyList& SettingsController::resetExemptModeEnableKeys()
+{
+    // The three placement enable master switches. Owned by their mode's main
+    // page (see the snapping-overlay-behavior manifest comment) so pending
+    // sidebar flips participate in dirty/save/discard, but EXEMPT from
+    // per-page Reset: "reset this page to defaults" must not switch the mode
+    // itself off or on. resetPage() filters these out of the manifest list it
+    // hands Settings::resetKeys.
+    using CD = ConfigDefaults;
+    static const Settings::ConfigKeyList keys = {
+        {CD::snappingGroup(), CD::enabledKey()},
+        {CD::tilingGroup(), CD::enabledKey()},
+        {CD::scrollingGroup(), CD::enabledKey()},
+    };
+    return keys;
+}
+
 const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
 {
     // The condensed SimpleOnly pages host cards whose config keys are owned
@@ -405,9 +631,16 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // Behavior. tiling-simple surfaces the algorithm picker and its
     // per-algorithm slots from Algorithm, plus the whole window-handling
     // card (placement, drag and overflow behaviour, sticky handling, smart
-    // gaps, restore-on-login) and focus from Window. They deliberately have NO pageOwnedConfigKeys
+    // gaps, restore-on-login) and focus from Window. scrolling-simple surfaces
+    // the default column width from Columns, the tab indicator's enable /
+    // style / position from Tabs, plus the Strip direction card, view
+    // centering and the whole window-handling and focus cards from Window.
+    // They deliberately have NO pageOwnedConfigKeys
     // entry — the one-owner invariant there forbids listing a key twice —
     // so dirtiness, Reset, and Discard delegate through this map instead.
+    // Neither selector page (snapping-zoneselector, scrolling-zoneselector)
+    // backs a simple page ON PURPOSE: the drag popups are advanced-tier
+    // surfaces in both families, so Simple mode carries no card for them.
     // animations-simple is absent: it rides the shared animation staging
     // domain like every other animation leaf.
     //
@@ -422,6 +655,8 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
         {QStringLiteral("snapping-simple"),
          {QStringLiteral("snapping-overlay-behavior"), QStringLiteral("snapping-window-behavior")}},
         {QStringLiteral("tiling-simple"), {QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm")}},
+        {QStringLiteral("scrolling-simple"),
+         {QStringLiteral("scrolling-columns"), QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling-window")}},
     };
     // Checked once at first call, in debug AND release: the assert names the
     // offending page for a developer, and resetPage / discardPage additionally
@@ -446,6 +681,25 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     return backing;
 }
 
+const Settings::ConfigKeyList& SettingsController::resetExemptDefaultSelectionKeys()
+{
+    // The two cross-page default selections. Owned by snapping-window-behavior
+    // and scrolling-columns (see their manifest comments) so the library
+    // pages' set-as-default writes participate in value-based dirtiness and
+    // per-page Discard, but EXEMPT from per-page Reset: neither owner page
+    // shows an editor row for its key, so "reset this page to defaults" must
+    // not wipe a selection made somewhere else. The tiling default is
+    // deliberately NOT here — the Algorithm page carries a real picker for it,
+    // so its Reset is honest. Same contract shape as
+    // resetExemptModeEnableKeys() above; resetPage() strips both lists.
+    using CD = ConfigDefaults;
+    static const Settings::ConfigKeyList keys = {
+        {CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()},
+        {CD::scrollingGroup(), CD::defaultTemplateKey()},
+    };
+    return keys;
+}
+
 const QSet<QString>& SettingsController::validPageNames()
 {
     // Keep in sync with the `regPage` / `regVirtual` registrations in
@@ -458,8 +712,8 @@ const QSet<QString>& SettingsController::validPageNames()
     // framework-driven PageHost Loader, keyed off the registry.)
     static const QSet<QString> pages{
         QStringLiteral("overview"),
-        QStringLiteral("layouts"),
         QStringLiteral("snapping-simple"),
+        QStringLiteral("snapping-layouts"),
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("snapping-zoneselector"),
@@ -467,15 +721,25 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-shaders"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-simple"),
+        QStringLiteral("tiling-library"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
         QStringLiteral("tiling-shortcuts"),
+        QStringLiteral("scrolling-simple"),
+        QStringLiteral("scrolling-templates"),
+        QStringLiteral("scrolling-columns"),
+        QStringLiteral("scrolling-tabs"),
+        QStringLiteral("scrolling-window"),
+        QStringLiteral("scrolling-shortcuts"),
+        QStringLiteral("scrolling-zoneselector"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
+        QStringLiteral("scrolling-ordering"),
         QStringLiteral("window-appearance"),
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),
         QStringLiteral("decorations-popups"),
+        QStringLiteral("decorations-shell"),
         QStringLiteral("decorations-sets"),
         QStringLiteral("decorations-shaders"),
         QStringLiteral("rules"),
@@ -490,9 +754,11 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"),
         QStringLiteral("animations-desktops"),
+        QStringLiteral("animations-shell"),
         QStringLiteral("animations-editor"),
         QStringLiteral("animations-window-motion"),
         QStringLiteral("animations-window-dragging"),
+        QStringLiteral("animations-scrolling"),
         QStringLiteral("animations-side-panels"),
         QStringLiteral("animations-widgets"),
         QStringLiteral("animations-presets"),
@@ -506,7 +772,14 @@ namespace {
 
 // Visible pages under `parentId` that the rail can render as a row of their
 // own (a non-empty qmlSource), counted only up to `limit` so the caller can ask
-// "more than one?" without walking a whole subtree.
+// "more than one?" without walking a whole subtree. Library pages are skipped:
+// they are never dirty and own no resettable state (isLibraryPage), so they
+// neither need dirtyScopeFor's hoist nor block it — counting them would stop
+// the condensed pages' hoist the moment a library leaf sits beside them, which
+// is exactly the topology this PR's per-mode split created. Every OTHER
+// navigable leaf still counts, which is what keeps the hoist from crossing a
+// surface that speaks for its own config (e.g. window-appearance under
+// appearance).
 int visibleNavigableCount(const PhosphorControl::PageRegistry& registry, const QString& parentId, int limit,
                           int depth = 0)
 {
@@ -519,7 +792,7 @@ int visibleNavigableCount(const PhosphorControl::PageRegistry& registry, const Q
     int n = 0;
     const auto children = registry.visibleChildPages(parentId);
     for (const PhosphorControl::PageRegistry::Entry& child : children) {
-        if (!child.qmlSource.isEmpty()) {
+        if (!child.qmlSource.isEmpty() && !isLibraryPage(child.id)) {
             ++n;
         }
         if (n >= limit) {
@@ -549,10 +822,10 @@ QString SettingsController::dirtyScopeFor(const QString& pageId) const
     // Only a CONDENSED surface hoists. A page that exists in both modes speaks
     // for itself in both, so widening its scope would badge it for edits it
     // cannot show and its own Reset/Discard cannot reach — which is the defect
-    // this function exists to remove, not to relocate. `layouts` is the case
-    // that proves it: in simple mode it is the only visible row under
-    // `display` (virtualscreens is AdvancedOnly), so an ungated walk would
-    // badge Layouts for staged virtual-screen edits it has no control over.
+    // this function exists to remove, not to relocate. `snapping-layouts` is
+    // the case that proves it: it is visible in simple mode alongside the
+    // condensed snapping page, and an ungated walk up to `snapping` would
+    // badge the library for staged snapping edits it has no control over.
     if (registry.entry(pageId).visibility != PhosphorControl::PageRegistry::PageVisibility::SimpleOnly) {
         return pageId;
     }

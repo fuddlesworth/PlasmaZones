@@ -74,6 +74,12 @@ struct CachedShader
     /// dims the surface throughout the transition; the MapTexture-only shader
     /// can't see `data.opacity()`.
     int iWindowOpacityLoc = -1;
+    /// `iOldWindowOpacity` location — -1 unless the pack includes
+    /// old_content.glsl. The old side's OWN resolved opacity: equal to the
+    /// iWindowOpacity push for self-cross-fades, the outgoing tab's value
+    /// (or 1.0 when baked into the seeded composite) on a tab swap. See
+    /// ShaderTransition::oldSnapshotOpacity for who computes it.
+    int iOldWindowOpacityLoc = -1;
     // Slot counts sourced from AnimationShaderContract so a future change to
     // the contract (e.g. growing the customParams budget) can't silently
     // desync this cache from the translation + upload sites in
@@ -357,11 +363,57 @@ struct ShaderTransition
     /// skip the morph uniforms.
     QRectF fromGeometry;
     QRectF toGeometry;
-    /// Set true when a morph transition begins (wired in applyWindowGeometry);
-    /// the first morph paint captures the still-old window content into
-    /// `oldSnapshot` and clears this. The window content is captured before
-    /// the moveResize configure round-trips, so it holds the OLD frame.
+    /// Armed by any leg that wants an old-content cross-fade and has not yet
+    /// captured one: the geometry-morph installs (applyWindowGeometry), the
+    /// held-move capture (window_connections, both sites), and the tab-swap
+    /// SEED FALLBACK (paint_capture, which pairs it with `snapshotSource`).
+    /// The first paint of an armed leg captures into `oldSnapshot` and clears
+    /// this; for a morph that capture runs before the moveResize configure
+    /// round-trips, so it holds the OLD frame.
     bool needsSnapshot = false;
+    /// Capture the old-content snapshot from a DIFFERENT window than the one
+    /// this transition runs on. Null for every ordinary leg, where the old
+    /// content is the transition window's own earlier frame.
+    ///
+    /// Set only by the scrolling tab swap, whose "before" image belongs to the
+    /// outgoing tab: the two windows share one rect, so a cross-fade between
+    /// them is a cross-fade in place, but the pixels have to come from the
+    /// window that is leaving. A QPointer because the source is parked
+    /// off-canvas by the time the first paint frame runs the capture, and a
+    /// window that closes in that gap must degrade to no cross-fade rather
+    /// than to a dangling read.
+    QPointer<KWin::EffectWindow> snapshotSource;
+    /// The old side's own resolved opacity, pushed as `iOldWindowOpacity` for
+    /// foreign-source legs (snapshotSource set). 1.0 when the snapshot came
+    /// from the decorated composite (an opacity-baking chain folds the value
+    /// into the pixels, so a second multiply would dim twice); the source's
+    /// decoration `foldedOpacity` on the raw capture path, which draws at
+    /// setOpacity(1.0) and bakes nothing. Self-cross-fades ignore this field:
+    /// their push mirrors iWindowOpacity, preserving their historical
+    /// behaviour exactly.
+    float oldSnapshotOpacity = 1.0f;
+    /// This leg IS the scrolling tab swap (`scrolling.tabSwitch`).
+    ///
+    /// Load-bearing against the focus leg, which contends for the same
+    /// per-window transition slot. Activating a tab is a focus change, so KWin
+    /// emits windowActivated for the same window the tile batch installs this
+    /// on, and the two arrive in either order: activation first and the swap
+    /// replaces the focus leg (which is the outcome we want, and happens for
+    /// free), or activation last and the focus leg replaces the swap
+    /// mid-flight, which loses the cross-fade and leaves the leg's captured
+    /// snapshot pointing at a window nothing is fading from.
+    ///
+    /// The activation handler reads this and declines to install its own leg
+    /// while a swap is live. Gating on THIS rather than on mere liveness is
+    /// the `heldMove` lesson: findTransition hands back whatever leg is
+    /// running, so a liveness test would also swallow the focus leg during an
+    /// unrelated open or maximize animation.
+    ///
+    /// Self-clearing: it lives and dies with the transition, so the
+    /// suppression lasts exactly as long as the swap it is protecting. The
+    /// accepted cost is a genuine refocus of the same window WITHIN that leg
+    /// (click away and back inside ~200 ms), which loses its focus animation.
+    bool tabSwap = false;
     /// ── Held interactive-move state (window.movement.move) ──
     /// True while the user is still dragging: the transition stays active
     /// past durationMs (progress clamps at 1) and the duration-timer
@@ -447,19 +499,70 @@ struct ShaderTransition
     MeshSim meshSim;
     MeshSimParams meshParams;
     qint64 meshLastMs = -1;
-    /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
-    /// shader can cross-fade the old content out while the live new content
-    /// fades in. Captured on the first morph paint AFTER the instant
-    /// `moveResize` — so it is sized to the window's current (post-moveResize)
-    /// `expandedGeometry`, but the buffer it holds is still the OLD content
-    /// because the client has not yet re-rendered for the configure. (The
-    /// matching new-geometry sub-rect `iAnchorRectInTexture` therefore maps
-    /// card-space uv into it correctly, same as for the live `uTexture0`.)
+    /// Snapshot of the OLD content, bound as `uOldWindow` so the shader can
+    /// cross-fade it out while the live new content fades in. THREE sources,
+    /// each with its own sizing/alignment story:
+    ///  - Morph (own past, first-paint capture): taken AFTER the instant
+    ///    `moveResize`, so it is sized to the window's post-moveResize
+    ///    `expandedGeometry` while still holding the OLD pixels (the client
+    ///    has not re-rendered for the configure) — `iAnchorRectInTexture`
+    ///    maps card-space uv into it exactly like the live `uTexture0`.
+    ///  - Tab-swap SEED (foreign window, install-time composite blit): spans
+    ///    the ARRIVING window's expanded rect at the shared column position,
+    ///    so the same map holds by construction.
+    ///  - Tab-swap RAW FALLBACK (foreign window, first-paint drawWindow):
+    ///    spans the SOURCE's own expanded rect, which can differ from the
+    ///    arriving window's by the two clients' shadow padding — sampled
+    ///    across the card with sub-percent stretch, the documented trade for
+    ///    a capture that always lands.
     /// Owned per-transition (unique per capture, not path-keyed like
     /// `userTextures`) and freed when the transition ends. Null when capture
     /// was not requested or failed — paintWindow then binds a transparent
     /// fallback (or the shader falls back to a non-cross-fade morph).
     std::unique_ptr<KWin::GLTexture> oldSnapshot;
+};
+
+/// Where a parked scrolling tile really belongs on the strip.
+///
+/// Held instead of a precomputed translation because the translation is only
+/// correct if the park LANDED where it was requested, and that is not
+/// something the effect can assume. A tile is parked by committing it below
+/// the union of every output. For a client whose committed size differs from
+/// the column it was handed, the park can silently fail: seen live with a
+/// Firefox Picture-in-Picture window (aspect-constrained, Wayland) parked to
+/// `(0,2176 1908x2052)` and committed at `(0,1087 1908x1073)`, its bottom edge
+/// pinned exactly to the screen bottom. A translation derived from the
+/// requested park rect then drew it 1089px off, which culled it from paint
+/// while its real frame still covered half the screen.
+///
+/// That observation is solid; the MECHANISM behind it is not established. The
+/// obvious candidate, KWin re-applying keep-on-screen containment on the
+/// renegotiated size, does not survive reading the xdg-shell commit path — the
+/// only keepInArea there is plasma-shell-surface-only, and neither the commit
+/// nor the ack path applies containment. Do not go looking for that call; what
+/// matters here is that the committed rect cannot be assumed to equal the
+/// requested one, whatever produces the difference.
+///
+/// X11 does not hit it: the effect constrains the size itself
+/// (constrainTileGeometry) and hands KWin an already-valid rect, so there is
+/// no renegotiation and the park lands. Storing the placement rather than the
+/// translation covers both without depending on which path a window took —
+/// and the resolver reproduces the old translation exactly whenever the
+/// commit did land, which is what preserves PR #906's pixel-verified X11
+/// behaviour.
+struct ScrollVisualPlacement
+{
+    /// The column's top-left ON THE STRIP (the batch's visualPos), in the
+    /// same absolute space the view offset is later added in.
+    QPoint stripPos;
+    /// The column rect this tile was handed. Only the size is read: it is
+    /// what a smaller committed frame is centred within.
+    QSize columnSize;
+
+    bool operator==(const ScrollVisualPlacement& o) const
+    {
+        return stripPos == o.stripPos && columnSize == o.columnSize;
+    }
 };
 
 /// First-frame suppression bookkeeping for a window that is about to be

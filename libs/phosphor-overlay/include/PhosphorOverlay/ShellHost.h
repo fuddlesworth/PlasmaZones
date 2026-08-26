@@ -154,10 +154,19 @@ public:
     ///
     /// @p anyInputGrabbing - true when at least one modal slot
     /// (consumer-defined; Phosphor today: snap-assist + layout picker) wants
-    /// pointer input. When false the shell's QQuickWindow is flagged
-    /// Qt::WindowTransparentForInput so background windows stay
-    /// interactable beneath non-modal slots (OSDs, main overlay, zone
-    /// selector during drag).
+    /// pointer input. When false, OR when @p anyVisible is false, the shell's
+    /// QQuickWindow is flagged Qt::WindowTransparentForInput so background
+    /// windows stay interactable beneath non-modal slots (OSDs, main overlay,
+    /// zone selector during drag). The @p anyVisible term means this does not
+    /// rest on the caller guaranteeing that a grabbing slot is a visible one:
+    /// a grab with nothing visible would otherwise hand an unseen surface
+    /// every click on the screen.
+    ///
+    /// Input is all-or-nothing for the whole shell surface: a visible modal
+    /// grab takes every click the surface covers, and anything else leaves it
+    /// click-through. Every kbd-None slot shares one screen-sized surface, so
+    /// a slot wanting clicks only where it draws would need a sub-surface
+    /// input region, which nothing asks for today.
     ///
     /// No-op when the shell surface or window is not yet up.
     void syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing);

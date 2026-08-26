@@ -138,7 +138,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setSnapAssistThumbnail">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect; authenticated against /proc/&lt;pid&gt;/exe. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail to the daemon as raw ARGB32 pixels. Called by the kwin-effect as the fallback for setWindowThumbnailDmabuf, whenever the zero-copy path is turned off or the driver, RHI backend or format cannot carry it; authenticated against /proc/&lt;pid&gt;/exe. Returns true iff the payload was accepted into the daemon's bounded LRU cache. See OverlayAdaptor::setSnapAssistThumbnail in src/dbus/overlayadaptor.cpp for the full validation and trust contract."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
@@ -156,7 +156,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setWindowThumbnailDmabuf">
-            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail as a single-plane DMA-BUF (zero-copy GPU path) instead of raw pixels. Experimental: the daemon only accepts it when started with PLASMAZONES_DMABUF_THUMBNAILS set, otherwise returns false and the caller must fall back to setSnapAssistThumbnail. Authenticated against /proc/&lt;pid&gt;/exe like the raw-pixel method. The fd is consumed/duplicated by the daemon's GPU import; the caller may close its copy after the call returns."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail as a single-plane DMA-BUF (zero-copy GPU path) instead of raw pixels. This is the default transport; the daemon refuses it and returns false when started with PLASMAZONES_DMABUF_THUMBNAILS=0, and on any false the caller must fall back to setSnapAssistThumbnail. Authenticated against /proc/&lt;pid&gt;/exe like the raw-pixel method. The fd is consumed/duplicated by the daemon's GPU import; the caller may close its copy after the call returns."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>
             </arg>
@@ -185,7 +185,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="sync_file fence fd that signals when the producer's GPU render into the buffer completes. The daemon waits on it before sampling so a repeated/live producer is not read mid-render. Borrowed for the call."/>
             </arg>
             <arg name="accepted" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon imported and stored the thumbnail. False when the dma-buf path is disabled (PLASMAZONES_DMABUF_THUMBNAILS unset), the driver/RHI backend can't import it, auth fails, or dimensions are out of range. On false the caller MUST fall back to setSnapAssistThumbnail."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon accepted and stored the descriptor. The GPU import is deferred (it runs lazily on the daemon's render thread once the render-completion fence signals), so true means accepted and will display, not already imported. False when the dma-buf path is disabled (PLASMAZONES_DMABUF_THUMBNAILS=0), the driver/RHI backend can't import it, auth fails, or dimensions are out of range. On false the caller MUST fall back to setSnapAssistThumbnail."/>
             </arg>
         </method>
 
@@ -214,6 +214,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Array of SnapAssistCandidate structs: (windowId, compositorHandle, icon, caption)."/>
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PhosphorProtocol::SnapAssistCandidateList"/>
             </arg>
+        </signal>
+        <signal name="snapAssistThumbnailCacheTrimmed">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's idle-grace trim empties its snap-assist thumbnail stores (pixel LRU and dma-buf descriptors). The kwin-effect subscribes and drops its recently-posted dedup set in response, so the next snap-assist re-captures thumbnails the daemon no longer holds. Without this edge the two sides desynchronise permanently after a trim and snap assist falls back to program icons until a daemon restart."/>
         </signal>
         <signal name="snapAssistDismissed">
             <annotation name="org.gtk.GDBus.DocString" value="Informational signal: emitted when the Snap Assist overlay closes — whether through a user pick, an Escape / backdrop dismiss, an external hideSnapAssist() D-Bus call, or a screen-change cancel. Pairs with snapAssistShown so external observers (KCMs, kwin-effect, debugging tools) can mirror the visible/hidden state without polling isSnapAssistVisible. Carries no payload; the dismiss reason is intentionally not surfaced because the daemon collapses every dismiss path through the same internal IOverlayService::snapAssistDismissed signal."/>

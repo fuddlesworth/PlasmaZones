@@ -1,7 +1,7 @@
 {
     "KPlugin": {
         "Category": "Window Management",
-        "Description": "Shows zone overlays during window dragging, with snapping and autotiling support",
+        "Description": "Draws the zone overlays shown while dragging a window and the tab indicators on scrolling columns, with snapping, tiling and scrolling support",
         "EnabledByDefault": true,
         "License": "GPL",
         "Name": "PlasmaZones",

@@ -13,6 +13,8 @@
 //     mirror store (`m_localRuleStore`) so the in-process LayoutRegistry's
 //     assignment cascade sees daemon-driven rule edits without a process
 //     restart.
+//   * Scrolling strip wake-ups (Scrolling interface) — relayed straight back
+//     out as `scrollingStripChanged` for the Monitors page's live thumbnail.
 //
 // The D-Bus wire-up is a natural seam away from `settingscontroller.cpp`. The
 // helper lambda and subscriptions are cohesive, only call into D-Bus
@@ -94,6 +96,12 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     subscribeDaemonSignal(layoutIface, QStringLiteral("layoutPropertyChanged"), SLOT(scheduleLayoutLoad()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
     subscribeDaemonSignal(layoutIface, QStringLiteral("layoutListChanged"), SLOT(scheduleLayoutLoad()));
+    // scrollingTemplatesChanged fires on template store CRUD (save, delete,
+    // duplicate, rescan) — reload the LOCAL read view first so the bundle's
+    // template source and export/open-file answer fresh, then the debounced
+    // layout reload refreshes the cards.
+    subscribeDaemonSignal(layoutIface, QStringLiteral("scrollingTemplatesChanged"),
+                          SLOT(onScrollingTemplatesChanged()));
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
     subscribeDaemonSignal(layoutIface, QStringLiteral("screenLayoutChanged"),
                           SLOT(onScreenLayoutChanged(QString, QString, int)));
@@ -105,6 +113,23 @@ void SettingsController::wireDaemonSubscriptions(QStringList& failedSubscription
     subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopNamesChanged"), SLOT(onVirtualDesktopsChanged()));
     subscribeDaemonSignal(layoutIface, QStringLiteral("activitiesChanged"), SLOT(onActivitiesChanged()));
     subscribeDaemonSignal(layoutIface, QStringLiteral("currentActivityChanged"), SLOT(onActivitiesChanged()));
+
+    // Strip wake-ups for the Monitors page's live thumbnail. Relayed straight
+    // to the QML-facing signal rather than through a slot: this side adds no
+    // state, and the page that draws the strip owns both the coalescing and
+    // the decision to re-read (its timer owns EVERY strip read, so a read
+    // started here would be a second one in the same frame).
+    //
+    // The relayed signal carries the daemon's contract with it: a wake-up,
+    // not a difference. It fires per step of a drag and can fire without a
+    // visible tile moving, so a receiver coalesces and compares rather than
+    // repainting on every hit. It is also one-directional — a settings or
+    // template push can reshape the strip without emitting it at all — so the
+    // page's periodic poll stays as the backstop for what it misses, along
+    // with an emission that arrived while the daemon was down and a placement
+    // change on a context that only later becomes current.
+    const QString scrollingIface = QString(PhosphorProtocol::Service::Interface::Scrolling);
+    subscribeDaemonSignal(scrollingIface, QStringLiteral("stripChanged"), SIGNAL(scrollingStripChanged(QString)));
 
     // Window-rules → settings-side mirror store. The daemon owns
     // rules.json; when it persists a change via setAllRules() the

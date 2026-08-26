@@ -1,0 +1,34 @@
+{
+    "id": "strip-chromatic",
+    "name": "Strip Chromatic",
+    "description": "Chromatic aberration while the strip scrolls. The red and blue channels pull apart along the direction of travel, further the faster you scroll, and snap back together as the strip settles.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Distortion",
+    "appliesTo": ["strip"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "strength",
+            "name": "Separation",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the color channels separate at a given scroll speed.",
+            "group": "Aberration"
+        },
+        {
+            "id": "edgeFeather",
+            "name": "Edge Feather",
+            "type": "float",
+            "default": 0.02,
+            "min": 0.0,
+            "max": 0.2,
+            "step": 0.01,
+            "description": "How softly the separation fades out at the edges of the strip area.",
+            "group": "Aberration"
+        }
+    ]
+}

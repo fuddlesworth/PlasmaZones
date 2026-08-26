@@ -85,6 +85,14 @@ public Q_SLOTS:
      * @brief Toggle autotile mode for a screen
      * @param screenId Screen to toggle
      * @note Switches between snapping mode and autotile mode
+     * @note Mode-only verb by contract: it writes an EMPTY snapping layout
+     *       and an EMPTY tiling algorithm into the screen's current-context
+     *       entry, so any layout or algorithm that context had pinned is
+     *       cleared and the toggled mode falls back to the cascade / global
+     *       default. Only the scrolling template survives, because
+     *       setAssignmentEntry seeds it from the stored entry. Callers that
+     *       need the stored slots preserved must read them first and pass
+     *       them back through setAssignmentEntry themselves.
      */
     void toggleAutotileForScreen(const QString& screenId);
 
@@ -101,6 +109,23 @@ public Q_SLOTS:
      *         On error (concurrent call, shutdown), a D-Bus error reply is sent instead.
      */
     QString generateSupportReport(int sinceMinutes, const QDBusMessage& message);
+
+    /**
+     * @brief Ask the daemon to shut down cleanly
+     *
+     * The exit path is the ordinary one: this quits the event loop, so main()
+     * resumes after exec() and runs Daemon::stop() plus the window teardown on
+     * the main thread. Nothing is torn down from inside the D-Bus dispatch.
+     *
+     * This is what `plasmazonesd --replace` calls on the incumbent instance
+     * before claiming the bus name. It is deliberately on the Control facade
+     * rather than the Daemon object itself: Control is the documented
+     * third-party entry point, and a shutdown verb needs no daemon internals.
+     *
+     * Safe to call when a shutdown is already in flight — QCoreApplication::quit()
+     * on an already-quitting loop is a no-op.
+     */
+    void quit();
 
 private:
     WindowTrackingAdaptor* m_wta;

@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QRectF>
 #include <QString>
+#include <QTest>
 #include <QUuid>
 #include <memory>
 #include <vector>
@@ -17,6 +18,8 @@
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/Zone.h>
 
 #include "helpers/IsolatedConfigGuard.h"
@@ -50,6 +53,35 @@ protected:
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
         return mgr;
+    }
+
+    /// Wire a fresh native template store into @p mgr (kept alive by the
+    /// fixture). Tests that exercise template assignment call this once and
+    /// register templates through createTestTemplate.
+    PhosphorZones::ScrollingTemplateStore* attachTemplateStore(PhosphorZones::LayoutRegistry* mgr)
+    {
+        m_stores.emplace_back(std::make_unique<PhosphorZones::ScrollingTemplateStore>());
+        mgr->setScrollingTemplateStore(m_stores.back().get());
+        return m_stores.back().get();
+    }
+
+    /// Create-and-save a minimal named template; returns its store id.
+    QUuid createTestTemplate(PhosphorZones::ScrollingTemplateStore* store, const QString& name)
+    {
+        PhosphorZones::ScrollingTemplate templ;
+        templ.name = name;
+        templ.presetColumnWidths = {0.333, 0.5, 0.667};
+        const QUuid id = store->saveTemplate(templ);
+        // QVERIFY expands to a bare `return;`, which a QUuid-returning helper
+        // cannot use, so call the same reporting entry point the macro does.
+        // This records the refused save as the FIRST reported failure, so the
+        // test log names the real cause instead of whatever the null id goes on
+        // to break. It does not abort the caller: the caller still receives a
+        // null id and keeps running.
+        if (!QTest::qVerify(!id.isNull(), "!id.isNull()", "template save was refused", __FILE__, __LINE__)) {
+            return {};
+        }
+        return id;
     }
 
     /// Author a per-context DefaultLayoutAssignment override rule into the
@@ -88,16 +120,20 @@ protected:
         QVERIFY(store != nullptr);
         const PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(
             QStringLiteral("test-mode"), screenId, virtualDesktop, activity, modeToken, QString(), QString(),
-            PWR::ContextRuleBridge::kContextBandBase);
+            PWR::ContextRuleBridge::kContextBandBase, QString());
         QVERIFY(store->addRule(rule));
     }
 
     std::vector<std::unique_ptr<TestHelpers::IsolatedConfigGuard>> m_guards;
+    std::vector<std::unique_ptr<PhosphorZones::ScrollingTemplateStore>> m_stores;
 
 private Q_SLOTS:
 
     void cleanup()
     {
+        // Stores first: a store's destructor still resolves paths under the
+        // guard's isolated XDG dirs, so the guard has to outlive it.
+        m_stores.clear();
         m_guards.clear();
     }
 };

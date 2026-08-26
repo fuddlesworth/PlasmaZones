@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/effectlogging.h"
 
 #include <PhosphorAnimation/AnimationShaderEffect.h> // shaderEffectAppliesToEventPath (peek suppression gate)
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -24,12 +25,16 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
 #include <QEvent>
+#include <QLocale>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QStandardPaths>
 #include <QTimer>
+#include <QTranslator>
 #include <QVarLengthArray>
 
-#include "autotilehandler/autotilehandler.h"
+#include "input_filter.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "handlers/dragtracker.h"
 #include "compositor/compositorbridge.h"
@@ -37,17 +42,18 @@
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
+#include "compositor/scrolltabindicatorpainter.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
 
 // `lcEffect` is defined in plasmazoneseffect.cpp via Q_LOGGING_CATEGORY. Re-declare
 // here so this TU can log under the same category without re-defining storage.
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
-    , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_tilingHandler(std::make_unique<TilingHandler>(this))
     , m_snapHandler(std::make_unique<SnapHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
@@ -63,13 +69,36 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // mid-migration, (c) test paths that don't drive KWin::effects.
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
+    , m_stripViewAnimator(std::make_unique<StripViewAnimator>())
+    , m_scrollTabPainter(std::make_unique<ScrollTabIndicatorPainter>())
     , m_shaderManager(this)
     , m_desktopTransition(this)
+    , m_stripTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
 {
     PhosphorProtocol::registerWireTypes();
+
+    // The compositor-drawn tab pills carry one translated string (the
+    // untitled-tab placeholder) and this process is kwin_wayland, which
+    // installs no PlasmaZones catalog of its own. Load the daemon's catalog
+    // for the current locale from the shared data location; the translator
+    // is parented to the effect so an unload removes it again. Same contexts
+    // and lookup as the daemon's translation loader, minus the build-tree
+    // search dirs that only make sense next to our own binaries.
+    {
+        auto* translator = new QTranslator(this);
+        const QLocale locale;
+        const QStringList dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        for (const QString& dir : dataDirs) {
+            if (translator->load(locale, QStringLiteral("plasmazones"), QStringLiteral("_"),
+                                 dir + QStringLiteral("/plasmazones/translations"))) {
+                QCoreApplication::installTranslator(translator);
+                break;
+            }
+        }
+    }
 
     // Latch compositor shutdown so the destructor can tell a runtime unload
     // (KCM toggle — restore the suppressed stock effects) from session
@@ -98,6 +127,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connectDragTracker();
     connectWindowAndScreenSignals();
     connectDaemonSubscriptions();
+    // Last, and it must stay last: the existing-window sweep inside can reach
+    // code that expects the daemon subscriptions above to be wired.
+    initExistingWindowsAndInput();
 }
 
 void PlasmaZonesEffect::clearDaemonCompositorState()
@@ -109,6 +141,20 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // KWin::effects access), so it is fine to run here even though this can be
     // reached from the destructor before the KWin::effects teardown guards.
     m_desktopTransition.reset();
+    // Same for the strip pass (no claim to release, but its capture textures
+    // and compiled shaders free under the same context discipline).
+    m_stripTransition.reset();
+    // And the tab indicators: the override cursor must be handed back before
+    // the effect goes (KWin would keep a pointing hand nothing owns). The
+    // handler's clear is GL-free — it RETIRES the per-output textures rather
+    // than deleting them — and releaseGl() right after is the GL-current
+    // point that actually frees them (plus anything retired earlier), so
+    // nothing leaks past the effect and nothing is deleted off-context.
+    // Made current HERE rather than inherited from the transition resets
+    // above, so reordering those cannot turn this into an off-context free.
+    m_tilingHandler->clearScrollTabState();
+    ensureGlContextCurrent();
+    m_scrollTabPainter->releaseGl();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));
@@ -375,10 +421,14 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // doesn't churn border items during the restore burst (see the
         // daemon-loss site above); restoreAll() covers every owner kind
         // including rule overrides.
-        m_autotileHandler->clearTiledTracking();
+        m_tilingHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
-        m_autotileHandler->restoreAllMonocleMaximized();
+        m_tilingHandler->restoreAllMonocleMaximized();
+        // Same undo obligation for the effect's own setFullScreen calls:
+        // without it an unload strands every windowed-fullscreen client in
+        // KWin fullscreen state with nothing left owning the flag.
+        m_tilingHandler->restoreAllWindowedFullscreen();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

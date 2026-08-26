@@ -16,17 +16,13 @@ namespace PhosphorAnimationShaders {
 
 ShaderProfile ShaderProfileTree::resolve(const QString& path) const
 {
-    // The interactive-drag leaf takes NO inherited shader. Every pack a user
-    // can assign on an ancestor ("window.movement", "window", the baseline)
-    // is a single-surface crossfade — the pickers refuse move-class packs
-    // everywhere but this leaf — and a crossfade cannot drive the held drag
-    // transition (no from/to plays while the pointer is down). Inheriting one
-    // here would install a dead transition that pins full-output repaints for
-    // the whole drag, and would show a "current shader" in settings that
-    // never visibly runs. Only a direct override at the leaf applies; timing
-    // inheritance is unaffected (that lives in the motion ProfileTree).
-    // Membership is defined by shaderPathResolvesInIsolation (below) so UI
-    // helpers that reason about shadowing share the resolver's definition.
+    // Some leaves take NO inherited shader: everything either could inherit
+    // from its ancestors is provably wrong for it, so only a direct override
+    // at the leaf applies (timing inheritance is unaffected — that lives in
+    // the motion ProfileTree). Membership is defined by
+    // shaderPathResolvesInIsolation below, which carries each member's own
+    // rationale; UI helpers that reason about shadowing share that predicate
+    // so the definitions cannot drift.
     if (shaderPathResolvesInIsolation(path)) {
         ShaderProfile effective;
         auto it = m_overrides.constFind(path);
@@ -42,7 +38,29 @@ ShaderProfile ShaderProfileTree::resolve(const QString& path) const
         cursor = PhosphorAnimation::ProfilePaths::parentPath(cursor);
     }
 
-    ShaderProfile effective = m_baseline;
+    // A subtree that inherits from its own root and from nothing above it —
+    // see shaderPathIsolationRoot. Two edits to the ordinary walk, and BOTH
+    // are needed: the baseline is dropped, and the chain is cut back to the
+    // root. Dropping the baseline alone would leave the `global` node in the
+    // chain, which is a node the user can assign a pack to, so the subtree
+    // would still inherit from outside itself through it.
+    const QString isolationRoot = shaderPathIsolationRoot(path);
+    ShaderProfile effective = isolationRoot.isEmpty() ? m_baseline : ShaderProfile{};
+    if (!isolationRoot.isEmpty()) {
+        while (!chain.isEmpty() && chain.constFirst() != isolationRoot) {
+            chain.removeFirst();
+        }
+        // The trim assumes the root is an ANCESTOR of the path, which holds for
+        // every predicate whose membership test is "the root, or the root plus a
+        // dot" — the only shape there is today. A root that ever answers for a path outside
+        // its own chain would empty the list here and silently apply nothing, not
+        // even the direct override at the path. Fail closed to the path itself
+        // rather than to no shader at all, so the leaf still resolves what the
+        // user explicitly put on it.
+        if (chain.isEmpty()) {
+            chain.append(path);
+        }
+    }
 
     for (const QString& step : chain) {
         auto it = m_overrides.constFind(step);
@@ -168,11 +186,57 @@ bool ShaderProfileTree::operator==(const ShaderProfileTree& other) const
 
 bool shaderPathResolvesInIsolation(const QString& path)
 {
-    // Exactly the interactive-drag leaf today — see the resolve() note above.
-    // Any future leaf that opts out of the walk-up overlay joins this
-    // predicate so resolve() and every shadowing-aware consumer move in
-    // lockstep.
-    return path == PhosphorAnimation::ProfilePaths::WindowMove;
+    // The two members, each with its own reason. Any future leaf that opts
+    // out of the walk-up overlay joins this predicate so resolve() and every
+    // shadowing-aware consumer move in lockstep.
+    //
+    // The DRAG leaf: every pack a user can assign on an ancestor
+    // ("window.movement", "window", the baseline) is a single-surface
+    // crossfade — the pickers refuse move-class packs everywhere but this
+    // leaf — and a crossfade cannot drive the held drag transition (no
+    // from/to plays while the pointer is down). Inheriting one would install
+    // a dead transition that pins full-output repaints for the whole drag.
+    //
+    // The tab leaf is here for the drag leaf's reason in a different shape: its
+    // class is OPT-IN rather than universal-permissive (a pack must declare
+    // `appliesTo: ["tab"]` to be offered), so every pack a picker offers on an
+    // ancestor for that ancestor's OWN sake is refused here. All three levels are
+    // above it — parentPath("scrolling") is `global`, not empty, and the baseline
+    // sits above that — so "its only ancestor is the strip-classed root" would be
+    // the wrong reason as well as the wrong count. The one pack that survives the
+    // gate is a HYBRID declaring `tab` beside the ancestor's class
+    // (`["tab","appearance"]` on `global`, `["tab","strip"]` on `scrolling`), so
+    // this predicate is a policy choice for that case and a structural refusal for
+    // every other: a hybrid engaged for window appearance must not silently start
+    // driving tab swaps. Inheriting one is worse than inheriting nothing, because
+    // shaderEffectAppliesToEventPath refuses it when the transition BEGINS (not at
+    // install) and the leaf then animates nothing. Only a direct override at the
+    // leaf applies; timing inheritance is unaffected (that lives in the motion
+    // ProfileTree, where the scrolling root's curve and duration ARE meaningful
+    // for both children).
+    return path == PhosphorAnimation::ProfilePaths::WindowMove
+        || path == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch;
+}
+
+QString shaderPathIsolationRoot(const QString& path)
+{
+    namespace PP = PhosphorAnimation::ProfilePaths;
+    // The shell family. Its surfaces belong to plasmashell, so every ancestor
+    // above the root describes something else entirely: `global` and the
+    // baseline are where a user says what THEIR WINDOWS do, and inheriting
+    // that would start playing a window pack on the system tray the moment
+    // anyone set one, with no way to say no short of overriding every shell
+    // leg with an explicit None. Cutting the chain at the root is the same
+    // answer the decoration tree gives the same family, and it is what makes
+    // "engage a pack on the Shell page" the entire opt-in.
+    //
+    // Inside the subtree inheritance is ordinary: a pack on `shell` cascades
+    // to every leg, and a leg overrides it.
+    static const QString shellPrefix = PP::Shell + QLatin1Char('.');
+    if (path == PP::Shell || path.startsWith(shellPrefix)) {
+        return PP::Shell;
+    }
+    return QString();
 }
 
 ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path)

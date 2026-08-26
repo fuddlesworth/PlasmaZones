@@ -98,6 +98,17 @@ public:
                                   ///< action paired with a window-property match,
                                   ///< etc). The row delegate shows a warning
                                   ///< badge when this is non-zero.
+        InertAnimationActionCountRole, ///< int — number of animation-override
+                                       ///< actions naming an event the
+                                       ///< compositor resolves WITHOUT a
+                                       ///< window, which a rule therefore
+                                       ///< cannot drive. Deliberately NOT a
+                                       ///< validation issue (that would gate
+                                       ///< canSave on a rule that is merely
+                                       ///< inert), so the collapsed row carries
+                                       ///< its own badge, matching the chip the
+                                       ///< rule editor and the action summary
+                                       ///< already show.
         ManagedRole, ///< bool — true for built-in rules the app owns (the
                      ///< baseline appearance rule). The row delegate hides the
                      ///< delete and drag-reorder affordances when set.
@@ -246,6 +257,12 @@ public:
     /// Resolver for `OverrideAnimationShader` action params (effect ids like
     /// "dissolve") so the summary renders "Dissolve" rather than the raw id.
     void setShaderEffectLabelLookup(LabelLookup fn);
+    /// Resolver for the `event` param the three per-event animation overrides
+    /// (OverrideAnimationShader / Timing / Curve) carry (profile paths like
+    /// "window.open"), so a rule overriding two events does not summarise as
+    /// two identical entries. Sourced from the animations page controller's
+    /// event taxonomy.
+    void setAnimationEventLabelLookup(LabelLookup fn);
     /// Resolver for `OverrideOverlayShader` action params (overlay shader ids)
     /// so the summary renders the friendly name rather than the raw id. Sourced
     /// from the overlay/snapping shader registry, NOT the animation one.
@@ -315,6 +332,7 @@ private:
     LabelLookup m_snappingLayoutLookup;
     LabelLookup m_tilingAlgorithmLookup;
     LabelLookup m_shaderEffectLookup;
+    LabelLookup m_animationEventLookup;
     LabelLookup m_overlayShaderLookup;
     LabelLookup m_curveLookup;
     LabelLookup m_decorationPackLookup;

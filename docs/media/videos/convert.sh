@@ -1,20 +1,27 @@
 #!/bin/bash
-# Adapted from https://gist.github.com/Potherca/18423260e2c9a4324c9ecb0c0a284066
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Turn a screen recording into a looping README gif.
+#   ./convert.sh ~/Videos/Screencasts/scrolling.mp4
+# Produces scrolling.gif next to this script. Override the defaults with
+# env vars, e.g. WIDTH=800 FPS=12 ./convert.sh input.mp4
+set -euo pipefail
 
 INPUT="$1"
-OUTPUT="$(basename "${INPUT%.*}")"
-ffmpeg -i "${INPUT}" \
-        -vf "scale=800:-2" \
-        "${OUTPUT}-scaled.webm"
+OUTPUT="$(dirname "$0")/$(basename "${INPUT%.*}").gif"
+FPS="${FPS:-10}"
+WIDTH="${WIDTH:-720}"
+COLORS="${COLORS:-96}"
 
-ffmpeg -i "${OUTPUT}-scaled.webm" \
-        -c:v "libx264" \
-        -c:a aac \
-        -movflags faststart \
-        "${OUTPUT}.mp4"
+ffmpeg -y -i "${INPUT}" \
+        -vf "fps=${FPS},scale=${WIDTH}:-2:flags=lanczos,split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=${COLORS}[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+        -loop 0 \
+        "${OUTPUT}"
 
-ffmpeg -i "${OUTPUT}.mp4" \
-        -vf "fps=10,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
-        -loop -1 \
-        "${OUTPUT}-full.gif"
-gifsicle --optimize=3 --output "${OUTPUT}.gif" "${OUTPUT}-full.gif"
+# Optional extra squeeze if gifsicle is installed.
+if command -v gifsicle >/dev/null 2>&1; then
+        gifsicle --optimize=3 --batch "${OUTPUT}"
+fi
+
+ls -lh "${OUTPUT}"

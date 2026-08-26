@@ -12,7 +12,6 @@ SettingsFlickable {
     // Page-scoped Q_PROPERTY surface lives on the sub-controller; appSettings
     // references stay direct (those are Settings Q_PROPERTYs not wrapped here).
     readonly property var settingsBridge: settingsController.tilingBehaviorPage
-    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
 
     contentHeight: content.implicitHeight
     clip: true
@@ -51,7 +50,9 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked
+                }
 
                 SettingsRow {
                     title: i18n("Hold to re-insert into stack")
@@ -60,9 +61,11 @@ SettingsFlickable {
                     enabled: !alwaysReinsertSwitch.checked
 
                     ModifierAndMouseCheckBoxes {
-                        width: root.triggerPreferredWidth
-                        allowMultiple: true
+                        width: TriggerLabels.editorPreferredWidth
                         acceptMode: acceptModeAll
+                        // See the scrolling twin: the sentinel eats a stored
+                        // slot that this list does not show.
+                        reservedTriggerSlots: alwaysReinsertSwitch.checked ? 1 : 0
                         triggers: root.settingsBridge.autotileDragInsertTriggers
                         defaultTriggers: root.settingsBridge.defaultAutotileDragInsertTriggers
                         tooltipEnabled: false
@@ -72,21 +75,41 @@ SettingsFlickable {
                     }
                 }
 
-                SettingsSeparator {}
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked
+                }
 
                 SettingsRow {
                     title: i18n("Toggle mode")
                     searchAnchor: "triggersToggleMode"
-                    description: i18n("Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it")
+                    description: i18n("Tap the re-insert trigger once to activate the stack preview. Tap it again to deactivate.")
                     enabled: !alwaysReinsertSwitch.checked
 
                     SettingsSwitch {
+                        id: insertToggleSwitch
+
                         checked: appSettings.autotileDragInsertToggle
                         accessibleName: i18n("Toggle mode for re-insert into stack")
                         onToggled: function (newValue) {
                             appSettings.autotileDragInsertToggle = newValue;
                         }
                     }
+                }
+
+                SettingsSeparator {
+                    enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+                }
+
+                TriggerGraceRow {
+                    title: i18n("Release grace period")
+                    searchAnchor: "releaseGracePeriod"
+                    description: i18n("How long the stack preview stays active after the re-insert trigger is released, so a window dropped just after letting go of the trigger still lands in the stack. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+                    accessibleName: i18n("Release grace period for re-insert into stack")
+                    enabled: !alwaysReinsertSwitch.checked && !insertToggleSwitch.checked
+                    minMs: root.settingsBridge.triggerGraceMsMin
+                    maxMs: root.settingsBridge.triggerGraceMsMax
+                    graceMs: appSettings.autotileDragInsertGraceMs
+                    onGraceModified: value => appSettings.autotileDragInsertGraceMs = value
                 }
             }
         }

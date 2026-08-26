@@ -45,6 +45,7 @@ target_link_libraries(PhosphorWorkspaces
         PhosphorEngine::PhosphorEngine
     PRIVATE
         Qt6::DBus
+        PhosphorIdentity::PhosphorIdentity
 )
 
 # Optional activities support — PlasmaActivities is the canonical KDE

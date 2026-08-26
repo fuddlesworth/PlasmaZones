@@ -15,10 +15,12 @@
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
+#include <QList>
 #include <QObject>
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <QVector>
 
 class QScreen;
@@ -86,6 +88,32 @@ public:
     // the labels-texture build path is hash-cached on unchanged inputs.
     virtual void refreshFromIdle() = 0;
 
+    // Drop-target indicator for a scrolling drag re-insert: paints the slot
+    // the dragged window would land in, in absolute px on the named screen.
+    // An invalid or empty rect hides it. Display-only — it takes no input,
+    // because it is drawn underneath a cursor that is mid-drag.
+    //
+    // The drag pipeline pushes this because the scroll engine defers structure
+    // to the drop, so unlike autotile's live restructure nothing in the strip
+    // moves to show where the window is going.
+    // @p animate distinguishes a TARGET CHANGE (true — the transitions exist
+    // to make one legible) from a scroll-tracking re-projection (false). No
+    // default argument on purpose: a default on a virtual binds statically to
+    // the declared type, so a caller holding the concrete service would
+    // silently get a different one.
+    virtual void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) = 0;
+
+    // Per-DRAG drop-indicator colour overrides, resolved from the dragged
+    // window's rules at drag start and cleared with an empty map when the drag
+    // ends. Keyed by the QML property names the slot reads. On the interface
+    // rather than the concrete service because the DRAG adaptor is what
+    // resolves them, and it holds this interface.
+    //
+    // Only the per-window half is here. The per-CONTEXT map is pushed by the
+    // daemon's own scrolling re-derive, which holds the concrete service, so
+    // widening the interface for it would buy nothing.
+    virtual void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) = 0;
+
     // PhosphorZones::Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
     virtual void showZoneSelector(const QString& targetScreenId = QString()) = 0;
@@ -96,8 +124,57 @@ public:
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
-    // Filtered layout count (matches what the zone selector actually displays)
+    // Filtered layout count in the LAYOUT/TEMPLATE vocabulary — the candidate
+    // list the picker and cycle shortcuts consult. Their empty-list gates test
+    // this against zero on every screen; the empty-STORE case on a Templates
+    // screen is an additional disjunct those gates answer from the template
+    // store's count() directly, because the store-independent None row keeps
+    // this count >= 1 there and would mask it. Never answers strip cards;
+    // selectorCardCount is the popup-sizing question.
     virtual int visibleLayoutCount(const QString& screenId) const = 0;
+
+    // Whether the per-screen include resolution picks the TEMPLATE family for
+    // @p screenId — the same answer visibleLayoutCount and the picker's row
+    // builder act on. The picker/cycle empty-store gates ask THIS rather than
+    // re-deriving support from the mode router, whose live-set-first answer
+    // can diverge from the assignment-based resolution mid-transition and
+    // would misclassify another family's rows.
+    virtual bool screenResolvesToTemplates(const QString& screenId) const = 0;
+
+    // Number of cells the drag-selector popup renders on @p screenId — strip
+    // cards (floored at 1 for the empty-strip cell) on strip-selector screens,
+    // the filtered layout count everywhere else. The trigger-edge sizing
+    // contract: isNearTriggerEdge consults this so the keep-visible band and
+    // the rendered popup can never disagree. Deliberately a separate virtual
+    // from visibleLayoutCount, which stays a pure layout/template row count
+    // rather than absorbing the strip floor.
+    virtual int selectorCardCount(const QString& screenId) const = 0;
+
+    // Strip-selector screens only: one ALONG-THE-STRIP extent share of the
+    // work area per rendered strip card, in card order (empty everywhere
+    // else, and for an empty strip) — on a vertical strip these are HEIGHT
+    // shares, matching the snapshot's widthFraction role convention. The
+    // other half of the trigger-edge sizing contract above: strip cards
+    // render variable-extent, so isNearTriggerEdge needs the fractions, not
+    // just the count, for its computeZoneSelectorLayout call to reproduce
+    // the real bar extent.
+    virtual QList<qreal> selectorStripFractions(const QString& screenId) const = 0;
+
+    // Strip-selector screens only (false everywhere else, so the answer is
+    // conjoined with strip mode at the source rather than by the caller):
+    // whether that screen's strip runs top to bottom. The third part of the
+    // trigger-edge sizing contract above — the
+    // cards stack down the popup on a vertical strip, so a bar rect computed
+    // on the horizontal assumption is the transpose of the popup actually
+    // painted, and the keep-visible band stops matching what the cursor is
+    // over. Default-implemented as "horizontal" so an implementation without
+    // strip support stays source-compatible, matching the strip-target block
+    // below.
+    virtual bool selectorStripVerticalAxis(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return false;
+    }
 
     // PhosphorZones::Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
@@ -106,6 +183,55 @@ public:
     virtual QRect getSelectedZoneGeometry(QScreen* screen) const = 0;
     virtual QRect getSelectedZoneGeometry(const QString& screenId) const = 0;
     virtual void clearSelectedZone() = 0;
+
+    // Strip-mode selector selection tracking (scrolling screens whose engine
+    // provides the drag-insert selector). The target is an int-only mirror
+    // of IPlacementEngine::DragInsertTarget's index fields — columnIndex/
+    // newColumn map to primary/newSlot, tileIndex to secondary (-1 appends);
+    // the presentation-only leadingEdge tag is deliberately not carried
+    // (commit ignores it) — kept engine-header-free like the rest of this
+    // interface. Exactly one of the zone triple and this target is ever set;
+    // clearSelectedZone clears both.
+    // Default-implemented as "no strip selection" so implementations without
+    // strip support stay source-compatible.
+    struct SelectorStripTarget
+    {
+        int columnIndex = -1;
+        int tileIndex = -1;
+        bool newColumn = false;
+
+        bool isValid() const
+        {
+            return columnIndex >= 0;
+        }
+    };
+    virtual bool hasSelectedStripTarget() const
+    {
+        return false;
+    }
+    virtual SelectorStripTarget selectedStripTarget() const
+    {
+        return {};
+    }
+    virtual QString selectedStripTargetScreenId() const
+    {
+        return {};
+    }
+    /// Rebuild the strip cards and drop the strip selection on @p screenId.
+    /// The drag adaptor calls this at the drag-insert preview begin/cancel
+    /// boundaries — the only moments the frozen (DETACH-ONCE) strip the
+    /// cards mirror can change shape mid-drag.
+    virtual void refreshStripSelector(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+    /// The window id of the live drag, so the strip cards can exclude a
+    /// not-yet-detached drag window. Set at drag start, cleared (empty id)
+    /// at drag end.
+    virtual void setActiveDragWindowId(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
 
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
     virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenId,
@@ -135,16 +261,22 @@ public:
     virtual bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                         const QByteArray& pixels) = 0;
 
-    /// Deliver a thumbnail as an imported DMA-BUF (zero-copy GPU path), the
-    /// alternative to the raw-ARGB32 @ref setSnapAssistThumbnail above. @p desc
-    /// carries a borrowed single-plane dma-buf fd plus its DRM
-    /// format/modifier/stride; the fd is valid only for the duration of this
-    /// call. The implementation imports it into a GPU texture for display.
+    /// Deliver a thumbnail as an imported DMA-BUF (zero-copy GPU path). This
+    /// is the DEFAULT transport; the raw-ARGB32 @ref setSnapAssistThumbnail
+    /// above is its fallback. @p desc carries a borrowed single-plane dma-buf
+    /// fd plus its DRM format/modifier/stride; the fd is valid only for the
+    /// duration of this call. The implementation imports it into a GPU
+    /// texture for display.
     ///
-    /// @return true iff the implementation imported and stored the thumbnail.
-    ///         False when the dma-buf path is unavailable (experimental gate
-    ///         off, driver/RHI backend unsupported, or import failed) — the
-    ///         caller MUST then fall back to @ref setSnapAssistThumbnail so a
+    /// @return true iff the implementation accepted and stored the
+    ///         descriptor. The GPU import itself may be deferred (the
+    ///         daemon imports lazily on its render thread, after the
+    ///         render-completion fence signals), so true means "accepted,
+    ///         will display", not "already imported". False when the
+    ///         dma-buf path is unavailable (kill switch
+    ///         PLASMAZONES_DMABUF_THUMBNAILS=0, driver/RHI backend
+    ///         unsupported, or the descriptor was rejected) — the caller
+    ///         MUST then fall back to @ref setSnapAssistThumbnail so a
     ///         preview still appears.
     virtual bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) = 0;
 
@@ -178,7 +310,11 @@ Q_SIGNALS:
                                   const QString& screenId);
 
     /**
-     * @brief Informational signal emitted when the Snap Assist overlay is shown.
+     * @brief Load-bearing signal (NOT merely informational: shortcuts_wiring.cpp's
+     * handler is the ONLY binder of the shared Escape grab for the snap-assist
+     * phase, which drop.cpp defers to it, and overlayadaptor.cpp relays it onto
+     * the bus — removing or reordering the emission leaves snap assist
+     * un-dismissable). Also emitted when the Snap Assist overlay is shown.
      *
      * The kwin-effect drives thumbnail capture independently as part of the
      * `showSnapAssist` call sequence (not in response to this signal); the
@@ -194,10 +330,30 @@ Q_SIGNALS:
     void snapAssistDismissed();
 
     /**
+     * @brief Emitted when the idle-grace trim fires, after clearing every
+     * live snap-assist thumbnail store (the pixel LRU and, when its
+     * provider is live, the dma-buf descriptor store).
+     *
+     * Load-bearing for cache coherence with the kwin-effect: the producer
+     * keeps a recently-posted dedup set mirroring the daemon's cache
+     * residency, and its skip path re-promotes entries — so without an
+     * explicit invalidation edge, a trim left the two sides permanently
+     * desynchronised (the effect skipped re-capture forever and snap-assist
+     * fell back to icons until a daemon restart). OverlayAdaptor relays this
+     * onto the bus; the effect drops its dedup set in response.
+     */
+    void snapAssistThumbnailCacheTrimmed();
+
+    /**
      * @brief Emitted when a layout is selected from the layout picker overlay
      * @param layoutId The UUID of the selected layout
      */
-    void layoutPickerSelected(const QString& layoutId);
+    /// @p screenId is the screen the picker was BOUND to when the pick was
+    /// made — captured before the hide clears the binding, because the
+    /// controller's current screen is a single mutable slot that desktop
+    /// switches and cycle presses on other screens can retarget while the
+    /// picker sits open.
+    void layoutPickerSelected(const QString& layoutId, const QString& screenId);
 
     /**
      * @brief Emitted when the layout picker overlay is dismissed for any

@@ -11,6 +11,7 @@
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <PhosphorCompositor/SnapAssistFilter.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 
@@ -121,6 +122,19 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                 if (!m_capture) {
                     m_capture = new SnapAssistThumbnailCapture(this);
                 }
+                // Size the capture to what the largest empty zone will draw
+                // for this many candidates on this output, instead of a
+                // fixed box. Zones are logical px; the output scale turns the
+                // card's logical icon size into the device px the texture
+                // needs to be sharp.
+                int zoneMinAxis = 0;
+                for (const auto& z : emptyZones) {
+                    zoneMinAxis = std::max(zoneMinAxis, std::min(z.width, z.height));
+                }
+                const KWin::LogicalOutput* output = m_effect->outputForScreenId(screenId);
+                const double outputScale = output ? output->scale() : 1.0;
+                const int boxPx = PhosphorProtocol::Service::snapAssistThumbnailBoxPx(
+                    zoneMinAxis, int(candidates.size()), outputScale);
                 QVector<SnapAssistThumbnailCapture::Candidate> captureList;
                 captureList.reserve(candidates.size());
                 for (const auto& c : candidates) {
@@ -133,7 +147,7 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
                     }
                     captureList.append({id});
                 }
-                m_capture->captureCandidates(captureList);
+                m_capture->captureCandidates(captureList, QSize(boxPx, boxPx));
 
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     m_effect, PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("showSnapAssist"),
@@ -144,6 +158,14 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
 }
 
 void SnapAssistHandler::resetRecentlyPostedThumbnails()
+{
+    if (m_capture) {
+        m_capture->resetRecentlyPosted();
+        m_capture->rearmDmabufPath();
+    }
+}
+
+void SnapAssistHandler::slotSnapAssistThumbnailCacheTrimmed()
 {
     if (m_capture) {
         m_capture->resetRecentlyPosted();
@@ -160,7 +182,7 @@ SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString
     // KWin-specific: fill compositorHandle (internal UUID) for overlay window identification.
     //
     // Earlier revisions also dropped autotile-tracked candidates here via
-    // @c AutotileHandler::isTrackedWindow, but that flag tracks "we have notified
+    // @c TilingHandler::isTrackedWindow, but that flag tracks "we have notified
     // autotile about this window at some point" — it is NOT a live "this window
     // currently lives on an autotile screen" check. After a window moves from an
     // autotile monitor to a manual-mode screen, the flag stays set until autotile's
@@ -171,7 +193,7 @@ SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString
     // The screen-membership question is now answered authoritatively in
     // SnapAssistFilter via @c VirtualScreenId::samePhysical(info.screenId, screenId):
     // candidates are restricted to the target's physical monitor, and trigger
-    // sites gate on @c !isAutotileScreen(screenId), so by transitivity no
+    // sites gate on @c !isManagedScreen(screenId), so by transitivity no
     // surviving candidate is on an autotile monitor in normal flow.
     //
     // Sibling-VS inclusion (windows on the other VS of the same physical monitor

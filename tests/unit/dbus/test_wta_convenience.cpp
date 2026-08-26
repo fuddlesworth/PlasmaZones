@@ -5,335 +5,30 @@
  * @file test_wta_convenience.cpp
  * @brief Unit tests for WindowTrackingAdaptor convenience methods:
  *        moveWindowToZone, swapWindowsById, getWindowState, getAllWindowStates,
- *        and windowStateChanged signal emission.
+ *        windowStateChanged emission, and the float-restore surface. The open
+ *        routing and cross-mode handoff tests live in test_wta_routing.cpp
+ *        (shared fixture: wta_convenience_fixture.h).
  */
 
-#include <QTest>
-#include <QString>
-#include <QStringList>
-#include <QSignalSpy>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QRect>
-#include <QRectF>
-#include <memory>
+#include "wta_convenience_fixture.h"
 
-#include <PhosphorPlacement/WindowTrackingService.h>
-#include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorSnapEngine/SnapState.h>
-#include <PhosphorScreens/Manager.h>
-#include "FakeScreenProvider.h"
-#include "core/interfaces/interfaces.h"
-#include <PhosphorZones/Layout.h>
-#include <PhosphorZones/Zone.h>
-#include "dbus/snapadaptor/snapadaptor.h"
-#include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
-#include <PhosphorSnapEngine/SnapEngine.h>
-#include <PhosphorEngine/IPlacementEngine.h>
-#include <PhosphorEngine/WindowPlacement.h>
-#include <PhosphorEngine/WindowRegistry.h>
-#include <PhosphorRules/RuleStore.h>
-#include <PhosphorRules/RuleAction.h>
-#include <PhosphorRules/MatchExpression.h>
-#include <PhosphorRules/MatchTypes.h>
-#include <PhosphorZones/AssignmentEntry.h>
-#include "config/configdefaults.h"
-#include <QUuid>
-#include "helpers/IsolatedConfigGuard.h"
-#include "helpers/LayoutRegistryTestHelpers.h"
-
-using namespace PlasmaZones;
-using namespace PhosphorSnapEngine;
-using PlasmaZones::TestHelpers::IsolatedConfigGuard;
-
-// =========================================================================
-// Stub Settings
-// =========================================================================
-
-#include "helpers/StubSettings.h"
-
-using StubSettingsConvenience = StubSettings;
-
-// =========================================================================
-// Stub PhosphorZones::Zone Detector
-// =========================================================================
-
-class StubZoneDetectorConvenience : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorConvenience(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helpers
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
-
-// =========================================================================
-// Test Class
-// =========================================================================
-
-class TestWtaConvenience : public QObject
+class TestWtaConvenience : public QObject, protected WtaConvenienceFixture
 {
     Q_OBJECT
 
 private Q_SLOTS:
     void init()
     {
-        m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
-        m_settings = new StubSettingsConvenience(nullptr);
-        m_zoneDetector = new StubZoneDetectorConvenience(nullptr);
-
-        // WTA needs a parent QObject for QDBusAbstractAdaptor
-        m_parent = new QObject(nullptr);
-        m_wta =
-            new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr, m_parent);
-
-        m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, nullptr, nullptr);
-        m_snapEngine->setEngineSettings(m_settings);
-        m_wta->service()->setSnapState(m_snapEngine->snapState());
-        m_wta->service()->setSnapEngine(m_snapEngine);
-        m_wta->setEngines(m_snapEngine, nullptr);
-
-        m_snapAdaptor = new SnapAdaptor(m_snapEngine, m_wta, m_settings, m_parent);
-
-        m_testLayout = createTestLayout(3, m_layoutManager);
-        m_layoutManager->addLayout(m_testLayout);
-        m_layoutManager->setActiveLayout(m_testLayout);
-
-        m_zoneIds.clear();
-        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
-            m_zoneIds.append(z->id().toString());
-        }
-
-        m_screenId = QStringLiteral("DP-1");
+        initFixture();
     }
-
     void cleanup()
     {
-        // SnapAdaptor is owned by m_parent (QDBusAbstractAdaptor parent)
-        // Clear engine before deleting to disconnect signals
-        if (m_snapAdaptor) {
-            m_snapAdaptor->clearEngine();
-        }
-        m_snapAdaptor = nullptr;
-        // WTA is owned by m_parent (QDBusAbstractAdaptor parent). Detach the
-        // borrowed engine from the service BEFORE deleting it so the service
-        // never holds a dangling SnapEngine* (the local-WTA tests below detach
-        // symmetrically).
-        m_wta->service()->setSnapState(nullptr);
-        m_wta->service()->setSnapEngine(nullptr);
-        delete m_snapEngine;
-        m_snapEngine = nullptr;
-        delete m_parent;
-        m_parent = nullptr;
-        m_wta = nullptr;
-        delete m_zoneDetector;
-        m_zoneDetector = nullptr;
-        delete m_settings;
-        m_settings = nullptr;
-        delete m_layoutManager;
-        m_layoutManager = nullptr;
-        m_testLayout = nullptr;
-        m_zoneIds.clear();
-        m_guard.reset();
+        cleanupFixture();
     }
 
     // =====================================================================
     // moveWindowToZone
     // =====================================================================
-
-    // ── Open routing: RouteToScreen / RouteToDesktop rules ──
-    void testApplyOpenRoutingForAutotile_routesToAutotileScreenAndDesktop()
-    {
-        // DP-2 is an AUTOTILE screen; DP-1 (the spawn screen) stays snapping (the
-        // registry default).
-        PhosphorZones::AssignmentEntry autotile;
-        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
-        autotile.tilingAlgorithm = QStringLiteral("dwindle");
-        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
-
-        // Register the opening window's metadata so the rule query resolves its appId.
-        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
-        m_wta->setWindowRegistry(registry);
-        m_wta->setWindowMetadata(QStringLiteral("inst1"), QStringLiteral("routeapp"), QString(), QString(), QString(),
-                                 0, 0, QString(), 0, QVariantMap());
-
-        // Rule: route "routeapp" onto DP-2 and onto virtual desktop 2.
-        using namespace PhosphorRules;
-        Rule rule;
-        rule.id = QUuid::createUuid();
-        rule.enabled = true;
-        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("routeapp"));
-        RuleAction route;
-        route.type = QString(ActionType::RouteToScreen);
-        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
-        RuleAction desk;
-        desk.type = QString(ActionType::RouteToDesktop);
-        desk.params.insert(QString(ActionParam::TargetDesktop), 2);
-        rule.actions = {route, desk};
-
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
-        QVERIFY(store.addRule(rule));
-        m_wta->setRuleStore(&store);
-
-        QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
-        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-
-        const QString routed =
-            m_wta->applyOpenRoutingForAutotile(QStringLiteral("routeapp|inst1"), QStringLiteral("DP-1"));
-
-        // Redirected to the autotile target, with both the output- and desktop-move
-        // signals emitted for the compositor to act on.
-        QCOMPARE(routed, QStringLiteral("DP-2"));
-        QCOMPARE(outputSpy.count(), 1);
-        QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
-        QCOMPARE(desktopSpy.count(), 1);
-        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
-    }
-
-    void testApplyOpenRoutingForAutotile_declinesSnapModeTarget()
-    {
-        // DP-2 stays SNAPPING (registry default): autotile must NOT redirect onto a
-        // snap-mode monitor (the snap placement path owns those), but RouteToDesktop
-        // is engine-neutral and still fires.
-        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
-        m_wta->setWindowRegistry(registry);
-        m_wta->setWindowMetadata(QStringLiteral("inst2"), QStringLiteral("snaproute"), QString(), QString(), QString(),
-                                 0, 0, QString(), 0, QVariantMap());
-
-        using namespace PhosphorRules;
-        Rule rule;
-        rule.id = QUuid::createUuid();
-        rule.enabled = true;
-        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("snaproute"));
-        RuleAction route;
-        route.type = QString(ActionType::RouteToScreen);
-        route.params.insert(QString(ActionParam::TargetScreenId), QStringLiteral("DP-2"));
-        RuleAction desk;
-        desk.type = QString(ActionType::RouteToDesktop);
-        desk.params.insert(QString(ActionParam::TargetDesktop), 3);
-        rule.actions = {route, desk};
-
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
-        QVERIFY(store.addRule(rule));
-        m_wta->setRuleStore(&store);
-
-        QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
-        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-
-        const QString routed =
-            m_wta->applyOpenRoutingForAutotile(QStringLiteral("snaproute|inst2"), QStringLiteral("DP-1"));
-
-        QVERIFY2(routed.isEmpty(), "a snap-mode RouteToScreen target must not be an autotile redirect");
-        QCOMPARE(outputSpy.count(), 0);
-        QCOMPARE(desktopSpy.count(), 1); // desktop routing is engine-neutral
-        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 3);
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
-    }
-
-    // The snap open path's RouteToDesktop emit (applyOpenDesktopRouting, called from
-    // SnapAdaptor::resolveWindowRestore) emits windowDesktopMoveRequested when a
-    // matched rule pins a desktop, and stays silent otherwise.
-    void testApplyOpenDesktopRouting_emitsDesktopMoveForMatch()
-    {
-        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
-        m_wta->setWindowRegistry(registry);
-        m_wta->setWindowMetadata(QStringLiteral("inst3"), QStringLiteral("deskapp"), QString(), QString(), QString(), 0,
-                                 0, QString(), 0, QVariantMap());
-
-        using namespace PhosphorRules;
-        Rule rule;
-        rule.id = QUuid::createUuid();
-        rule.enabled = true;
-        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("deskapp"));
-        RuleAction desk;
-        desk.type = QString(ActionType::RouteToDesktop);
-        desk.params.insert(QString(ActionParam::TargetDesktop), 4);
-        rule.actions = {desk};
-
-        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
-        QVERIFY(store.addRule(rule));
-        m_wta->setRuleStore(&store);
-
-        QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1"));
-        QCOMPARE(desktopSpy.count(), 1);
-        QCOMPARE(desktopSpy.at(0).at(1).toInt(), 4);
-
-        // A window with no matching rule emits nothing.
-        m_wta->setWindowMetadata(QStringLiteral("inst4"), QStringLiteral("nomatch"), QString(), QString(), QString(), 0,
-                                 0, QString(), 0, QVariantMap());
-        QSignalSpy quietSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
-        m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1"));
-        QCOMPARE(quietSpy.count(), 0);
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
-    }
 
     void testMoveWindowToZone_validZone_emitsApplyGeometry()
     {
@@ -478,7 +173,8 @@ private Q_SLOTS:
         int x = 0, y = 0, wd = 0, h = 0;
         bool shouldSnap = true;
         m_snapAdaptor->resolveWindowRestore(w2, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
-                                            x, y, wd, h, shouldSnap);
+                                            /*isOpenPath=*/true, /*minWidth=*/0, /*minHeight=*/0, x, y, wd, h,
+                                            shouldSnap);
 
         QCOMPARE(shouldSnap, false); // float-restore is not a snap
         QCOMPARE(spy.count(), 1);
@@ -540,7 +236,8 @@ private Q_SLOTS:
         int x = 0, y = 0, wd = 0, h = 0;
         bool shouldSnap = true;
         m_snapAdaptor->resolveWindowRestore(w, m_screenId, false, static_cast<int>(PhosphorEngine::WindowKind::Normal),
-                                            x, y, wd, h, shouldSnap);
+                                            /*isOpenPath=*/true, /*minWidth=*/0, /*minHeight=*/0, x, y, wd, h,
+                                            shouldSnap);
 
         QCOMPARE(shouldSnap, false); // floated, NOT snapped despite the loaded assignment
         QCOMPARE(spy.count(), 1);
@@ -645,7 +342,7 @@ private Q_SLOTS:
         snap->setEngineSettings(m_settings);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         const QRect floatedGeo(120, 90, 760, 540); // inside screenRect
         const QString w1 = QStringLiteral("settings|orphan-float");
@@ -699,14 +396,14 @@ private Q_SLOTS:
         snap->setEngineSettings(m_settings);
         wta->service()->setSnapState(snap->snapState());
         wta->service()->setSnapEngine(snap);
-        wta->setEngines(snap, nullptr);
+        wta->setEngines(snap, nullptr, nullptr);
 
         const QString w1 = QStringLiteral("steam|abc123");
         const QRect goodFloat(918, 624, 1608, 957); // a genuine floated geometry
         const QRect tileRect(8, 1138, 3184, 602); // a full-width bottom-row tile rect
 
         // The autotile engine still reports this window actively tiled.
-        wta->service()->setAutotileTiledPredicate([&](const QString& id) {
+        wta->service()->setEngineTiledPredicate([&](const QString& id) {
             return id == w1;
         });
 
@@ -735,7 +432,7 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screenId), goodFloat);
         QVERIFY(rec->freeGeometryFor(screenId) != tileRect);
 
-        wta->service()->setAutotileTiledPredicate({});
+        wta->service()->setEngineTiledPredicate({});
         wta->service()->setSnapEngine(nullptr);
         wta->service()->setSnapState(nullptr);
         delete snap;
@@ -958,6 +655,12 @@ private Q_SLOTS:
         m_wta->setWindowFloating(windowId, false);
         QCOMPARE(spy.count(), 2);
         QCOMPARE(spy.at(1).at(1).toBool(), false);
+
+        // Clear the injected resolver (same discipline as the tiled
+        // predicate in the float-back test): cleanup() rebuilds the fixture
+        // today, but a stale closure would outlive this slot if it ever
+        // becomes per-class.
+        m_wta->service()->setEngineFloatResolver({});
     }
 
     // End-to-end regression for Discussion #724 (the 3.3.x recurrence): a
@@ -1067,19 +770,6 @@ private Q_SLOTS:
 
         m_wta->setWindowRegistry(nullptr);
     }
-
-private:
-    std::unique_ptr<IsolatedConfigGuard> m_guard;
-    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
-    StubSettingsConvenience* m_settings = nullptr;
-    StubZoneDetectorConvenience* m_zoneDetector = nullptr;
-    QObject* m_parent = nullptr;
-    WindowTrackingAdaptor* m_wta = nullptr;
-    SnapAdaptor* m_snapAdaptor = nullptr;
-    SnapEngine* m_snapEngine = nullptr;
-    PhosphorZones::Layout* m_testLayout = nullptr;
-    QStringList m_zoneIds;
-    QString m_screenId;
 };
 
 QTEST_MAIN(TestWtaConvenience)

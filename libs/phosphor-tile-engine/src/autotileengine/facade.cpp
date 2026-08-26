@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
 
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
+
 namespace PhosphorTileEngine {
 
 bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* operation) const
@@ -50,6 +52,12 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
 
 void AutotileEngine::setWindowRegistry(QObject* registry)
 {
+    // Drop the previous registration hook up front. Both early returns below
+    // leave the engine WITHOUT a usable registry, so a hook installed by an
+    // earlier successful call must not keep installing appId resolvers on
+    // newly registered (hot-reloaded) algorithms — this is a re-wireable seam,
+    // and setWindowRegistry(nullptr) is the documented way to unwire it.
+    disconnect(m_appIdResolverHook);
     m_windowRegistry = dynamic_cast<PhosphorEngine::IWindowRegistry*>(registry);
     if (!m_windowRegistry) {
         if (registry) {
@@ -79,10 +87,9 @@ void AutotileEngine::setWindowRegistry(QObject* registry)
             algo->setAppIdResolver(resolver);
         }
     }
-    // Drop the previous invocation's hook first: setWindowRegistry is a public
-    // re-wireable seam, and stacking a second identical lambda would call
-    // setAppIdResolver N times per hot-reloaded algorithm.
-    disconnect(m_appIdResolverHook);
+    // The entry-point disconnect above is THE de-dup guard (nothing between
+    // it and here re-populates the handle), so this connect installs onto an
+    // always-clean slot.
     m_appIdResolverHook = connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
                                   [this, resolver](const QString& id) {
                                       auto* reg = m_algorithmRegistry;
@@ -329,7 +336,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     }
     const PhosphorEngine::TilingStateKey key = keyIt.value();
     PhosphorTiles::TilingState* state = m_states.stateForKey(key);
-    if (!state) {
+    if (!state || !state->containsWindow(wid)) {
+        // Membership, not just a live key: windowOpened keys the window
+        // BEFORE onWindowAdded can refuse it, and a phantom-keyed window
+        // would capture a bogus "tiled at order -1" slot that then blocks
+        // the free-geometry write downstream (same guard as isWindowTiled).
         return std::nullopt;
     }
     // Live minimize state via the IWindowRegistry contract (defaulted virtual
@@ -419,6 +430,9 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
         slot.order = state->windowOrder().indexOf(wid);
     } else {
         slot.state = WindowPlacement::stateTiled();
+        // The order at capture time, recorded as context only: the reopen
+        // path takes floating slots only, and a tiled slot's job is to stand
+        // as the exact-final evidence that the window closed tiled.
         slot.order = state->windowOrder().indexOf(wid);
     }
     p.engines.insert(engineId(), slot);
@@ -427,8 +441,11 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
 
 void AutotileEngine::snapAllWindows(const NavigationContext& ctx)
 {
-    // Autotile has no distinct "snap all" — retile picks up every window
-    // the engine is tracking and inserts any new ones into the layout.
+    // Autotile has no distinct "snap all": a retile re-lays every TILED
+    // window. Deliberately narrower than the other engines' interpretation —
+    // user/rule floats stay floating (only overflow floats are recovered,
+    // by retile's recoverIfRoom pass); pulling every float back in would be
+    // a semantic change to autotile floating that needs its own decision.
     retile(ctx.screenId);
 }
 
@@ -457,11 +474,14 @@ void AutotileEngine::cycleFocus(bool forward, const NavigationContext& ctx)
     m_navigation->focusInDirection(dir, QStringLiteral("cycle"), canonicalizeForLookup(ctx.windowId));
 }
 
-void AutotileEngine::pushToEmptyZone(const NavigationContext& /*ctx*/)
+void AutotileEngine::pushToEmptyZone(const NavigationContext& ctx)
 {
     // Autotile has no concept of empty zones — every tracked window is
-    // placed by the layout algorithm. Deliberate no-op so the shortcut
-    // becomes a harmless press in autotile mode.
+    // placed by the layout algorithm. Report it like span does (and like
+    // the scroll engine's push): a silent shortcut reads as broken, and
+    // IPlacementEngine documents the feedback policy for this intent.
+    Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("not_supported"), ctx.windowId, QString(),
+                              ctx.screenId);
 }
 
 void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
@@ -470,9 +490,11 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
     // tiling layout — toggling its float state achieves exactly that.
     // Same daemon-authoritative routing as toggleFocusedFloat: prefer
     // ctx.windowId over the engine's per-state focusedWindow() tracker.
+    // Routed through the per-verb body so a failure reports action
+    // "restore", matching the scroll engine's convention.
     if (!ctx.windowId.isEmpty()) {
         const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
-        toggleWindowFloat(ctx.windowId, screenId);
+        toggleWindowFloatAs(ctx.windowId, screenId, QStringLiteral("restore"));
         return;
     }
     toggleFocusedWindowFloat();

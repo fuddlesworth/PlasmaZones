@@ -68,12 +68,17 @@ void main() {
     // leg, so it is clamped.
     float f = sin(PI * ec);
 
-    // Orthonormal travel/perp basis in (approx) card space. A degenerate
-    // move (pure resize) folds along the vertical so it still reads.
-    vec2 fromC = iFromRect.xy + 0.5 * iFromRect.zw;
-    vec2 toC = iToRect.xy + 0.5 * iToRect.zw;
-    vec2 travel = toC - fromC;
-    vec2 dir = (dot(travel, travel) > 1.0) ? normalize(travel) : vec2(0.0, 1.0);
+    // Orthonormal travel/perp basis in (approx) card space, taken from the
+    // leg's RIGID translation rather than its centre delta. A window pinned
+    // at one edge and grown moves its centre by half the size change while
+    // standing still, so the centre delta would lay the creases across an
+    // axis the window never travelled along; legDirection falls back to the
+    // growth axis, which is the one that actually changed. The accordion
+    // itself is NOT damped for a resize the way the staggered packs are:
+    // the rect below interpolates rigidly and the fold envelope is zero at
+    // both ends, so it concertinas and reopens without any part of the
+    // window arriving ahead of another.
+    vec2 dir = legDirection(iFromRect, iToRect);
     vec2 perp = vec2(-dir.y, dir.x);
 
     // Decompose the card point onto the basis. At f = 0 this reconstructs

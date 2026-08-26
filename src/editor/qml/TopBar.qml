@@ -33,6 +33,10 @@ ToolBar {
     required property var editorWindow
     required property bool fullscreenMode
     required property bool previewMode
+    // Scrolling-template mode: the screen selector (templates are
+    // screen-portable), layout-specific dialogs, and import/export are all
+    // layout-editing affordances and hide.
+    required property bool templateMode
 
     // Shared frame-contrast border used by chrome elements across the bar
     readonly property color frameBorderColor: Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
@@ -53,6 +57,7 @@ ToolBar {
         RowLayout {
             id: screenSelectorSection
 
+            visible: !topBar.templateMode
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - within section)
 
             Repeater {
@@ -125,7 +130,7 @@ ToolBar {
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
-            visible: screenRepeater.count > 0
+            visible: screenSelectorSection.visible && screenRepeater.count > 0
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -151,7 +156,7 @@ ToolBar {
 
             // Layout name label
             Label {
-                text: i18nc("@label", "Layout:")
+                text: topBar.templateMode ? i18nc("@label", "Template:") : i18nc("@label", "Layout:")
                 color: Kirigami.Theme.disabledTextColor
             }
 
@@ -177,7 +182,7 @@ ToolBar {
             TextField {
                 id: layoutNameField
 
-                // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                // Mirrors PlasmaZones::MaxLayoutNameLength (core/types/constants.h),
                 // same client-side cap as PropertyPanel's zone name field.
                 readonly property int maxLength: 40
                 readonly property int currentLength: text ? text.length : 0
@@ -197,8 +202,8 @@ ToolBar {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 readOnly: topBar.previewMode
                 enabled: editorController !== null && editorController !== undefined
-                Accessible.name: i18nc("@label", "Layout name")
-                Accessible.description: i18nc("@info", "Enter name for the layout")
+                Accessible.name: topBar.templateMode ? i18nc("@label", "Template name") : i18nc("@label", "Layout name")
+                Accessible.description: topBar.templateMode ? i18nc("@info", "Enter name for the template") : i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
                 rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.smallSpacing
                 // textEdited fires only on user input, never on a programmatic write.
@@ -210,6 +215,14 @@ ToolBar {
                         return;
 
                     layoutNameField.userEdited = false;
+                    // An empty or whitespace-only name is refused here, at
+                    // the UI gate the save paths rely on: the field restores
+                    // the last committed name instead of handing the
+                    // controller a name the daemon would reject at save.
+                    if (text.trim().length === 0) {
+                        layoutNameField.text = layoutNameField.committedName;
+                        return;
+                    }
                     if (editorController && text !== layoutNameField.committedName)
                         editorController.layoutName = text;
                 }
@@ -299,7 +312,7 @@ ToolBar {
             property string redoText: undoController ? undoController.redoText : ""
 
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between buttons)
-            visible: editorController && undoController !== null
+            visible: editorController !== null && editorController !== undefined && undoController !== null
 
             // Reactive updates when undoController properties change
             Connections {
@@ -368,6 +381,9 @@ ToolBar {
         // LAYOUT SETTINGS BUTTON (Per-layout gap overrides)
         // ═══════════════════════════════════════════════════════════════
         ToolButton {
+            id: layoutSettingsButton
+
+            visible: !topBar.templateMode
             icon.name: "configure"
             enabled: editorController !== null && editorController !== undefined
             onClicked: topBar.layoutSettingsDialog.open()
@@ -377,12 +393,12 @@ ToolBar {
             Accessible.description: i18nc("@info", "Configure per-layout gap overrides")
         }
 
-        // Visual separator. The layout settings button above is always shown,
-        // so this needs no orphan guard of the kind the shader button's
-        // separator carries.
+        // Visual separator (hidden with the layout settings button so template
+        // mode does not show an orphan)
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
+            visible: layoutSettingsButton.visible
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -391,6 +407,7 @@ ToolBar {
         ToolButton {
             id: visibilityButton
 
+            visible: !topBar.templateMode
             icon.name: "view-filter"
             enabled: editorController !== null && editorController !== undefined
             onClicked: topBar.visibilityDialog.open()
@@ -408,7 +425,7 @@ ToolBar {
 
             icon.name: "adjustlevels"
             enabled: editorController !== null && editorController.shadersEnabled
-            visible: !topBar.previewMode && editorController !== null && editorController.shadersEnabled
+            visible: !topBar.previewMode && !topBar.templateMode && editorController !== null && editorController.shadersEnabled
             onClicked: topBar.shaderDialog.open()
             ToolTip.text: i18nc("@tooltip", "Shader effect settings")
             ToolTip.visible: hovered
@@ -433,7 +450,7 @@ ToolBar {
 
             // Import button
             ToolButton {
-                visible: !topBar.previewMode
+                visible: !topBar.previewMode && !topBar.templateMode
                 icon.name: "document-import"
                 enabled: editorController !== null && editorController !== undefined
                 onClicked: importDialog.open()
@@ -445,7 +462,7 @@ ToolBar {
 
             // Export button
             ToolButton {
-                visible: !topBar.previewMode
+                visible: !topBar.previewMode && !topBar.templateMode
                 icon.name: "document-export"
                 enabled: editorController !== null && editorController !== undefined && editorController.layoutId !== ""
                 onClicked: exportDialog.open()
@@ -457,7 +474,7 @@ ToolBar {
 
             // Visual separator (hide when import/export are hidden to avoid orphan)
             Kirigami.Separator {
-                visible: !topBar.previewMode
+                visible: !topBar.previewMode && !topBar.templateMode
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
             }

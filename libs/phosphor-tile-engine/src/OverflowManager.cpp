@@ -7,6 +7,8 @@
 // KDE/Qt logging
 #include "tileenginelogging.h"
 
+#include <algorithm>
+
 namespace PhosphorTileEngine {
 
 void OverflowManager::markOverflow(const QString& windowId, const QString& screenId)
@@ -74,7 +76,8 @@ QStringList OverflowManager::applyOverflow(const QString& screenId, const QStrin
 
 QStringList OverflowManager::recoverIfRoom(const QString& screenId, int tiledCount, int maxWindows,
                                            const std::function<bool(const QString&)>& isFloating,
-                                           const std::function<bool(const QString&)>& containsWindow)
+                                           const std::function<bool(const QString&)>& containsWindow,
+                                           const std::function<int(const QString&)>& orderIndex)
 {
     if (m_overflow.isEmpty()) {
         return {};
@@ -113,6 +116,15 @@ QStringList OverflowManager::recoverIfRoom(const QString& screenId, int tiledCou
         sit->remove(wid);
         m_windowToScreen.remove(wid);
         qCDebug(PhosphorTileEngine::lcTileEngine) << "Overflow: purged stale entry" << wid << "on screen" << screenId;
+    }
+
+    // Which candidates recover is user-visible, so it must be deterministic:
+    // the m_overflow QSet iterates in hash order, and consuming it directly
+    // recovered an arbitrary window when candidates outnumbered the room.
+    if (orderIndex) {
+        std::sort(candidates.begin(), candidates.end(), [&orderIndex](const QString& a, const QString& b) {
+            return orderIndex(a) < orderIndex(b);
+        });
     }
 
     // Return candidates up to available room — caller performs state mutations

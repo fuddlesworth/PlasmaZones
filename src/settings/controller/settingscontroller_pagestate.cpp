@@ -42,6 +42,15 @@ namespace PlasmaZones {
 
 void SettingsController::emitDirtyPagesChanged()
 {
+    // A fully-clean dirty set means no unsaved edit is TRACKED any more —
+    // including a value-blind (per-screen) one, which stops being tracked at
+    // the same moment its page leaves the set (a kebab Discard on that page
+    // reaches here without ever passing through setNeedsSave(false)). Drop
+    // the reconcile latch with it, or a stranded latch would disable the
+    // value-based reconcile for the rest of the session.
+    if (m_dirtyPages.isEmpty()) {
+        m_valueBlindDirty = false;
+    }
     if (m_dirtyEmitDepth > 0) {
         m_dirtyEmitPending = true;
         return;
@@ -121,8 +130,10 @@ QString SettingsController::resolveToLeaf(const QString& page) const
 
 void SettingsController::setActivePage(const QString& page)
 {
-    // Resolve parent category names (e.g. "snapping" → "snapping-overlay-behavior")
-    // against the live registry topology and the current mode.
+    // Resolve parent category names to their first visible leaf for the
+    // current mode (e.g. "snapping" → "snapping-simple" in simple mode and
+    // "snapping-layouts" — the section's first rail row — in advanced mode)
+    // against the live registry topology.
     const QString resolved = resolveToLeaf(page);
 
     if (!validPageNames().contains(resolved)) {
@@ -246,15 +257,64 @@ void SettingsController::setAdvancedMode(bool advanced)
 
 void SettingsController::onSettingsPropertyChanged()
 {
-    // isApplyingSystemPalette(): a runtime ApplicationPaletteChange re-derive
-    // (Settings::eventFilter) fires the zone-color NOTIFYs, but it is
-    // palette-driven, not a user edit. Settings rebaselines the derived keys
-    // itself, though only when the useSystemColors toggle is committed — a
-    // pending (uncommitted) toggle keeps them discardable. Flipping needsSave
-    // here would show a phantom unsaved-changes footer on every theme switch.
-    if (!m_saving && !m_loading && !m_settings.isApplyingSystemPalette()) {
+    // isAnnouncingPaletteChange(): a runtime ApplicationPaletteChange
+    // (Settings::eventFilter) fires the zone-color NOTIFYs for the colours
+    // that follow the palette, but it is palette-driven, not a user edit, and
+    // writes nothing. Flipping needsSave here would show a phantom
+    // unsaved-changes footer on every theme switch.
+    if (!m_saving && !m_loading && !m_settings.isAnnouncingPaletteChange()) {
         setNeedsSave(true);
+        // A value edited BACK to its committed state would otherwise strand
+        // its page in m_dirtyPages forever — nothing else reconciles on a
+        // plain change — leaving needsSave() true with every badge clean and
+        // maybeDrainPendingExternalReload() permanently bailing on a deferred
+        // external reload. Reconcile the dirty set against value truth,
+        // coalesced through a queued single-shot so a slider drag's NOTIFY
+        // burst pays one reconcile per event-loop turn, not one per tick.
+        // Pages with no value/staging-based branch fall through isPageDirty
+        // to their m_dirtyPages membership, so the reconcile keeps them; the
+        // one blind spot is a MANIFEST page dirtied by an edit its manifest
+        // cannot see (the per-screen overrides), which the m_valueBlindDirty
+        // latch below suspends the reconcile for entirely — clearing such a
+        // page would silently drop the unsaved edit and un-park a deferred
+        // external reload over it.
+        scheduleDirtyReconcile();
     }
+}
+
+void SettingsController::onValueBlindSettingsChanged()
+{
+    // A per-screen override edit: dirties like any other change, but its
+    // value lives outside every page manifest, so value-based reconciliation
+    // cannot see it. Latch the reconcile off until the next clean transition
+    // (save / discard / an emptied dirty set clears the latch) rather than
+    // let it clear a page whose edit is real but manifest-invisible. Latched
+    // AFTER the mark and only when something is actually tracked, so
+    // setNeedsSave's virtual-node early return cannot strand the latch with
+    // an empty dirty set.
+    if (!m_saving && !m_loading && !m_settings.isAnnouncingPaletteChange()) {
+        setNeedsSave(true);
+        if (!m_dirtyPages.isEmpty()) {
+            m_valueBlindDirty = true;
+        }
+    }
+}
+
+void SettingsController::scheduleDirtyReconcile()
+{
+    if (m_valueBlindDirty || m_dirtyReconcileQueued) {
+        return;
+    }
+    m_dirtyReconcileQueued = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_dirtyReconcileQueued = false;
+        if (m_saving || m_loading || m_valueBlindDirty) {
+            return;
+        }
+        // Copy: reconcilePagesDirty mutates m_dirtyPages while iterating
+        // its argument.
+        reconcilePagesDirty(QSet<QString>(m_dirtyPages));
+    });
 }
 
 void SettingsController::onExternalSettingsChanged()
@@ -319,7 +379,10 @@ void SettingsController::setNeedsSave(bool needs)
         }
     } else if (!m_dirtyPages.isEmpty()) {
         m_dirtyPages.clear();
+        m_valueBlindDirty = false;
         emitDirtyPagesChanged();
+    } else {
+        m_valueBlindDirty = false;
     }
 }
 
@@ -398,6 +461,8 @@ bool SettingsController::isPageDirty(const QString& page) const
         return m_stagedSnappingOrder.has_value() && *m_stagedSnappingOrder != m_settings.snappingLayoutOrder();
     case OrderingPageKind::Tiling:
         return m_stagedTilingOrder.has_value() && *m_stagedTilingOrder != m_settings.tilingAlgorithmOrder();
+    case OrderingPageKind::Scrolling:
+        return m_stagedScrollingOrder.has_value() && *m_stagedScrollingOrder != m_settings.scrollingTemplateOrder();
     case OrderingPageKind::None:
         break;
     }
@@ -405,8 +470,11 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Quick Shortcuts pages: dirty iff a quick-slot edit is staged for the
     // mode. Same shared-classifier gate as the ordering pages above.
     if (isShortcutsPage(page)) {
-        return page == QLatin1String("snapping-shortcuts") ? m_staging.hasStagedSnappingQuickSlots()
-                                                           : m_staging.hasStagedTilingQuickSlots();
+        if (page == QLatin1String("snapping-shortcuts"))
+            return m_staging.hasStagedSnappingQuickSlots();
+        if (page == QLatin1String("scrolling-shortcuts"))
+            return m_staging.hasStagedScrollingQuickSlots();
+        return m_staging.hasStagedTilingQuickSlots();
     }
 
     // Virtual Screens page: dirty iff any physical screen has a staged
@@ -476,6 +544,23 @@ bool SettingsController::isPageDirty(const QString& page) const
         }
         return false;
     }
+
+    // Library pages are never dirty: their stores (layouts / algorithms /
+    // templates) write immediately rather than staging, and their one config
+    // write — set the family's default from a card's context menu — is
+    // attributed to the key's owner page through an external-edit envelope
+    // (see pageOwnedConfigKeys' defaultLayoutIdKey / defaultTemplateKey
+    // entries). Answered BEFORE the m_dirtyPages fallthrough because for
+    // fallthrough pages membership IS the truth: a stray entry (an
+    // un-enveloped edit made while a library page was active) would otherwise
+    // be self-confirming, and with pageSupportsReset false the page offers no
+    // Discard to clear it — a badge only the global footer could remove. This
+    // way the value-based reconcile drops such an entry on the next pass.
+    // resetPage/discardPage need no matching branch: pageSupportsReset is
+    // false for these ids, so the kebab never offers the actions and the
+    // parent-category loops skip them.
+    if (isLibraryPage(page))
+        return false;
 
     if (m_dirtyPages.contains(page))
         return true;
@@ -579,9 +664,24 @@ bool SettingsController::syncDirtyMembership(const QString& page, bool dirty)
 
 void SettingsController::beginExternalEdit(const QString& page)
 {
-    // Resolve parent categories to their canonical leaf — same rules as
-    // setActivePage — so the sidebar can pass "snapping" or "tiling".
-    const QString resolved = resolveToLeaf(page);
+    // The three placement-mode ids resolve to the page that OWNS the mode's
+    // enable key, not to the section's first visible leaf. The only callers
+    // that pass a bare mode id are the sidebar's enable toggle and its
+    // section-disable confirm (Main.qml / ConfirmDialogs.qml), and the edit
+    // inside their envelope is precisely the <Mode>/enabled flip — value-based
+    // dirtiness for that key lives on its manifest owner. resolveToLeaf would
+    // land on the section's first visible leaf instead, which since the
+    // library pages lead each section is a never-dirty page (isLibraryPage)
+    // that would swallow the attribution.
+    static const QHash<QString, QString> kModeEnableOwners{
+        {QStringLiteral("snapping"), QStringLiteral("snapping-overlay-behavior")},
+        {QStringLiteral("tiling"), QStringLiteral("tiling-behavior")},
+        {QStringLiteral("scrolling"), QStringLiteral("scrolling-columns")},
+    };
+    const QString ownerMapped = kModeEnableOwners.value(page, page);
+    // Resolve any OTHER parent category to its canonical leaf — same rules as
+    // setActivePage.
+    const QString resolved = resolveToLeaf(ownerMapped);
     if (!validPageNames().contains(resolved)) {
         qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
         // Push an empty sentinel anyway. ExternalEditScope's destructor calls

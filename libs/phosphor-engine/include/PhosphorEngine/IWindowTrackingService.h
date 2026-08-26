@@ -156,6 +156,27 @@ public:
     // Geometry resolution
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// The window's remembered UNMANAGED (free/float-back) geometry, resolved
+    /// FOR @p screenId, or nullopt when no record can answer.
+    ///
+    /// "Validated" describes the POSITION, not the size. The implementation
+    /// prefers the spot remembered for @p screenId and otherwise falls back to
+    /// one remembered on another screen, re-centring that rect on @p screenId
+    /// (its absolute coordinates belong to the screen it was captured on, so
+    /// only the SIZE carries over). So a non-null answer is not evidence the
+    /// window was ever free on this screen.
+    ///
+    /// @p exactOnly restricts the lookup to the window's OWN record. The
+    /// default admits a same-app SIBLING's free geometry, which is deliberate
+    /// cross-instance float-back sharing for free positions; pass exactOnly
+    /// when the contract is per-window.
+    ///
+    /// The SIZE is whatever the compositor last reported and is never bounded
+    /// here. A caller minting a SIZING INTENT out of it (a Fixed column width,
+    /// a fixed tile height) owes it a bound of its own — the extents are
+    /// untrusted input from a compositor and, through the injected service,
+    /// from an embedder. Callers that only re-place a window at a remembered
+    /// spot need no such bound.
     virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
                                                             bool exactOnly = false) const = 0;
 
@@ -172,6 +193,19 @@ public:
     /// leaving its engine slots intact. For the drag-out / layout-change consume
     /// paths that restore the float-back once and must not re-apply it.
     virtual void clearFreeGeometry(const QString& windowId) = 0;
+
+    /// Downgrade @p engineId's slot on @p windowId's record to
+    /// WindowPlacement::stateReleased() and mark the placements dirty. Called
+    /// by an engine that KNOWINGLY gives a window up (cross-mode handoff), so
+    /// its slot stops advertising a home the cross-screen reclaim would pull
+    /// the window back to. Default no-op: an embedder without persistence has
+    /// nothing to downgrade. NOT for ordinary close — a window that closed
+    /// tiled keeps its slot, which is what login restore reads.
+    virtual void releaseEngineSlot(const QString& windowId, const QString& engineId)
+    {
+        Q_UNUSED(windowId)
+        Q_UNUSED(engineId)
+    }
     /// Screen-scoped consume-once variant: clears only @p screenId's
     /// remembered float-back, preserving other monitors' entries. Default
     /// falls back to the all-screens form for implementations without

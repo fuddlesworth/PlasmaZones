@@ -6,23 +6,29 @@
  * @brief Contracts between the animations settings QML and its C++ controller,
  *        pinned by parsing the QML source itself.
  *
- * Three things the compiler cannot check, because QML resolves names at
+ * Contracts the compiler cannot check, because QML resolves names at
  * runtime and the settings app has no QML test harness:
  *
  *   - every `animationsPage.<name>` the QML calls exists on the controller's
  *     meta-object, so a rename on either side fails here rather than as a
- *     silent no-op in the running app;
+ *     silent no-op in the running app (and likewise for the shader browser's
+ *     bridge calls);
  *   - every event path the simple Animations page hosts falls inside the C++
  *     page-scope roots, so a per-page Reset covers what the page shows;
  *   - the Override toggle's ON branch writes nothing, and its OFF branch closes
  *     the timing editor only when the clear was accepted. Both live entirely in
- *     QML and so cannot be observed by driving the controller from C++.
+ *     QML and so cannot be observed by driving the controller from C++;
+ *   - the shader browser's `_typeCatalog` declares exactly the event-class
+ *     vocabulary (every class present, the synthetic universal bucket absent,
+ *     keying independent of declaration order).
  *
  * Split out of `test_animations_page_controller.cpp`, which owns the
  * controller's own behaviour. These slots need `P_SOURCE_DIR` to read the
  * source tree; that is what makes them a separate concern rather than a
  * separate file for size alone.
  */
+
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QTest>
 
@@ -352,6 +358,166 @@ private Q_SLOTS:
                  "refreshFromTree's latch reset is no longer transition- and selfDriven-gated");
     }
 
+    /// The shader-ownership contracts that live ONLY in QML.
+    ///
+    /// None of these is reachable from C++. `setShaderOverrideOnPaths` receives
+    /// an already-chosen parameter map, so no controller-level slot can tell
+    /// "the card decided to carry the event's own values" from "the card decided
+    /// to carry nothing" — the decision itself is the thing under test, and it
+    /// is made here. The caption and the remove button's arm are the same shape:
+    /// derived properties feeding a label, with no observable that leaves the
+    /// QML layer. A source scrape is what is left, and this suite already keeps
+    /// one for exactly this hazard class two slots up.
+    void shaderOwnershipContractsHoldInTheQml()
+    {
+        static const QRegularExpression lineCommentRe(QStringLiteral("//[^\\n]*"));
+        static const QRegularExpression blockCommentRe(QStringLiteral("/\\*.*?\\*/"),
+                                                       QRegularExpression::DotMatchesEverythingOption);
+        static const QRegularExpression wsRe(QStringLiteral("\\s+"));
+        const auto flattened = [](const QString& path) {
+            QString src = readFile(path);
+            src.remove(blockCommentRe);
+            src.remove(lineCommentRe);
+            return src.replace(wsRe, QStringLiteral(" "));
+        };
+
+        const QString cardPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationEventCard.qml");
+        const QString editorPath =
+            QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/AnimationProfileEditor.qml");
+        const QString card = flattened(cardPath);
+        const QString editor = flattened(editorPath);
+        // Read failures first: without this every contains() below fails with a
+        // message about the contract rather than about the missing file.
+        QVERIFY2(!card.isEmpty(), qPrintable(QStringLiteral("could not read ") + cardPath));
+        QVERIFY2(!editor.isEmpty(), qPrintable(QStringLiteral("could not read ") + editorPath));
+
+        // (1) A promotion carries what the event STORES, never the resolved
+        // map. `currentShaderParams` is the resolved one, so on an event that
+        // tuned nothing it holds the ANCESTOR's values, and carrying it pins a
+        // frozen copy of them — severing the cascade this whole branch exists
+        // to preserve. Reading the stored map answers both cases at once:
+        // empty means there is nothing of this event's own to keep.
+        QVERIFY2(card.contains(QStringLiteral(
+                     "const ownParams = (root._primaryRawShader && root._primaryRawShader.parameters) || ({});")),
+                 "the promotion no longer sources its parameters from what the event STORES");
+        QVERIFY2(card.contains(QStringLiteral("const keepParams = sid.length > 0 && sid === "
+                                              "root.currentShaderEffectId && Object.keys(ownParams).length > 0;")),
+                 "the promotion test no longer requires the event to own parameters of its own");
+        QVERIFY2(card.contains(QStringLiteral("root._setShaderOverrideOnAll(sid, keepParams ? ownParams : ({}));")),
+                 "a promotion no longer carries the event's own params, or a switch no longer drops them");
+
+        // (2) The remove control's two inputs stay group-aware. The label names
+        // a pack only when EVERY path the click writes holds it, and the arm it
+        // takes keys on whether any path owns one at all — a per-path spelling
+        // would name one member's pack on a button that clears several.
+        QVERIFY2(card.contains(QStringLiteral("shaderPackRemovable: root._anyWritePathOwnsShaderPack")),
+                 "the remove button's arm is no longer chosen by the GROUP predicate");
+        QVERIFY2(card.contains(QStringLiteral("shaderPackNameIsExact: root._allWritePathsHoldShownPack")),
+                 "the remove button's label is no longer gated on every path holding the shown pack");
+
+        // (3) The refusal latch releases on pendingChangesChanged and on
+        // nothing else. It has to be that signal: the discard's terminal
+        // handler emits overrideChanged only for the files it actually
+        // restored, so a card none of those reach would stay latched for the
+        // rest of the session.
+        QVERIFY2(card.contains(QStringLiteral("function onPendingChangesChanged() { root._writesRefused = false; }")),
+                 "the refusal latch no longer releases on pendingChangesChanged alone");
+
+        // (4) The ownership caption's arms, in order. Ordering is the
+        // contract: owning a pack outranks owning only parameters, the
+        // orphaned-values spelling is nested INSIDE the params-only arm (a
+        // stale map IS a params-only map, so a sibling arm would let the two
+        // orderings disagree), and inherited-value is the fallthrough.
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsPack) return i18n(\"Overridden for this event\");")),
+                 "the caption's owned-pack arm changed");
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderOwnsParamsOnly) {")),
+                 "the caption's params-only arm is no longer the outer test");
+        QVERIFY2(editor.contains(QStringLiteral("if (shaderParamsStale) return i18n(\"Following the inherited pack, "
+                                                "with saved settings that no longer apply\");")),
+                 "the caption's orphaned-parameters arm changed, or left the params-only arm");
+        QVERIFY2(editor.contains(QStringLiteral("return i18n(\"Following the inherited "
+                                                "pack, with settings of its own\");")),
+                 "the caption's params-only arm changed");
+        QVERIFY2(editor.contains(QStringLiteral("return i18n(\"Following the inherited value\");")),
+                 "the caption's inherited fallthrough changed");
+    }
+
+    /// ShaderBrowserPage's `_typeCatalog` labels the shader browser's type
+    /// axis, one entry per event class. There is no way to derive it from the
+    /// C++ SSOT (ProfilePaths::allEventClassTokens) inside QML, so it is a
+    /// hand-maintained list — and a class added without an entry here ships
+    /// an untranslated raw token sorted last, which is exactly how the strip
+    /// class first shipped. Pin the key set against the same literal
+    /// vocabulary test_animationshadereffect pins on the C++ side.
+    void shaderBrowserTypeCatalogCoversEveryEventClass()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        const int start = src.indexOf(QStringLiteral("_typeCatalog"));
+        QVERIFY2(start >= 0, "_typeCatalog is gone from ShaderBrowserPage.qml");
+        const int end = src.indexOf(QStringLiteral("_universalKey"), start);
+        QVERIFY2(end > start, "could not find the end of the _typeCatalog block (_universalKey moved?)");
+        const QString block = src.mid(start, end - start);
+
+        // The C++ SSOT itself, not a mirror: a hand-copied literal here passed
+        // green when a class was added to the vocabulary and NEITHER the QML
+        // catalog nor the copy was updated — the exact failure this slot
+        // exists to prevent. Reading the SSOT makes a new class fail here
+        // until _typeCatalog grows its entry. "universal" is deliberately
+        // absent from the vocabulary: it is the synthetic order-0 bucket the
+        // helpers resolve, not a declared class — pinned below.
+        const QStringList classTokens = PhosphorAnimation::ProfilePaths::allEventClassTokens();
+        QVERIFY(!classTokens.contains(QStringLiteral("universal")));
+        QVERIFY2(!block.contains(QStringLiteral("\"key\": \"universal\"")),
+                 "_typeCatalog must not declare the synthetic universal bucket as a class entry");
+        QStringList missing;
+        for (const QString& token : classTokens) {
+            if (!block.contains(QStringLiteral("\"key\": \"") + token + QLatin1Char('"'))) {
+                missing << token;
+            }
+        }
+        QVERIFY2(missing.isEmpty(),
+                 qPrintable(QStringLiteral("_typeCatalog has no entry for event class(es): ")
+                            + missing.join(QLatin1String(", "))
+                            + QStringLiteral(" — such packs get an untranslated badge sorted last")));
+    }
+
+    /// _effectTypeKey must bucket a pack by CATALOG order, not by the order
+    /// its metadata happens to list its classes. Reading `appliesTo[0]` made
+    /// two behaviourally identical hybrids badge and sort into different
+    /// buckets, and it was the last consumer anywhere that observed the
+    /// declaration order — AnimationShaderEffect::operator== now compares
+    /// appliesTo as a set on the strength of that. A regression here would
+    /// silently reintroduce the asymmetry, so guard the shape.
+    void shaderBrowserTypeKeyIsIndependentOfDeclarationOrder()
+    {
+        const QString qmlPath = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders/ShaderBrowserPage.qml");
+        const QString src = readFile(qmlPath);
+        QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+        const int start = src.indexOf(QStringLiteral("function _effectTypeKey"));
+        QVERIFY2(start >= 0, "_effectTypeKey is gone from ShaderBrowserPage.qml");
+        const int end = src.indexOf(QStringLiteral("function _typeLabel"), start);
+        QVERIFY2(end > start, "could not find the end of _effectTypeKey");
+        const QString body = src.mid(start, end - start);
+
+        QVERIFY2(body.contains(QStringLiteral("_typeCatalog")),
+                 "_effectTypeKey must resolve the bucket through _typeCatalog so the result is independent of "
+                 "the pack's declaration order");
+        // The bare first-token read is the regression. The catalog-order
+        // walk keeps `appliesTo[0]` only as the unknown-token fallback, so
+        // require the catalog lookup to come FIRST.
+        const int catalogAt = body.indexOf(QStringLiteral("_typeCatalog"));
+        const int firstTokenAt = body.indexOf(QStringLiteral("appliesTo[0]"));
+        if (firstTokenAt >= 0) {
+            QVERIFY2(catalogAt >= 0 && catalogAt < firstTokenAt,
+                     "appliesTo[0] may only be the unknown-token fallback, after the catalog-order lookup");
+        }
+    }
+
     // ─── Shader-browser bridge route ──────────────────────────────────────
 
     /// The Animations → Shaders page routes AnimationsPageController through
@@ -383,7 +549,12 @@ private Q_SLOTS:
                                                 QStringLiteral("ShaderSetCard.qml")};
         {
             static const QRegularExpression bridgeUseRe(QStringLiteral("\\bbridge\\."));
-            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+            // Subdirectories, matching the routeFiles walk: a browser-route
+            // file added in a subfolder must be visible to this completeness
+            // sweep, or the guard goes silent on exactly the file it exists
+            // to catch.
+            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
+                               QDirIterator::Subdirectories);
             while (sweep.hasNext()) {
                 const QString path = sweep.next();
                 if (routeFiles.contains(path) || setsRouteExclusions.contains(QFileInfo(path).fileName())) {
@@ -511,6 +682,101 @@ private Q_SLOTS:
         QVERIFY2(outOfScope.isEmpty(),
                  qPrintable(QStringLiteral("simple-page cards outside the animations-simple scope: ")
                             + outOfScope.join(QLatin1String(", "))));
+    }
+
+    /// Every event-path literal a surface page spells must (a) name a real
+    /// built-in path and (b) fall inside that page's own scope.
+    ///
+    /// Both halves fail silently without this. A path that is not in
+    /// allBuiltInPaths() is refused by AnimationsPageController's writers, so the
+    /// card renders normally and every control on it no-ops — the user toggles the
+    /// override, picks a shader, drags the duration, and the card snaps back to
+    /// inherited each refresh because nothing was ever written. A path that IS
+    /// built-in but sits outside the page's scope writes fine and is then
+    /// unreachable by that page's Reset and invisible to its dirty walk.
+    ///
+    /// An explicit table rather than a directory glob, deliberately: page ids are
+    /// not derivable from filenames (AnimationsWindowMotionPage →
+    /// "animations-window-motion", AnimationsSidePanelsPage → "animations-side-panels"),
+    /// and the library pages resolve to WholeTree/ConfigOnly scopes where the
+    /// subtree assertion would be meaningless. Add a row when a surface page is
+    /// added; the floor below catches a regex that stopped matching.
+    void surfacePageCardsNameRealPathsInTheirOwnScope()
+    {
+        struct PageUnderTest
+        {
+            const char* qmlFile;
+            const char* pageId;
+            // The page's real card count, so a regex that half-matched is caught
+            // rather than passing over a truncated list.
+            int minCards;
+            // Prefix of the one path family a page is KNOWN to display without
+            // owning in its scope, or nullptr when the scope owns every card.
+            // Scoped to the family rather than the whole page, so the page's
+            // other cards stay covered.
+            const char* scopeExemptPrefix;
+        };
+        static const PageUnderTest pages[] = {
+            {"AnimationsShellPage.qml", "animations-shell", 3, nullptr},
+            {"AnimationsWindowsPage.qml", "animations-windows", 5, nullptr},
+            {"AnimationsOsdsPage.qml", "animations-osds", 4, nullptr},
+            {"AnimationsDesktopsPage.qml", "animations-desktops", 3, nullptr},
+            {"AnimationsSidePanelsPage.qml", "animations-side-panels", 5, nullptr},
+            // Widgets hosts two `cursor.*` cards as well as its own `widget.*`
+            // ones, and NO page scope names `cursor` — so those two overrides can
+            // be set here but are reached by no page's Reset and seen by no page's
+            // dirty walk, only by the whole-tree library pages. That is a real gap
+            // and it predates this table; it is recorded here rather than papered
+            // over. Exempting only the `cursor.` prefix keeps the page's twenty
+            // `widget.*` cards under the scope check, and the exemption goes away
+            // the day `cursor` gains an owner.
+            {"AnimationsWidgetsPage.qml", "animations-widgets", 22, "cursor."},
+            // The remaining three surface pages. Each one's cards sit wholly
+            // inside its own scope (`popup`, `editor`, `scrolling`), so none
+            // needs the exemption Widgets does.
+            {"AnimationsOverlaysPage.qml", "animations-overlays", 9, nullptr},
+            {"AnimationsEditorPage.qml", "animations-editor", 4, nullptr},
+            {"AnimationsScrollingPage.qml", "animations-scrolling", 2, nullptr},
+        };
+
+        static const QRegularExpression re(QStringLiteral("\"eventPath\"\\s*:\\s*\"([^\"]+)\""));
+        const QStringList builtIn = PhosphorAnimation::ProfilePaths::allBuiltInPaths();
+
+        QStringList problems;
+        for (const PageUnderTest& page : pages) {
+            const QString qmlPath =
+                QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/animations/") + QLatin1String(page.qmlFile);
+            const QString src = readFile(qmlPath);
+            QVERIFY2(!src.isEmpty(), qPrintable(QStringLiteral("could not read ") + qmlPath));
+
+            QStringList cardPaths;
+            auto it = re.globalMatch(src);
+            while (it.hasNext())
+                cardPaths.append(it.next().captured(1));
+
+            // Non-vacuity floor per page: a regex that stopped matching would
+            // otherwise turn every row below into a pass over an empty list.
+            QVERIFY2(cardPaths.size() >= page.minCards,
+                     qPrintable(QStringLiteral("parsed only %1 eventPath literals from %2")
+                                    .arg(cardPaths.size())
+                                    .arg(QLatin1String(page.qmlFile))));
+
+            const AnimationPageScope scope = animationPageScope(QLatin1String(page.pageId));
+            QCOMPARE(scope.kind, AnimationPageScope::EventSubtree);
+            for (const QString& path : cardPaths) {
+                if (!builtIn.contains(path)) {
+                    problems.append(QLatin1String(page.qmlFile) + QLatin1String(": ") + path
+                                    + QLatin1String(" is not a built-in path"));
+                }
+                const bool exempt = page.scopeExemptPrefix && path.startsWith(QLatin1String(page.scopeExemptPrefix));
+                if (!exempt && !animationPathInScope(path, scope)) {
+                    problems.append(QLatin1String(page.qmlFile) + QLatin1String(": ") + path
+                                    + QLatin1String(" is outside the ") + QLatin1String(page.pageId)
+                                    + QLatin1String(" scope"));
+                }
+            }
+        }
+        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("; "))));
     }
 };
 

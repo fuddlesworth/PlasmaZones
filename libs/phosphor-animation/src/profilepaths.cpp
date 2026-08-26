@@ -9,12 +9,20 @@ namespace ProfilePaths {
 // Root
 const QString Global = QStringLiteral("global");
 
-// Event-class tokens (see ProfilePaths.h). Kept as QStringLiteral so they
-// compare cheaply against AnimationShaderEffect::appliesTo entries.
+// Event-class tokens (see ProfilePaths.h). QStringLiteral rather than a bare
+// literal because these are namespace-scope QStrings: the literal form builds
+// its QString data at compile time, so construction allocates nothing at
+// static-init.
 const QString EventClassGeometry = QStringLiteral("geometry");
 const QString EventClassAppearance = QStringLiteral("appearance");
+// NOTE: this token is the same STRING as the `Desktop` path root below. The
+// collision is deliberate (both are the user-facing word) and it is the only
+// one among these constants, but it means eventClassForPath(Desktop) returns
+// its own argument. No store may key on "a path or a class token" in one map.
 const QString EventClassDesktop = QStringLiteral("desktop");
 const QString EventClassMove = QStringLiteral("move");
+const QString EventClassStrip = QStringLiteral("strip");
+const QString EventClassTab = QStringLiteral("tab");
 
 // window.* — split into two contract sub-trees so each has a real cascade
 // parent for its "All": appearance (a surface materialising / dissolving) and
@@ -34,8 +42,10 @@ const QString WindowFocus = QStringLiteral("window.appearance.focus");
 // deliberately omits KWin's resize edge-lock logic, so no pack class had a
 // real story there. Discrete resizes are covered by snapIn / layoutSwitch /
 // maximize. `window.movement.snapResize` was dropped with it: no callsite
-// ever routed it. Stale config overrides on either path are filtered by the
-// allBuiltInPaths()/shaderSupportedEventPaths() membership checks.
+// ever routed it. A stale config override on either path is pruned from the
+// SHADER tree by shaderSupportedEventPaths() on both read and write. The
+// motion tree has no such prune, so a motion override there simply lingers,
+// unreachable from the UI and named by no resolver.
 const QString WindowMovement = QStringLiteral("window.movement");
 const QString WindowMaximize = QStringLiteral("window.movement.maximize");
 const QString WindowMove = QStringLiteral("window.movement.move");
@@ -57,6 +67,37 @@ const QString Editor = QStringLiteral("editor");
 const QString EditorSnapIn = QStringLiteral("editor.snapIn");
 const QString EditorSnapOut = QStringLiteral("editor.snapOut");
 const QString EditorSnapResize = QStringLiteral("editor.snapResize");
+
+// scrolling.* — the scrolling strip's VIEW, not any window on it. Its own
+// root rather than a window.movement.* leaf because the subject is the view:
+// one leg moves every column at once, and the compositor drives it with a
+// single per-output spring. The tab-indicator overlay does not mirror it: the
+// compositor adds the same offset to that surface in the same paint pass, so
+// one spring drives both. A second spring on the daemon side was tried and
+// cannot work, because the overlay composites a frame or more behind the pass
+// that moves the columns.
+const QString Scrolling = QStringLiteral("scrolling");
+const QString ScrollingView = QStringLiteral("scrolling.view");
+// The tab swap inside a tabbed column. Grouped under scrolling because tabbed
+// columns exist only there, but it is NOT the strip's one-scene contract and
+// carries its own opt-in class instead — see eventClassForPath. The subject is
+// a single window taking the rect another just vacated, which is the same
+// old-content crossfade the snap morph runs, only with the old content coming
+// from a DIFFERENT window.
+const QString ScrollingTabSwitch = QStringLiteral("scrolling.tabSwitch");
+
+// shell.* — the desktop shell's own surfaces, currently the Plasma applet
+// popups (launcher, tray flyouts, a widget's expanded view). Their legs are
+// appearance legs like a window's, and the kwin-effect installs them from the
+// same windowAdded / windowClosed hooks, but they hang off their own root so
+// nothing a user chose for their WINDOWS reaches a surface plasmashell owns.
+// The shader tree makes that structural (shaderPathIsolationRoot): the whole
+// subtree resolves inside itself, so a shell surface animates only once a pack
+// is engaged on one of these nodes.
+const QString Shell = QStringLiteral("shell");
+const QString ShellAppletPopup = QStringLiteral("shell.appletPopup");
+const QString ShellAppletPopupShow = QStringLiteral("shell.appletPopup.show");
+const QString ShellAppletPopupHide = QStringLiteral("shell.appletPopup.hide");
 
 // osd.*
 const QString Osd = QStringLiteral("osd");
@@ -90,12 +131,6 @@ const QString PanelFadeOut = QStringLiteral("panel.fadeOut");
 const QString Cursor = QStringLiteral("cursor");
 const QString CursorHover = QStringLiteral("cursor.hover");
 const QString CursorClick = QStringLiteral("cursor.click");
-
-// shader.*
-const QString Shader = QStringLiteral("shader");
-const QString ShaderOpen = QStringLiteral("shader.open");
-const QString ShaderClose = QStringLiteral("shader.close");
-const QString ShaderSwitch = QStringLiteral("shader.switch");
 
 // widget.*
 const QString Widget = QStringLiteral("widget");
@@ -151,6 +186,13 @@ QStringList allBuiltInPaths()
         EditorSnapIn,
         EditorSnapOut,
         EditorSnapResize,
+        Scrolling,
+        ScrollingView,
+        ScrollingTabSwitch,
+        Shell,
+        ShellAppletPopup,
+        ShellAppletPopupShow,
+        ShellAppletPopupHide,
         Osd,
         OsdShow,
         OsdPop,
@@ -176,10 +218,6 @@ QStringList allBuiltInPaths()
         Cursor,
         CursorHover,
         CursorClick,
-        Shader,
-        ShaderOpen,
-        ShaderClose,
-        ShaderSwitch,
         Widget,
         WidgetHover,
         WidgetPress,
@@ -221,8 +259,55 @@ QString parentPath(const QString& path)
     return path.left(dotIdx);
 }
 
+QStringList allEventClassTokens()
+{
+    // Built once: callers iterate this behind picker filters and validators,
+    // and the vocabulary cannot change at runtime.
+    static const QStringList tokens{EventClassGeometry, EventClassAppearance, EventClassDesktop,
+                                    EventClassMove,     EventClassStrip,      EventClassTab};
+    return tokens;
+}
+
+bool eventPathResolvesPerWindow(const QString& path)
+{
+    // An explicit list rather than a prefix rule, because the boundary does not
+    // follow the taxonomy's shape: `scrolling.tabSwitch` is per-window while its
+    // sibling `scrolling.view` is not, and the `window` category nodes are not
+    // per-window either since the compositor only ever resolves leaves.
+    //
+    // Each entry names the call site that supplies the window, so a reader can
+    // check the claim rather than trust it:
+    //   window.appearance.*  — tryBeginShaderForEvent from window_lifecycle
+    //                          (open/close/focus) and daemon_apply (minimize)
+    //   window.movement.maximize / .move
+    //                        — tryBeginShaderForEvent from window_connections
+    //   window.movement.snapIn / .snapOut / .layoutSwitch
+    //                        — applyWindowGeometry's resolve in drag_snap, and
+    //                          every other applyWindowGeometry caller that takes
+    //                          the default profilePath (it defaults to snapIn),
+    //                          which includes the tiling and scrolling reflows
+    //   scrolling.tabSwitch  — tryBeginShaderForEvent from the tiling handler's
+    //                          tab swap, which passes the arriving window
+    static const QStringList kPerWindowPaths{
+        WindowOpen, WindowClose,  WindowMinimize, WindowFocus,        WindowMaximize,
+        WindowMove, WindowSnapIn, WindowSnapOut,  WindowLayoutSwitch, ScrollingTabSwitch,
+    };
+    return kPerWindowPaths.contains(path);
+}
+
 QString eventClassForPath(const QString& path)
 {
+    // The dotted sub-tree prefixes, built once. This runs per row per repaint
+    // behind the settings picker's filter, and each of these used to allocate
+    // a temporary QString on every call.
+    static const QString movementPrefix = WindowMovement + QLatin1Char('.');
+    static const QString appearancePrefix = WindowAppearance + QLatin1Char('.');
+    static const QString osdPrefix = Osd + QLatin1Char('.');
+    static const QString popupPrefix = Popup + QLatin1Char('.');
+    static const QString desktopPrefix = Desktop + QLatin1Char('.');
+    static const QString scrollingPrefix = Scrolling + QLatin1Char('.');
+    static const QString shellPrefix = Shell + QLatin1Char('.');
+
     // The interactive-drag leaf is its own opt-in class. A drag installs a
     // HELD transition: there is no old→new crossfade to play (iFromRect stays
     // invalid, progress clamps while the pointer is down), so a geometry
@@ -238,7 +323,7 @@ QString eventClassForPath(const QString& path)
     // maximize) — the rest of the window.movement sub-tree, including its
     // cascade parent. Maximize IS a geometry change with a before/after
     // rect, so morph can drive it even though it isn't a built-in default.
-    if (path == WindowMovement || path.startsWith(WindowMovement + QLatin1Char('.'))) {
+    if (path == WindowMovement || path.startsWith(movementPrefix)) {
         return EventClassGeometry;
     }
     // Appearance legs animate a single surface in or out: the whole
@@ -246,11 +331,20 @@ QString eventClassForPath(const QString& path)
     // popup surface — the osd/popup roots and all their show/hide/pop
     // descendants. `startsWith` keeps future sub-surfaces classified without
     // touching this list.
-    if (path == WindowAppearance || path.startsWith(WindowAppearance + QLatin1Char('.'))) {
+    if (path == WindowAppearance || path.startsWith(appearancePrefix)) {
         return EventClassAppearance;
     }
-    if (path == Osd || path == Popup || path.startsWith(Osd + QLatin1Char('.'))
-        || path.startsWith(Popup + QLatin1Char('.'))) {
+    if (path == Osd || path == Popup || path.startsWith(osdPrefix) || path.startsWith(popupPrefix)) {
+        return EventClassAppearance;
+    }
+    // The shell family is appearance too, and deliberately NOT a class of its
+    // own: a shell surface is a single surface materialising or dissolving,
+    // exactly what an appearance pack draws, and it binds the same single
+    // sampler. What sets these paths apart is WHOSE surface it is, which the
+    // shader tree answers by isolating the subtree rather than by narrowing
+    // the pack vocabulary. A new class here would only make every existing
+    // appearance pack unselectable for no gain.
+    if (path == Shell || path.startsWith(shellPrefix)) {
         return EventClassAppearance;
     }
     // Desktop family — the full-screen two-texture switch contract. The
@@ -258,8 +352,30 @@ QString eventClassForPath(const QString& path)
     // desktop-transition shader validates on the root or the leaf, and the
     // single-surface shaders are dimmed (see shaderEffectAppliesToEventPath,
     // which makes this class opt-in rather than universal-permissive).
-    if (path == Desktop || path.startsWith(Desktop + QLatin1Char('.'))) {
+    if (path == Desktop || path.startsWith(desktopPrefix)) {
         return EventClassDesktop;
+    }
+    // Scrolling family — the strip's one-scene post-process contract. The
+    // view spring retargets continuously under wheel scrolling (no discrete
+    // from/to legs), so neither the crossfade classes nor the two-texture
+    // desktop class fit: a strip pack decorates the live capture driven by
+    // offset/velocity (iStripMotion) and must opt in via
+    // `appliesTo: ["strip"]`. Root and every leaf carry the class, mirroring
+    // desktop.
+    // The tab swap is the one scrolling leaf that is NOT a strip pass, and it
+    // is not an appearance leg either. It cross-fades a snapshot of the
+    // OUTGOING tab (uOldWindow) into the live content of the incoming one, so
+    // it is two-texture like the desktop switch, on a window quad rather than
+    // a screen. A universal single-surface pack would fade the arriving tab in
+    // over whatever lies behind the column, which is the wallpaper, so its own
+    // class keeps it opt-in the way desktop and strip are. Checked BEFORE the
+    // sub-tree match below so the leaf wins over its scrolling ancestor, the
+    // same ordering window.movement.move uses against its own family.
+    if (path == ScrollingTabSwitch) {
+        return EventClassTab;
+    }
+    if (path == Scrolling || path.startsWith(scrollingPrefix)) {
+        return EventClassStrip;
     }
     // `window` root (mixed: spans both classes), `global`, and the
     // editor/panel/widget/cursor/shader families have no single class — the
@@ -299,6 +415,26 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // stay opt-in. A fresh config animates them only once the user picks a
     // desktop pack (e.g. Desktop Fade) on the Animations → Transitions →
     // Desktop page.
+    //
+    // `scrolling.view` is opt-in for the same reason from the other
+    // direction: its pass runs on EVERY wheel scroll, so a built-in default
+    // would put a full-screen post-process on the most frequent interaction
+    // in the mode. Scrolling stays a plain translation until the user picks a
+    // strip pack on Animations → Motion → Scrolling.
+    //
+    // `scrolling.tabSwitch` joins them, and its case is the closest call of
+    // the three. Without a pack the swap is a hard cut, which IS worse than
+    // the plain behaviour the other two fall back to — but the pass costs a
+    // window-sized capture and a skipped frame per switch, and a transition
+    // that installs itself on a fresh config is the kind of thing a user
+    // should choose rather than discover. Every tab pack (Tab Fade first) is
+    // one pick away on the same page as the strip packs.
+    //
+    // The `shell.*` legs carry no default either, and theirs is not a
+    // judgement call: the shell subtree is isolated in the shader tree
+    // precisely so a surface plasmashell owns animates nothing until the user
+    // says otherwise, and a built-in default here would reach around that
+    // isolation and put a transition on every tray flyout of a fresh install.
     // Every other event defaults to no shader.
     return QString();
 }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorRendering/ShaderNodeLiveness.h>
 #include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <PhosphorShaders/BaseUniforms.h>
@@ -98,6 +99,13 @@ constexpr bool isConsumerBinding(int binding) noexcept
  * safe to call from the GUI thread outside the sync phase (it is the only flag
  * exposed as std::atomic).
  *
+ * One sanctioned entry point runs on the render thread OUTSIDE the sync phase:
+ * releaseResources(), reached via ShaderEffect::releaseIdleGraphicsResources'
+ * QQuickWindow::NoStage render job while the GUI thread is NOT blocked. That
+ * is safe because no GUI-thread path mutates node members directly — every
+ * ShaderEffect setter stages into the item's own members and defers the node
+ * push to the next sync — so the job cannot race a concurrent member write.
+ *
  * (Setters on the sibling ShaderEffect class are a different story — those run
  * on the GUI thread and stage their changes into ShaderEffect's own members, to
  * be pushed down to this node during the next sync phase.)
@@ -138,6 +146,33 @@ public:
      * Thread-safe: uses an atomic flag checked by prepare()/render().
      */
     void invalidateItem();
+
+    /**
+     * @brief Whether this node still holds a usable back-pointer to its item.
+     *
+     * False once invalidateItem() has run. This is the node's central
+     * threading invariant — every m_item dereference is gated on it — so it is
+     * exposed for callers that need to assert the teardown contract held
+     * (chiefly: that the item severed the back-pointer before it was freed).
+     * Thread-safe, but only a snapshot: do not use it to gate a dereference
+     * the node does not own.
+     */
+    bool hasValidItem() const
+    {
+        return m_itemValid.load(std::memory_order_acquire);
+    }
+
+    /**
+     * @brief The liveness block to hand to ShaderEffect::registerRenderNode.
+     *
+     * Valid for the node's whole lifetime and beyond — the block itself
+     * outlives the node, which nulls its own pointer inside it on
+     * destruction. See ShaderNodeLiveness.
+     */
+    const std::shared_ptr<ShaderNodeLiveness>& liveness() const
+    {
+        return m_liveness;
+    }
 
     // QSGRenderNode
     QSGRenderNode::StateFlags changedStates() const override;
@@ -266,6 +301,10 @@ public:
     void setBufferShaderPaths(const QStringList& paths);
     void setBufferFeedback(bool enable);
     void setBufferScale(qreal scale);
+    /// Buffer-pass texel format: RGBA16F when true (the default — safe for HDR,
+    /// signed-data, and feedback buffers), RGBA8 when a pack's metadata declares
+    /// its buffers hold plain clamped colour (`"halfFloatBuffers": false`).
+    void setHalfFloatBuffers(bool enable);
     void setBufferWrap(const QString& wrap);
     void setBufferWraps(const QStringList& wraps);
     void setBufferFilter(const QString& filter);
@@ -333,12 +372,33 @@ protected:
      */
     QRhi* safeRhi() const;
 
+    /**
+     * @brief Retract this node from its liveness block.
+     *
+     * MUST be the first statement of EVERY subclass destructor, not just this
+     * class's. The most-derived destructor body and its member teardown run
+     * before ~ShaderNodeRhi, so a retract that happened only in the base would
+     * leave ShaderEffect::withTrackedNode able to dispatch a virtual call into
+     * a node whose derived half is already destroyed.
+     *
+     * Idempotent (nulling an already-null pointer under the same mutex), so
+     * the base destructor's own call after a subclass has already retracted
+     * costs one uncontended lock and nothing else. Takes
+     * ShaderNodeLiveness::mutex, so it must not be called with m_itemMutex
+     * held. See ShaderNodeLiveness for the full ordering.
+     */
+    void retractLiveness() noexcept;
+
 private:
     bool ensurePipeline();
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
     bool ensureDummyChannelResources(QRhi* rhi);
     bool ensureBufferSampler(QRhi* rhi, int index);
+    /// Drop every buffer-pass target and everything compiled against it
+    /// (render targets, pass descriptors, pipelines, SRBs). Shared by
+    /// setBufferScale and setHalfFloatBuffers; ensureBufferTarget rebuilds.
+    void resetBufferTargets();
     /// Snapshot the node's live members into a UboFrameState and hand it to the
     /// installed UBO profile's fill(). @p rhi supplies the NDC Y-orientation
     /// the profile folds into qt_Matrix.
@@ -412,6 +472,12 @@ private:
     // m_itemMutex (avoids deadlock during ~ShaderEffect → invalidateItem path).
     mutable std::mutex m_itemMutex;
 
+    /// Published to the tracking ShaderEffect so it can tell a live node from
+    /// one the scene graph has already deleted. Seeded with `this` in the
+    /// constructor, nulled under its own mutex by retractLiveness() as the
+    /// first act of every destructor in the hierarchy. See ShaderNodeLiveness.
+    std::shared_ptr<ShaderNodeLiveness> m_liveness = std::make_shared<ShaderNodeLiveness>();
+
     // ── Uniform Extension ──────────────────────────────────────────────
     std::shared_ptr<PhosphorShaders::IUniformExtension> m_uniformExtension;
     /// Reused staging buffer for extension uploads — resized only when the
@@ -448,6 +514,12 @@ private:
     QStringList m_bufferPaths;
     bool m_bufferFeedback = false;
     qreal m_bufferScale = 1.0;
+    // Buffer-pass texel format. Half-float by default so packs that store HDR
+    // radiance, signed data, or feedback accumulators keep full precision; a
+    // pack whose buffers hold plain clamped [0,1] colour opts down to RGBA8
+    // via metadata to halve buffer bandwidth (which is what integrated GPUs
+    // are starved of).
+    bool m_halfFloatBuffers = true;
     std::array<QString, kMaxBufferPasses> m_bufferWraps = {QStringLiteral("clamp"), QStringLiteral("clamp"),
                                                            QStringLiteral("clamp"), QStringLiteral("clamp")};
     QString m_bufferWrapDefault = QStringLiteral("clamp");

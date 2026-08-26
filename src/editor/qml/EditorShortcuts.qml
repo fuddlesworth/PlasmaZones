@@ -21,6 +21,9 @@ Item {
     required property var helpDialog
     required property bool fullscreenMode
     required property bool previewMode
+    // Scrolling-template mode disables every zone-operation shortcut; save,
+    // undo/redo, help, fullscreen, and close stay live.
+    required property bool templateMode
     // Helper property to safely access undoController
     property var undoController: editorController ? editorController.undoController : null
     property bool canUndo: undoController ? undoController.canUndo : false
@@ -67,12 +70,15 @@ Item {
         }
     }
 
-    // Save shortcut (StandardKey.Save - respects KDE/Qt system shortcuts)
+    // Save shortcut (StandardKey.Save - respects KDE/Qt system shortcuts).
+    // Disabled in preview mode: preview is the read-only autotile view and
+    // saveLayout carries no preview guard of its own. Template mode stays
+    // enabled — saving the template is the whole point.
     Shortcut {
         id: saveShortcut
 
         sequences: [StandardKey.Save]
-        enabled: editorController !== null
+        enabled: !shortcuts.previewMode && editorController !== null
         onActivated: {
             if (editorController)
                 editorController.saveLayout();
@@ -85,7 +91,7 @@ Item {
         id: deleteShortcut
 
         sequences: [StandardKey.Delete]
-        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.deleteSelectedZones();
@@ -97,7 +103,7 @@ Item {
         id: selectAllShortcut
 
         sequences: [StandardKey.SelectAll]
-        enabled: !shortcuts.previewMode && editorController !== null
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController !== null
         onActivated: {
             if (editorController)
                 editorController.selectAll();
@@ -111,7 +117,7 @@ Item {
     Shortcut {
         id: duplicateShortcut
 
-        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.duplicateSelectedZones();
@@ -124,7 +130,7 @@ Item {
 
         sequences: [StandardKey.Copy]
         context: Qt.ApplicationShortcut
-        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.copyZones(editorController.selectedZoneIds);
@@ -137,7 +143,7 @@ Item {
 
         sequences: [StandardKey.Cut]
         context: Qt.ApplicationShortcut
-        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.cutZones(editorController.selectedZoneIds);
@@ -150,7 +156,7 @@ Item {
 
         sequences: [StandardKey.Paste]
         context: Qt.ApplicationShortcut
-        enabled: !shortcuts.previewMode && editorController && editorController.canPaste
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController && editorController.canPaste
         onActivated: {
             if (editorController)
                 editorController.pasteZones(false);
@@ -166,7 +172,7 @@ Item {
         // the sequence ambiguous and Qt then fires neither shortcut.
         sequences: ["Ctrl+Shift+V"]
         context: Qt.ApplicationShortcut
-        enabled: !shortcuts.previewMode && editorController && editorController.canPaste
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorController && editorController.canPaste
         onActivated: {
             if (editorController)
                 editorController.pasteZones(true);
@@ -178,10 +184,10 @@ Item {
     Shortcut {
         id: splitHorizontalShortcut
 
-        enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
-                editorController.splitZone(editorWindow.selectedZoneId, true);
+                editorWindow._zoneOps.splitWithShrinkAnimation(editorWindow.selectedZoneId, true, editorController, editorWindow._zonesRepeater);
         }
     }
 
@@ -191,10 +197,10 @@ Item {
     Shortcut {
         id: splitVerticalShortcut
 
-        enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
-                editorController.splitZone(editorWindow.selectedZoneId, false);
+                editorWindow._zoneOps.splitWithShrinkAnimation(editorWindow.selectedZoneId, false, editorController, editorWindow._zonesRepeater);
         }
     }
 
@@ -205,7 +211,7 @@ Item {
 
         id: fillShortcut
 
-        enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
+        enabled: !shortcuts.previewMode && !shortcuts.templateMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId) {
                 // Find the selected zone in the repeater and trigger animated fill

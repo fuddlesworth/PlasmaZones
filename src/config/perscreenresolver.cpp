@@ -24,6 +24,8 @@ constexpr PerScreenMapping kPerScreenMappings[] = {
     {P_PER_SCREEN_PREFIX_ZONE_SELECTOR, "ZoneSelector"},
     {P_PER_SCREEN_PREFIX_AUTOTILE, "Autotile"},
     {P_PER_SCREEN_PREFIX_SNAPPING, "Snapping"},
+    {P_PER_SCREEN_PREFIX_SCROLLING, "Scrolling"},
+    {P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR, "ScrollingZoneSelector"},
 };
 } // namespace
 
@@ -44,9 +46,12 @@ bool PerScreenPathResolver::isPerScreenPrefix(const QString& groupName)
         const auto prefixLen = static_cast<int>(qstrlen(m.prefix));
         // Require strictly more than prefixLen+1 chars so the colon is present
         // AND followed by at least one screen-id character. A bare
-        // "ZoneSelector:" is rejected here so purgeStaleKeys can clean it up
-        // instead of letting the resolver short-circuit it as malformed-but-
-        // per-screen and skip the purge.
+        // "ZoneSelector:" is rejected here so the BACKEND refuses reads and
+        // writes to it (toJsonPath maps the malformed name to an empty path,
+        // which deleteGroup/read guards drop) instead of storing an orphan
+        // top-level key. Such a husk is only removable by reset()'s whole
+        // PerScreen-container delete — purgeStaleKeys' per-name deleteGroup
+        // is refused by the same empty-path guard.
         if (groupName.size() > prefixLen + 1 && groupName.startsWith(QLatin1String(m.prefix))
             && groupName.at(prefixLen) == QLatin1Char(':')) {
             return true;
@@ -57,8 +62,9 @@ bool PerScreenPathResolver::isPerScreenPrefix(const QString& groupName)
 
 bool PerScreenPathResolver::isMalformedPerScreen(const QString& groupName)
 {
-    // "ZoneSelector:" / "AutotileScreen:" / "SnappingScreen:" — prefix present
-    // with a trailing colon but no screen id. Without this check, toJsonPath
+    // A bare prefix from the table above ("ZoneSelector:", "AutotileScreen:",
+    // "SnappingScreen:", "ScrollingScreen:", "ScrollingZoneSelector:") — the
+    // colon is present but no screen id follows. Without this check, toJsonPath
     // would decline (via isPerScreenPrefix returning false) and the backend
     // would fall back to dot-path, storing the name as an orphan top-level
     // key on disk.

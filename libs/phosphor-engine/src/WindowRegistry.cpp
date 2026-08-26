@@ -89,7 +89,12 @@ void WindowRegistry::remove(const QString& instanceId)
     const QString postEmit = m_canonicalByInstance.value(instanceId);
     if (postEmit == canonical) {
         m_canonicalByInstance.remove(instanceId);
-        if (hasPendingUpsert && !canonical.isEmpty()) {
+        // Keep the mapping alive for a re-announce that is about to replay its
+        // record — but NOT while clear() is draining, where the replay itself
+        // is dropped below. Re-inserting there left the instance behind as a
+        // canonical-only survivor of a bulk reset that promises to empty the
+        // registry, so the two conditions must agree.
+        if (hasPendingUpsert && m_clearing == 0 && !canonical.isEmpty()) {
             m_canonicalByInstance.insert(instanceId, canonical);
         }
     }
@@ -192,6 +197,22 @@ QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
     if (it != m_canonicalByInstance.constEnd()) {
         return it.value();
     }
+    // Frozen unconditionally, INCLUDING an appId-less composite ("|instanceId",
+    // which KWin produces for a surface whose class it has not resolved yet).
+    // Exempting that shape looks attractive — an appId-less canonical does
+    // strip the identity the appId buckets match on — but it is the wrong
+    // layer to fix it at, and the exemption is actively harmful: the canonical
+    // would then CHANGE mid-life, at the first metadata push carrying a real
+    // class, while the effect keeps sending the id it froze at first
+    // observation. Engine state keyed at open (strip/tile membership, the
+    // m_states reverse maps, min sizes, float markers) becomes unreachable at
+    // the new id, close stops removing the window, and the alive-set walk in
+    // WindowTrackingAdaptor::pruneStaleWindows force-removes the live window
+    // from its layout. One stable key per window for its whole life is the
+    // invariant every store here is built on. A window whose appId is not yet
+    // known is served by asking the REGISTRY for it (currentAppIdFor, which
+    // reads the metadata record and self-corrects on the class-change push),
+    // never by parsing it back out of the frozen id.
     m_canonicalByInstance.insert(instanceId, rawWindowId);
     return rawWindowId;
 }

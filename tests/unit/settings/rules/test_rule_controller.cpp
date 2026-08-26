@@ -19,13 +19,13 @@
  *   - the field / operator / action authoring metadata is well-formed.
  */
 
-#include <QJSEngine>
 #include <QJsonObject>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
 
+#include "settings/rules/ruleauthoring.h"
 #include "settings/rules/rulecontroller.h"
 #include "settings/rules/rulemodel.h"
 
@@ -48,10 +48,15 @@ private Q_SLOTS:
     void moveRuleReorders();
     void flatPriorityIgnoresBandsOnReorder();
     void authoringMetadata();
+    void operatorMetadata();
+    void actionMetadata();
+    void boolActionPolaritySweep();
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
     void asyncCommitAndRevertAreInvokable();
     void stageUserRulesEnforcesTheAddRuleBoundary();
+    void stageUserRulesRaisesTheCommitGate();
+    void promotedLeafRootRoundTrips();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -73,9 +78,31 @@ void TestRuleController::newEmptyRuleShapesBySubject()
     const QVariantMap activityMatch = activity.value(QStringLiteral("match")).toMap();
     QCOMPARE(activityMatch.value(QStringLiteral("field")).toString(), QStringLiteral("activity"));
 
-    // Custom starts from the catch-all All{} composite.
+    // The desktop subject starts with a VirtualDesktop leaf, seeded at 1
+    // because 0 is the "unpinned" sentinel and would match nothing.
+    const QVariantMap desktop = controller.newEmptyRule(QStringLiteral("desktop"));
+    const QVariantMap desktopMatch = desktop.value(QStringLiteral("match")).toMap();
+    QCOMPARE(desktopMatch.value(QStringLiteral("field")).toString(), QStringLiteral("virtualDesktop"));
+    QCOMPARE(desktopMatch.value(QStringLiteral("value")).toInt(), 1);
+
+    // Animation and Custom both start from the catch-all All{} composite —
+    // they are the two subjects that do NOT seed a bare leaf. Because their
+    // match shapes are identical, the PRIORITY is the only thing separating
+    // the two branches, so a dispatch that routed one into the other would be
+    // invisible without asserting it.
     const QVariantMap custom = controller.newEmptyRule(QStringLiteral("custom"));
     QVERIFY(custom.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
+    const QVariantMap animation = controller.newEmptyRule(QStringLiteral("animation"));
+    QVERIFY(animation.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
+    QVERIFY2(custom.value(QStringLiteral("priority")).toInt() != animation.value(QStringLiteral("priority")).toInt(),
+             "custom and animation must not collapse onto one band");
+
+    // Every subject the New Rule dialog offers is covered above. An id it does
+    // not know falls through to the custom shape rather than producing an
+    // empty map, so a typo in the QML catalogue degrades rather than breaks.
+    const QVariantMap unknown = controller.newEmptyRule(QStringLiteral("no-such-subject"));
+    QVERIFY(!unknown.value(QStringLiteral("id")).toString().isEmpty());
+    QVERIFY(unknown.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
 
     // Each fresh rule carries a distinct UUID.
     QVERIFY(monitor.value(QStringLiteral("id")).toString() != app.value(QStringLiteral("id")).toString());
@@ -107,6 +134,20 @@ void TestRuleController::addUpdateRemoveByUuid()
     QVERIFY(controller.removeRule(id));
     QCOMPARE(controller.model()->rowCount(), 0);
     QVERIFY(!controller.removeRule(id));
+
+    // The negative half of the by-UUID surface. Every one of these takes an id
+    // from QML, where a stale binding or a deleted-then-clicked row hands over
+    // an id the model no longer has. They must refuse, not assert or write.
+    const QString ghost = QUuid::createUuid().toString();
+    QVERIFY2(controller.ruleJson(ghost).isEmpty(), "ruleJson must return an empty map for an unknown id");
+    QVERIFY2(!controller.setRuleEnabled(ghost, true), "setRuleEnabled must refuse an unknown id");
+    QVERIFY2(!controller.removeRule(ghost), "removeRule must refuse an unknown id");
+
+    QVariantMap orphan = controller.newEmptyRule(QStringLiteral("application"));
+    orphan[QStringLiteral("id")] = ghost;
+    orphan[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    QVERIFY2(!controller.updateRuleFromJson(orphan), "updateRuleFromJson must refuse an id the model does not hold");
+    QCOMPARE(controller.model()->rowCount(), 0);
 }
 
 void TestRuleController::dirtyTrackingAndRevert()
@@ -121,9 +162,12 @@ void TestRuleController::dirtyTrackingAndRevert()
     const QString id = controller.addRuleFromJson(rule);
     QVERIFY(!id.isEmpty());
 
-    // Adding a rule flips the dirty bit.
+    // Adding a rule flips the dirty bit, exactly once. A floor (>= 1) would
+    // pass for an add that emitted dirtyChanged three times, which is the
+    // regression this signal is most likely to grow — CLAUDE.md's "only emit
+    // when the value actually changes" applies here.
     QVERIFY(controller.isDirty());
-    QVERIFY(dirtySpy.count() >= 1);
+    QCOMPARE(dirtySpy.count(), 1);
 
     // revert() re-fetches the daemon's authoritative set asynchronously and
     // only clears the dirty bit if the re-fetch succeeded. The contract this
@@ -143,17 +187,26 @@ void TestRuleController::dirtyTrackingAndRevert()
     // hermetic means standing up a real `org.plasmazones.Rules` service on a
     // private bus — a fixture no other test in this file needs, for one
     // transition the daemon-side rule tests already cover from the other end.
-    // Do NOT read a green CI run as evidence that a successful revert clears
-    // dirty; that leg is covered on demand by running this test under
-    // `dbus-run-session` with the daemon started.
+    // Under ctest the TEST_LAUNCHER private bus declares NO service
+    // directories, so org.plasmazones.Rules is never reachable and the
+    // failure arm below is the one that runs. The assertion IS
+    // outcome-derived (the branch keeps the success arm alive for a direct
+    // dev-box run against a live daemon), so a ctest environment that ever
+    // grew a service directory would silently swap which contract is
+    // asserted — accepted, since the launcher config is part of this
+    // repo's test contract.
     QSignalSpy loadedSpy(&controller, &RuleController::rulesLoaded);
     controller.revert();
-    // Pump the event loop briefly so the QDBusPendingCall reply (success or
-    // error) lands. A timeout fall-through is acceptable — that's the
-    // daemon-absent path and dirty must stay set.
+    // Pump the event loop briefly so the QDBusPendingCall reply (an error
+    // under ctest) lands.
     loadedSpy.wait(500);
-    const bool reverted = loadedSpy.count() > 0;
-    QCOMPARE(controller.isDirty(), !reverted);
+    if (loadedSpy.count() > 0) {
+        // Direct run against a live daemon: a landed revert clears dirty.
+        QVERIFY(!controller.isDirty());
+    } else {
+        // The ctest path: no daemon, revert cannot land, dirty must stay.
+        QVERIFY(controller.isDirty());
+    }
 }
 
 void TestRuleController::userAuthorableFilterHidesInternalActions()
@@ -344,6 +397,7 @@ void TestRuleController::authoringMetadata()
     bool sawOrientationKind = false;
     bool sawLayoutKind = false;
     bool sawVirtualDesktopKind = false;
+    bool sawColorSchemeKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
@@ -353,7 +407,7 @@ void TestRuleController::authoringMetadata()
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
                 || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
-                || kind == QLatin1String("layout"));
+                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
@@ -370,14 +424,19 @@ void TestRuleController::authoringMetadata()
         // label} triples so the editor can render the dropdown. ScreenOrientation
         // (orientation) is one of these — it mirrors mode — so it is validated here
         // too, guarding against a regression that reverts it to a bare string field.
-        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode")
-            || kind == QLatin1String("orientation")) {
+        // ColorScheme (light/dark) is the third of the same shape: without it in
+        // this loop a dropped options array would leave the editor's dropdown
+        // empty with nothing failing.
+        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
+            || kind == QLatin1String("colorScheme")) {
             if (kind == QLatin1String("windowType")) {
                 sawWindowTypeKind = true;
             } else if (kind == QLatin1String("mode")) {
                 sawModeKind = true;
-            } else {
+            } else if (kind == QLatin1String("orientation")) {
                 sawOrientationKind = true;
+            } else {
+                sawColorSchemeKind = true;
             }
             const QVariantList options = f.value(QStringLiteral("options")).toList();
             QVERIFY2(!options.isEmpty(), "enum valueKind must expose options for the dropdown");
@@ -401,6 +460,10 @@ void TestRuleController::authoringMetadata()
     // VirtualDesktop keeps its dedicated "virtualDesktop" kind, which drives the
     // desktop-name picker in the editor and the name resolution in the summaries.
     QVERIFY(sawVirtualDesktopKind);
+    // ColorScheme keeps its own "colorScheme" kind. Reverting it to a bare
+    // string field would drop the light/dark dropdown and leave the user
+    // hand-typing the token, so the kind is pinned the same way the others are.
+    QVERIFY(sawColorSchemeKind);
 
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum
@@ -422,18 +485,23 @@ void TestRuleController::authoringMetadata()
         fieldCategoryOrder.insert(f.value(QStringLiteral("wire")).toString(),
                                   f.value(QStringLiteral("categoryOrder")).toInt());
     }
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId")), 1); // Identity
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType")), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient")), 6); // Type
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen")), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized")), 3); // State
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar")), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher")), 4); // Taskbar & switcher
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating")), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone")), 5); // Tiling
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width")), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height")), 2); // Size
-    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId")), 0); // Context
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("appId"), -1), 1); // Identity
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("windowType"), -1), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isTransient"), -1), 6); // Type
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFullscreen"), -1), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isMaximized"), -1), 3); // State
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipTaskbar"), -1), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("skipSwitcher"), -1), 4); // Taskbar & switcher
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("isFloating"), -1), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("zone"), -1), 5); // Tiling
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height"), -1), 2); // Size
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId"), -1), 0); // Context
+    // ColorScheme is a context field, not a window-state one: it resolves per
+    // screen/desktop/activity like screenId, so it belongs in the Context
+    // bucket. A descriptor that dropped it into State would bury it under the
+    // window properties in the fly-out.
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("colorScheme"), -1), 0); // Context
 
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
@@ -455,7 +523,7 @@ void TestRuleController::authoringMetadata()
 
     const auto opWires = [&](const QString& wire) {
         QSet<QString> s;
-        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire))) {
+        for (const QVariant& v : controller.operatorsForField(valueByWire.value(wire, -1))) {
             s.insert(v.toMap().value(QStringLiteral("wire")).toString());
         }
         return s;
@@ -465,6 +533,11 @@ void TestRuleController::authoringMetadata()
     QVERIFY(widthOps.contains(QStringLiteral("greaterThan")));
     QVERIFY(widthOps.contains(QStringLiteral("equals")));
     QCOMPARE(opWires(QStringLiteral("isTransient")), QSet<QString>{QStringLiteral("equals")});
+}
+
+void TestRuleController::operatorMetadata()
+{
+    RuleController controller;
 
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);
@@ -492,35 +565,249 @@ void TestRuleController::authoringMetadata()
         QVERIFY2(allOperatorWires.contains(v.toMap().value(QStringLiteral("wire")).toString()),
                  "operatorsForField returned an operator absent from allOperators()");
     }
+}
+
+void TestRuleController::actionMetadata()
+{
+    RuleController controller;
 
     const QVariantList actions = controller.actionTypes();
     QVERIFY(!actions.isEmpty());
     bool sawFloat = false;
     // Every action carries a picker category; collect the order per wire so the
     // grouping can be spot-checked. Context-domain categories come first
-    // (Gaps=0, Engine=1, Snapping=2, Tiling=3, Overlay=4), then the
-    // window-domain categories (Animation=5, Appearance=6, Window=7). The old
-    // flat "Layout & engine" category was split into Engine / Snapping / Tiling.
+    // (Gaps=0, Engine=1, Snapping=2, Tiling/Algorithm and Tiling/Behavior both
+    // =3, Scrolling=4, Overlay=5), then the ONE window-domain bucket, whose
+    // numbers order its submenus: Window/Placement=6, Window/Scrolling=7,
+    // Window/Appearance=8, Window/Animation=9, Window/Behavior=10,
+    // Window/Tab indicator=11, Window/Drop indicator=12. CategoryMenuButton
+    // takes a bucket's position from the SMALLEST order in it, so 6 is what
+    // puts Window last. An unregistered or uncategorized action falls to
+    // Other=99. The old flat "Layout & engine" category was split into
+    // Engine / Snapping / Tiling / Scrolling.
     QHash<QString, int> actionCategoryOrder;
+    QHash<QString, QString> actionCategoryLabel;
     for (const QVariant& v : actions) {
         const QVariantMap a = v.toMap();
         if (a.value(QStringLiteral("value")).toString() == QLatin1String("float"))
             sawFloat = true;
         QVERIFY(!a.value(QStringLiteral("category")).toString().isEmpty());
         QVERIFY(a.contains(QStringLiteral("categoryOrder")));
-        actionCategoryOrder.insert(a.value(QStringLiteral("value")).toString(),
-                                   a.value(QStringLiteral("categoryOrder")).toInt());
+        // Every picker entry needs a real translated label: the label table's
+        // fallback returns the RAW WIRE STRING, so a future authorable action
+        // added without a label branch would silently show "excludePlacement"
+        // in the picker while every count-free assertion stays green. The
+        // label != wire guard is the picker-side twin of
+        // test_rule_model.cpp's summary-label registry loop.
+        const QString wire = a.value(QStringLiteral("value")).toString();
+        const QString label = a.value(QStringLiteral("label")).toString();
+        QVERIFY2(!label.isEmpty(), qPrintable(wire));
+        QVERIFY2(label != wire, qPrintable(wire));
+        // Description canary: every picker entry carries the info-icon hover
+        // help (actionDescription's if-ladder has no compiler exhaustiveness
+        // like fieldDescription's switch, so this sweep is what keeps it
+        // covering every registered type — an action added without a
+        // description entry fails here by name).
+        QVERIFY2(!a.value(QStringLiteral("description")).toString().isEmpty(), qPrintable(wire));
+        // The structural invariant behind the picker's context/window divider:
+        // a top-level bucket takes its side from ONE of its items, so a bucket
+        // may never hold both domains. Every window-domain action therefore
+        // lives in a `Window/<sub>` submenu and no context-domain action may,
+        // which collapses the whole window half into a single bucket the
+        // divider can describe honestly. This also pins the shape: bare
+        // "Window" would be a direct item sitting above the submenus, the
+        // mixed flat-list-plus-submenus layout this organisation replaced.
+        //
+        // The comparison is against the TRANSLATED label, which holds because
+        // a headless unit run loads no catalogue so tr() returns its source
+        // string. That is the same coupling the strip-axis label rows below
+        // rely on, and the file-level convention here. Loading translations in
+        // this target would break both at once, so they move together.
+        const QString category = a.value(QStringLiteral("category")).toString();
+        const bool windowDomain = a.value(QStringLiteral("domain")).toString() == QLatin1String("window");
+        const QString whereFailed = wire + QLatin1String(" -> ") + category;
+        QVERIFY2(category != QLatin1String("Window"), qPrintable(whereFailed));
+        QVERIFY2(windowDomain == category.startsWith(QLatin1String("Window/")), qPrintable(whereFailed));
+        actionCategoryOrder.insert(wire, a.value(QStringLiteral("categoryOrder")).toInt());
+        actionCategoryLabel.insert(wire, category);
     }
     QVERIFY(sawFloat);
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap")), 0); // Gaps (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode")), 1); // Engine (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout")), 2); // Snapping (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm")), 3); // Tiling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam")), 3); // Tiling (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader")), 4); // Overlay (context)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations")), 5); // Animation (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity")), 6); // Appearance (window)
-    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude")), 7); // Window (window)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setInnerGap"), -1), 0); // Gaps (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setEngineMode"), -1), 1); // Engine (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setSnappingLayout"), -1), 2); // Snapping (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setTilingAlgorithm"), -1), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setAlgorithmParam"), -1), 3); // Tiling (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setCenterFocusedColumn"), -1), 4); // Scrolling (context)
+    // Each Window submenu carries its own number, which is what orders the
+    // submenus inside the bucket. Pin the label too: the order alone cannot
+    // tell Window/Scrolling apart from a stray top-level bucket that happens
+    // to sort at 7.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openTabbed"), -1), 7);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("openTabbed")), QStringLiteral("Window/Scrolling"));
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("overrideOverlayShader"), -1), 5); // Overlay (context)
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeAnimations"), -1), 9);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("excludeAnimations")), QStringLiteral("Window/Animation"));
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setOpacity"), -1), 8);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setOpacity")), QStringLiteral("Window/Appearance"));
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("exclude"), -1), 6);
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("exclude")), QStringLiteral("Window/Placement"));
+    // The scoped exclusion siblings: placement rides Window/Placement with the
+    // blanket Exclude; decorations rides Window/Appearance with the border
+    // family. A descriptor category typo on either would land it in the wrong
+    // picker bucket (or Other=99) with no other test noticing.
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("excludePlacement")), QStringLiteral("Window/Placement"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("excludeDecorations")), QStringLiteral("Window/Appearance"));
+    // The two behaviour overrides are the reason Window/Behavior exists: the
+    // stacking layer and the pointer scroll multiplier are neither placement
+    // nor looks, and the scroll multiplier in particular must NOT drift into
+    // Window/Scrolling, which is the scrolling engine's per-window arm.
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setWindowLayer")), QStringLiteral("Window/Behavior"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("scrollFactor")), QStringLiteral("Window/Behavior"));
+    // The per-window indicator colours: window-domain, so they sit in the
+    // Window bucket, one hop from the context-domain half of each family under
+    // Scrolling. Keeping a family whole would put window actions above the
+    // divider — see actionCategory()'s tabIndicator branch.
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("tabColorActive")), QStringLiteral("Window/Tab indicator"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setTabIndicatorActiveColor")),
+             QStringLiteral("Scrolling/Tab indicator"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("dropIndicatorColor")), QStringLiteral("Window/Drop indicator"));
+    QCOMPARE(actionCategoryLabel.value(QStringLiteral("setDropIndicatorColor")),
+             QStringLiteral("Scrolling/Drop indicator"));
+    // The per-context scrolling behaviour toggles and enums ride the Scrolling bucket
+    // with the sizing knobs they sit beside. Every one of them shares the
+    // `layoutEngine` descriptor category with the engine controls, so the
+    // bucket is decided by a hand-written per-type dispatch: an action left
+    // out of that list falls through to Engine=1 and lands in the wrong
+    // submenu with nothing else noticing. Pin the whole set rather than a
+    // sample, because the omission is per type.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollAlwaysCenterSingleColumn"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollRespectMinimumSize"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollCropStraddlers"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusNewWindows"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollSmartGaps"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouse"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouseMaxScroll"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStickyWindowHandling"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStripAxis"), -1), 4);
+    // The per-window Open* actions are window-domain and ride the
+    // Window/Scrolling submenu, the same way openTabbed above does. A miss
+    // here drops them into the context-domain Scrolling bucket, above the
+    // picker's divider.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openMaximized"), -1), 7);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFocused"), -1), 7);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFullscreen"), -1), 7);
+    // The unfloat fallback is a windowManagement action, riding
+    // Window/Placement with the blanket Exclude.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setUnfloatFallbackToZone"), -1), 6);
+
+    // The strip-axis option labels — the exact summary strings the editor
+    // combo and the rule row render, matching the Strip direction card's own
+    // wording. A token that falls through enumOptionLabel shows its raw wire
+    // spelling in the UI with everything else green.
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Auto)),
+             QStringLiteral("Match the screen shape"));
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Horizontal)),
+             QStringLiteral("Side to side"));
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Vertical)),
+             QStringLiteral("Top to bottom"));
+}
+
+void TestRuleController::boolActionPolaritySweep()
+{
+    // The bool-phrase canary: EVERY registered action whose Value param is a
+    // bool must answer boolActionStateLabel with a non-empty, distinct phrase
+    // for both polarities. A new bool action added without its phrases used
+    // to render the raw wire string in the rule row with the whole suite
+    // green — this is the future-miss net.
+    //
+    // Its own slot, because QVERIFY aborts the whole slot: as the tail of a
+    // 345-line authoringMetadata it was unreachable whenever anything above
+    // it failed, which is exactly when a net matters most.
+    int boolActions = 0;
+    const QStringList allTypes = PhosphorRules::ActionRegistry::instance().registeredTypes();
+    for (const QString& type : allTypes) {
+        const auto desc = PhosphorRules::ActionRegistry::instance().descriptor(type);
+        QVERIFY(desc.has_value());
+        bool valueIsBool = false;
+        for (const auto& param : desc->params) {
+            if (param.key == QString(ActionParam::Value) && param.kind == QLatin1String("bool")) {
+                valueIsBool = true;
+            }
+        }
+        if (!valueIsBool) {
+            continue;
+        }
+        ++boolActions;
+        const QString onLabel = RuleAuthoring::boolActionStateLabel(type, true);
+        const QString offLabel = RuleAuthoring::boolActionStateLabel(type, false);
+        QVERIFY2(!onLabel.isEmpty() && !offLabel.isEmpty(),
+                 qPrintable(QStringLiteral("bool action %1 lacks a polarity phrase").arg(type)));
+        QVERIFY2(onLabel != offLabel,
+                 qPrintable(QStringLiteral("bool action %1 renders both polarities identically").arg(type)));
+    }
+    QVERIFY2(boolActions > 10, "the bool-action sweep must actually cover the family, not an empty set");
+}
+
+void TestRuleController::promotedLeafRootRoundTrips()
+{
+    // The C++ half of the editor's leaf-root promotion. Every guided starting
+    // point seeds a BARE LEAF as the whole match, and MatchExpressionEditor
+    // wraps it into `all:[existingLeaf, blankLeaf]` when the user adds a
+    // second condition. That shape reaches the store, so the contract it has
+    // to satisfy is pinned here — the QML side has no test harness in this
+    // tree, and the shape is the part that persists.
+    RuleController controller;
+
+    const QVariantMap seeded = controller.newEmptyRule(QStringLiteral("application"));
+    QVariantMap leaf = seeded.value(QStringLiteral("match")).toMap();
+    // The seeded subject really is a bare leaf — the premise the promotion
+    // exists for. If this ever becomes a composite, the promote row stops
+    // rendering and this test is measuring nothing.
+    QVERIFY2(leaf.contains(QStringLiteral("field")), "the application subject must seed a bare leaf");
+    leaf[QStringLiteral("value")] = QStringLiteral("org.kde.dolphin");
+
+    const QVariantMap blank{{QStringLiteral("field"), QString()},
+                            {QStringLiteral("op"), QString()},
+                            {QStringLiteral("value"), QString()}};
+    QVariantMap promoted = seeded;
+    promoted[QStringLiteral("match")] = QVariantMap{{QStringLiteral("all"), QVariantList{leaf, blank}}};
+    promoted[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+
+    // A half-filled group must not become a stored rule. The blank leaf makes
+    // MatchExpression::fromJson reject the WHOLE expression, so accepting it
+    // would either drop the user's filled condition or leave a match-everything
+    // catch-all behind. The editor gates Save on its own filled-leaves check;
+    // this pins that the store refuses it too, for every path that does not go
+    // through the editor (D-Bus, import, a hand-edited rules.json).
+    QVERIFY2(controller.addRuleFromJson(promoted).isEmpty(),
+             "a promoted group with a blank second condition must not be storable");
+    QCOMPARE(controller.model()->rowCount(), 0);
+
+    // Fill the second condition and the rule commits, with the FIRST leaf
+    // preserved intact — the promotion embeds the original by reference, so a
+    // regression that rebuilt it instead would surface as a lost field/value.
+    QVariantMap filled = blank;
+    filled[QStringLiteral("field")] = QStringLiteral("windowClass");
+    filled[QStringLiteral("op")] = QStringLiteral("contains");
+    filled[QStringLiteral("value")] = QStringLiteral("dolphin");
+    promoted[QStringLiteral("match")] = QVariantMap{{QStringLiteral("all"), QVariantList{leaf, filled}}};
+
+    const QString id = controller.addRuleFromJson(promoted);
+    QVERIFY2(!id.isEmpty(), "a fully filled promoted group must be storable");
+
+    const QVariantMap stored = controller.ruleJson(id);
+    const QVariantList children = stored.value(QStringLiteral("match")).toMap().value(QStringLiteral("all")).toList();
+    QCOMPARE(children.size(), 2);
+    QCOMPARE(children.at(0).toMap().value(QStringLiteral("field")).toString(), QStringLiteral("appId"));
+    QCOMPARE(children.at(0).toMap().value(QStringLiteral("value")).toString(), QStringLiteral("org.kde.dolphin"));
+    QCOMPARE(children.at(1).toMap().value(QStringLiteral("field")).toString(), QStringLiteral("windowClass"));
+
+    // Still a window-property match, so the picker keeps offering
+    // window-domain actions rather than flipping to the context half.
+    QVERIFY(!controller.matchIsContextOnly(stored.value(QStringLiteral("match")).toMap()));
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()
@@ -596,6 +883,42 @@ void TestRuleController::validationIssuesForJsonFlags()
     QVariantMap partial = clean;
     partial[QStringLiteral("actions")] = QVariantList{};
     QCOMPARE(controller.validationIssuesForJson(partial).size(), 0);
+
+    // An action whose TYPE is picked but whose required param is still empty
+    // (what every seeded rule template hands the editor). RuleAction::fromJson
+    // drops it, so saving would silently lose the action — it has to surface
+    // as an issue or the Save button stays enabled over a rule that will not
+    // survive the round trip.
+    QVariantMap unfilled = clean;
+    QVariantMap route;
+    route[QStringLiteral("type")] = QStringLiteral("routeToScreen");
+    route[QStringLiteral("targetScreenId")] = QString();
+    unfilled[QStringLiteral("actions")] = QVariantList{route};
+    const QVariantList unfilledIssues = controller.validationIssuesForJson(unfilled);
+    QCOMPARE(unfilledIssues.size(), 1);
+    const QVariantMap unfilledIssue = unfilledIssues.first().toMap();
+    QCOMPARE(unfilledIssue.value(QStringLiteral("code")).toInt(),
+             static_cast<int>(PhosphorRules::ValidationIssue::Code::IncompleteActionPayload));
+    QCOMPARE(unfilledIssue.value(QStringLiteral("actionIndex")).toInt(), 0);
+    QCOMPARE(unfilledIssue.value(QStringLiteral("actionType")).toString(), QStringLiteral("routeToScreen"));
+
+    // Discriminator: the same action WITH its picker filled is clean, so the
+    // issue above is the empty param and not the action type.
+    route[QStringLiteral("targetScreenId")] = QStringLiteral("DP-1");
+    unfilled[QStringLiteral("actions")] = QVariantList{route};
+    QCOMPARE(controller.validationIssuesForJson(unfilled).size(), 0);
+
+    // A type-less placeholder row (the user added an action but has not
+    // picked a type) raises NO issue here: the editor's completeness gate
+    // owns that case, and the library's co-located-exclusion check would
+    // otherwise name the placeholder with an empty action label.
+    QVariantMap placeholder = clean;
+    QVariantMap blank;
+    blank[QStringLiteral("type")] = QString();
+    QVariantMap exclude;
+    exclude[QStringLiteral("type")] = QStringLiteral("exclude");
+    placeholder[QStringLiteral("actions")] = QVariantList{exclude, blank};
+    QCOMPARE(controller.validationIssuesForJson(placeholder).size(), 0);
 }
 
 void TestRuleController::asyncCommitAndRevertAreInvokable()
@@ -612,8 +935,6 @@ void TestRuleController::asyncCommitAndRevertAreInvokable()
              "RuleController::revert must remain Q_INVOKABLE — the daemon-changed banner's "
              "'Discard and reload' action calls it directly from QML");
 }
-
-QTEST_MAIN(TestRuleController)
 
 /// stageUserRules is the profile-activation staging path — a public entry
 /// that bypasses addRule. It must enforce the same boundary: an invalid rule
@@ -654,5 +975,44 @@ void TestRuleController::stageUserRulesEnforcesTheAddRuleBoundary()
     QCOMPARE(controller.model()->rowCount(), 1);
     QCOMPARE(controller.model()->rules().first().id, good.id);
 }
+
+/// Staging into a CLEAN controller must raise the commit gate, not only the
+/// badge. The two ride different mechanisms: the Rules page badge derives from
+/// the value-based userRulesDirty(), while asyncCommit refuses to push and
+/// reload() overwrites the model whenever m_dirty is false. A regression that
+/// stages the profile's rules without flipping isDirty() therefore badges the
+/// page while the global Save silently commits nothing and the next daemon
+/// broadcast erases the staged set — which is why this asserts the BOOLEAN,
+/// not the badge. The boundary test above cannot catch it: it seeds through
+/// addRuleFromJson first, which is already dirty by then.
+void TestRuleController::stageUserRulesRaisesTheCommitGate()
+{
+    RuleController controller;
+    QVERIFY(!controller.isDirty());
+
+    Rule good;
+    good.id = QUuid::createUuid();
+    good.name = QStringLiteral("profile rule");
+    good.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("z"));
+    RuleAction floatAction;
+    floatAction.type = QString(ActionType::Float);
+    good.actions = {floatAction};
+    QVERIFY(good.isValid());
+
+    QSignalSpy dirtySpy(&controller, &RuleController::dirtyChanged);
+    controller.stageUserRules({good});
+
+    QVERIFY(controller.isDirty());
+    QVERIFY(controller.userRulesDirty());
+    QCOMPARE(dirtySpy.count(), 1);
+
+    // Re-staging while already dirty keeps the gate up and still notifies, so
+    // the reconcile re-runs against the new model contents.
+    controller.stageUserRules({good});
+    QVERIFY(controller.isDirty());
+    QCOMPARE(dirtySpy.count(), 2);
+}
+
+QTEST_MAIN(TestRuleController)
 
 #include "test_rule_controller.moc"

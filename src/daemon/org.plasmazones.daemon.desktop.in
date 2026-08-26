@@ -4,7 +4,7 @@
 [Desktop Entry]
 Type=Application
 Name=PlasmaZones Daemon
-Comment=Window tiling zone management daemon
+Comment=Window snapping, tiling and scrolling daemon
 Exec=@KDE_INSTALL_FULL_BINDIR@/plasmazonesd
 Icon=plasmazones
 NoDisplay=true
@@ -14,4 +14,4 @@ X-DBUS-ServiceName=org.plasmazones
 # fetchRestrictedDBusInterfacesFromPid + the portal layer both inspect
 # them, so keep at least one Qt/KDE marker present.
 Categories=Qt;KDE;Utility;
-Keywords=window;tiling;zones;daemon;
+Keywords=window;tiling;zones;snap;scrolling;daemon;

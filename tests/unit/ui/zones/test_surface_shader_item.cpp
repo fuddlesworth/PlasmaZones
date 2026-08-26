@@ -153,14 +153,18 @@ private Q_SLOTS:
         QCOMPARE(statusSpy.count(), 1);
     }
 
-    void testSurfaceShaderItem_unsupportedUrlSchemeSetsError()
+    void testSurfaceShaderItem_unsupportedUrlSchemeIsFullyRefused()
     {
         // http:// / ftp:// can't be loaded by the RHI pipeline; the base
-        // rejects them at setShaderSource() with an Error status + log.
+        // rejects them at setShaderSource() as a FULL refusal — no state
+        // changes, only a warning — so status, the property value, and the
+        // rendered output always agree (see the zone item's sibling test
+        // for the full rationale).
         SurfaceShaderItem item;
         item.setShaderSource(QUrl(QStringLiteral("http://example.com/effect.frag")));
-        QCOMPARE(item.status(), SurfaceShaderItem::Status::Error);
-        QVERIFY(!item.errorLog().isEmpty());
+        QCOMPARE(item.status(), SurfaceShaderItem::Status::Null);
+        QVERIFY(item.errorLog().isEmpty());
+        QVERIFY(item.shaderSource().isEmpty());
     }
 };
 

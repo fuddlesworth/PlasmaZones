@@ -3,9 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as PZCommon
 
@@ -31,6 +29,12 @@ QtObject {
     /// against it exactly as they did inline, with no rewrites.
     required property var row
 
+    /// The reserved explicit-opt-out word (PhosphorZones::NoSnappingLayout /
+    /// NoTilingAlgorithm — one spelling, see the AssignmentEntry.h checklist).
+    /// Named once here so the two editors that offer the None row share it,
+    /// matching MonitorStatePage's `_noLayoutToken` convention.
+    readonly property string noLayoutToken: "none"
+
     // Param-editor Components — the `modelData` they reference is the
     // **Loader**'s `modelData` (set by Repeater), reached via `parent.modelData`
     // since each loaded item is parented to the Loader. A `required property
@@ -43,7 +47,175 @@ QtObject {
             text: row.action[_param.key] !== undefined ? String(row.action[_param.key]) : ""
             placeholderText: _param.label
             Accessible.name: _param.label
-            onEditingFinished: row.actionEdited(row._withParam(_param.key, text))
+            // The descriptor publishes its cap as `max`, so the field cannot
+            // author a value the load-time validator would then drop. Guarded
+            // because `max` is optional on a string param.
+            maximumLength: _param.max !== undefined ? _param.max : 32767
+            // Stored trimmed. The validators measure the trimmed value, so
+            // committing the raw text would let a padded entry read as set
+            // while resolving to something else entirely — for the tab label
+            // font that is the difference between a family and a silent
+            // fallback face.
+            onEditingFinished: row.actionEdited(row._withParam(_param.key, text.trim()))
+        }
+    }
+
+    /// The advisory `max` the descriptor publishes for a SnapToZone param
+    /// (the ordinal cap for `zones`, the per-name character cap for
+    /// `zoneNames`), read off the row's param schema so neither bound is
+    /// re-typed in QML. A schema that carries none means "no cap" rather than
+    /// a second copy of the constant.
+    function _snapToZoneBound(key) {
+        var params = row._params || [];
+        for (var i = 0; i < params.length; i++) {
+            if (params[i].key === key && params[i].max !== undefined)
+                return params[i].max;
+        }
+        return Number.POSITIVE_INFINITY;
+    }
+
+    /// Whether a SnapToZone action payload carries at least one VALID zone
+    /// name (non-blank and within the per-name cap after trimming). The
+    /// ordinal editor's empty guard consults this so "names only" is a
+    /// reachable state; the name editor's twin guard below consults the
+    /// ordinal list the same way. Validity, not mere presence: an over-long
+    /// name is one the validator rejects, so clearing the ordinals against it
+    /// would leave an action the save path refuses.
+    function _snapToZoneHasNames(action) {
+        var names = action ? action[row._zoneNamesKey] : undefined;
+        if (!Array.isArray(names))
+            return false;
+        var max = editors._snapToZoneBound(row._zoneNamesKey);
+        for (var i = 0; i < names.length; i++) {
+            if (typeof names[i] !== "string")
+                continue;
+            var len = names[i].trim().length;
+            if (len > 0 && len <= max)
+                return true;
+        }
+        return false;
+    }
+
+    /// Whether a SnapToZone action payload carries at least one VALID ordinal
+    /// (an integer in 1..max). Validity, not mere presence: a hand-edited
+    /// `zones: [0]` is rejected by the validator, so clearing the names against
+    /// it would leave an action the save path refuses.
+    function _snapToZoneHasOrdinals(action) {
+        var zones = action ? action[row._zoneOrdinalsKey] : undefined;
+        if (!Array.isArray(zones))
+            return false;
+        var max = editors._snapToZoneBound(row._zoneOrdinalsKey);
+        for (var i = 0; i < zones.length; i++) {
+            var n = Number(zones[i]);
+            if (Number.isInteger(n) && n >= 1 && n <= max)
+                return true;
+        }
+        return false;
+    }
+
+    // Zone-name input for `kind == "zoneNames"` (SnapToZone): a free-text field
+    // plus a picker of the names the layouts on disk already use. Parsing and
+    // formatting go through the controller (RuleAuthoring::parseZoneNameList /
+    // formatZoneNameList) so the field, the picker and the rule-list summary
+    // agree on what a name list is: `,` / `;` separated, a name containing a
+    // separator rides inside straight double quotes, trimmed, deduped
+    // case-insensitively, capped at the descriptor's per-name length. Stores a
+    // JSON array of name strings; multiple names span their combined area
+    // together with any ordinals.
+    property Component _zoneNamesEditor: Component {
+        RowLayout {
+            id: zoneNamesRow
+
+            readonly property var _param: parent.modelData
+            readonly property var _names: Array.isArray(row.action[_param.key]) ? row.action[_param.key] : []
+            // Names the picker may still add: the controller's list minus the
+            // ones already chosen, compared the way the engine matches them
+            // (trimmed, case-insensitive). Mirrors the decoration-chain
+            // picker's `_addable`; the button disables when nothing is left.
+            readonly property var _addable: {
+                var known = row.controller ? row.controller.zoneNames : [];
+                var chosen = Object.create(null);
+                for (var i = 0; i < _names.length; i++)
+                    chosen[String(_names[i]).trim().toLowerCase()] = true;
+                var out = [];
+                for (var k = 0; k < known.length; k++) {
+                    var name = String(known[k]);
+                    if (chosen[name.trim().toLowerCase()])
+                        continue;
+                    out.push({
+                        "id": name,
+                        "name": name
+                    });
+                }
+                return out;
+            }
+
+            spacing: Kirigami.Units.smallSpacing
+
+            function commit(parsed) {
+                // A SnapToZone action needs at least one target across its name
+                // and ordinal lists. With no valid ordinals, an empty name list
+                // would leave an action the validator rejects (Save is gated on
+                // it, with a generic footer message), so keep the last value
+                // instead, restored via Qt.binding so the declarative text
+                // binding survives. With ordinals present, clearing the names is
+                // a legitimate "numbers only" target.
+                if (parsed.length === 0 && !editors._snapToZoneHasOrdinals(row.action)) {
+                    zoneNamesField.text = Qt.binding(function () {
+                        return row.controller ? row.controller.formatZoneNameList(zoneNamesRow._names) : zoneNamesRow._names.join(", ");
+                    });
+                    return;
+                }
+                row.actionEdited(row._withParam(_param.key, parsed));
+            }
+
+            TextField {
+                id: zoneNamesField
+
+                Layout.fillWidth: true
+                // Normalised display (trimmed, deduped, separator-bearing names
+                // quoted) re-binds after each edit.
+                text: row.controller ? row.controller.formatZoneNameList(zoneNamesRow._names) : zoneNamesRow._names.join(", ")
+                placeholderText: i18nc("@info:placeholder zone names for a snap-to-zone rule", "e.g. Editor, Terminal")
+                Accessible.name: zoneNamesRow._param.label
+                Accessible.description: i18nc("@info:accessibility zone names field of a snap-to-zone rule", "Zone names to snap matched windows to, found in whichever layout is active. Multiple zones span their combined area.")
+                // Array.from: a QStringList crosses into QML as a sequence
+                // wrapper, not a JS Array, and the stored payload must be a
+                // real array (the guards and the summary test Array.isArray).
+                onEditingFinished: zoneNamesRow.commit(row.controller ? Array.from(row.controller.parseZoneNameList(text)) : [])
+            }
+
+            // The shared picker rather than a hand-rolled Menu + MenuItem list:
+            // CategoryMenuButton is built once and keeps its menu alive across
+            // opens, defers the selection through Qt.callLater, and rebuilds
+            // lazily when `items` changes while open, which is the documented
+            // guard against Qt 6's QQuickMenu teardown race. Picking a name
+            // shrinks `_addable`, so the list the user just clicked changes
+            // under the click; that is exactly the case the shared component
+            // handles.
+            PZCommon.CategoryMenuButton {
+                id: zoneNamePicker
+
+                items: zoneNamesRow._addable
+                enabled: zoneNamesRow._addable.length > 0
+                currentId: ""
+                includeNoneEntry: false
+                placeholderText: i18nc("@action:button", "Add a name…")
+                Accessible.description: i18nc("@info:accessibility", "Add a zone name from your layouts")
+                onSelected: function (id) {
+                    if (!id || id.length === 0)
+                        return;
+                    // The typed text may hold an uncommitted edit: merge it
+                    // rather than discard it, then append the picked name.
+                    var next = row.controller ? Array.from(row.controller.parseZoneNameList(zoneNamesField.text)) : zoneNamesRow._names.slice();
+                    for (var i = 0; i < next.length; i++) {
+                        if (String(next[i]).trim().toLowerCase() === String(id).trim().toLowerCase())
+                            return;
+                    }
+                    next.push(id);
+                    zoneNamesRow.commit(next);
+                }
+            }
         }
     }
 
@@ -54,12 +226,19 @@ QtObject {
         TextField {
             readonly property var _param: parent.modelData
             readonly property var _zones: Array.isArray(row.action[_param.key]) ? row.action[_param.key] : []
+            // The SnapToZone ordinal cap (PhosphorRules::MaxZoneOrdinal,
+            // published by the descriptor as this param's `max`). Both parse
+            // paths below clamp against it: the range path so an unbounded
+            // "1-100000" cannot build a huge array on the UI thread, and the
+            // single-ordinal path so a typed "70" is dropped at parse time
+            // rather than committed as a value the validator rejects.
+            readonly property real _maxZoneOrdinal: editors._snapToZoneBound(_param.key)
 
             // Normalised display (sorted, deduped) re-binds after each edit.
             text: _zones.join(", ")
             placeholderText: i18nc("@info:placeholder zone numbers for a snap-to-zone rule", "e.g. 1, 2 or 1-2")
             Accessible.name: _param.label
-            Accessible.description: i18nc("@info:whatsthis", "One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.")
+            Accessible.description: i18nc("@info:accessibility zone numbers field of a snap-to-zone rule", "One or more 1-based zone numbers to snap matched windows to. Multiple zones span their combined area.")
             onEditingFinished: {
                 // Parse comma/semicolon/space-separated ordinals and "lo-hi"
                 // ranges into a deduped, ascending array of 1-based integers.
@@ -72,15 +251,16 @@ QtObject {
                         continue;
                     var range = t.match(/^(\d+)-(\d+)$/);
                     if (range) {
+                        // A range expands to one entry per ordinal, so it needs
+                        // a finite cap to be safe on the UI thread; a schema
+                        // that publishes none cannot bound it, and the range is
+                        // refused rather than expanded unbounded.
+                        if (!isFinite(_maxZoneOrdinal))
+                            continue;
                         var lo = parseInt(range[1], 10);
                         var hi = parseInt(range[2], 10);
-                        // Clamp the upper bound to the SnapToZone ordinal cap
-                        // (MaxZoneOrdinal = 64 in RuleAction.h). An unbounded
-                        // expansion (e.g. "1-100000") would build a huge array on
-                        // the UI thread and freeze it; ordinals past the cap are
-                        // rejected by the validator anyway.
-                        if (hi > 64)
-                            hi = 64;
+                        if (hi > _maxZoneOrdinal)
+                            hi = _maxZoneOrdinal;
                         if (lo >= 1 && hi >= lo) {
                             for (var z = lo; z <= hi; z++) {
                                 if (!seen[z]) {
@@ -93,7 +273,7 @@ QtObject {
                     }
                     if (/^\d+$/.test(t)) {
                         var n = parseInt(t, 10);
-                        if (n >= 1 && !seen[n]) {
+                        if (n >= 1 && n <= _maxZoneOrdinal && !seen[n]) {
                             seen[n] = true;
                             parsed.push(n);
                         }
@@ -102,15 +282,18 @@ QtObject {
                 parsed.sort(function (a, b) {
                     return a - b;
                 });
-                // A SnapToZone action requires a non-empty ordinal list (the
-                // descriptor validator rejects []). If the user cleared the field
-                // or typed only invalid tokens, keep the last valid value rather
-                // than committing an empty list — that would produce an action the
-                // validator drops on save, silently losing the rule with the Save
-                // button still enabled. Restore via Qt.binding (not a bare
-                // `text = ...`) so the declarative `text: _zones.join(", ")`
-                // binding survives and keeps normalising on later edits.
-                if (parsed.length === 0) {
+                // A SnapToZone action needs at least one target across its
+                // ordinal and name lists (the descriptor validator rejects an
+                // action with neither). If the user cleared the field or typed
+                // only invalid tokens AND no zone names are set, keep the last
+                // valid value rather than committing an empty list — that would
+                // leave an action the validator rejects (Save is gated on it,
+                // with a generic footer message that does not name the field).
+                // Restore via Qt.binding (not a bare `text = ...`) so the
+                // declarative `text: _zones.join(", ")` binding survives and
+                // keeps normalising on later edits. With names present, an
+                // empty ordinal list is a legitimate "names only" target.
+                if (parsed.length === 0 && !editors._snapToZoneHasNames(row.action)) {
                     text = Qt.binding(function () {
                         return _zones.join(", ");
                     });
@@ -174,23 +357,33 @@ QtObject {
     }
 
     // Colour swatch + picker for `kind == "color"` params — the single `value`
-    // colour on SetBorderColorActive / SetBorderColorInactive. Stores a
-    // `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and the
-    // global zone/border colours) so transparency set in the picker survives.
-    // The validator accepts the `#AARRGGBB` shape and the effect-side consumer
-    // parses it via `QColor(QString)` (which reads 9-digit hex alpha-first).
+    // colour on SetBorderColorActive / SetBorderColorInactive / SetTintColor
+    // plus the overlay-colour actions. Stores a `#AARRGGBB` wire string
+    // (alpha-first, matching QColor::HexArgb and the global zone/border
+    // colours) so transparency set in the picker survives. The validator
+    // accepts the `#AARRGGBB` shape and the effect-side consumer parses it via
+    // `QColor(QString)` (which reads 9-digit hex alpha-first).
+    //
+    // Presented through ThemeFallbackColorControl — the same swatch, hex
+    // label, and reset every settings-page colour row uses — with "accent" as
+    // the sentinel. Only the three border/tint actions carry the accent
+    // concept (their consumer resolves the token; the overlay-colour actions'
+    // validator is plain hex), so Reset exists only on those.
     property Component _colorParamEditor: Component {
         RowLayout {
+            id: colorEditorRoot
+
             readonly property var _param: parent.modelData
-            // Final fallback (colour param with no stored value AND no metadata
-            // default) derives from the theme's accent rather than a hardcoded
-            // hex (CLAUDE.md: never hardcode colors).
-            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : String(Kirigami.Theme.highlightColor))
-            // A border-colour action's single `value` param may carry the "accent"
-            // sentinel ("follow the system accent") instead of a hex string. It is
-            // not a QColor, so render the live system colour for the swatch and a
-            // word for the label rather than letting QColor("accent") fall to black.
-            readonly property bool _isAccent: _hex === "accent"
+            // Final fallback (colour param with no stored value) derives from
+            // the theme's accent rather than a hardcoded hex (CLAUDE.md:
+            // never hardcode colors). Unreachable in practice —
+            // defaultPayloadFor always seeds a colour param.
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : String(Kirigami.Theme.highlightColor)
+            // Whether this action's consumer resolves the "accent" sentinel:
+            // published on the param descriptor (acceptsAccent) so this
+            // editor, defaultPayloadFor's seeding, and ActionRow's
+            // type-switch migration all read one C++ source of truth.
+            readonly property bool _accentCapable: colorEditorRoot._param.acceptsAccent === true
             // The accent sentinel follows the system colour scheme per focus state,
             // the same split updateWindowDecoration applies: the focused (active) slot
             // adopts the highlight colour, the unfocused (inactive) slot the inactive
@@ -201,42 +394,26 @@ QtObject {
 
             spacing: Kirigami.Units.smallSpacing
 
-            ColorButton {
-                id: swatch
-
-                color: parent._isAccent ? parent._accentColor : parent._hex
-                Accessible.name: _param.label
-                onClicked: {
-                    // Open the PAGE-LEVEL colour picker (via the appSettings
-                    // bridge) rather than a delegate-scoped ColorDialog: a
-                    // rule-list rebuild while the dialog is open would destroy
-                    // this delegate and tear the popup down under the user. The
-                    // target param key is captured in the transient accepted
-                    // handler, which self-disconnects on close.
-                    var picker = row.appSettings ? row.appSettings.colorPicker : null;
-                    if (!picker)
-                        return;
-                    var key = _param.key;
-                    function acceptedHandler() {
-                        picker.accepted.disconnect(acceptedHandler);
-                        picker.rejected.disconnect(rejectedHandler);
-                        row.actionEdited(row._withParam(key, row._toHexArgb(picker.selectedColor)));
-                    }
-                    function rejectedHandler() {
-                        picker.accepted.disconnect(acceptedHandler);
-                        picker.rejected.disconnect(rejectedHandler);
-                    }
-                    picker.accepted.connect(acceptedHandler);
-                    picker.rejected.connect(rejectedHandler);
-                    picker.openFor(swatch.color);
+            ThemeFallbackColorControl {
+                storedColor: colorEditorRoot._hex
+                sentinel: "accent"
+                fallbackLabel: i18n("Accent")
+                themeColor: colorEditorRoot._accentColor
+                // Reset only where the sentinel means something: writing
+                // "accent" into an overlay-colour action would fail its
+                // plain-hex validator.
+                showReset: colorEditorRoot._accentCapable
+                resetAccessibleName: i18n("Reset to the system accent color")
+                resetToolTip: i18n("Follow the system accent color")
+                // The PAGE-LEVEL colour picker (via the appSettings bridge)
+                // rather than a delegate-scoped ColorDialog: a rule-list
+                // rebuild while the dialog is open would destroy this delegate
+                // and tear the popup down under the user.
+                picker: row.appSettings ? row.appSettings.colorPicker : null
+                swatchAccessibleName: colorEditorRoot._param.label
+                onColorChosen: function (hex) {
+                    row.actionEdited(row._withParam(colorEditorRoot._param.key, hex));
                 }
-            }
-
-            Label {
-                // Show the stored #AARRGGBB wire value (alpha-first), or "Accent"
-                // for the system-accent sentinel.
-                text: parent._isAccent ? i18n("Accent") : parent._hex.toUpperCase()
-                font: Kirigami.Theme.fixedWidthFont
             }
 
             Item {
@@ -265,6 +442,13 @@ QtObject {
                 }
                 return -1;
             }
+            // A stored token this build's option list does not carry leaves
+            // currentIndex at -1, and ComboBox's default `displayText` is
+            // `currentText`, which is empty there — a blank combo that hides
+            // what the rule pins, while the read-only summary shows the raw
+            // token. Fall back to the token for the same reason the layout,
+            // template, screen and desktop editors below do.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             Accessible.name: _param.label
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
@@ -272,12 +456,18 @@ QtObject {
         }
     }
 
-    // Both action editors use the rich `LayoutComboBox` — preview tile +
-    // category / aspect badges, same component the assignment pages use.
-    // `layoutFilter` separates the two streams: 0 = manual / snapping
-    // layouts, 1 = autotile algorithms. `showNoneOption: false` because
-    // the action either targets a layout or has no value (no implicit
-    // "Default" fallback inside a rule).
+    // The snapping-layout and tiling-algorithm action editors use the rich
+    // `LayoutComboBox` — preview tile + category / aspect badges, same
+    // component the assignment pages use. `layoutFilter` separates the two
+    // streams: 0 = manual / snapping layouts, 1 = autotile algorithms.
+    // `showNoneOption: false` because the action either targets a layout or
+    // has no value (no implicit "Default" fallback inside a rule). The
+    // explicit-none row is a different thing and both editors carry it: the
+    // reserved word is a real value the action can carry (opt the context
+    // out of layouts entirely), so without the row a stored token had no
+    // entry to match and could not be re-picked. The scrolling-template
+    // editor below uses a plain combo instead, for the reason its own
+    // comment gives.
     property Component _snappingLayoutEditor: Component {
         LayoutComboBox {
             readonly property var _param: parent.modelData
@@ -287,7 +477,79 @@ QtObject {
             currentLayoutId: row.action[_param.key] || ""
             layoutFilter: 0
             showNoneOption: false
+            // The reserved "explicitly no layout" word
+            // (PhosphorZones::NoSnappingLayout, whose spelling checklist
+            // names this site).
+            showExplicitNoneOption: true
+            explicitNoneValue: editors.noLayoutToken
             showPreview: true
+            // Surface an unresolvable stored id verbatim, matching every
+            // sibling wire-value editor in this file: a rule pinned to a
+            // layout that has since been deleted matches no row, so the combo
+            // sits at currentIndex -1 and would otherwise render blank —
+            // hiding what the rule actually points at, with no "not in your
+            // list" message here to compensate.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
+            onActivated: function (index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+    }
+
+    // Native scrolling-template picker for SetScrollingTemplate. A plain
+    // combo over the template family in the shared layouts model — the rich
+    // LayoutComboBox streams are keyed to manual/autotile categories, and a
+    // template row needs neither aspect badges nor category chips. A stored
+    // id whose template was deleted still surfaces verbatim.
+    property Component _scrollingTemplateEditor: Component {
+        WideComboBox {
+            id: templateCombo
+
+            readonly property var _param: parent.modelData
+            // The reserved "explicitly no template" word the action can carry,
+            // as opposed to an empty slot, which inherits the configured
+            // default. The authoritative declaration is
+            // PhosphorZones::NoScrollingTemplate in AssignmentEntry.h, whose
+            // spelling checklist names this site.
+            readonly property string _noTemplateToken: "none"
+            readonly property var _templates: {
+                let entries = [];
+                const all = (row.appSettings && row.appSettings.layouts) || [];
+                for (let i = 0; i < all.length; i++) {
+                    if (all[i].isScrollingTemplate === true)
+                        entries.push({
+                            "label": all[i].displayName,
+                            "id": all[i].id
+                        });
+                }
+                // The reserved "explicitly no template" word, last, the way
+                // every other template list in the app orders it (the unified
+                // layout list sorts it there and the layout picker reads it off
+                // the tail). It is a real value the action can carry, so
+                // without a row for it the stored token had no entry to match
+                // and fell through to the raw-id displayText below, printing
+                // "none" at the user — and an action already set to it could
+                // not be re-picked once changed.
+                entries.push({
+                    "label": i18nc("@item:inlistbox scrolling template rule action, use no template at all", "None"),
+                    "id": templateCombo._noTemplateToken
+                });
+                return entries;
+            }
+
+            model: _templates
+            textRole: "label"
+            valueRole: "id"
+            currentIndex: {
+                var target = row.action[_param.key] || "";
+                for (var i = 0; i < templateCombo._templates.length; ++i) {
+                    if (templateCombo._templates[i].id === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a template…"))
+            Accessible.name: _param.label
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }
@@ -350,7 +612,10 @@ QtObject {
                 for (var i = 1; i <= desktopCombo._count; ++i) {
                     var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
                     items.push({
-                        "label": name && name.length > 0 ? (i + ": " + name) : ("" + i),
+                        // Composed inside one i18nc so translators control the
+                        // order and the separator, matching the monitor picker
+                        // above and the match-side desktop picker.
+                        "label": name && name.length > 0 ? i18nc("virtual desktop number, then its name", "%1: %2", i, name) : ("" + i),
                         "value": i
                     });
                 }
@@ -395,14 +660,35 @@ QtObject {
                 // (which wrote the combo's "autotile:bsp" verbatim) must round-
                 // trip too — and double-prefixing it would leave the combo
                 // blank. Matches the list resolver's already-prefixed handling.
+                // The reserved word stays bare: the explicit-none row is keyed
+                // "none", and prefixing it would leave the combo blank for a
+                // stored opt-out. A hand-edited "autotile:none" gets the same
+                // tolerance the corrupted prefixed real ids get — mapped to
+                // the bare word so it seats the None row instead of leaving
+                // the combo blank.
                 const stored = row.action[_param.key] || "";
-                if (stored === "" || stored.startsWith("autotile:"))
+                if (stored === "autotile:" + editors.noLayoutToken)
+                    return editors.noLayoutToken;
+                if (stored === "" || stored === editors.noLayoutToken || stored.startsWith("autotile:"))
                     return stored;
                 return "autotile:" + stored;
             }
             layoutFilter: 1
             showNoneOption: false
+            // The reserved "explicitly no algorithm" word
+            // (PhosphorZones::NoTilingAlgorithm, whose spelling checklist
+            // names this site). Bare on the wire like the algorithm ids.
+            // NOT offered for setAlgorithmParam, which shares this editor by
+            // kind: parameters tuned for "no algorithm" is a meaningless
+            // payload, and the SetAlgorithmParam summary would render the raw
+            // word as an algorithm apparently named "none".
+            showExplicitNoneOption: row.action.type !== "setAlgorithmParam"
+            explicitNoneValue: editors.noLayoutToken
             showPreview: true
+            // Same verbatim fallback as the snapping editor above: an
+            // algorithm that is no longer installed matches no row, and a
+            // blank combo hides what the rule pins.
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || "")
             onActivated: function (index) {
                 const bareId = currentValue.startsWith("autotile:") ? currentValue.substring(9) : currentValue;
                 row.actionEdited(row._withParam(_param.key, bareId));
@@ -421,6 +707,20 @@ QtObject {
         // full "Section · Event" label (see ActionListView._resolveParamValue).
         PZCommon.CategoryMenuButton {
             readonly property var _param: parent.modelData
+
+            /// The event path this action currently stores, or "".
+            ///
+            /// A `string` property so its change signal fires only when the VALUE
+            /// changes. `items` below has to know the stored path (it keeps a
+            /// windowless one listed), and `_withParam` replaces the whole
+            /// `row.action` object on every param write, so reading
+            /// `row.action[_param.key]` from inside `items` would rebuild the
+            /// item list on each keystroke and slider tick. `onItemsChanged`
+            /// destroys and rebuilds the entire cascading menu, so that is a
+            /// full teardown per write. Routing through this value-stable id
+            /// keeps the rebuild to an actual event change — the same reason
+            /// ActionRow uses `_algorithmParamAlgoId` for its params editor.
+            readonly property string _storedEvent: row.action[_param.key] || ""
 
             // Map eventSections() into the picker's `{ id, name, category,
             // categoryOrder }` shape: one item per leaf event, grouped under its
@@ -445,11 +745,34 @@ QtObject {
                         if (entry.isCategory)
                             continue;
 
+                        // Skip events no rule can reach. The compositor resolves
+                        // these windowless (a desktop switch, the scrolling
+                        // strip, an OSD, a panel, the editor's own widgets, the
+                        // whole shell subtree), and a rule's animation action is
+                        // matched against a window, so one pinned here would
+                        // save cleanly, show in the list, and never fire.
+                        //
+                        // A path ALREADY stored on this action stays listed even
+                        // when it is one of these. Dropping it would render the
+                        // stored value as "(missing: desktop.switch)", which is
+                        // a lie — the event exists and is spelled correctly, it
+                        // just cannot be driven per window. Keeping it means the
+                        // row still reads its real name, and the chip beside it
+                        // explains why nothing happens.
+                        var windowless = !entry.acceptsWindowRules;
+                        if (windowless && entry.path !== _storedEvent)
+                            continue;
+
+                        // The one that survives is dimmed and carries its
+                        // reason, so the menu says why it is there rather than
+                        // reading as an ordinary offer the filter forgot.
                         out.push({
                             "id": entry.path,
                             "name": entry.label,
                             "category": section.label,
-                            "categoryOrder": s
+                            "categoryOrder": s,
+                            "dimmed": windowless,
+                            "dimReason": windowless ? i18n("This event is not driven per window, so a rule cannot change it. It stays here because this action already names it.") : ""
                         });
                     }
                 }

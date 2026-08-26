@@ -3,6 +3,8 @@
 
 #include "helpers/SnapEngineTestFixture.h"
 
+#include <PhosphorRules/ExclusionRules.h>
+
 /**
  * @brief SnapEngine restore-path coverage: the snap-to-empty auto-assign gate,
  *        focus-new-windows, resolveWindowRestore predicate gates, capturePlacement,
@@ -17,6 +19,16 @@ private Q_SLOTS:
     void testCalculateSnapToEmptyZone_gate_globalOff_perLayoutOff_blocks()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        // Capability contract the daemon's layout-selection gates rest on:
+        // zone layouts ARE snap's placement input, so the engine must
+        // override the interface's default-None layoutSupport. Asserted
+        // through the base pointer too — the daemon dispatches via
+        // IPlacementEngine*, and a dropped `override` with a shadowing
+        // non-virtual would pass the concrete check while the interface
+        // call reverted to None.
+        using LayoutSupport = PhosphorEngine::IPlacementEngine::LayoutSupport;
+        QCOMPARE(engine.layoutSupport(), LayoutSupport::Placement);
+        QCOMPARE(static_cast<PhosphorEngine::IPlacementEngine*>(&engine)->layoutSupport(), LayoutSupport::Placement);
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
@@ -220,6 +232,9 @@ private Q_SLOTS:
         // gate" substring (the appRule/session re-checks log a different
         // phrasing) — so the assertion fails only if the caller-screen gate
         // actually rejected an enabled context.
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "an enabled context must pass the disabled-context gate");
         m_wts->setSnapState(nullptr);
@@ -239,6 +254,9 @@ private Q_SLOTS:
 
         QVERIFY2(!result.shouldSnap,
                  "guiless fixture has no layout/app-rule/session entry — restore resolves to noSnap");
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
@@ -321,6 +339,9 @@ private Q_SLOTS:
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
 
         QVERIFY2(consulted, "the snapped-record restore path must consult the managed-restore predicate");
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
                  "with managed restore on, the managed-restore gate must not skip the record");
         m_wts->setSnapState(nullptr);
@@ -332,10 +353,12 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        // No predicate injected — the engine must restore snapped records
-        // unconditionally (the historical default). This guards against a
-        // regression that treated a NULL predicate as "block" (skip): the gate
-        // must never fire when no predicate is wired.
+        // No predicate injected — the gate must never fire when nothing is
+        // wired, which is the regression this guards (a NULL predicate read as
+        // "block"). Note what is and is not claimed: the assertion is that the
+        // gate did NOT skip the record, not that the restore ran to completion.
+        // Geometry cannot resolve in this guiless fixture, so the completed
+        // restore is not observable here.
         PhosphorEngine::WindowPlacement rec;
         rec.windowId = QStringLiteral("app|orig");
         rec.appId = QStringLiteral("app");
@@ -350,6 +373,9 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
 
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("managed-restore gate skipped snapped record")),
                  "with no predicate the managed-restore gate must never fire");
         m_wts->setSnapState(nullptr);
@@ -372,7 +398,7 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        engine.setFloatPredicate([](const QString&) {
+        engine.setFloatPredicate([](const QString&, const QString&) {
             return true;
         });
 
@@ -401,9 +427,8 @@ private Q_SLOTS:
         engine.setEngineSettings(m_settings);
         m_wts->setSnapState(engine.snapState());
 
-        // Predicate present but returns false — the gate must not fire. (No
-        // predicate at all is the same: m_floatPredicate is empty.)
-        engine.setFloatPredicate([](const QString&) {
+        // Predicate present but returns false — the gate must not fire.
+        engine.setFloatPredicate([](const QString&, const QString&) {
             return false;
         });
 
@@ -411,8 +436,28 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|uuid-no-float-rule"), QStringLiteral("DP-1"), &result);
 
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "log capture produced nothing — the absence assertion below would pass "
+                 "vacuously");
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
                  "an unmatched window must not be floated by the open-floating gate");
+        m_wts->setSnapState(nullptr);
+
+        // The no-predicate case is the OTHER half of "gate inactive", and it
+        // reaches the gate through a different expression (an empty std::function
+        // rather than one returning false). It used to be asserted only in a
+        // comment, so a guard that dereferenced an unset predicate — or fired the
+        // gate when none was wired — would have gone unnoticed here.
+        SnapEngine unset(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        unset.setEngineSettings(m_settings);
+        m_wts->setSnapState(unset.snapState());
+
+        PhosphorEngine::SnapResult unsetResult;
+        const QStringList unsetLines =
+            captureResolveLogs(unset, QStringLiteral("app|uuid-no-predicate"), QStringLiteral("DP-1"), &unsetResult);
+
+        QVERIFY2(!unsetLines.join(QLatin1Char('\n')).contains(QStringLiteral("floated by rule")),
+                 "with no predicate wired at all the open-floating gate must stay inactive");
         m_wts->setSnapState(nullptr);
     }
 
@@ -463,8 +508,15 @@ private Q_SLOTS:
         const QStringList lines =
             captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
 
-        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+        const QString joinedCross = lines.join(QLatin1Char('\n'));
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
+        QVERIFY2(!joinedCross.contains(QStringLiteral("defers to the owning engine")),
                  "a pending cross-screen snap restore must NOT be deferred by the opening-screen ownership gate");
+        // resolveWindowRestore has TWO defer branches now; this test's whole
+        // point is that neither may swallow this window, so assert both.
+        QVERIFY2(!joinedCross.contains(QStringLiteral("deferring to its recorded engine")),
+                 "nor may the cross-screen TILE defer claim a snapped record");
         m_wts->setSnapState(nullptr);
     }
 
@@ -503,6 +555,139 @@ private Q_SLOTS:
                  "the opening-screen ownership gate must defer to autotile");
         QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
                  "deferring must not consume the snapped record — autotile still needs it");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_crossScreenScrollingTiledRecord_defersOnSnapScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        // DP-2 is a scrolling-mode screen; DP-1 stays snapping (the default).
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+
+        // A window recorded TILED in DP-2's strip last session.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        // KWin's session restore drops the fresh-uuid window on the SNAP
+        // monitor DP-1 (the login-restore wrong-output bug). Snap must defer
+        // entirely — no auto-snap, no floating default, record untouched —
+        // so the adaptor's reclaim hook can hand the window back to the
+        // scroll engine, which pulls it home to DP-2.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+        const QString joined = lines.join(QLatin1Char('\n'));
+
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
+        QVERIFY2(!result.shouldSnap, "a pending cross-screen tile restore must never be snapped here");
+        QVERIFY2(result.deferredToTilingEngine,
+                 "the verdict must be reported as a tile-defer, not a bare no-snap: the adaptor gates the reclaim "
+                 "on it, and an exclusion or disabled-context refusal must not be mistaken for one");
+        QVERIFY2(joined.contains(QStringLiteral("deferring to its recorded engine")),
+                 "the tile-defer gate must fire for a scrolling-tiled record homed on a scrolling screen");
+        QVERIFY2(!joined.contains(QStringLiteral("defaulting to floated")),
+                 "the defer must run BEFORE the no-match floating default — float state written here would "
+                 "fight the scroll engine's re-tile of the same window");
+        // The behavioural half of that claim: no float announcement either.
+        // The log assertion alone survives a message rewording; this pins the
+        // contract the daemon and the effect actually observe.
+        QCOMPARE(floatSpy.count(), 0);
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "deferring must not consume the record — the scroll engine's reclaim still needs it");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_crossScreenAutotileTiledRecord_defersOnSnapScreen()
+    {
+        // The gate's OTHER term. Deleting the autotile half left every test
+        // green, yet an autotile-tiled record arriving on a snap screen is
+        // the same reported bug shape as the scrolling one.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        QSignalSpy floatSpy(&engine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged);
+
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::autotileEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(captureIsNonEmpty(lines),
+                 "snap-engine log capture produced nothing — the absence assertions below would pass vacuously");
+        QVERIFY2(!result.shouldSnap, "an autotile-homed cross-screen tiled record must not be snapped here");
+        QVERIFY2(result.deferredToTilingEngine, "the autotile term of the tile-defer gate must fire");
+        QCOMPARE(floatSpy.count(), 0);
+        QVERIFY(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")));
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_excludedWindow_neverDefersToTilingEngine()
+    {
+        // A gate that says "nobody should manage this" outranks one that
+        // says "someone else should". Without the exclusion check the defer
+        // fired first and handed an excluded window to a reclaim the user's
+        // rules had vetoed.
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+        // Size-based exclusion, the same lever test_snap_engine_exclude uses:
+        // a sub-threshold full query makes isWindowExcluded true.
+        m_settings->setMinimumWindowWidth(200);
+        m_settings->setMinimumWindowHeight(150);
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
+            PhosphorRules::WindowQuery q;
+            q.width = 80;
+            q.height = 60;
+            return std::optional<PhosphorRules::WindowQuery>(q);
+        });
+
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(PhosphorEngine::WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(PhosphorEngine::WindowPlacement::scrollingEngineId(), slot);
+        m_wts->placementStore().record(rec);
+
+        PhosphorEngine::SnapResult result;
+        captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-1"), &result);
+
+        QVERIFY2(!result.deferredToTilingEngine, "an excluded window must not be offered to the cross-screen reclaim");
+        engine.setExclusionQueryProvider({});
         m_wts->setSnapState(nullptr);
     }
 
@@ -828,9 +1013,11 @@ private Q_SLOTS:
         const auto p = engine.capturePlacement(tracked);
         QVERIFY(p.has_value());
         const PhosphorEngine::EngineSlot slot = p->slotFor(PhosphorEngine::WindowPlacement::snapEngineId());
+        // Equality with `floating` is the whole assertion: it already
+        // excludes the retired `free` token, so a separate `!= free` check
+        // could never fail independently. The intent it documented — that
+        // capture must never produce `free` again — lives here.
         QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateFloating()));
-        QVERIFY2(slot.state != PhosphorEngine::WindowPlacement::stateFree(),
-                 "the retired `free` state must never be produced");
         m_wts->setSnapState(nullptr);
     }
 
@@ -866,12 +1053,17 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
-    // The unfloatFallbackToZone setting GATES the fallback: with it off, a window
-    // that has no pre-float zone gets no fallback target (resolveFallbackUnfloatGeometry
-    // returns not-found), so unfloat keeps it floating. (The on-success geometry path
-    // needs a valid zoneGeometry, which this guiless fixture cannot produce — null
-    // QGuiApplication::primaryScreen(); it is covered end-to-end in the QTEST_MAIN
-    // test_snap_unfloat_fallback.cpp instead.)
+    // With unfloatFallbackToZone off, a window that has no pre-float zone gets no
+    // fallback target, so unfloat keeps it floating.
+    //
+    // What this pair does NOT establish is that the GATE is what produced the
+    // not-found: this fixture is guiless, QGuiApplication::primaryScreen() is
+    // null, so zoneGeometry() is invalid and the resolver answers not-found with
+    // the setting on as well. The resolver logs nothing on the gate's early
+    // return, so there is no branch marker to assert either. The discriminating
+    // pair lives in the QTEST_MAIN test_snap_unfloat_fallback.cpp, where geometry
+    // is valid and off-vs-on really does differ (see its
+    // "off → not-found even though zoneGeometry is valid" leg).
     void testResolveFallbackUnfloatGeometry_offReturnsNotFound()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
@@ -897,10 +1089,10 @@ private Q_SLOTS:
     // chain PAST the opt-in gate — effective-screen resolution, layout lookup, and
     // zone selection (last-used → first-empty → first zone) — and reaches the final
     // geometry gate. Under QTEST_GUILESS_MAIN there is no QScreen, so zoneGeometry()
-    // returns an invalid QRect and the result is still not-found. This pins that (a)
-    // the post-gate chain executes without crashing on a real layout, and (b) the
-    // headless geometry limitation — not a broken gate — is what produces not-found
-    // here (the on-success geometry path is covered in test_snap_unfloat_fallback.cpp).
+    // returns an invalid QRect and the result is still not-found. What this leg is
+    // worth on its own: the post-gate chain executes over a real layout without
+    // crashing. It cannot tell a working gate from a broken one, because the OFF
+    // leg above reports the same not-found for a different reason.
     void testResolveFallbackUnfloatGeometry_onButHeadlessReturnsNotFound()
     {
         SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);

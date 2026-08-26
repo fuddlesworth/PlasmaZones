@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
  * appSettings context property, so the card carries no per-page state.
  */
 SettingsCard {
-    headerText: i18n("Window Handling")
+    headerText: i18n("Window handling")
     searchAnchor: "windowHandling"
     collapsible: true
 
@@ -81,6 +81,22 @@ SettingsCard {
                 accessibleName: i18n("Restore untiled windows to their previous position")
                 onToggled: function (newValue) {
                     appSettings.autotileRestoreFloatedWindowsOnLogin = newValue;
+                }
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
+            title: i18n("Keep floating windows above")
+            searchAnchor: "keepFloatingAbove"
+            description: i18n("Keep the windows you float stacked above the tiled windows. A rule that sets a window layer takes precedence for the windows it matches.")
+
+            SettingsSwitch {
+                checked: appSettings.autotileKeepFloatingAbove
+                accessibleName: i18n("Keep floating windows above")
+                onToggled: function (newValue) {
+                    appSettings.autotileKeepFloatingAbove = newValue;
                 }
             }
         }

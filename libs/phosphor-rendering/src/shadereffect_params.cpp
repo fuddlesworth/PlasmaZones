@@ -298,7 +298,12 @@ void ShaderEffect::setShaderParams(const QVariantMap& params)
         // Same per-iteration QString bind as `sizeKey` / `texKey` above.
         const QString wrapKey(kUserTextureWrapKeys[i]);
         if (params.contains(wrapKey)) {
-            const QString incomingWrap = params.value(wrapKey).toString();
+            // Normalize-then-guard, mirroring setUserTextureWrap below: a raw
+            // store lets two spellings that normalize identically ("" vs
+            // "clamp") defeat the equality guard and fire a spurious update()
+            // per push. The registries currently emit only canonical tokens,
+            // so this is consistency hardening, not a live-producer fix.
+            const QString incomingWrap = ShaderNodeRhi::normalizeWrapMode(params.value(wrapKey).toString());
             if (m_userTextureWraps[i] != incomingWrap) {
                 m_userTextureWraps[i] = incomingWrap;
                 anyMutation = true;
@@ -382,6 +387,16 @@ void ShaderEffect::setBufferScale(qreal scale)
     }
     m_bufferScale = clamped;
     Q_EMIT bufferScaleChanged();
+    update();
+}
+
+void ShaderEffect::setHalfFloatBuffers(bool enable)
+{
+    if (m_halfFloatBuffers == enable) {
+        return;
+    }
+    m_halfFloatBuffers = enable;
+    Q_EMIT halfFloatBuffersChanged();
     update();
 }
 

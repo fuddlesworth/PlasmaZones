@@ -3,13 +3,17 @@
 
 #include "configdefaults.h"
 
+#include "configkeys.h"
+
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -52,6 +56,12 @@ QString ConfigDefaults::quickLayoutsFilePath()
 QString ConfigDefaults::layoutSettingsFilePath()
 {
     return configDir() + QStringLiteral("/plasmazones/layout-settings.json");
+}
+
+QString ConfigDefaults::layoutsDirPath()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ConfigKeys::layoutsSubdir();
 }
 
 QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
@@ -106,7 +116,7 @@ QJsonObject ConfigDefaults::defaultLayoutVisibilitySettings()
         out.insert(id, hidden);
     }
     for (const QString& id : algorithmIds) {
-        out.insert(QStringLiteral("autotile:") + id, hidden);
+        out.insert(PhosphorLayout::LayoutId::makeAutotileId(id), hidden);
     }
     return out;
 }
@@ -116,11 +126,14 @@ QString ConfigDefaults::legacyConfigFilePath()
     return configDir() + QStringLiteral("/plasmazonesrc");
 }
 
-QString ConfigDefaults::readRenderingBackendFromDisk()
+ConfigDefaults::RenderingBootConfig ConfigDefaults::readRenderingConfigFromDisk()
 {
-    // Lightweight read — only needs one key, so avoid constructing a full backend
-    // (which parses the entire file and tracks group state).  This runs before
-    // QCoreApplication exists on the daemon startup path.
+    // Lightweight read — only needs the Rendering group, so avoid constructing
+    // a full backend (which parses the entire file and tracks group state), and
+    // parse the file once for both keys. This runs before QCoreApplication
+    // exists on the daemon startup path.
+    RenderingBootConfig out{renderingBackend(), gpuDevice()};
+    bool backendFound = false;
     const QString jsonPath = configFilePath();
     if (QFile::exists(jsonPath)) {
         QFile f(jsonPath);
@@ -130,28 +143,51 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
             if (err.error == QJsonParseError::NoError && doc.isObject()) {
                 const QJsonObject rendering = doc.object().value(renderingGroup()).toObject();
                 if (rendering.contains(backendKey())) {
-                    return normalizeRenderingBackend(rendering.value(backendKey()).toString(renderingBackend()));
+                    out.backend = normalizeRenderingBackend(rendering.value(backendKey()).toString(renderingBackend()));
+                    backendFound = true;
+                }
+                if (rendering.contains(gpuKey())) {
+                    out.gpuDevice = normalizeGpuDevice(rendering.value(gpuKey()).toString(gpuDevice()));
                 }
             }
         }
     }
 
-    // Fallback: read from the legacy INI when the JSON is absent, unparseable,
-    // or doesn't carry the key — in practice the pre-migration window (this
-    // function is called very early, before ensureJsonConfig(), and a
-    // successful migration renames the INI away).
-    const QString iniPath = legacyConfigFilePath();
-    if (QFile::exists(iniPath)) {
-        QSettings cfg(iniPath, QSettings::IniFormat);
-        // v1 INI key name — the INI file predates the v2 rename to "Backend".
-        // Routed through the frozen `Legacy::v1RenderingBackendKey()` accessor
-        // shared with `migrateIniToJson` / `migrateV1ToV2` so a future rename
-        // of the literal can't drift one consumer behind the others.
-        const QString raw = cfg.value(ConfigKeys::Legacy::v1RenderingBackendKey(), renderingBackend()).toString();
-        return normalizeRenderingBackend(raw);
+    // Backend fallback: read from the legacy INI when the JSON is absent,
+    // unparseable, or doesn't carry the key — in practice the pre-migration
+    // window (this function is called very early, before ensureJsonConfig(),
+    // and a successful migration renames the INI away). No INI fallback for
+    // the GPU pin: Rendering.Gpu postdates the v1 INI format.
+    if (!backendFound) {
+        const QString iniPath = legacyConfigFilePath();
+        if (QFile::exists(iniPath)) {
+            QSettings cfg(iniPath, QSettings::IniFormat);
+            // v1 INI key name — the INI file predates the v2 rename to "Backend".
+            // Routed through the frozen `Legacy::v1RenderingBackendKey()` accessor
+            // shared with `migrateIniToJson` / `migrateV1ToV2` so a future rename
+            // of the literal can't drift one consumer behind the others.
+            const QString raw = cfg.value(ConfigKeys::Legacy::v1RenderingBackendKey(), renderingBackend()).toString();
+            out.backend = normalizeRenderingBackend(raw);
+        }
     }
 
-    return renderingBackend();
+    return out;
+}
+
+QString ConfigDefaultsShaders::normalizeGpuDevice(const QString& raw)
+{
+    const QString normalized = raw.toLower().trimmed();
+    if (normalized.isEmpty() || normalized == gpuDevice()) {
+        return gpuDevice();
+    }
+    // Exactly four hex digits per field: sysfs prints PCI ids as 0x%04x and
+    // GpuDeviceList emits them 0x-stripped, so a shorter form never comes from
+    // a legitimate producer. anchoredPattern (\A...\z) keeps the anchoring
+    // independent of the trim above (PCRE '$' alone would still match before a
+    // trailing newline).
+    static const QRegularExpression pciPair(
+        QRegularExpression::anchoredPattern(QStringLiteral("[0-9a-f]{4}:[0-9a-f]{4}")));
+    return pciPair.match(normalized).hasMatch() ? normalized : gpuDevice();
 }
 
 QVariantMap ConfigDefaults::animationProfile(const PhosphorAnimation::CurveRegistry& registry)

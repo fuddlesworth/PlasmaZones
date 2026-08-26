@@ -242,8 +242,8 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         QJsonArray src;
-        // Three valid entries — first should get the highest priority,
-        // last should get priority 1 (descending by list order, lowest is 1).
+        // Three valid entries — first gets the highest priority, last the
+        // lowest, all inside the Animation band (100..199).
         src.append(makeShaderRule(QStringLiteral("first"), QStringLiteral("window.open"), QStringLiteral("popup")));
         src.append(makeShaderRule(QStringLiteral("second"), QStringLiteral("window.open"), QStringLiteral("fade")));
         src.append(makeShaderRule(QStringLiteral("third"), QStringLiteral("window.open"), QStringLiteral("blur")));
@@ -257,10 +257,12 @@ private Q_SLOTS:
             priorityByPattern[pattern] = rule.value(QStringLiteral("priority")).toInt();
         }
         QCOMPARE(priorityByPattern.size(), 3);
-        // count == 3 → first=3, second=2, third=1 (always > 0).
-        QCOMPARE(priorityByPattern[QStringLiteral("first")], 3);
-        QCOMPARE(priorityByPattern[QStringLiteral("second")], 2);
-        QCOMPARE(priorityByPattern[QStringLiteral("third")], 1);
+        // count == 3 → offsets 3, 2, 1 over the Animation band base of 100.
+        // The band matters: a bare 1..N sat below every band, so these rules
+        // read as lower-priority than everything else in the Rules page.
+        QCOMPARE(priorityByPattern[QStringLiteral("first")], 103);
+        QCOMPARE(priorityByPattern[QStringLiteral("second")], 102);
+        QCOMPARE(priorityByPattern[QStringLiteral("third")], 101);
     }
 
     void testAnimationAppRules_engagedEmptyEffectIdPreserved()
@@ -433,8 +435,8 @@ private Q_SLOTS:
         const QList<QJsonObject> animRulesOut = animationRulesFromRules();
         QCOMPARE(animRulesOut.size(), 1);
         const QJsonObject animRule = animRulesOut.first();
-        // Animation rule sits at priority 1 (count == 1 → priority 1).
-        QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 1);
+        // Animation rule sits in the Animation band (count == 1 → 100 + 1).
+        QCOMPARE(animRule.value(QStringLiteral("priority")).toInt(), 101);
 
         // Assignment cascade — every fixture-pinned level (306/304/303/301)
         // must still produce an assignment rule (setEngineMode + NOT

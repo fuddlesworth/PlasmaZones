@@ -291,16 +291,17 @@ private Q_SLOTS:
 
     void testModeField_contextLeaf()
     {
-        // Mode is a context field — always present. A `Mode Equals "tiling"`
-        // leaf matches a query in tiling mode and nothing else.
-        const auto tilingLeaf = MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling"));
+        // Mode is a context field — always present. A
+        // `Mode Equals ModeToken::Tiling` leaf matches a query in tiling mode
+        // and nothing else.
+        const auto tilingLeaf = MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QString(ModeToken::Tiling));
 
         WindowQuery tiling;
-        tiling.mode = QStringLiteral("tiling");
+        tiling.mode = QString(ModeToken::Tiling);
         QVERIFY(tilingLeaf.evaluate(tiling));
 
         WindowQuery snapping;
-        snapping.mode = QStringLiteral("snapping");
+        snapping.mode = QString(ModeToken::Snapping);
         QVERIFY(!tilingLeaf.evaluate(snapping));
 
         // A floating window carries no mode (empty token) — the leaf is inert.

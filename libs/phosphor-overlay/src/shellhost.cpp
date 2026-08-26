@@ -9,6 +9,7 @@
 #include <QChar>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegion>
 
 namespace PhosphorOverlay {
 
@@ -210,10 +211,33 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // shell click-through, so background windows stay interactable
     // for the non-modal slot's lifetime instead of eating every click
     // on every screen for several seconds.
-    const bool wantTransparent = !anyInputGrabbing;
+    //
+    // Two states:
+    //
+    //   visible modal up -> whole surface takes input (no mask).
+    //   anything else    -> click-through.
+    //
+    // The grab term is spelled `anyVisible && anyInputGrabbing` rather than
+    // bare `anyInputGrabbing` so the derivation does not rest on callers
+    // guaranteeing that a grabbing slot is also a visible one. Nothing in this
+    // library enforces that, and if it were ever false the bare form would hand
+    // an invisible surface the whole screen's clicks.
+    const bool wantTransparent = !(anyVisible && anyInputGrabbing);
     if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
         s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
+    // QWindow::setMask reaches wl_surface.set_input_region through the Qt
+    // Wayland platform window (our layer shell is a SHELL INTEGRATION, so the
+    // window underneath is a normal QWaylandWindow and the standard path
+    // applies). Nothing in the tree installs a mask any more (the partial
+    // input region went with the daemon-drawn tab strip), so the empty set is
+    // always the answer: the whole surface, with the flag above deciding
+    // whether it takes input at all. Kept as an explicit re-assert rather
+    // than dropped because a re-created platform window starts from scratch,
+    // and stating the region here keeps the surface's input shape in one
+    // place with the flag. Every caller is on a structural edge (slot show,
+    // hide completion, screen add/remove), never a paint path.
+    s.m_shellWindow->setMask(QRegion());
 }
 
 bool ShellHost::rekey(const QString& oldKey, const QString& newKey)

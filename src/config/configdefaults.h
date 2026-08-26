@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "configdefaults_screens.h"
+#include "configdefaults_scrolling_shortcuts.h"
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults : public ConfigDefaultsScreens
+class ConfigDefaults : public ConfigDefaultsScrollingShortcuts
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -58,6 +58,26 @@ public:
     {
         return false;
     }
+    // Hold-mode release grace, one per trigger list that has a toggle mode:
+    // snapping activation, the snapping zone span modifier, and the two
+    // engines' drag re-insert. A mouse-button trigger is released by the same hand
+    // that drops the window, so the button often lifts a few milliseconds
+    // before the drop. The trigger keeps reading as held for this long
+    // after its last physically-held tick, so that drop still snaps. Only
+    // hold mode uses it (toggle mode has no release to extend), and 0
+    // turns it off. The range is shared by all four.
+    static int dragActivationGraceMs()
+    {
+        return 150;
+    }
+    static constexpr int triggerGraceMsMin()
+    {
+        return 0;
+    }
+    static constexpr int triggerGraceMsMax()
+    {
+        return 1000;
+    }
     static bool snappingEnabled()
     {
         return true;
@@ -78,6 +98,18 @@ public:
     {
         return false;
     }
+    static int zoneSpanGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
+    /// Snap assist's grace differs from its siblings in WHERE it is read: the
+    /// other three are read on a drag tick, this one at the drop itself, which
+    /// is the moment the lifting hand is most likely to have already let go.
+    /// Its trigger list has no toggle mode, so the grace always applies.
+    static int snapAssistGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
     static QVariantList autotileDragInsertTriggers()
     {
         // Held while dragging a window to dynamically insert it into the
@@ -87,6 +119,45 @@ public:
     static bool autotileDragInsertToggle()
     {
         return false;
+    }
+    static int autotileDragInsertGraceMs()
+    {
+        return dragActivationGraceMs();
+    }
+    // Scrolling twins of the autotile drag-insert pair (stored under
+    // Scrolling.Behavior with the same generic Triggers/ToggleActivation
+    // keys). Declared here beside the trigger family rather than in
+    // configdefaults_scrolling.h because makeSingleTriggerList lives on the
+    // derived class and the base header cannot call it.
+    /// The scrolling wheel chords ("scroll keys"). Meta turns the wheel into
+    /// column focus, Meta+Shift into a view pan — one modifier step apart for
+    /// one step of difference in meaning. Both were hardcoded in the KWin
+    /// effect before they became settings, and these preserve what shipped.
+    ///
+    /// Ordinary trigger lists, with no wheel marker of any kind: the wheel is
+    /// implicit in WHICH setting this is, exactly as the drag lists leave the
+    /// drag implicit. That is also why the trigger editor shows "Meta" here
+    /// rather than "Meta + Wheel".
+    static QVariantList scrollingWheelFocusTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Meta));
+    }
+    static QVariantList scrollingWheelViewTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::MetaShift));
+    }
+
+    static QVariantList scrollingDragInsertTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
+    }
+    static bool scrollingDragInsertToggle()
+    {
+        return false;
+    }
+    static int scrollingDragInsertGraceMs()
+    {
+        return dragActivationGraceMs();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -117,29 +188,34 @@ public:
     {
         return true;
     }
+    // Spelled as the enumerators, not literals, so each bound READS as the
+    // entry it means (a new enumerator still needs the Max retargeted by
+    // hand). The remaining consumers are the D-Bus registry guards and the
+    // runtime default asserts; the schema rows validate against explicit
+    // enumerator lists and no longer read these.
     static constexpr int osdStyleMin()
     {
-        return 0;
+        return static_cast<int>(OsdStyle::None);
     }
     static constexpr int osdStyleMax()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static int osdStyle()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static constexpr int overlayDisplayModeMin()
     {
-        return 0;
+        return static_cast<int>(OverlayDisplayMode::ZoneRectangles);
     }
     static constexpr int overlayDisplayModeMax()
     {
-        return 1;
+        return static_cast<int>(OverlayDisplayMode::LayoutPreview);
     }
     static int overlayDisplayMode()
     {
-        return 0;
+        return static_cast<int>(OverlayDisplayMode::ZoneRectangles);
     }
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Behavior Settings
@@ -175,6 +251,18 @@ public:
     static bool snappingRestoreFloatedWindowsOnLogin()
     {
         return autotileRestoreFloatedWindowsOnLogin();
+    }
+    // Keep a FLOATED window stacked above the windows the mode places. Per-engine
+    // like the restore toggle above; snapping delegates to the autotile canonical.
+    // constexpr so settings/scrolling.cpp can static_assert the scrolling twin
+    // (which lives in a chain link that cannot reference this leaf) against it.
+    static constexpr bool autotileKeepFloatingAbove()
+    {
+        return false;
+    }
+    static constexpr bool snappingKeepFloatingAbove()
+    {
+        return autotileKeepFloatingAbove();
     }
     static bool snapUnfloatFallbackToZone()
     {
@@ -267,7 +355,10 @@ public:
     }
     // Zone-selector preview-size presets (Small / Large). Medium reuses the
     // default previewWidth() (180). Used by the Small/Medium/Large quick-size
-    // buttons so the widths aren't hard-coded in QML.
+    // buttons of BOTH selector pages — the strip page reuses them through the
+    // snapping bounds bridge, which its page header declares as UI bounds,
+    // not values bound to either config group (so the strip's own stored
+    // default, scrollingZoneSelectorPreviewWidth(), is free to diverge).
     static constexpr int previewWidthSmall()
     {
         return 120;
@@ -372,10 +463,51 @@ public:
         return {baselineBorderRuleId(), baselineTitleBarRuleId(), baselineGapRuleId()};
     }
 
-    // Returns the absolute path to quicklayouts.json (the numbered quick-layout
-    // shortcut slots 1..9). Quick-layout slots are NOT rules, so they
-    // sit in a sibling sidecar next to rules.json rather than in the
-    // rule store. LayoutRegistry reads/writes this file directly.
+    /// Default user-defined sort orders for the layout picker, the tiling
+    /// algorithm menu and the scrolling template picker: empty (no custom
+    /// order; consumers fall back to their natural sort). Comma-joined
+    /// QString on disk, matching the keys' stored type; the schema rows
+    /// source their defaults here.
+    static QString snappingLayoutOrder()
+    {
+        return QString();
+    }
+    static QString tilingAlgorithmOrder()
+    {
+        return QString();
+    }
+    static QString scrollingTemplateOrder()
+    {
+        return QString();
+    }
+
+    /// Default snapping default-layout id: empty (no explicit default; the
+    /// daemon falls back to its bundled template pick).
+    static QString defaultLayoutId()
+    {
+        return QString();
+    }
+
+    /// Default per-algorithm settings map: empty (every algorithm runs on
+    /// its own schema defaults until the user tweaks one).
+    static QVariantMap autotilePerAlgorithmSettings()
+    {
+        return {};
+    }
+
+    /// Default tiling locked-screens list: empty comma-joined QString (no
+    /// screen locked), matching the key's stored type.
+    static QString autotileLockedScreens()
+    {
+        return QString();
+    }
+
+    // Returns the absolute path to quicklayouts.json (the numbered
+    // quick-layout shortcut slots 1..QuickLayoutSlotCount — the key builders
+    // in configkeys.h read the count from PhosphorProtocol::Service, so this
+    // prose names the constant rather than a literal). Quick-layout slots are
+    // NOT rules, so they sit in a sibling sidecar next to rules.json rather
+    // than in the rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to layout-settings.json — the per-layout
@@ -383,6 +515,11 @@ public:
     // of the structural layout definition, so they live in a sibling sidecar
     // next to rules.json rather than inside each layout file.
     PLASMAZONES_EXPORT static QString layoutSettingsFilePath();
+
+    // Absolute path to the per-user layouts DIRECTORY. Owns the
+    // GenericDataLocation + ConfigKeys::layoutsSubdir() join that three call
+    // sites used to spell by hand.
+    PLASMAZONES_EXPORT static QString layoutsDirPath();
 
     // Curated default picker visibility, seeded into layout-settings.json on a
     // fresh install only (LayoutRegistry::seedDefaultLayoutSettingsIfFresh).
@@ -398,20 +535,29 @@ public:
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();
 
     /**
-     * Read the rendering backend from the config file on disk.
+     * One-shot read of the Rendering group from the config file on disk,
+     * parsing config.json once for both boot-time values.
      *
-     * Primary path: reads Rendering/Backend from config.json (the
-     * renderingGroup()/backendKey() accessors). Falls back to the legacy
-     * plasmazonesrc INI (v1 key) when the JSON config is absent, unparseable,
-     * or doesn't carry the key — in practice the pre-migration window, since
-     * a successful migration renames the INI away. This helper provides a
-     * single canonical read used by daemon, editor, and Settings.
+     * Backend: reads Rendering/Backend (the renderingGroup()/backendKey()
+     * accessors), falling back to the legacy plasmazonesrc INI (v1 key) when
+     * the JSON config is absent, unparseable, or doesn't carry the key — in
+     * practice the pre-migration window, since a successful migration renames
+     * the INI away. Returns a normalized token ("auto", "vulkan", "opengl").
+     *
+     * GPU pin: reads Rendering/Gpu with no INI fallback (the key postdates
+     * the v1 INI format, so an INI can never carry it). Returns "auto" or a
+     * normalized "vendor:device" hex pair.
      *
      * Safe to call before QCoreApplication exists (raw file access, no
-     * config backend construction).
-     * Returns the normalized backend string ("auto", "vulkan", or "opengl").
+     * config backend construction). Used by the daemon and editor mains.
      */
-    PLASMAZONES_EXPORT static QString readRenderingBackendFromDisk();
+    struct RenderingBootConfig
+    {
+        QString backend;
+        QString gpuDevice;
+    };
+    PLASMAZONES_EXPORT static RenderingBootConfig readRenderingConfigFromDisk();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
@@ -468,7 +614,7 @@ public:
         return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
     // Autotile inner/outer gaps are unified with snapping — see innerGap() /
-    // outerGap*() above. Tiling reads the same shared accessors; no autotile-
+    // outerGap*() in configdefaults_gaps.h. Tiling reads the same shared accessors; no autotile-
     // specific gap defaults remain.
     static constexpr bool autotileFocusNewWindows()
     {
@@ -606,19 +752,6 @@ public:
     {
         return {};
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Ordering Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QStringList snappingLayoutOrder()
-    {
-        return {};
-    }
-    static QStringList tilingAlgorithmOrder()
-    {
-        return {};
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings
     // ═══════════════════════════════════════════════════════════════════════════
@@ -842,6 +975,13 @@ public:
     {
         return QStringLiteral("Meta+F");
     }
+    static QString switchFocusFloatTilingShortcut()
+    {
+        // X as in eXchange the focused layer. Promoted from the
+        // scrolling-only shortcut group when all three engines gained the
+        // verb; the binding is unchanged.
+        return QStringLiteral("Meta+Alt+X");
+    }
     static QString snapToZone1Shortcut()
     {
         return QStringLiteral("Meta+Ctrl+1");
@@ -936,15 +1076,32 @@ public:
     }
     static QString autotileIncMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+]");
+        // NOT Meta+Shift+] — Shift+symbol chords never fire on Wayland
+        // (KWin consumes Shift in the keysym translation; see
+        // toggleCheatsheetShortcut). Meta+Ctrl+[ ] belong to the rotate
+        // pair; = and - are the KDE-wide count/zoom-adjust idiom.
+        //
+        // ACCEPTED EXCEPTION to the letters-only rule the scrolling family
+        // follows (configdefaults_scrolling_shortcuts.h): on layouts where "=" itself
+        // is a shifted key (German among them) this chord is dead until the
+        // user rebinds. The unshifted-symbol idiom is kept anyway because
+        // +/- is what every KDE count control ships, and the scrolling rule
+        // targets the harder failure (Shift+SYMBOL spellings, dead on every
+        // layout under Wayland). The scrolling banner's blanket wording
+        // points here.
+        return QStringLiteral("Meta+Ctrl+=");
     }
     static QString autotileDecMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+[");
+        return QStringLiteral("Meta+Ctrl+-");
     }
     static QString autotileRetileShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+R");
+        // T as in re-Tile. NOT Meta+Ctrl+R: Spectacle owns every
+        // Meta-modified R chord (that one is its window recording) — see
+        // the externally-owned table in configdefaults_scrolling_shortcuts.h's
+        // Scrolling Shortcuts banner.
+        return QStringLiteral("Meta+Ctrl+T");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1014,6 +1171,10 @@ static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDu
 static_assert(ConfigDefaults::decorationIdleTimeoutSec() >= ConfigDefaults::decorationIdleTimeoutSecMin()
                   && ConfigDefaults::decorationIdleTimeoutSec() <= ConfigDefaults::decorationIdleTimeoutSecMax(),
               "ConfigDefaults::decorationIdleTimeoutSec() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::decorationBlurScaleMultiplier() >= ConfigDefaults::decorationBlurScaleMultiplierMin()
+                  && ConfigDefaults::decorationBlurScaleMultiplier()
+                      <= ConfigDefaults::decorationBlurScaleMultiplierMax(),
+              "ConfigDefaults::decorationBlurScaleMultiplier() outside declared [min, max] range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");
@@ -1040,5 +1201,30 @@ static_assert(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSp
 static_assert(ConfigDefaults::autotileSplitRatioStep() >= ConfigDefaults::autotileSplitRatioStepMin()
                   && ConfigDefaults::autotileSplitRatioStep() <= ConfigDefaults::autotileSplitRatioStepMax(),
               "ConfigDefaults::autotileSplitRatioStep() outside declared [min, max] range");
+// The zone-selector quick-size pair: both re-seed the RANGED PreviewWidth
+// key (the Small/Large buttons write them through the store), so an
+// out-of-range edit here would be silently snapped by the schema clamp on
+// the next press instead of failing the build — the same rationale as the
+// scrolling tab-indicator width re-seeds' asserts.
+static_assert(ConfigDefaults::previewWidthSmall() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::previewWidthSmall() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::previewWidthSmall() outside declared [min, max] range");
+static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
+// The strip selector's ranged defaults. Asserted HERE rather than in
+// configdefaults_scrolling_behavior.h because that header is link 7 of the
+// include chain and cannot see the shared Min/Max accessors (its own section
+// banner says so) —
+// same placement rationale as the quick-size pair above.
+static_assert(ConfigDefaults::scrollingZoneSelectorTriggerDistance() >= ConfigDefaults::triggerDistanceMin()
+                  && ConfigDefaults::scrollingZoneSelectorTriggerDistance() <= ConfigDefaults::triggerDistanceMax(),
+              "ConfigDefaults::scrollingZoneSelectorTriggerDistance() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollingZoneSelectorPreviewWidth() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::scrollingZoneSelectorPreviewWidth() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::scrollingZoneSelectorPreviewWidth() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollingZoneSelectorPreviewHeight() >= ConfigDefaults::previewHeightMin()
+                  && ConfigDefaults::scrollingZoneSelectorPreviewHeight() <= ConfigDefaults::previewHeightMax(),
+              "ConfigDefaults::scrollingZoneSelectorPreviewHeight() outside declared [min, max] range");
 
 } // namespace PlasmaZones

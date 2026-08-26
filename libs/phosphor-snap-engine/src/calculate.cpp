@@ -14,8 +14,6 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
-#include <QGuiApplication>
-#include <QScreen>
 #include <QUuid>
 
 namespace PhosphorSnapEngine {
@@ -52,16 +50,18 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
 
     // The placement resolver is the daemon's SnapToZone window-rule evaluation —
     // the engine never reads the rule store directly (LGPL boundary). It returns
-    // the 1-based zone ordinals to snap into, or an empty list when no SnapToZone
-    // rule matched this window. Unset resolver (unit tests) ⇒ no rule snapping.
+    // the 1-based zone ordinals and/or zone names to snap into, or two empty
+    // lists when no SnapToZone rule matched this window. Unset resolver (unit
+    // tests) ⇒ no rule snapping.
     if (!m_placementZonesResolver) {
         return SnapResult::noSnap();
     }
     const PlacementDirective directive = m_placementZonesResolver(windowId, windowScreenName);
-    if (directive.zoneOrdinals.isEmpty()) {
+    if (directive.zoneOrdinals.isEmpty() && directive.zoneNames.isEmpty()) {
         return SnapResult::noSnap();
     }
     const QList<int>& ordinals = directive.zoneOrdinals;
+    const QStringList& names = directive.zoneNames;
 
     // A RouteToScreen action pins the placement to a specific monitor: resolve the
     // zones on THAT screen and move the window there (the apply path honours
@@ -81,38 +81,53 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
         directive.targetDesktop >= 1 ? directive.targetDesktop : currentVirtualDesktopForScreen(placementScreen);
 
     // The placement only applies when the (screen, desktop) target is in snapping
-    // mode. An autotile-mode target is owned by the autotile routing hook, and a
+    // mode. An autotile- or scrolling-mode target is owned by that engine, and a
     // disabled / unresolvable target has no layout — decline so the window falls
-    // through to the normal restore chain rather than being stranded. Gate whenever
-    // the target differs from the opening (screen, desktop), so a cross-desktop or
-    // cross-screen route is validated against where the window will actually land.
+    // through to the normal restore chain rather than being stranded.
+    //
+    // Validated for EVERY target, routed or not. The gate used to fire only when
+    // the target differed from the opening (screen, desktop), on the assumption
+    // that an unrouted target is the opening screen and the caller already
+    // checked it. That assumption breaks on the cross-screen-restore bypass in
+    // resolveWindowRestore: it deliberately runs the rest of the open path on a
+    // TILED opening screen, so an unrouted SnapToZone rule reached this function
+    // with a tiled target, snapped the window into a zone there, and overwrote
+    // the owning engine's slot through the store's mutual-exclusivity invariant.
     // (m_layoutManager is non-null here — the early guard above already returned.)
-    const bool routed = placementScreen != windowScreenName || directive.targetDesktop >= 1;
-    if (routed
-        && m_layoutManager->modeForScreen(placementScreen, placementDesktop, currentActivity())
-            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+    if (m_layoutManager->modeForScreen(placementScreen, placementDesktop, currentActivity())
+        != PhosphorZones::AssignmentEntry::Mode::Snapping) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "calculateSnapToPlacementRule: route target" << placementScreen << "desktop" << placementDesktop
             << "is not in snapping mode — declining snap route for" << windowId;
         return SnapResult::noSnap();
     }
 
-    // Ordinals are layout-agnostic: resolve them against the layout active on the
-    // placement (screen, desktop). For a desktop route that is the DESTINATION
-    // desktop's layout; otherwise it is the screen's current-desktop layout.
-    PhosphorZones::Layout* layout = directive.targetDesktop >= 1
-        ? m_layoutManager->layoutForScreen(placementScreen, placementDesktop, currentActivity())
-        : m_layoutManager->resolveLayoutForScreen(placementScreen);
+    // Ordinals and names are layout-agnostic: resolve them against the layout
+    // active on the placement (screen, desktop). For a desktop route that is the
+    // DESTINATION desktop's layout; otherwise it is the screen's current-desktop
+    // layout. The lookup uses the SAME (screen, desktop, activity) triple the
+    // mode gate above just checked, so the two cannot disagree on which desktop
+    // "current" means (the engine's and the registry's desktop resolvers are
+    // wired to one authority in the daemon but not in every host).
+    PhosphorZones::Layout* layout =
+        m_layoutManager->layoutForScreen(placementScreen, placementDesktop, currentActivity());
     if (!layout) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "calculateSnapToPlacementRule: no layout for screen" << placementScreen << "desktop" << placementDesktop;
         return SnapResult::noSnap();
     }
 
-    // Resolve each ordinal to its zone id (an ordinal naming a zone the active
+    // Resolve each ordinal and each name to its zone id (a target the active
     // layout lacks is skipped — a span rule is layout-agnostic and may reference
-    // a zone count this layout does not have).
+    // a zone count, or a zone name, this layout does not have). Ordinals and
+    // names union; a zone reached both ways is added once.
     QStringList zoneIds;
+    const auto addZone = [&zoneIds](const PhosphorZones::Zone* zone) {
+        const QString id = zone->id().toString();
+        if (!zoneIds.contains(id)) {
+            zoneIds.append(id);
+        }
+    };
     for (const int ordinal : ordinals) {
         PhosphorZones::Zone* zone = layout->zoneByNumber(ordinal);
         if (!zone) {
@@ -120,7 +135,16 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
                 << "calculateSnapToPlacementRule: zone ordinal" << ordinal << "absent in layout" << layout->name();
             continue;
         }
-        zoneIds.append(zone->id().toString());
+        addZone(zone);
+    }
+    for (const QString& name : names) {
+        PhosphorZones::Zone* zone = layout->zoneByName(name);
+        if (!zone) {
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "calculateSnapToPlacementRule: zone named" << name << "absent in layout" << layout->name();
+            continue;
+        }
+        addZone(zone);
     }
     if (zoneIds.isEmpty()) {
         return SnapResult::noSnap();
@@ -137,8 +161,8 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
     }
 
     qCInfo(PhosphorSnapEngine::lcSnapEngine)
-        << "calculateSnapToPlacementRule: snapping" << windowId << "to zones" << ordinals << "on screen"
-        << placementScreen << (placementScreen != windowScreenName ? "(routed)" : "(opening screen)");
+        << "calculateSnapToPlacementRule: snapping" << windowId << "to zones" << ordinals << "names" << names
+        << "on screen" << placementScreen << (placementScreen != windowScreenName ? "(routed)" : "(opening screen)");
 
     SnapResult result;
     result.shouldSnap = true;
@@ -159,9 +183,11 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
         return SnapResult::noSnap();
     }
 
-    // Check if window was floating - floating windows should NOT be auto-snapped
-    // They should remain floating when reopened
-    if (m_windowTracker->isWindowFloating(windowId)) {
+    // A window floating in SNAPPING mode is not auto-snapped; it stays where
+    // it is. Read from this engine's own store, not the mode-routed resolver:
+    // snapadaptor calls this directly over D-Bus with no mode gate, so the
+    // routed read would let a tiling engine's float bit decide a snap.
+    if (isFloating(windowId)) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine) << "snapToLastZone:" << windowId << "was floating, skipping";
         return SnapResult::noSnap();
     }

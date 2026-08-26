@@ -10,14 +10,19 @@ import org.kde.kirigami as Kirigami
  * @brief Per-surface decoration override card. Mirrors AnimationEventCard.
  *
  * One card per surface path, every one an override card: the master toggle
- * engages a per-surface override in the DecorationProfileTree; OFF clears
- * it (reset to inherited — same as AnimationEventCard, no separate reset
- * button) and the card shows the RESOLVED chain read-only with an
- * "Inheriting from: …" breadcrumb. CATEGORY paths (window, popup) and the
- * standalone osd surface inherit from the tree's BASELINE (empty by
- * default), so their toggle doubles as the category's decoration master
- * switch: OFF renders the whole category undecorated, matching the
- * animations pages' top-level toggles. A category root additionally shows
+ * opens the chain editor and writes NOTHING (the _editorLatch below — same
+ * design as AnimationEventCard's timing latch); a per-surface override in
+ * the DecorationProfileTree is created only when the user actually edits the
+ * chain. OFF clears the override (reset to inherited — same as
+ * AnimationEventCard, no separate reset button) and the card shows the
+ * RESOLVED chain read-only with an "Inheriting from: …" breadcrumb.
+ * CATEGORY paths (window, popup) and the standalone osd surface inherit
+ * from the tree's BASELINE (empty by default), so their toggle doubles as
+ * the category's decoration master switch: OFF renders the whole category
+ * undecorated, matching the animations pages' top-level toggles. The
+ * `shell` subtree is the exception: it is baseline-isolated
+ * (DecorationSupportedPaths.h), inherits nothing, and stays undecorated
+ * until a chain is engaged inside it. A category root additionally shows
  * the "applies to all children" cascade banner while editing. The
  * alwaysEnabled escape hatch (no toggle, always editing) remains for any
  * future surface that must never be disableable.
@@ -44,9 +49,26 @@ Item {
 
     readonly property var bridge: settingsController.decorationPage
 
+    // Routed through the C++ SSOT (decorationPathIsBaselineIsolated in
+    // DecorationSupportedPaths.h) so a future isolated subtree cannot leave
+    // this card claiming "Using global defaults": the shell subtree never
+    // inherits the tree baseline.
+    readonly property bool _baselineIsolated: root.bridge ? root.bridge.isBaselineIsolated(root.surfacePath) : false
+
+    // Session-local "the user opened the chain editor" latch, mirroring
+    // AnimationEventCard._editingTiming: flipping the toggle ON sets this and
+    // writes NOTHING — an override is created only when the user actually
+    // edits the chain. Without it the toggle had to commit a snapshot
+    // override just to stay visually on, and an engaged (even empty) chain at
+    // a category root suppresses the shipped seed decorations on its leaves.
+    // Cleared by the toggle's OFF path, and by refresh() when an EXTERNAL
+    // clear moves _hasOverride from true to false. Not persisted.
+    property bool _editorLatch: false
+
     // True when this card edits its own DIRECT profile: an alwaysEnabled root
-    // always does; a leaf only when its override is engaged.
-    readonly property bool _editing: root.alwaysEnabled || root._hasOverride
+    // always does; a leaf when its override is engaged or the editor is
+    // latched open for this session.
+    readonly property bool _editing: root.alwaysEnabled || root._hasOverride || root._editorLatch
 
     // ── Reactive model state ─────────────────────────────────────────────
     property var _effects: []
@@ -74,37 +96,43 @@ Item {
         return (chain.length > 1) ? chain.slice(1).join(" ← ") : "";
     }
 
-    function refresh() {
+    // The pack catalogue changes only on shaderEffectsChanged (install /
+    // uninstall), so it is NOT re-read on every profile write — refresh()
+    // runs on every built card for every tree edit, including each slider
+    // drag tick, and availableShaderEffects() materialises a map per
+    // installed pack.
+    function _refreshEffects() {
         if (!root.bridge)
             return;
         root._effects = root.bridge.availableShaderEffects();
+    }
+
+    function refresh() {
+        if (!root.bridge)
+            return;
+        var wasOverride = root._hasOverride;
         root._hasOverride = root.bridge.hasOverride(root.surfacePath);
+        // EXTERNAL clear (a parent card's "Clear shadowing children", a page
+        // reset/discard): a true→false transition closes the latched editor.
+        // Our own OFF path already cleared the latch before the write, and our
+        // own first edit moves the flag false→true, so a transition here is
+        // never self-driven.
+        if (wasOverride && !root._hasOverride)
+            root._editorLatch = false;
         root._resolved = root.bridge.resolvedProfile(root.surfacePath);
         root._raw = root.bridge.rawProfile(root.surfacePath);
         root._chain = root.bridge.chainAt(root.surfacePath);
-        root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ({});
+        // Direct override when engaged, else the RESOLVED map — the editor's
+        // other two inputs (chainAt, disabledPacksAt) are resolved too, and a
+        // latched-open card with no override must show the inherited values
+        // the surface is actually drawing with, not the pack schema defaults
+        // (the C++ writers engage from the same resolved map, filtered to the
+        // effective chain, on first edit — display-equivalent, since the
+        // editor only indexes per-pack entries for packs in the chain).
+        root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ((root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({}));
         root._disabledPacks = root.bridge.disabledPacksAt(root.surfacePath);
         root._parentChainText = root._computeParentChainText();
         root._shadowingChildrenCount = root.bridge.overrideDescendantCount(root.surfacePath);
-    }
-
-    // Engage a per-surface override (leaf toggle ON): seed the chain AND the
-    // per-pack parameter values from the currently resolved profile, so the
-    // override starts visibly identical to what was inherited and the user
-    // diverges from there. Seeding only the chain would flip every pack back
-    // to its schema defaults the moment the toggle engages, discarding the
-    // inherited values the user was just previewing.
-    function _engageOverride() {
-        // Engaging is idempotent: if a direct override already exists, re-seeding
-        // from the resolved profile would discard the user's diverged edits. Only
-        // seed when there is no override yet (a stray re-fire of onToggleClicked
-        // with checked === true must not clobber the current chain).
-        if (!root.bridge || root._hasOverride)
-            return;
-        root.bridge.setChain(root.surfacePath, root.bridge.chainAt(root.surfacePath));
-        var inheritedParams = (root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({});
-        for (var packId in inheritedParams)
-            root.bridge.setChainParams(root.surfacePath, packId, inheritedParams[packId]);
     }
 
     function _resolvedSummary() {
@@ -130,8 +158,10 @@ Item {
     }
 
     implicitHeight: card.implicitHeight
-    Layout.fillWidth: true
-    Component.onCompleted: root.refresh()
+    Component.onCompleted: {
+        root._refreshEffects();
+        root.refresh();
+    }
 
     Connections {
         target: root.bridge
@@ -139,6 +169,7 @@ Item {
             root.refresh();
         }
         function onShaderEffectsChanged() {
+            root._refreshEffects();
             root.refresh();
         }
     }
@@ -153,11 +184,25 @@ Item {
         // mirrors AnimationEventCard's alwaysEnabled global root.
         showToggle: !root.alwaysEnabled
         toggleChecked: root._editing
+        // The toggle REPORTS override state; it is not a precondition for the
+        // body. Gating the body on it would disable every row while OFF —
+        // including the "Clear shadowing children" action on a parent card,
+        // which is needed exactly when the parent has no override of its own.
+        // Same rationale as AnimationEventCard.
+        gateBodyOnToggle: false
         onToggleClicked: function (checked) {
-            if (checked)
-                root._engageOverride();
-            else if (root.bridge)
-                root.bridge.clearOverride(root.surfacePath);
+            if (checked) {
+                // Open the chain editor, write nothing. An override is created
+                // only when the user edits the chain — committing a snapshot
+                // here pinned an (often empty) chain override the user never
+                // asked for, and an engaged chain at a category root
+                // suppresses the shipped seed decorations on its leaves.
+                root._editorLatch = true;
+            } else {
+                root._editorLatch = false;
+                if (root.bridge)
+                    root.bridge.clearOverride(root.surfacePath);
+            }
         }
 
         contentItem: ColumnLayout {
@@ -176,7 +221,18 @@ Item {
                 text: {
                     if (root.isParentNode)
                         return i18n("Settings here apply to all child surfaces unless individually overridden.");
-                    return root._parentChainText.length > 0 ? i18n("Inheriting from: %1", root._parentChainText) : i18n("Using global defaults");
+                    // Baseline-isolated surfaces (the shell subtree) inherit
+                    // nothing, so with an EMPTY resolved chain there is no
+                    // decoration flowing in from anywhere and the inheritance
+                    // breadcrumb below would be a false claim. Once a chain IS
+                    // engaged at an ancestor (e.g. at "shell"), the resolved
+                    // chain is non-empty and the breadcrumb is the truth again.
+                    var resolvedChain = (root._resolved && root._resolved.chain) ? root._resolved.chain : [];
+                    if (root._baselineIsolated && resolvedChain.length === 0)
+                        return i18n("Not decorated. Add a decoration pack to style this surface.");
+                    if (root._parentChainText.length > 0)
+                        return i18n("Inheriting from: %1", root._parentChainText);
+                    return i18n("Using global defaults");
                 }
             }
 

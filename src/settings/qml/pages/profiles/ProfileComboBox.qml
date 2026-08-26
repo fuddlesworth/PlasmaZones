@@ -129,7 +129,6 @@ ComboBox {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                propagateComposedEvents: true
                 onPressed: function (mouse) {
                     const fieldPos = root.mapToItem(catcher, 0, 0);
                     const onField = mouse.x >= fieldPos.x && mouse.y >= fieldPos.y && mouse.x < fieldPos.x + root.width && mouse.y < fieldPos.y + root.height;

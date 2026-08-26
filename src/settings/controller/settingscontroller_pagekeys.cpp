@@ -31,22 +31,41 @@ OrderingPageKind orderingPageKind(const QString& page)
     if (page == QLatin1String("tiling-ordering")) {
         return OrderingPageKind::Tiling;
     }
+    if (page == QLatin1String("scrolling-ordering")) {
+        return OrderingPageKind::Scrolling;
+    }
     return OrderingPageKind::None;
 }
 
-// The two Quick Shortcuts pages. Their editable state is the per-mode staged
+// The three Quick Shortcuts pages. Their editable state is the per-mode staged
 // quick-slot layout assignments in StagingService (daemon-backed).
 bool isShortcutsPage(const QString& page)
 {
-    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
+    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts")
+        || page == QLatin1String("scrolling-shortcuts");
+}
+
+// The per-mode library pages. Their stores (layouts / algorithms / templates)
+// write immediately rather than staging, so the pages are never dirty — see the
+// header's note for how their set-as-default config write is attributed.
+bool isLibraryPage(const QString& page)
+{
+    return page == QLatin1String("snapping-layouts") || page == QLatin1String("tiling-library")
+        || page == QLatin1String("scrolling-templates");
+}
+
+// QML bridge for the predicate above; see the header note on the Q_INVOKABLE.
+bool SettingsController::isLibraryPage(const QString& page) const
+{
+    return PlasmaZones::isLibraryPage(page);
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain
 // AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT
-// whole-tree: each surface leaf (windows/osds/overlays/desktops/motion/dragging/
-// panels/widgets/editor, plus the condensed animations-simple page, which takes
-// the same branch across several roots) owns one event-path subtree (see
-// animationPageScope), the general leaf owns only the config keys, and the
+// whole-tree: each surface leaf owns one event-path subtree (see
+// animationPageScope, which is the list — do not maintain a second copy of it
+// here), plus the condensed animations-simple page, which takes the same branch
+// across several roots. The general leaf owns only the config keys, and the
 // presets/sets/shaders library leaves act on the whole editable tree. Scoping keeps a Reset on one surface from
 // wiping the others (mirrors the decoration domain below).
 bool isAnimationPage(const QString& page)
@@ -97,9 +116,10 @@ const Settings::ConfigKeyList& animationConfigKeys()
 // the file-size ceiling).
 
 // Every decoration leaf reads/writes the single shared DecorationProfileTree
-// settings key (one JSON blob covering windows + OSDs + popups), so
-// pageGroupChildren("decorations") — the canonical leaf set — identifies them
-// all. Reset/Discard/dirty are NOT whole-tree, though: the three surface pages
+// settings key (one JSON blob covering windows, OSDs, popups and shell
+// surfaces), so pageGroupChildren("decorations") — the canonical leaf set —
+// identifies them all. Reset/Discard/dirty are NOT whole-tree, though: the
+// four surface pages
 // each own one root subtree (see decorationSurfaceRoot), so resetting OSDs must
 // not touch the Windows overrides. Only the sets/shaders library leaves act on
 // the whole editable tree.

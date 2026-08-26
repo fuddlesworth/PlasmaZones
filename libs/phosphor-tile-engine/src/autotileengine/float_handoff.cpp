@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -26,6 +16,8 @@
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
+#include <PhosphorEngine/IWindowRegistry.h>
+#include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
@@ -37,6 +29,18 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -87,7 +91,71 @@ void AutotileEngine::toggleFocusedWindowFloat()
     performToggleFloat(state, focused, screenId);
 }
 
+void AutotileEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
+{
+    // Prefer the caller's screen when it names a KNOWN autotile screen —
+    // tilingStateForScreen lazily creates state, so a known screen always
+    // resolves and the fallback below runs only for an empty or foreign
+    // screen id. In that case resolve the screen holding the focus, with
+    // requireTiledWindows false for the same reason toggleFocusedWindowFloat
+    // passes it: an all-floating monitor is a legitimate press target.
+    QString screen = screenId;
+    PhosphorTiles::TilingState* state = nullptr;
+    if (!screen.isEmpty() && isAutotileScreen(screen)) {
+        state = tilingStateForScreen(screen);
+    }
+    if (!state) {
+        screen.clear();
+        m_navigation->tiledWindowsForFocusedScreen(screen, state, QString(), /*requireTiledWindows=*/false);
+    }
+    const QString action = QStringLiteral("float");
+    if (!state) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+
+    // Leg/target/refusal shape comes from the shared resolver (see the
+    // scroll engine's switchFocusBetweenFloatingAndTiling for the contract).
+    // Minimized windows are filtered on BOTH sides: the daemon models
+    // minimize as a float, and the layer memories can name one.
+    //
+    // Unlike scroll, no eager bookkeeping precedes the activation: autotile
+    // has no self-activation echo filter, so the compositor's answering
+    // focus report flows through setFocusedWindow and updates the layer
+    // memories exactly as a genuine focus would — the switch is self-healing
+    // when the compositor drops the activation.
+    const auto isHidden = [this](const QString& id) {
+        return m_windowRegistry && m_windowRegistry->minimizedState(id).value_or(false);
+    };
+    PhosphorEngine::LayerSwitchSide tiledSide;
+    tiledSide.candidate = state->lastTiledFocus();
+    tiledSide.fallbacks = state->tiledWindows();
+    tiledSide.isEligible = [state, isHidden](const QString& id) {
+        return state->containsWindow(id) && !state->isFloating(id) && !isHidden(id);
+    };
+    PhosphorEngine::LayerSwitchSide floatingSide;
+    floatingSide.candidate = state->lastFloatingFocus();
+    floatingSide.fallbacks = state->floatingWindows();
+    floatingSide.isEligible = [state, isHidden](const QString& id) {
+        return state->isFloating(id) && !isHidden(id);
+    };
+    // The resolver reads focusForFeedback from the SOURCE side only, and
+    // this verb's source is always the state's live focus slot — one value,
+    // no per-leg distinction.
+    tiledSide.focusForFeedback = state->focusedWindow();
+    floatingSide.focusForFeedback = state->focusedWindow();
+
+    announceLayerSwitch(PhosphorEngine::resolveLayerFocusSwitch(state->floatingHasFocus(), tiledSide, floatingSide),
+                        action, screen);
+}
+
 void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
+{
+    toggleWindowFloatAs(rawWindowId, screenId, QStringLiteral("float"));
+}
+
+void AutotileEngine::toggleWindowFloatAs(const QString& rawWindowId, const QString& screenId,
+                                         const QString& failureAction)
 {
     if (!warnIfEmptyWindowId(rawWindowId, "toggleWindowFloat")) {
         return;
@@ -99,8 +167,7 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
 
     if (screenId.isEmpty()) {
         qCWarning(PhosphorTileEngine::lcTileEngine) << "toggleWindowFloat: empty screenId for window" << windowId;
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_screen"), QString(), QString(),
-                                  QString());
+        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("no_screen"), QString(), QString(), QString());
         return;
     }
 
@@ -149,8 +216,8 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
         // — this path is purely "no-op when the window isn't ours".
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
-                                  QString(), screenId);
+        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("window_not_tracked"), QString(), QString(),
+                                  screenId);
         return;
     }
 
@@ -160,11 +227,28 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
 void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId,
                                         const QString& screenId)
 {
-    state->toggleFloating(windowId);
+    // Branch on the result, like every other mutation site in the engine.
+    // toggleFloating returns false for a window this state does not contain;
+    // both current callers validate membership first, so this is unreachable
+    // today — but ignoring it meant a future caller would emit "now tiled" for
+    // an unmanaged window and clear a legitimate snap float downstream.
+    if (!state->toggleFloating(windowId)) {
+        qCWarning(PhosphorTileEngine::lcTileEngine)
+            << "performToggleFloat: state does not contain" << windowId << "on screen" << screenId;
+        return;
+    }
     m_overflow.clearOverflow(windowId); // User explicitly toggled, no longer overflow
-    retileAfterOperation(screenId, true);
 
     const bool isNowFloating = state->isFloating(windowId);
+    // Same staleness policy as setWindowFloat's unfloat arm: the window's
+    // min size may have changed while floating, and a stale entry can
+    // inflate enforceMinSizes past the user's split ratio. The effect
+    // re-discovers and re-reports a live one on the next retile.
+    if (!isNowFloating) {
+        m_windowMinSizes.remove(windowId);
+    }
+    retileAfterOperation(screenId, true);
+
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "Window" << windowId << (isNowFloating ? "now floating" : "now tiled") << "on screen" << screenId;
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenId);
@@ -174,6 +258,10 @@ void AutotileEngine::performToggleFloat(PhosphorTiles::TilingState* state, const
 // Cross-engine handoff (see IPlacementEngine.h for contract)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// NOTE: autotile ignores ctx.toDesktop — arrivals always land in the
+// CURRENT desktop's TilingState. Cross-desktop moves onto an autotile
+// desktop must use the reactive catch-scan path instead (the cross-mode
+// dispatcher's reactiveAutotileDesktopArrival branch does exactly that).
 void AutotileEngine::handoffReceive(const HandoffContext& ctx)
 {
     if (ctx.windowId.isEmpty() || ctx.toScreenId.isEmpty() || !isAutotileScreen(ctx.toScreenId)) {
@@ -199,6 +287,13 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     const auto trackedKeyIt = m_states.windowKeys().constFind(windowId);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() == destKey
         && state->containsWindow(windowId)) {
+        // Already adopted — nothing structural to do, but a re-handoff can
+        // carry a FRESHER min size; on a genuine change the layout must
+        // re-validate (same contract as windowMinSizeUpdated).
+        if ((ctx.minSize.width() > 0 || ctx.minSize.height() > 0)
+            && storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height())) {
+            scheduleRetileForScreen(ctx.toScreenId);
+        }
         return;
     }
     // Already tracked but on a DIFFERENT autotile state (cross-screen
@@ -206,7 +301,20 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // prior handoff). Release the previous state first to avoid orphaning
     // the entry — handoffRelease is the correct primitive for "drop
     // tracking without mutating geometry" within this engine too.
+    QSize preservedMin(0, 0);
     if (trackedKeyIt != m_states.windowKeys().constEnd() && trackedKeyIt.value() != destKey) {
+        // Internal re-home: the release wipes m_windowMinSizes on the
+        // assumption that ctx.minSize re-seeds it — untrue when the daemon
+        // built the context from an engine that does not model min sizes
+        // (snap's windowMinimumSize is the 0x0 default). Preserve our own
+        // live value for that case; it is re-stored through
+        // storeWindowMinSize AFTER the destination key is set below, so it
+        // caps against the DESTINATION screen — a raw re-insert would
+        // replay a possibly other-screen-capped value, exactly what
+        // handoffRelease drops the entry to avoid.
+        if (ctx.minSize.width() <= 0 && ctx.minSize.height() <= 0) {
+            preservedMin = m_windowMinSizes.value(windowId, QSize(0, 0));
+        }
         handoffRelease(windowId);
     }
 
@@ -216,12 +324,32 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     //     window takes the departed partner's exact slot;
     //   - a drag-drop carrying a cursor position, which the drag-insert path
     //     places separately — there we keep the simple append so the drop wins.
+    bool inserted = false;
     if (ctx.insertIndex >= 0 && ctx.dropPos.isNull()) {
-        state->addWindow(windowId, ctx.insertIndex);
+        inserted = state->addWindow(windowId, ctx.insertIndex);
     } else if (ctx.dropPos.isNull()) {
         insertWindowByConfigOrder(state, windowId, ctx.toScreenId);
+        inserted = state->containsWindow(windowId);
     } else {
-        state->addWindow(windowId);
+        inserted = state->addWindow(windowId);
+    }
+    if (!inserted) {
+        // The destination refused (MaxRuntimeTreeDepth cap). The source has
+        // already released the window at every daemon call site, so keying
+        // it here would strand it: present in neither engine yet reading as
+        // tiled through the phantom key. Leave it unmanaged (free) instead —
+        // the same outcome as a window neither engine ever tracked. The
+        // float-sync announcement is deliberately withheld (the window is
+        // unmanaged, not floating), but the screen still reflows: a swap
+        // source that just lost its partner must not keep a hole.
+        qCWarning(PhosphorTileEngine::lcTileEngine) << "handoffReceive: destination state refused" << windowId << "on"
+                                                    << ctx.toScreenId << "- window left unmanaged";
+        // Leave no trace: an unmanaged window keeps no min-size entry
+        // either (pruneStaleWindows would sweep it eventually, but the
+        // refusal branch's contract is immediate cleanliness).
+        m_windowMinSizes.remove(windowId);
+        retileAfterOperation(ctx.toScreenId, true);
+        return;
     }
     // Autotile-engine policy on receive: a window arriving as "floating in
     // the source" stays floating here too — drag-from-snap typically falls
@@ -233,6 +361,16 @@ void AutotileEngine::handoffReceive(const HandoffContext& ctx)
     // arrival — symmetric with the removal hook in handoffRelease.
     notifyAlgorithmWindowAdded(state, ctx.toScreenId, windowId);
     m_states.setKeyForWindow(windowId, destKey);
+    // Seed the source engine's last-known min size so the first retile
+    // clamps correctly instead of waiting a refuse/re-discover round-trip.
+    if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
+        storeWindowMinSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+    } else if (preservedMin.width() > 0 || preservedMin.height() > 0) {
+        // Internal re-home with a min-size-less context: re-store OUR
+        // preserved value through the capping path so it clamps against
+        // the destination screen (see the preservation comment above).
+        storeWindowMinSize(windowId, preservedMin.width(), preservedMin.height());
+    }
 
     // Announce the received float bit on the passive channel (the snap twin
     // announces its float re-homes via windowFloatingChanged from its
@@ -287,6 +425,46 @@ void AutotileEngine::handoffRelease(const QString& windowId)
         state->removeWindow(canonical);
     }
     m_states.removeWindow(canonical);
+    // The durable slot goes with the tracking (the scroll twin carries the
+    // same clear): a released window is one this engine knowingly gave up,
+    // and a stale autotile TILED slot left in the unified record is not
+    // memory but a false home — paired with a stale record-level screenId
+    // (which an engine-miss capture can leave behind), the cross-screen
+    // reclaim would later yank the window back out from under its new
+    // engine. Ordinary close deliberately KEEPS the slot; only the handoff
+    // clears it.
+    if (m_windowTracker) {
+        m_windowTracker->releaseEngineSlot(canonical, engineId());
+    }
+    // The min-size cache leaves with the tracking: the daemon queries
+    // windowMinimumSize BEFORE calling release (the HandoffContext
+    // contract), and a re-receive re-seeds from ctx.minSize — keeping the
+    // entry would replay a possibly other-screen-capped value on re-entry
+    // (same rationale as windowFocused's cross-screen clear).
+    m_windowMinSizes.remove(canonical);
+    // The mode-transition float marker must not outlive this engine's
+    // tracking: the receiving engine owns the float bit from here. The
+    // autotile->snapping direction is covered by the daemon's clear on
+    // windowSnapStateChanged, but autotile->scrolling has no such clear, so a
+    // stale entry keeps isModeSpecificFloated answering true for a window
+    // this engine no longer manages — which makes presaveSnapFloats skip it
+    // and loses its snap float/zone on the next return to snapping.
+    // ScrollEngine::handoffRelease clears its twin for the same reason.
+    m_autotileFloatedWindows.remove(canonical);
+    // Overflow bookkeeping likewise: every other removal path clears it, and
+    // a live entry left behind makes capturePlacement's overflow-vs-user-float
+    // discriminator record a genuine later user float as tiled.
+    m_overflow.clearOverflow(canonical);
+    // A pending seed position or post-retile focus naming a window another
+    // engine now owns must not replay on this screen's next applyTiling.
+    purgeFromPendingOrders(canonical);
+    for (auto fit = m_pendingFocusByScreen.begin(); fit != m_pendingFocusByScreen.end();) {
+        if (fit.value() == canonical) {
+            fit = m_pendingFocusByScreen.erase(fit);
+        } else {
+            ++fit;
+        }
+    }
 }
 
 void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, const QString& callerScreenId)

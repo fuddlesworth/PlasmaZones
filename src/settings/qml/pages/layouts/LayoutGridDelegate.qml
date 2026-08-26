@@ -26,9 +26,20 @@ Item {
     required property var settingsController
     required property real cellWidth
     required property real cellHeight
-    property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
-    // The full autotile default ID including prefix, for comparison
-    readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
+    property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile, 2 = Scrolling Templates
+    // The full autotile default ID including prefix, for comparison. Only
+    // evaluated for autotile cards so snapping and template cards do not
+    // re-evaluate on an unrelated autotile-default change.
+    readonly property string autotileDefaultId: root.viewMode === 1 ? "autotile:" + root.appSettings.defaultAutotileAlgorithm : ""
+    // A template card's zoneCount carries the number of bands its preview
+    // draws, and that comes from one of three sources: the template's starting
+    // columns, the width presets when it has no starting columns, or the single
+    // fallback band a template with neither draws (at its own default width
+    // when that width is a fraction, at half width otherwise).
+    // Bands off the right edge are dropped either way. Only the first source is
+    // literally a column count, so the footer and the accessible description say
+    // "widths", which is true of all three.
+    readonly property bool isTemplateCard: root.viewMode === 2 || root.modelData.isScrollingTemplate === true
     // Global "Auto-assign for all layouts" master toggle (#370). Read once at
     // the root so child controls (auto-assign button, CategoryBadge) share a
     // single binding and stay consistent.
@@ -49,7 +60,10 @@ Item {
     property bool contextMenuEnabled: true
 
     // Signals
-    signal selected(int index)
+    // Parameterless on purpose: every consumer routes by the card's id
+    // (modelData.id), and an index parameter invites being mistaken for a
+    // routing key in an id-routed page.
+    signal selected
     signal activated(string layoutId)
     signal deleteRequested(var layout)
     signal contextMenuRequested(var layout)
@@ -94,8 +108,8 @@ Item {
             pg.unregisterSearchAnchor(root._anchorId, root);
     }
 
-    Accessible.name: modelData.displayName || i18n("Unnamed Layout")
-    Accessible.description: i18np("Layout with %n zone", "Layout with %n zones", modelData.zoneCount || 0)
+    Accessible.name: modelData.displayName || (root.isTemplateCard ? i18n("Unnamed Template") : (root.viewMode === 1 ? i18n("Unnamed Algorithm") : i18n("Unnamed Layout")))
+    Accessible.description: root.isTemplateCard ? i18np("Template with %n width", "Template with %n widths", modelData.zoneCount || 0) : i18np("Layout with %n zone", "Layout with %n zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
     Accessible.focusable: true
     // Keyboard reachability for the Keys handlers below (matches
@@ -106,22 +120,31 @@ Item {
     // double-click delivers selection then activation) so keyboard activation
     // never leaves a stale selection highlight on another card.
     Keys.onReturnPressed: {
-        root.selected(root.index);
+        root.selected();
         root.activated(root.modelData.id);
     }
     // Numpad Enter alias, matching the sibling card components.
     Keys.onEnterPressed: {
-        root.selected(root.index);
+        root.selected();
         root.activated(root.modelData.id);
     }
     // Space selects without activating (WizardTemplateCard/PositionPicker
     // semantics).
-    Keys.onSpacePressed: root.selected(root.index)
+    Keys.onSpacePressed: root.selected()
     Keys.onDeletePressed: {
         // Only system items are undeletable; user (non-system) algorithms are
         // deletable via the context menu, so keyboard Delete matches that path.
         if (!root.modelData.isSystem)
             root.deleteRequested(root.modelData);
+    }
+    // Keyboard route to the context menu (Menu key / Shift+F10): the menu is
+    // the sole home of several card actions (Duplicate, Export, the current
+    // default's Clear Default), so it cannot stay mouse-only.
+    Keys.onMenuPressed: {
+        if (root.contextMenuEnabled) {
+            root.selected();
+            root.contextMenuRequested(root.modelData);
+        }
     }
 
     // HoverHandler for hover state — immune to scale transform geometry changes
@@ -142,10 +165,10 @@ Item {
             // subsequent Return/Delete presses.
             root.forceActiveFocus();
             if (mouse.button === Qt.RightButton) {
-                root.selected(root.index);
+                root.selected();
                 root.contextMenuRequested(root.modelData);
             } else {
-                root.selected(root.index);
+                root.selected();
             }
         }
         onDoubleClicked: mouse => {
@@ -215,6 +238,15 @@ Item {
                     fontItalic: root.appSettings ? root.appSettings.labelFontItalic : false
                     fontUnderline: root.appSettings ? root.appSettings.labelFontUnderline : false
                     fontStrikeout: root.appSettings ? root.appSettings.labelFontStrikeout : false
+                    // No strip axis ticks here, deliberately. The library browses
+                    // templates with no target screen in hand, and the bands it
+                    // draws are laid out screen-agnostically (always left to
+                    // right, see appendScrollingTemplatePreviews) — so a tick
+                    // resolved from the global ladder can point across its own
+                    // bands on a vertical strip, and says "horizontal" for the
+                    // default Auto axis whatever the monitor is shaped like.
+                    // The Monitors page carries the ticks, where a real screen
+                    // resolves both the bands and the axis together.
 
                     // Hover the preview to read the layout/algorithm description.
                     // Scoped to the thumbnail graphic (not the whole card) so it
@@ -253,13 +285,29 @@ Item {
                         id: defaultIcon
 
                         source: "favorite"
-                        visible: root.viewMode === 1 ? root.modelData.id === root.autotileDefaultId : root.modelData.id === root.appSettings.defaultLayoutId
+                        visible: {
+                            if (root.viewMode === 2)
+                                return root.modelData.id === root.appSettings.defaultScrollingTemplate;
+
+                            if (root.viewMode === 1)
+                                return root.modelData.id === root.autotileDefaultId;
+
+                            return root.modelData.id === root.appSettings.defaultLayoutId;
+                        }
                         width: Kirigami.Units.iconSizes.small
                         height: Kirigami.Units.iconSizes.small
                         color: Kirigami.Theme.textColor
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.visible: defaultIconMA.containsMouse && visible
-                        ToolTip.text: root.viewMode === 1 ? i18n("Default autotile algorithm") : i18n("Default layout")
+                        ToolTip.text: {
+                            if (root.viewMode === 2)
+                                return i18n("Default scrolling template");
+
+                            if (root.viewMode === 1)
+                                return i18n("Default autotile algorithm");
+
+                            return i18n("Default layout");
+                        }
 
                         MouseArea {
                             id: defaultIconMA
@@ -279,11 +327,17 @@ Item {
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.visible: systemIconMA.containsMouse && visible
                         ToolTip.text: {
+                            if (root.modelData.isScrollingTemplate && root.modelData.isSystem)
+                                return i18n("Built-in template. Editing stores your own copy.");
+
                             if (root.modelData.isAutotile && root.modelData.isSystem)
                                 return i18n("Bundled algorithm");
 
                             if (root.modelData.isSystem)
                                 return i18n("System layout (read-only)");
+
+                            if (root.modelData.isScrollingTemplate)
+                                return i18n("Edited copy of a built-in template. Deleting it brings the built-in one back.");
 
                             return i18n("Modified system layout");
                         }
@@ -359,7 +413,7 @@ Item {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.modelData.isAutotile !== true && (root.isHovered || effectiveAuto)
+                        visible: root.modelData.isAutotile !== true && root.modelData.isScrollingTemplate !== true && (root.isHovered || effectiveAuto)
                         enabled: !globalAuto
                         icon.name: effectiveAuto ? "window-duplicate" : "window-new"
                         icon.width: Kirigami.Units.iconSizes.small
@@ -376,7 +430,7 @@ Item {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.isHovered || root.modelData.hiddenFromSelector === true
+                        visible: root.modelData.isScrollingTemplate !== true && (root.isHovered || root.modelData.hiddenFromSelector === true)
                         icon.name: root.modelData.hiddenFromSelector ? "view-hidden" : "view-visible"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
@@ -400,7 +454,7 @@ Item {
                     elide: Text.ElideRight
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.disabledTextColor
-                    text: i18np("%n zone", "%n zones", root.modelData.zoneCount || 0)
+                    text: root.isTemplateCard ? i18np("%n width", "%n widths", root.modelData.zoneCount || 0) : i18np("%n zone", "%n zones", root.modelData.zoneCount || 0)
                 }
             }
         }

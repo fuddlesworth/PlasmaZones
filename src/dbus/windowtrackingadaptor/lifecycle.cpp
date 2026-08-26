@@ -9,6 +9,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "windowtrackingadaptor.h"
+#include "internal.h"
 #include "core/resolve/daemongeometryresolver.h"
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
@@ -40,6 +41,7 @@
 #include <QJsonObject>
 #include <QTimer>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <utility>
 
 namespace PlasmaZones {
 
@@ -113,19 +115,41 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         // the effect's desktopsChanged/activitiesChanged pushes) — a window
         // moved to another desktop while minimized must reopen there, not on
         // the desktop frozen into a pre-minimize record.
+        // Managed slots recorded against a DIFFERENT screen must not be
+        // re-filed verbatim under the close screen — the shared downgrade
+        // (recordFloatingClose's rule) flips them to floating BEFORE the
+        // screen stamp below erases the evidence of the mismatch.
+        PhosphorPlacement::WindowTrackingService::downgradeMismatchedManagedSlots(*preserved, preserved->screenId,
+                                                                                  authoritativeScreen);
         preserved->screenId = authoritativeScreen;
-        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-        if (const auto context = m_windowRegistry->windowContext(instanceId)) {
-            preserved->virtualDesktop = context->virtualDesktop;
-            preserved->activity = context->activity;
+        // Registry-guarded like the minimize probe at the top of this function:
+        // a registry-less service is a supported state (tests call
+        // setWindowRegistry(nullptr) on a live adaptor), and this branch is
+        // reachable with a null registry because isSuspensionFloat above needs
+        // no registry to set treatAsMinimized. Without a registry the preserve
+        // keeps the record's own desktop/activity, which is the documented
+        // degradation rather than a crash.
+        if (m_windowRegistry) {
+            const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+            if (const auto context = m_windowRegistry->windowContext(instanceId)) {
+                preserved->virtualDesktop = context->virtualDesktop;
+                preserved->activity = context->activity;
+            }
         }
-        // A pure-float record carries no engine slot, and record()'s merge
-        // only adopts context alongside engine slots — synthesize a floating
-        // slot (recordFloatingClose's convention) so the close screen lands.
-        if (preserved->engines.isEmpty() && !preserved->freeGeometryByScreen.isEmpty()) {
+        // Synthesize the OWNING engine's floating slot whenever the record
+        // lacks one — not merely when the map is empty (recordFloatingClose's
+        // convention): the tiling engines' reopen accept path reads strictly their own
+        // slot, so a record carrying only FOREIGN slots would otherwise
+        // preserve nothing the reopening engine can see. Also what makes
+        // record()'s merge adopt the close screen for a pure-float record.
+        const QString owningEngine = m_service->owningModeEngineId(windowId, authoritativeScreen);
+        // Same gate shape as recordFloatingClose: absent owning slot → add.
+        // (An all-empty record is dropped by the hasRestorableContent gate
+        // below either way — a bare floating slot is contentless residue.)
+        if (!preserved->engines.contains(owningEngine)) {
             PhosphorEngine::EngineSlot slot;
             slot.state = PhosphorEngine::WindowPlacement::stateFloating();
-            preserved->engines.insert(QString(PhosphorEngine::WindowPlacement::snapEngineId()), slot);
+            preserved->engines.insert(owningEngine, slot);
         }
         // Contentless residue must never enter the appId FIFO (mirrors the
         // primary capture path's gate): it would starve and evict real
@@ -164,7 +188,17 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     if (m_autotileEngine && m_service->isWindowInAutotileMode(windowId)) {
         std::swap(primary, secondary);
     }
-    PhosphorEngine::PlacementEngineBase* engines[] = {primary, secondary};
+    // The scrolling engine joins the capture chain the same way. Its
+    // capturePlacement returns nullopt for untracked windows, so trying it
+    // FIRST when it tracks the window is the same ordering insurance the
+    // autotile swap above provides (snap would otherwise claim the window
+    // as a stale floated record).
+    PhosphorEngine::PlacementEngineBase* scrollFirst = nullptr;
+    if (m_scrollEngine && m_scrollEngine->isWindowTracked(windowId)) {
+        scrollFirst = m_scrollEngine.data();
+    }
+    PhosphorEngine::PlacementEngineBase* engines[] = {scrollFirst, primary, secondary,
+                                                      scrollFirst ? nullptr : m_scrollEngine.data()};
     for (PhosphorEngine::PlacementEngineBase* e : engines) {
         if (!e) {
             continue;
@@ -202,7 +236,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
             // the write — exactly as recordFreeGeometry refuses tiled frames. The
             // window's prior, genuine free geometry stays intact for the float-back.
             const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFloating())
-                && !m_service->isWindowAutotileTiled(windowId);
+                && !m_service->isWindowEngineTiled(windowId);
             if (unmanagedState) {
                 const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
                 if (frame.isValid()) {
@@ -235,7 +269,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
                         const bool stillOnSnapRect =
                             !slot.zoneIds.isEmpty() && m_service->resolveZoneGeometry(slot.zoneIds, screenKey) == frame;
                         // Tiled analogue of the same poison guard (see the
-                        // helper doc). The isWindowAutotileTiled gate above
+                        // helper doc). The isWindowEngineTiled gate above
                         // cannot catch the float-toggle edge:
                         // AutotileEngine::performToggleFloat clears the tiled
                         // bit BEFORE the daemon's sync slot reaches this
@@ -315,7 +349,7 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
     // above and returned) is never second-guessed.
     // No m_service re-check: the entry guard at the top of this function
     // already established it.
-    if (!authoritativeScreen.isEmpty() && !m_service->isWindowAutotileTiled(windowId)) {
+    if (!authoritativeScreen.isEmpty() && !m_service->isWindowEngineTiled(windowId)) {
         const QRect frame = m_frameGeometry.value(shadowWindowId(windowId));
         // Same tile-rect poison guard as the primary capture path (see the
         // helper doc): a window tiled by autotile, handed off, and closed
@@ -341,7 +375,12 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
 
 bool WindowTrackingAdaptor::isFrameStillOnTileRect(const QString& windowId, const QRect& frame) const
 {
-    return m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame;
+    if (m_autotileEngine && m_autotileEngine->lastManagedRect(windowId) == frame) {
+        return true;
+    }
+    // Scroll-managed windows carry the same float-toggle capture edge: the
+    // strip rect must never be adopted as float-back geometry.
+    return m_scrollEngine && m_scrollEngine->lastManagedRect(windowId) == frame;
 }
 
 QString WindowTrackingAdaptor::shadowWindowId(const QString& windowId) const
@@ -429,15 +468,21 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         const QString trackedSnap = m_snapEngine ? m_snapEngine->screenForTrackedWindow(windowId) : QString();
         const QString trackedAutotile =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
-        const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap : trackedAutotile;
+        const QString trackedScroll = m_scrollEngine ? m_scrollEngine->screenForTrackedWindow(windowId) : QString();
+        const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap
+            : !trackedAutotile.isEmpty()                     ? trackedAutotile
+                                                             : trackedScroll;
         if (trackedScreen.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
             return;
         }
-        PhosphorEngine::PlacementEngineBase* source =
-            !trackedSnap.isEmpty() ? m_snapEngine.data() : m_autotileEngine.data();
+        PhosphorEngine::PlacementEngineBase* source = !trackedSnap.isEmpty() ? m_snapEngine.data()
+            : !trackedAutotile.isEmpty()                                     ? m_autotileEngine.data()
+                                                                             : m_scrollEngine.data();
         PhosphorEngine::PlacementEngineBase* dest = nullptr;
         if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(newScreenId)) {
             dest = m_autotileEngine.data();
+        } else if (m_scrollEngine && m_scrollEngine->isActiveOnScreen(newScreenId)) {
+            dest = m_scrollEngine.data();
         } else if (m_snapEngine) {
             dest = m_snapEngine.data();
         }
@@ -449,17 +494,22 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.toScreenId = newScreenId;
         ctx.fromEngineId = source ? source->engineId() : QString();
         ctx.wasFloating = true;
-        if (source && source != dest) {
-            source->handoffRelease(windowId);
+        // Canonical-vs-canonical (windowActivated stores the shadow id): the
+        // receive seeds its focus memory from this — a screen change that
+        // never moved focus produces no report to record the side change.
+        ctx.heldFocus = m_lastActiveWindowId == shadowWindowId(windowId);
+        ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
+        ctx.minSize = source ? source->windowMinimumSize(windowId) : QSize();
+        const bool adopted = WindowTrackingInternal::guardedHandoff(source, dest, ctx, trackedScreen);
+        if (adopted) {
+            // No windowStateChanged "screen_changed" entry here, unlike the
+            // snapped branch below: the receive path's windowFloatingChanged
+            // relay already carries the DESTINATION screen to subscribers, so a
+            // second push would be redundant; anything else about a floating
+            // window's screen is pull-resolved (screenForWindow) on demand.
+            qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
+                                 << "to" << newScreenId << "- handoff complete";
         }
-        dest->handoffReceive(ctx);
-        // No windowStateChanged "screen_changed" entry here, unlike the
-        // snapped branch below: the receive path's windowFloatingChanged
-        // relay already carries the DESTINATION screen to subscribers, so a
-        // second push would be redundant; anything else about a floating
-        // window's screen is pull-resolved (screenForWindow) on demand.
-        qCInfo(lcDbusWindow) << "windowScreenChanged: floating window" << windowId << "moved from" << trackedScreen
-                             << "to" << newScreenId << "- handoff complete";
         return;
     }
 
@@ -592,6 +642,28 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     const QString shadowId = shadowWindowId(windowId);
     m_frameGeometry.remove(shadowId);
     m_broadcastFloating.remove(shadowId);
+    // shadowId, NOT the raw windowId: shadowWindowId() IS the canonical id,
+    // and tabColorRuleParams is called with ids taken from the ScrollEngine
+    // tab-strip payload, which stores them canonicalized. For a WM_CLASS-
+    // mutating app (Electron/CEF) the effect's current composite differs from
+    // the canonical one, so removing by the raw id would miss in exactly the
+    // case canonicalization exists for and leak the entry for the session.
+    // Identical to windowId whenever the id never mutated.
+    m_tabColorMemo.remove(shadowId);
+    // The evaluator's shared memo needs the same close-time drop, and it is
+    // keyed differently: resolveCachedFiltered is called with the RAW windowId
+    // its callers were handed, not the canonical shadow id. Evict both — the
+    // two coincide for a well-behaved app, and for a class-mutating one the
+    // window can have seeded an entry under either. evictCached is a no-op for
+    // a key with no entry. Without this the entry lingers until the evaluator's
+    // own cap eviction or the next rules save retires its whole generation, and
+    // a reused window id would read a dead window's verdict.
+    if (m_ruleEvaluator) {
+        m_ruleEvaluator->evictCached(shadowId);
+        if (windowId != shadowId) {
+            m_ruleEvaluator->evictCached(windowId);
+        }
+    }
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The
@@ -716,6 +788,8 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
             const QVariant& v = it.value();
             if (k == Key::IsMinimized) {
                 meta.isMinimized = v.toBool();
+            } else if (k == Key::IsDemandingAttention) {
+                meta.isDemandingAttention = v.toBool();
             } else if (k == Key::IsFullscreen) {
                 meta.isFullscreen = v.toBool();
             } else if (k == Key::IsSticky) {
@@ -782,8 +856,11 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     // window even after the effect restarts and re-derives a mutated-class
     // composite for it. Idempotent: the instance id is stable, so a later push
     // carrying a mutated appId returns the original composite rather than
-    // re-seeding (issue #628). The registry's own remove() retires the mapping
-    // when the window closes.
+    // re-seeding (issue #628). That includes a first push whose appId is still
+    // EMPTY: the appId-less composite is frozen like any other, because a
+    // canonical that changed once the class arrived would strand the engine
+    // state keyed under the earlier id. The registry's own remove() retires the
+    // mapping when the window closes.
     m_windowRegistry->canonicalizeWindowId(PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId));
 
     m_windowRegistry->upsert(instanceId, meta);
@@ -831,9 +908,12 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
         return;
     }
-    // The effect reports the PHYSICAL screen id; VirtualDesktopManager keys its
-    // per-screen map on the same id the daemon uses everywhere. updateScreenDesktop
-    // emits screenDesktopChanged only on a real change (emit-on-change).
+    // The effect reports the PHYSICAL screen id, and VirtualDesktopManager keys its
+    // per-screen map on that physical id. The daemon asks with EFFECTIVE ids, which
+    // on a subdivided output are the vs:N children and never the physical parent, so
+    // currentDesktopForScreen resolves an effective id up to its parent output on a
+    // key miss before falling back to the global desktop. updateScreenDesktop emits
+    // screenDesktopChanged only on a real change (emit-on-change).
     m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
 }
 
@@ -842,6 +922,11 @@ void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
         return;
     }
+    // Key on the CANONICAL id. The effect reports the window's CURRENT
+    // composite, but captureWindowPlacement reaches this map with canonical
+    // ids on the engine-relay path — a raw key would make that capture miss
+    // the frame for a class-mutating app (Electron/CEF) and silently drop its
+    // float-back geometry. Every read canonicalizes to match.
     m_frameGeometry[shadowWindowId(windowId)] = QRect(x, y, width, height);
 }
 
@@ -860,20 +945,28 @@ void WindowTrackingAdaptor::notifyWindowResized(const QString& windowId, int old
     }
 
     const QRect newFrame(newX, newY, newWidth, newHeight);
-    // Keep the frame shadow in sync with the committed geometry.
+    // Keep the frame shadow in sync with the committed geometry, in the
+    // map's canonical key space (see setFrameGeometry).
     m_frameGeometry[shadowWindowId(windowId)] = newFrame;
 
+    const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
+    // Scroll strips reconcile the interactive resize into the column's
+    // stored intent; autotile reflows the tree. Route to whichever engine
+    // tracks the window (empty screen ⇒ not tracked there).
+    if (m_scrollEngine) {
+        const QString scrollScreen = m_scrollEngine->screenForTrackedWindow(windowId);
+        if (!scrollScreen.isEmpty()) {
+            m_scrollEngine->onWindowResized(windowId, oldFrame, newFrame, scrollScreen);
+            return;
+        }
+    }
     if (!m_autotileEngine) {
         return;
     }
-    // Empty screen ⇒ the window isn't autotile-tracked (floating, snap-mode, or
-    // unmanaged) — nothing to reflow. The engine re-validates regardless.
     const QString screenId = m_autotileEngine->screenForTrackedWindow(windowId);
     if (screenId.isEmpty()) {
         return;
     }
-
-    const QRect oldFrame(oldX, oldY, oldWidth, oldHeight);
     m_autotileEngine->onWindowResized(windowId, oldFrame, newFrame, screenId);
 }
 
@@ -916,6 +1009,19 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         if (!owning.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(owning, resolvedScreen)) {
             snap->migrateWindowToScreen(windowId, resolvedScreen);
         }
+        // Snap's layer-focus memories (the switch verb's "return to the
+        // window I was on" candidates) are armed here, on the adaptor that
+        // already holds the snap engine — snap is deliberately NOT in the
+        // TilingAdaptor lifecycle vector, whose focus relay serves the
+        // tiling family. Must run AFTER the migrate above: noteFocused
+        // writes through the window's owning store, and the migrate is what
+        // re-keys that store onto the activation screen. Accepted side
+        // effect: this also populates SnapEngine::m_lastActiveScreenId on
+        // every activation (previously never written in production), which
+        // activates tier 3 of setWindowFloat's screen-resolution chain —
+        // the tier that member was documented to feed. resolvedScreen (not
+        // the raw screenId) keeps virtual-screen ids intact for it.
+        snap->windowFocused(windowId, resolvedScreen);
     }
 
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;
@@ -944,19 +1050,46 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         return;
     }
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
+    // Instance-keyed view of the same set, for the shadow maps keyed on
+    // CANONICAL ids (the engine relays feed relayWindowFloatingChanged
+    // canonical ids, so m_broadcastFloating must be swept in a key space that
+    // survives a class rename — a raw sweep would erase a class-mutating
+    // app's dedup entry every pass and the next relay would re-broadcast an
+    // unchanged float state).
     QSet<QString> aliveInstances;
     aliveInstances.reserve(aliveWindowIds.size());
+    // Canonical view of the same set, for the ENGINE prunes: the engines key
+    // their internal maps on canonical ids (see the loop below).
+    QSet<QString> canonicalAlive;
+    canonicalAlive.reserve(aliveWindowIds.size());
     for (const QString& id : aliveWindowIds) {
         aliveInstances.insert(PhosphorIdentity::WindowId::extractInstanceId(id));
+        canonicalAlive.insert(m_service->canonicalizeForLookup(id));
     }
     if (!m_lastActiveWindowId.isEmpty()
         && !aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(m_lastActiveWindowId))) {
         m_lastActiveWindowId.clear();
     }
+    // Capture each dead window's final engine slot BEFORE ANY prune drops
+    // state — pruneStaleAssignments wipes the SnapState the snap capture
+    // answers from, and the engine prunes below untrack the tiling engines,
+    // so this must run first or a silently-dead window's persisted record
+    // stays as stale as the last save-timer sweep. Screen-less form: the
+    // close-only branches (minimize preserve, orphan fallback, sibling
+    // collapse) need an authoritative screen nobody has for a silently-dead
+    // window. Keys are SNAPSHOTTED first — captureWindowPlacement fans out
+    // into engine code, and mutating a QHash mid-iteration is undefined
+    // (refreshOpenWindowPlacements documents the same discipline).
+    const QStringList shadowIds = m_frameGeometry.keys();
+    for (const QString& shadowId : shadowIds) {
+        if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(shadowId))) {
+            captureWindowPlacement(shadowId);
+        }
+    }
     int persistedPruned = m_service->pruneStaleAssignments(alive);
-    if (m_autotileEngine) {
-        // The autotile engine keys every internal map (m_states reverse map,
-        // m_windowMinSizes, m_autotileFloatedWindows, TilingState membership)
+    if (m_autotileEngine || m_scrollEngine) {
+        // The engines key every internal map (m_states reverse maps,
+        // m_windowMinSizes, float markers, TilingState/strip membership)
         // on each window's CANONICAL id — its FIRST-seen composite, frozen by
         // the daemon-side WindowRegistry. The alive list, by contrast, carries
         // the effect's CURRENT composites: on an effect reload the effect
@@ -965,37 +1098,68 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
         // class the canonicalization machinery exists for) the current
         // composite differs from the canonical. A raw comparison would then
         // miss the live window in the alive set and FORCE-REMOVE it from the
-        // layout. Canonicalize each alive id back to its registry identity so
-        // the engine compares canonical-to-canonical (passthrough for ids the
+        // layout. Canonicalize each alive id back to its registry identity
+        // ONCE (hoisted to the top of this method), then prune every
+        // non-null engine with the same set (passthrough for ids the
         // registry never saw — never worse than the raw set).
-        QSet<QString> canonicalAlive;
-        canonicalAlive.reserve(aliveWindowIds.size());
-        for (const QString& id : aliveWindowIds) {
-            canonicalAlive.insert(m_service->canonicalizeForLookup(id));
+        for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.data(), m_scrollEngine.data()}) {
+            if (engine) {
+                persistedPruned += engine->pruneStaleWindows(canonicalAlive);
+            }
         }
-        persistedPruned += m_autotileEngine->pruneStaleWindows(canonicalAlive);
     }
     // Defensive sweep of the frame-geometry shadow store. The primary
     // cleanup path is `windowClosed`, but if a window dies without a
     // matching close signal reaching the adaptor (effect bug, compositor
     // crash, lost D-Bus call), the entry would otherwise leak forever.
     // The effect calls pruneStaleWindows precisely for this defensive
-    // case — extend the same alive-set filter to m_frameGeometry.
+    // case — extend the same alive-set filter to m_frameGeometry. The map is
+    // keyed on canonical ids, so it is swept in the instance-id key space: a
+    // raw sweep would erase a class-mutating app's live entry every pass.
     int frameGeoPruned = 0;
     for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            // The evaluator's shared memo has no enumeration API, so it cannot
+            // be swept by the alive-set predicate the local maps use. Evict by
+            // the dead key instead: this map holds an entry for every window
+            // the daemon tracked, so its dead keys are the dead windows.
+            if (m_ruleEvaluator) {
+                m_ruleEvaluator->evictCached(it.key());
+            }
             it = m_frameGeometry.erase(it);
             ++frameGeoPruned;
         } else {
             ++it;
         }
     }
+    // Fan the prune out to sibling adaptors' per-window caches (see the
+    // signal doc). Consumers only erase from their OWN maps — nothing here
+    // depends on emit-vs-sweep ordering. The payload is the same instance-id
+    // view the local sweeps use, as a marshallable list: adaptor signals are
+    // auto-relayed onto the bus, and QSet has no D-Bus signature.
+    Q_EMIT stalePruned(QStringList(aliveInstances.cbegin(), aliveInstances.cend()));
     // Same defensive sweep for the last-broadcast floating shadow: an entry
     // would otherwise leak if the window died without a windowClosed signal.
     // Not persisted, so it does not feed the save-scheduling decision below.
     for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_broadcastFloating.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    // And the tab-colour rule memo, for the same reason and in the same key
+    // space — it is keyed on canonical ids too, so a raw sweep would erase a
+    // class-mutating app's live entry every pass.
+    for (auto it = m_tabColorMemo.begin(); it != m_tabColorMemo.end();) {
+        if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            // Canonical-id twin of the evaluator eviction in the frame-geometry
+            // sweep above: a resolve reached the shared memo under whichever id
+            // its caller held, and evictCached is a no-op for a missing key.
+            if (m_ruleEvaluator) {
+                m_ruleEvaluator->evictCached(it.key());
+            }
+            it = m_tabColorMemo.erase(it);
         } else {
             ++it;
         }

@@ -22,6 +22,7 @@ class CurveRegistry;
 namespace PhosphorRules {
 class RuleEvaluator;
 class ResolvedActions;
+struct Rule;
 }
 
 namespace PlasmaZones {
@@ -238,5 +239,63 @@ std::optional<ResolvedDecorationChain> resolveDecorationChain(const PhosphorRule
  * pair, always writing both flags.
  */
 std::optional<QString> resolveWindowLayer(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Fullscreen-at-open verdict — the runtime consumer for the
+ *        OpenFullscreen rule.
+ *
+ * Returns the boolean payload when an enabled rule fills the
+ * `open-fullscreen` slot of @p resolved (true = open in real KWin
+ * fullscreen, false = veto the app's own fullscreen request at open), or
+ * `std::nullopt` when no rule fills it or the value is not a strict JSON
+ * bool (same defence-in-depth stance as the other consumers). The caller
+ * (applyRuleOpenFullscreen) flips `KWin::Window::setFullScreen` once, at
+ * windowAdded time, before the window is announced to the daemon — and the
+ * tiling-eligibility gate rejects on the REQUESTED bit as well as the
+ * committed one, so the announce path is not fooled by the commit lag this
+ * flip leaves behind on Wayland.
+ *
+ * Resolved against the effect-VERDICT evaluator (`Tag::EffectVerdict`), whose
+ * terminal scope is the blanket `Exclude` only: an `ExcludeAnimations` rule
+ * must not cancel a fullscreen-at-open decision.
+ */
+std::optional<bool> resolveOpenFullscreen(const PhosphorRules::ResolvedActions& resolved);
+
+/**
+ * @brief Per-window scroll-speed multiplier — the runtime consumer for the
+ *        ScrollFactor rule.
+ *
+ * Returns the validated factor when an enabled rule fills the `scroll-factor`
+ * slot of @p resolved, or `std::nullopt` when no rule fills it or the value is
+ * non-numeric / non-finite / outside [MinScrollFactor, MaxScrollFactor]
+ * (reject-not-clamp, matching the load-time validator; NaN fails an ordered
+ * comparison in BOTH directions, so it is rejected by an explicit finiteness
+ * test rather than by the range test). Resolved against the effect-VERDICT
+ * evaluator, so an `ExcludeAnimations` rule cannot cancel it. The caller (the
+ * effect's input filter,
+ * via ruleScrollFactorFor) rescales the axis event's delta and deltaV120 in
+ * place before the forwarding filter delivers it to the client.
+ */
+std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& resolved);
+
+/// True when @p rule carries at least one appearance action that can actually
+/// take effect on a window.
+///
+/// The animation window-filter force-animates a window past the user's min-size
+/// and exclusion settings when a rule matches it, on the reasoning that
+/// authoring a matching rule is the opt-in signal. That reasoning needs the
+/// rule to be able to DO something. An animation override names an event, and
+/// rule slots are looked up by exact event path with no parent cascade (see
+/// shaderSlotFor and friends), so an override pinned to an event the compositor
+/// resolves windowless is never consulted and the rule signals nothing.
+///
+/// "Live" is asked through the action descriptor rather than against a list of
+/// animation action type ids, which would drift the day a fourth event-scoped
+/// action is registered. An action declaring no `animationEvent` param is not
+/// event-scoped at all (a border, an opacity, a layer) and is always live. An
+/// EMPTY event is unset rather than windowless and stays live; an event this
+/// build does not know names no leg any resolver asks for, so it is inert
+/// exactly like a windowless one.
+bool ruleCarriesLiveEffectAction(const PhosphorRules::Rule& rule);
 
 } // namespace PlasmaZones

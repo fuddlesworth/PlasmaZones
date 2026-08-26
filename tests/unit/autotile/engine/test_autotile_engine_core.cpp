@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QSignalSpy>
 
 #include <memory>
@@ -14,6 +15,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "helpers/AutotileTestHelpers.h"
 #include "helpers/IsolatedConfigGuard.h"
+#include "helpers/LogCapture.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubZoneDetector.h"
 #include <PhosphorTileEngine/AutotileConfig.h>
@@ -21,6 +23,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 
+#include "helpers/AutotileFakes.h"
 #include "helpers/ScriptedAlgoTestSetup.h"
 
 #include <QJsonObject>
@@ -39,6 +42,15 @@ class TestAutotileEngineCore : public QObject
 
 private:
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
+
+    /// Tile-engine log capture (shared helper), so a test can assert WHICH
+    /// branch produced an outcome rather than only that it happened.
+    template<typename Fn>
+    static QStringList captureTileLogs(Fn&& fn)
+    {
+        return PlasmaZones::TestHelpers::captureCategoryLogs(QLatin1String("org.phosphor.tile-engine"),
+                                                             std::forward<Fn>(fn));
+    }
 
 private Q_SLOTS:
 
@@ -434,7 +446,11 @@ private Q_SLOTS:
         original.outerGap = 10;
         original.splitRatio = 0.65;
         original.masterCount = 2;
-        original.algorithmId = QStringLiteral("bsp");
+        // NOT the default ("bsp", AutotileDefaults::DefaultAlgorithmId): a
+        // round-trip assertion against a field's own default cannot fail,
+        // and this is the field that decides which algorithm a reloaded
+        // per-screen config uses.
+        original.algorithmId = QStringLiteral("columns");
         original.smartGaps = false;
         original.focusNewWindows = false;
         original.focusFollowsMouse = true;
@@ -536,6 +552,36 @@ private Q_SLOTS:
     // =========================================================================
     // Window lifecycle tests
     // =========================================================================
+
+    void testTiledRecordIsNotConsumedOnReopen()
+    {
+        // Order restore was removed deliberately: a TILED record must not be
+        // consumed on reopen (it stays as the exact-final evidence the window
+        // closed tiled) and the reopened window takes a config-order insert.
+        PlasmaZones::TestHelpers::FakeStickyWindowTracking tracker;
+        AutotileEngine engine(nullptr, &tracker, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        const QString screen = QStringLiteral("DP-1");
+        engine.setAutotileScreens({screen});
+
+        engine.windowOpened(QStringLiteral("aa|a1"), screen);
+        engine.windowOpened(QStringLiteral("bb|b1"), screen);
+        QCoreApplication::processEvents();
+
+        const auto rec = engine.capturePlacement(QStringLiteral("bb|b1"));
+        QVERIFY(rec.has_value());
+        QVERIFY(tracker.placementStore().record(*rec));
+        engine.windowClosed(QStringLiteral("bb|b1"));
+
+        engine.windowOpened(QStringLiteral("bb|b2"), screen);
+        QCoreApplication::processEvents();
+
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(screen);
+        QVERIFY(state);
+        QVERIFY(state->containsWindow(QStringLiteral("bb|b2")));
+        QVERIFY(!state->isFloating(QStringLiteral("bb|b2"))); // tiled reopen stays tiled
+        // The tiled record was not consumed by the reopen.
+        QVERIFY(tracker.placementStore().peekExact(QStringLiteral("bb|b1")).has_value());
+    }
 
     void testWindowLifecycle()
     {
@@ -691,8 +737,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PlasmaZones::StubZoneDetector zoneDetector;
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
 
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-1");
@@ -732,8 +777,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PlasmaZones::StubZoneDetector zoneDetector;
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         PhosphorEngine::WindowRegistry registry;
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setWindowRegistry(&registry);
@@ -812,8 +856,7 @@ private Q_SLOTS:
         PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
         std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
             PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
-        PlasmaZones::StubZoneDetector zoneDetector;
-        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), &zoneDetector, nullptr, nullptr);
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
         PhosphorEngine::WindowRegistry registry;
         AutotileEngine engine(nullptr, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setWindowRegistry(&registry);
@@ -844,6 +887,180 @@ private Q_SLOTS:
         const PhosphorEngine::EngineSlot slot = stored->slotFor(engine.engineId());
         QCOMPARE(slot.state, QString(PhosphorEngine::WindowPlacement::stateTiled()));
         QCOMPARE(slot.order, 0);
+    }
+
+    // =========================================================================
+    // Cross-screen session reclaim (claimCrossScreenReopen) and its scrolling
+    // reciprocal: KWin's session restore opens windows on a nondeterministic
+    // output, so a window recorded TILED on this engine's screen can arrive
+    // announced elsewhere — the engine pulls it home. A window recorded tiled
+    // on a scrolling-mode screen that arrives HERE is scrolling's to reclaim,
+    // and windowOpened must stand down.
+    // =========================================================================
+
+    void testClaimCrossScreenReopen_pullsTiledRecordHome()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString home = QStringLiteral("DP-1");
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layoutManager->setAssignmentEntryDirect(home, 0, QString(), autotile);
+        engine.setAutotileScreens({home});
+
+        using PhosphorEngine::WindowPlacement;
+        WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|old");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = home;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(WindowPlacement::stateTiled());
+        slot.order = 0;
+        rec.engines.insert(engine.engineId(), slot);
+        QVERIFY(wts.placementStore().record(rec));
+
+        QVERIFY2(engine.claimCrossScreenReopen(QStringLiteral("app|new"), QStringLiteral("DP-9"), 0, 0),
+                 "a tiled record homed on an autotile-mode screen must be reclaimed cross-screen");
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(home);
+        QVERIFY(state);
+        QVERIFY2(state->containsWindow(QStringLiteral("app|new")),
+                 "the reclaimed window must re-enter the RECORDED screen's tiling state");
+        // A claim that pulled the window home and then floated it there would
+        // satisfy containsWindow alone — the record said TILED, so pin that.
+        QVERIFY2(!state->isFloating(QStringLiteral("app|new")),
+                 "a TILED record must be reclaimed as tiled, not floated on arrival");
+    }
+
+    void testClaimCrossScreenReopen_refusalLadder()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString home = QStringLiteral("DP-1");
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layoutManager->setAssignmentEntryDirect(home, 0, QString(), autotile);
+        engine.setAutotileScreens({home});
+
+        using PhosphorEngine::WindowPlacement;
+        // FLOATING record: float restore is screen-local, never a pull.
+        WindowPlacement floatRec;
+        floatRec.windowId = QStringLiteral("edit|old");
+        floatRec.appId = QStringLiteral("edit");
+        floatRec.screenId = home;
+        PhosphorEngine::EngineSlot floatSlot;
+        floatSlot.state = QString(WindowPlacement::stateFloating());
+        floatRec.engines.insert(engine.engineId(), floatSlot);
+        floatRec.freeGeometryByScreen.insert(home, QRect(20, 20, 400, 300));
+        QVERIFY(wts.placementStore().record(floatRec));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("edit|new"), QStringLiteral("DP-9"), 0, 0),
+                 "an autotile-floating record must not claim cross-screen");
+
+        // Tiled record but SAME-screen arrival: the ordinary open path owns it.
+        WindowPlacement tiled;
+        tiled.windowId = QStringLiteral("app|old");
+        tiled.appId = QStringLiteral("app");
+        tiled.screenId = home;
+        PhosphorEngine::EngineSlot tiledSlot;
+        tiledSlot.state = QString(WindowPlacement::stateTiled());
+        tiledSlot.order = 0;
+        tiled.engines.insert(engine.engineId(), tiledSlot);
+        QVERIFY(wts.placementStore().record(tiled));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("app|new"), home, 0, 0),
+                 "an arrival on the recorded screen itself is not cross-screen");
+
+        // Already-tracked window: an in-session move, never a session restore.
+        engine.windowOpened(QStringLiteral("app|new"), home);
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("app|new"), QStringLiteral("DP-9"), 0, 0),
+                 "a window this engine already tracks must never be re-claimed");
+
+        // Home context NOT in autotile mode (default entry is Snapping):
+        // the MODE check must be the refusing branch, so DP-5 is added to
+        // the live screen set first — otherwise isActiveOnScreen refuses too
+        // and the leg would pass even with the mode term deleted.
+        engine.setAutotileScreens({home, QStringLiteral("DP-5")});
+        WindowPlacement offMode;
+        offMode.windowId = QStringLiteral("web|old");
+        offMode.appId = QStringLiteral("web");
+        offMode.screenId = QStringLiteral("DP-5");
+        offMode.engines.insert(engine.engineId(), tiledSlot);
+        QVERIFY(wts.placementStore().record(offMode));
+        QVERIFY2(!engine.claimCrossScreenReopen(QStringLiteral("web|new"), QStringLiteral("DP-9"), 0, 0),
+                 "a home screen not in autotile mode must refuse the claim");
+
+        // Null dependencies (headless path): never claims. The scroll twin
+        // covers this through its unset resolver; autotile's equivalent is
+        // the tracker/layout-manager guard.
+        AutotileEngine headless(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
+        headless.setAutotileScreens({home});
+        QVERIFY2(!headless.claimCrossScreenReopen(QStringLiteral("app|new"), QStringLiteral("DP-9"), 0, 0),
+                 "an engine with no tracker or layout manager must never claim");
+    }
+
+    void testWindowOpened_defersToScrollingCrossScreenRestore()
+    {
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        std::unique_ptr<PhosphorZones::LayoutRegistry> layoutManager(
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts")));
+        PhosphorPlacement::WindowTrackingService wts(layoutManager.get(), nullptr, nullptr);
+        AutotileEngine engine(layoutManager.get(), &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        const QString here = QStringLiteral("DP-1");
+        engine.setAutotileScreens({here});
+        // Registry setup for realism only — DP-2 genuinely IS a scrolling
+        // screen in the assignment cascade (a payload-less Scrolling entry
+        // is the canonical KCM shape; the "scrolling:" sentinel needs no
+        // id). It does NOT decide this test: the defer term consults the
+        // daemon-injected resolver below, which answers mode AND
+        // scroll-engine liveness, because a defer keyed on mode alone would
+        // stand down for a window the scroll engine then declines.
+        PhosphorZones::AssignmentEntry scrolling;
+        scrolling.mode = PhosphorZones::AssignmentEntry::Scrolling;
+        layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), scrolling);
+        engine.setScrollingModeResolver([](const QString& rec, int, const QString&) {
+            return rec == QStringLiteral("DP-2");
+        });
+
+        using PhosphorEngine::WindowPlacement;
+        WindowPlacement rec;
+        rec.windowId = QStringLiteral("term|old");
+        rec.appId = QStringLiteral("term");
+        rec.screenId = QStringLiteral("DP-2");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = QString(WindowPlacement::stateTiled());
+        slot.order = 1;
+        rec.engines.insert(WindowPlacement::scrollingEngineId(), slot);
+        QVERIFY(wts.placementStore().record(rec));
+
+        const QStringList deferLines = captureTileLogs([&] {
+            engine.windowOpened(QStringLiteral("term|new"), here);
+        });
+        QVERIFY2(!deferLines.isEmpty(),
+                 "tile-engine log capture produced nothing — the branch assertion below "
+                 "would pass vacuously");
+        // tilingStateForScreen creates on demand (testStateForScreen_createNew
+        // pins that), so the state is never null here — asserting under an
+        // `if` would silently skip the whole check if that ever changed.
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(here);
+        QVERIFY(state);
+        QVERIFY2(!state->containsWindow(QStringLiteral("term|new")),
+                 "a cross-screen scrolling restore must not be adopted by autotile");
+        // ...and specifically because the DEFER branch refused it, not some
+        // unrelated early bail: the engine logs a distinctive line there.
+        QVERIFY2(deferLines.join(QLatin1Char('\n'))
+                     .contains(QStringLiteral("defers — carries a cross-screen restore for another engine")),
+                 "the cross-screen defer gate must be the branch that refused adoption");
+        // The record survives untouched for scrolling's claim.
+        QVERIFY(wts.placementStore().peekExact(QStringLiteral("term|old")).has_value());
     }
 };
 

@@ -115,6 +115,13 @@ public:
      * while Portal relays the compositor's localized description. Don't
      * string-compare results across backends or parse them back into
      * QKeySequence.
+     *
+     * KNOWN CONSUMER PAST THAT CONTRACT: the daemon's cheatsheet family
+     * compression (shortcutmanager_catalog.cpp) does parse these back to
+     * normalize and token-compare. It degrades gracefully by design — a
+     * string that does not parse stays verbatim, fails the compare, and the
+     * family simply shows uncompressed rows — but a change to this method's
+     * output format must keep that consumer in mind.
      */
     QStringList effectiveTriggers(const QString& id) const;
 

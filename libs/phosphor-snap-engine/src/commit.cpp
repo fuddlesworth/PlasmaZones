@@ -22,6 +22,15 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     if (!m_globals) {
         return;
     }
+    // Guarded locally like m_globals, per the ctor contract: this is public
+    // API, and the clearFloatingForSnap deref below is unconditional, so a
+    // stub-dependency engine crashed here in release while the assert above
+    // only covered the other dependency.
+    Q_ASSERT(m_windowTracker);
+    if (!m_windowTracker) {
+        qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnapImpl: no window tracker for" << windowId;
+        return;
+    }
     Q_ASSERT(!zoneIds.isEmpty());
     if (Q_UNLIKELY(zoneIds.isEmpty())) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnapImpl: empty zoneIds for" << windowId;
@@ -29,7 +38,21 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
     }
     const QString& primaryZoneId = zoneIds.first();
 
-    if (m_windowTracker->clearFloatingForSnap(windowId)) {
+    // The broadcast is gated on EITHER float verdict, not the routed one
+    // alone. clearFloatingForSnap reads the mode-routed isWindowFloating,
+    // which on a screen mid-flip answers the FOREIGN engine's bit — false —
+    // while snap's OWN bit is true and the zone assignment below clears it
+    // silently. Subscribers that last heard "floating" (the adaptor's float
+    // bookkeeping, the effect's per-screen float cache) then keep stale float
+    // chrome on a window snap just committed to a zone. The routed call still
+    // runs for its own bookkeeping; when only the own bit was set, the
+    // pre-float capture is cleared to match the normal path.
+    const bool ownFloating = isFloating(windowId);
+    const bool routedCleared = m_windowTracker->clearFloatingForSnap(windowId);
+    if (ownFloating && !routedCleared) {
+        m_windowTracker->clearPreFloatZone(windowId);
+    }
+    if (ownFloating || routedCleared) {
         Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
     }
 
@@ -172,7 +195,16 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
             // (production deps are non-null; tests never reach this path with a
             // null tracker), so no separate guard is needed here.
             uncommitSnap(entry.windowId);
-            m_windowTracker->clearFreeGeometry(entry.windowId);
+            // Screen-scoped when a screen is resolvable: this restore
+            // consumes ONE screen's float-back, and the all-screens form
+            // destroyed the position remembered for every other monitor.
+            // The empty-screen escalation to the wholesale clear is the
+            // pre-existing fallback for an unresolvable entry.
+            QString restoreScreen = entry.targetScreenId;
+            if (restoreScreen.isEmpty() && mgr && entry.targetGeometry.isValid()) {
+                restoreScreen = mgr->effectiveScreenAt(entry.targetGeometry.center());
+            }
+            m_windowTracker->clearFreeGeometry(entry.windowId, restoreScreen);
             resolvedScreens.append(QString());
             continue;
         }

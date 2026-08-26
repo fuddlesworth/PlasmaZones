@@ -19,6 +19,7 @@
  */
 
 #include <QDir>
+#include <QDirIterator>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTest>
@@ -38,6 +39,38 @@ class TestSettingsValueLabels : public QObject
 private:
     /// (group, key, token) triples that carry a label, as one joined string per
     /// entry so the two directions can be compared as sets.
+    /// Numeric keys that legitimately carry no unit: bare counts, indices and
+    /// ratios where a suffix would read as noise rather than as information.
+    /// Anything NOT listed here has to have a descriptor, so a new numeric key
+    /// with a real unit cannot ship rendering as a bare number.
+    static const QSet<QString>& unitlessNumericKeys()
+    {
+        static const QSet<QString> kSet{
+            // Bare counts: "3" reads correctly, "3 columns" would be the view's
+            // job to phrase, not the unit table's.
+            QStringLiteral("Snapping.ZoneSelector/GridColumns"),
+            QStringLiteral("Snapping.ZoneSelector/MaxRows"),
+            QStringLiteral("Tiling.Algorithm/MasterCount"),
+            QStringLiteral("Tiling.Algorithm/MaxWindows"),
+            QStringLiteral("Shaders.Audio/Bars"),
+            // Font weights are a CSS scale (400 regular, 700 bold), not a
+            // quantity of anything.
+            QStringLiteral("Snapping.Zones.Labels/FontWeight"),
+            QStringLiteral("Scrolling.TabIndicator/FontWeight"),
+            // A 0-100 strength knob that the UI deliberately renders with no
+            // suffix (GeneralPage.qml sets valueSuffix to empty). It is not a
+            // percentage OF anything, so a "%" would assert a meaning the
+            // value does not carry.
+            QStringLiteral("Shaders.Audio/NoiseReduction"),
+            // Dual-kind: holds a 0.05-1.0 proportion or a pixel width
+            // depending on Scrolling/DefaultColumnWidthKind, and proportion is
+            // the default. No single unit is correct, so it carries none
+            // rather than a wrong one.
+            QStringLiteral("Scrolling/DefaultColumnWidthValue"),
+        };
+        return kSet;
+    }
+
     static QSet<QString> labelledTriples()
     {
         QSet<QString> out;
@@ -101,6 +134,74 @@ private Q_SLOTS:
         // Guard the guard: an empty label table subtracts to an empty orphan
         // set and would pass while checking nothing.
         QVERIFY2(!labelled.isEmpty(), "no labels found — the walk is broken, not clean");
+    }
+
+    /// Every numeric key either carries a descriptor or is declared unitless.
+    ///
+    /// The two slots above walk enum CHOICES, and the orphan slot walks
+    /// descriptors -> schema, which catches a stale row. Nothing walked
+    /// schema -> descriptors for numeric keys, so a new Int/Double key with a
+    /// real unit could ship with no descriptor and stay green: the profile diff
+    /// then renders it as a bare number. That is exactly how the four trigger
+    /// release graces shipped unitless. This is the missing direction.
+    void everyNumericKeyIsDescribedOrDeclaredUnitless()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QStringList undescribed;
+        int checked = 0;
+        for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
+            for (const PhosphorConfig::KeyDef& def : git.value()) {
+                if (def.expectedType != QMetaType::Int && def.expectedType != QMetaType::Double) {
+                    continue;
+                }
+                if (!def.choices.isEmpty()) {
+                    continue; // An enum stored as an int: the choice slots own it.
+                }
+                const QString qualified = git.key() + QLatin1Char('/') + def.key;
+                if (unitlessNumericKeys().contains(qualified)) {
+                    continue;
+                }
+                ++checked;
+                const ValueDescriptor d = SettingsValueLabels::descriptorFor(git.key(), def.key);
+                if (d.kind == ValueKind::Plain && d.unit.isEmpty()) {
+                    undescribed.append(qualified);
+                }
+            }
+        }
+        undescribed.sort();
+        QVERIFY2(undescribed.isEmpty(),
+                 qPrintable(QStringLiteral("numeric keys with no descriptor and not declared unitless: %1")
+                                .arg(undescribed.join(QLatin1String(", ")))));
+        QVERIFY2(checked > 0, "no numeric keys found in the schema — the walk is broken, not clean");
+    }
+
+    /// Every unitless-allowlist entry must name a key the schema declares.
+    ///
+    /// Without this a renamed or misspelled entry silently stops excusing
+    /// anything while still reading as a live exemption. The gate stays honest
+    /// either way (an unmatched entry excuses nothing), but the list would
+    /// quietly rot. Mirrors deliberateExclusionsAreRealKeys in
+    /// test_page_owned_config_keys.cpp.
+    void everyUnitlessDeclarationNamesARealKey()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QSet<QString> declared;
+        for (auto git = schema.groups.constBegin(); git != schema.groups.constEnd(); ++git) {
+            for (const PhosphorConfig::KeyDef& def : git.value()) {
+                declared.insert(git.key() + QLatin1Char('/') + def.key);
+            }
+        }
+        QStringList dangling;
+        for (const QString& entry : unitlessNumericKeys()) {
+            if (!declared.contains(entry)) {
+                dangling.append(entry);
+            }
+        }
+        dangling.sort();
+        QVERIFY2(dangling.isEmpty(),
+                 qPrintable(QStringLiteral("unitless declarations naming no schema key: %1")
+                                .arg(dangling.join(QLatin1String(", ")))));
+        QVERIFY2(!unitlessNumericKeys().isEmpty(), "the allowlist is empty — this guard checks nothing");
     }
 
     /// A declared value must be one its own key actually accepts. The validator
@@ -199,9 +300,47 @@ private Q_SLOTS:
         QVERIFY2(!described.isEmpty(), "no described keys — the walk is broken, not clean");
     }
 
+    /// The reverse direction of the walk above, which is the one that was
+    /// unguarded: every trigger-list key the SCHEMA declares must have a
+    /// Trigger descriptor. The descriptor table names trigger-bearing GROUPS
+    /// by hand, so a feature that puts its list in a new group of its own
+    /// (the scroll keys did) is registered nowhere and renders as a raw
+    /// maplist in the profile diff. Nothing failed when that happened,
+    /// because the described-to-schema walk only catches the opposite error.
+    void everySchemaTriggerKeyDescribesAsTrigger()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QStringList undescribed;
+        int checked = 0;
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            for (const auto& entry : it.value()) {
+                if (entry.key != ConfigDefaults::triggersKey()) {
+                    continue;
+                }
+                ++checked;
+                if (SettingsValueLabels::descriptorFor(it.key(), entry.key).kind != ValueKind::Trigger) {
+                    undescribed.append(it.key() + QLatin1Char('/') + entry.key);
+                }
+            }
+        }
+        undescribed.sort();
+        QVERIFY2(undescribed.isEmpty(),
+                 qPrintable(QStringLiteral("schema trigger keys with no Trigger descriptor: %1")
+                                .arg(undescribed.join(QLatin1String(", ")))));
+        QVERIFY2(checked > 0, "no trigger keys found in the schema — the walk is broken, not clean");
+    }
+
     /// A key displayed as a percentage must actually persist a 0.0-1.0 ratio.
     /// Scaling a key that already stores 0-100 would render "8000%", and the
     /// only signal that the scale is wrong is the number a user sees.
+    ///
+    /// The check reads the DEFAULT, not the key's whole legal band. One
+    /// percent-rendered key is a multiplier rather than a ratio:
+    /// Decorations.Performance/BlurScaleMultiplier legally stores up to 2.0
+    /// (rendered "200%", which is correct for it) and clears this guard only
+    /// because its default is 1.0. If its default ever moves above 1.0, the
+    /// right fix is an explicit exemption for that key here, not loosening the
+    /// bound for everyone.
     void percentScaledKeysStoreARatio()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
@@ -324,8 +463,12 @@ private Q_SLOTS:
 
         QStringList problems;
         int calls = 0;
-        const QFileInfoList files = qmlDir.entryInfoList({QStringLiteral("*.qml")}, QDir::Files);
-        for (const QFileInfo& info : files) {
+        // Recursive on purpose: nearly every page lives under qml/pages/**, so
+        // a flat entryInfoList walk saw only the handful of top-level files and
+        // silently guarded 3 of the ~23 real call sites while reading green.
+        QDirIterator files(qmlDir.path(), {QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (files.hasNext()) {
+            const QFileInfo info(files.next());
             QFile file(info.absoluteFilePath());
             if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
                 continue;
@@ -349,7 +492,12 @@ private Q_SLOTS:
 
         problems.sort();
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
-        QVERIFY2(calls > 0, "no valueOptions() calls found in QML — the scan is broken, not clean");
+        // A floor a single-file scan cannot satisfy: the settings QML carries
+        // over twenty valueOptions() calls, so a count this low means the walk
+        // regressed to a subset of the tree, not that pickers were removed.
+        QVERIFY2(calls > 10,
+                 qPrintable(QStringLiteral("only %1 valueOptions() calls found in QML — the scan is broken, not clean")
+                                .arg(calls)));
     }
 
     /// Every UI-subset token must name a choice its key actually declares —

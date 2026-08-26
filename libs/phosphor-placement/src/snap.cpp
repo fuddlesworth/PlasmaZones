@@ -141,13 +141,30 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
 
 void WindowTrackingService::setSnapStateResolver(SnapStateResolver resolver)
 {
+    const bool detaching = !resolver.globals;
     m_snapResolver = std::move(resolver);
+    if (detaching) {
+        // An EMPTY resolver is a detach, and a detach discards the hold for
+        // the same reason setSnapState(nullptr) does: keeping it would flush a
+        // set captured for the store that just went away into whatever store
+        // is wired next. The two detach paths are documented as equivalent, so
+        // they must actually behave that way.
+        m_pendingUserSnappedClasses.reset();
+        return;
+    }
+    // A load that arrived before the resolver was wired parked its classes;
+    // now that a store exists they can land. See setUserSnappedClasses.
+    flushPendingUserSnappedClasses();
 }
 
 void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
 {
     if (!state) {
         m_snapResolver = SnapStateResolver{};
+        // A detach DISCARDS the hold. Keeping it would flush a set captured
+        // for the store that just went away into whatever store is wired
+        // next — visible in tests that reuse one service across cases.
+        m_pendingUserSnappedClasses.reset();
         return;
     }
     SnapStateResolver resolver;
@@ -168,6 +185,7 @@ void WindowTrackingService::setSnapState(PhosphorSnapEngine::SnapState* state)
     };
     resolver.forgetWindow = [](const QString&) { };
     m_snapResolver = std::move(resolver);
+    flushPendingUserSnappedClasses();
 }
 
 void WindowTrackingService::setSnapEngine(PhosphorEngine::PlacementEngineBase* engine)
@@ -208,7 +226,12 @@ QList<PhosphorSnapEngine::SnapState*> WindowTrackingService::snapAllStates() con
 
 bool WindowTrackingService::hasSnapState() const
 {
-    return static_cast<bool>(m_snapResolver.globals);
+    // Resolve, don't just check the arm is installed. The globals lambda
+    // captures a QPointer, so it self-nulls when the engine dies while the
+    // arm stays callable — and every Q_ASSERT(hasSnapState()) then passed in
+    // debug while the paired release path took its null branch. The assert
+    // now asserts what the code below it actually needs.
+    return m_snapResolver.globals && m_snapResolver.globals() != nullptr;
 }
 
 } // namespace PhosphorPlacement

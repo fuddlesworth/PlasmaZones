@@ -76,12 +76,36 @@ SettingsFlickable {
                     description: activeDescription
 
                     SettingsSwitch {
+                        id: toggleActivationSwitch
+
                         checked: appSettings.toggleActivation
                         accessibleName: i18n("Toggle mode")
                         onToggled: function (newValue) {
                             appSettings.toggleActivation = newValue;
                         }
                     }
+                }
+
+                // Hold mode only: toggle mode has no release to extend, and
+                // with "Activate on every drag" the trigger deactivates
+                // while held, where a grace would prolong the suppression.
+                SettingsSeparator {
+                    enabled: !alwaysActivateSwitch.checked && !toggleActivationSwitch.checked
+                }
+
+                TriggerGraceRow {
+                    title: i18n("Release grace period")
+                    searchAnchor: "releaseGracePeriod"
+                    description: i18n("How long the overlay stays active after the activation trigger is released, so a window dropped just after letting go of the trigger still snaps. Helps when the trigger is a mouse button released with the drop. Set 0 to turn it off.")
+                    // Qualified: this page also hosts the zone span card's own
+                    // grace row, so a bare "Release grace period" would give a
+                    // screen reader two identical control names.
+                    accessibleName: i18n("Release grace period for drag activation")
+                    enabled: !alwaysActivateSwitch.checked && !toggleActivationSwitch.checked
+                    minMs: root.settingsBridge.triggerGraceMsMin
+                    maxMs: root.settingsBridge.triggerGraceMsMax
+                    graceMs: appSettings.dragActivationGraceMs
+                    onGraceModified: value => appSettings.dragActivationGraceMs = value
                 }
             }
         }

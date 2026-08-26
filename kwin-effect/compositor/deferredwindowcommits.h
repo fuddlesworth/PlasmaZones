@@ -18,7 +18,7 @@ namespace PlasmaZones {
  * @brief Per-window deferred single-shot commits with consume-erase semantics.
  *
  * The shared plumbing behind the tiling handlers' debounced/deferred
- * per-window state machines (AutotileHandler's minimize→float debounce and
+ * per-window state machines (TilingHandler's minimize→float debounce and
  * both engines' unminimize→unfloat grace): one pending single-shot QTimer
  * per windowId, cancellable until it fires. What stays engine-specific is
  * the @c fire callback — every revalidation and commit decision lives with

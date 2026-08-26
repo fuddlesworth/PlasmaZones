@@ -171,9 +171,11 @@ ItemDelegate {
                 }
 
                 // Capability badge — a small rounded chip showing which event
-                // class this shader targets (Geometry / Appearance / Desktop).
-                // Hidden for universal shaders so the grid only calls out the
-                // ones that behave differently.
+                // class this shader targets, labelled from ShaderBrowserPage's
+                // _typeCatalog (the six classes: geometry, drag motion,
+                // appearance, desktop, scrolling strip, tab switch). Hidden for universal
+                // shaders so the grid only calls out the ones that behave
+                // differently.
                 MetadataChip {
                     visible: root._typeBadge.length > 0
                     text: root._typeBadge

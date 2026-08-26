@@ -483,8 +483,14 @@ QString LayoutRegistry::layoutSettingsFilePath() const
 
 void LayoutRegistry::readQuickLayouts()
 {
-    m_quickLayoutSlots[0].clear();
-    m_quickLayoutSlots[1].clear();
+    // Through slotIndexFor (the declared one authority) rather than raw
+    // indices, so a slot-array change cannot leave persistence behind.
+    auto& snappingSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)];
+    auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
+    auto& scrollingSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)];
+    snappingSlots.clear();
+    autotileSlots.clear();
+    scrollingSlots.clear();
     QFile file(quickLayoutsFilePath());
     if (!file.open(QIODevice::ReadOnly)) {
         return; // a missing file is not an error
@@ -497,24 +503,46 @@ void LayoutRegistry::readQuickLayouts()
 
     // Reader for one mode's nested slot object ({ "1": id, ... }).
     const auto readModeSlots = [](const QJsonObject& obj, QHash<int, QString>& out) {
-        for (int i = 1; i <= 9; ++i) {
+        for (int i = 1; i <= QuickSlotCount; ++i) {
             const QString key = QString::number(i);
-            if (obj.contains(key)) {
-                const QString layoutId = obj.value(key).toString();
-                if (!layoutId.isEmpty()) {
-                    out[i] = layoutId;
-                }
+            if (!obj.contains(key)) {
+                continue;
             }
+            const QString stored = obj.value(key).toString();
+            if (stored.isEmpty()) {
+                continue;
+            }
+            // Refuse the reserved opt-out id, exactly as both write paths do
+            // (setQuickLayoutSlot and setAllQuickLayoutSlots). A hand-edited
+            // sidecar would otherwise resurrect the silent dead press those
+            // refusals exist to prevent, since nothing re-validates a loaded
+            // slot before it is pressed.
+            if (PhosphorLayout::LayoutId::isAutotile(stored)
+                && PhosphorLayout::LayoutId::extractAlgorithmId(stored) == NoTilingAlgorithm) {
+                qCWarning(lcZonesLib) << "Dropping the reserved opt-out id from stored quick slot" << i << ":"
+                                      << stored;
+                continue;
+            }
+            // Canonicalize a UUID-shaped value to the braced spelling this
+            // library compares and writes everywhere. A hand-edited sidecar can
+            // hold the unbraced form, and the id-keyed sweeps (purge on delete,
+            // the picker's current-slot match) compare strings, so an unbraced
+            // entry would silently never match. A value that is not a UUID is a
+            // tiling-algorithm token and is stored verbatim.
+            const QUuid parsed = QUuid::fromString(stored);
+            out[i] = parsed.isNull() ? stored : parsed.toString();
         }
     };
 
-    // Slots are nested by mode ({ "snapping": {...}, "autotile": {...} }). This
-    // is the single on-disk format: the writer below and the v3→v4 migration
-    // both emit it. A pre-mode (flat) file has neither key, so both modes stay
-    // empty — no ad-hoc legacy read, matching the config policy that a
-    // restructured store drops old values rather than carrying a second format.
-    readModeSlots(root.value(QuickSlotsSnappingKey).toObject(), m_quickLayoutSlots[0]);
-    readModeSlots(root.value(QuickSlotsAutotileKey).toObject(), m_quickLayoutSlots[1]);
+    // Slots are nested by mode ({ "snapping": {...}, "autotile": {...},
+    // "scrolling": {...} }). This is the single on-disk format: the writer
+    // below and the v3→v4 migration both emit it. A pre-mode (flat) file has
+    // none of the three keys, so all three modes stay empty — no ad-hoc legacy
+    // read, matching the config policy that a restructured store drops old
+    // values rather than carrying a second format.
+    readModeSlots(root.value(QuickSlotsSnappingKey).toObject(), snappingSlots);
+    readModeSlots(root.value(QuickSlotsAutotileKey).toObject(), autotileSlots);
+    readModeSlots(root.value(QuickSlotsScrollingKey).toObject(), scrollingSlots);
 }
 
 void LayoutRegistry::writeQuickLayouts()
@@ -528,8 +556,9 @@ void LayoutRegistry::writeQuickLayouts()
         return obj;
     };
     QJsonObject obj;
-    obj.insert(QuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[0]));
-    obj.insert(QuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[1]));
+    obj.insert(QuickSlotsSnappingKey, modeSlotsToJson(m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)]));
+    obj.insert(QuickSlotsAutotileKey, modeSlotsToJson(m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)]));
+    obj.insert(QuickSlotsScrollingKey, modeSlotsToJson(m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)]));
     // QSaveFile gives atomic temp-write + rename — a crash mid-write never
     // leaves a truncated quicklayouts.json behind.
     QSaveFile file(quickLayoutsFilePath());
@@ -547,8 +576,10 @@ void LayoutRegistry::writeQuickLayouts()
         qCWarning(lcZonesLib) << "Failed to commit quick layouts:" << file.errorString();
         return;
     }
-    qCInfo(lcZonesLib) << "Saved quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
-                       << "autotile=" << m_quickLayoutSlots[1].size();
+    qCInfo(lcZonesLib) << "Saved quickShortcuts: snapping="
+                       << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)].size()
+                       << "autotile=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)].size()
+                       << "scrolling=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)].size();
 }
 
 void LayoutRegistry::loadAssignments()
@@ -558,9 +589,10 @@ void LayoutRegistry::loadAssignments()
     m_ruleStore->load();
     readQuickLayouts();
 
-    qCInfo(lcZonesLib) << "Loaded rules=" << m_ruleStore->count()
-                       << "quickShortcuts: snapping=" << m_quickLayoutSlots[0].size()
-                       << "autotile=" << m_quickLayoutSlots[1].size();
+    qCInfo(lcZonesLib) << "Loaded rules=" << m_ruleStore->count() << "quickShortcuts: snapping="
+                       << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Snapping)].size()
+                       << "autotile=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)].size()
+                       << "scrolling=" << m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Scrolling)].size();
 }
 
 void LayoutRegistry::saveAssignments()
@@ -619,7 +651,9 @@ PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
     PhosphorZones::Layout* layout = parsed;
     if (layoutById(parsed->id())) {
         qCInfo(lcZonesLib) << "importLayout: UUID collision, regenerating IDs";
-        layout = new PhosphorZones::Layout(*parsed);
+        // Unparented: addLayout() below takes ownership, the same handover the
+        // clone contract documents.
+        layout = parsed->clone();
         // deleteLater, not delete — see the override branch in loadLayouts().
         parsed->deleteLater();
     }
