@@ -522,35 +522,28 @@ struct ShaderTransition
     std::unique_ptr<KWin::GLTexture> oldSnapshot;
 };
 
-/// First-frame suppression bookkeeping for a window that is about to be
-/// repositioned on open (snap-restore or autotile).
-///
-/// KWin places a new window at its centred placement geometry and
-/// composites it there BEFORE the effect's `windowAdded` handler can move
-/// it into a zone / tile — `windowAdded` is the earliest hook an effect
-/// gets, and it fires post-placement. The effect's `moveResize` is an
-/// asynchronous Wayland configure, so without suppression the window
-/// visibly flashes at screen centre for the 1-N frames the configure
-/// takes to round-trip (longer for the autotile / async-resolve D-Bus
-/// paths). While a `RestoreSuppression` entry exists for a window,
-/// `paintWindow` draws nothing for it — the window is invisible until it
-/// has settled into its destination.
 /// Where a parked scrolling tile really belongs on the strip.
 ///
 /// Held instead of a precomputed translation because the translation is only
 /// correct if the park LANDED where it was requested, and that is not
 /// something the effect can assume. A tile is parked by committing it below
-/// the union of every output; for a client whose committed size differs from
-/// the column it was handed, KWin renegotiates the size and then re-applies
-/// its keep-on-screen containment to the new one — so the window stays ON
-/// screen and the park silently fails. Seen live with a Firefox
-/// Picture-in-Picture window (aspect-constrained, Wayland): parked to
-/// `(0,2176 1908x2052)`, committed at `(0,1087 1908x1073)`, its bottom edge
+/// the union of every output. For a client whose committed size differs from
+/// the column it was handed, the park can silently fail: seen live with a
+/// Firefox Picture-in-Picture window (aspect-constrained, Wayland) parked to
+/// `(0,2176 1908x2052)` and committed at `(0,1087 1908x1073)`, its bottom edge
 /// pinned exactly to the screen bottom. A translation derived from the
 /// requested park rect then drew it 1089px off, which culled it from paint
 /// while its real frame still covered half the screen.
 ///
-/// X11 does not hit that: the effect constrains the size itself
+/// That observation is solid; the MECHANISM behind it is not established. The
+/// obvious candidate, KWin re-applying keep-on-screen containment on the
+/// renegotiated size, does not survive reading the xdg-shell commit path — the
+/// only keepInArea there is plasma-shell-surface-only, and neither the commit
+/// nor the ack path applies containment. Do not go looking for that call; what
+/// matters here is that the committed rect cannot be assumed to equal the
+/// requested one, whatever produces the difference.
+///
+/// X11 does not hit it: the effect constrains the size itself
 /// (constrainTileGeometry) and hands KWin an already-valid rect, so there is
 /// no renegotiation and the park lands. Storing the placement rather than the
 /// translation covers both without depending on which path a window took —
@@ -572,6 +565,19 @@ struct ScrollVisualPlacement
     }
 };
 
+/// First-frame suppression bookkeeping for a window that is about to be
+/// repositioned on open (snap-restore or autotile).
+///
+/// KWin places a new window at its centred placement geometry and
+/// composites it there BEFORE the effect's `windowAdded` handler can move
+/// it into a zone / tile — `windowAdded` is the earliest hook an effect
+/// gets, and it fires post-placement. The effect's `moveResize` is an
+/// asynchronous Wayland configure, so without suppression the window
+/// visibly flashes at screen centre for the 1-N frames the configure
+/// takes to round-trip (longer for the autotile / async-resolve D-Bus
+/// paths). While a `RestoreSuppression` entry exists for a window,
+/// `paintWindow` draws nothing for it — the window is invisible until it
+/// has settled into its destination.
 struct RestoreSuppression
 {
     /// frameGeometry at `windowAdded`. The window is released once its

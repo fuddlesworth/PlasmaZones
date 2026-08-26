@@ -223,10 +223,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString scrollEdge;
         int viewDelta = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
         bool viewImmediate = false; ///< scrolling strip: user-driven continuous view motion — apply the delta outright
-        /// scrolling strip: where a PARKED column really sits. Converted to a
-        /// translation from this batch's rect at apply time and ADDED to the
-        /// window's committed frame by the paint path — not substituted for
-        /// it, which would erase the X11 constrain-and-centre offset.
+        /// scrolling strip: where a PARKED column really sits. Stored at apply
+        /// time as a ScrollVisualPlacement (this position plus the column
+        /// size); the paint path derives its own translation from that per
+        /// read, centring the committed frame inside the column rather than
+        /// substituting for it — which would erase the X11 constrain-and-centre
+        /// offset. See scrollVisualTranslationFor.
         QPoint visualPos;
         bool hasVisualPos = false;
         QString tabFrom; ///< scrolling strip: the tab this entry replaces in a tabbed column, else empty
@@ -458,7 +460,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         int viewDelta = 0;
         bool viewImmediate = false;
         /// Carried verbatim from Entry::visualPos — see its doc for how the
-        /// paint path consumes it (a delta ADDED to the commit).
+        /// paint path consumes it (stored as a placement, resolved per read).
         QPoint visualPos;
         bool hasVisualPos = false;
         QString tabFrom;
@@ -1560,17 +1562,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 && (!kwcForBail || kwcForBail->isRequestedFullScreen())
                 && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
             {
-                // Stored as the TRANSLATION from the batch's park rect to the
-                // strip position, not as the strip position itself. The paint
-                // path adds it to wherever the window is actually committed,
-                // which preserves the offset applyWindowGeometry's X11
-                // constrain-and-centre pass puts between the park rect and the
-                // committed frame — subtracting the committed frame from the
-                // strip position (the previous form) erased that offset and
-                // drew a fixed-size game at its column's top-left, the top of
-                // the screen, for the length of every park. For an
+                // Stored as the column's strip POSITION and SIZE, not as a
+                // precomputed translation from the batch's park rect. The paint
+                // path derives the translation per read, centring the window's
+                // committed frame inside the stored column, which preserves the
+                // offset applyWindowGeometry's X11 constrain-and-centre pass
+                // puts between the park rect and the committed frame. An
+                // earlier form subtracted the committed frame from the strip
+                // position up front and erased that offset, drawing a
+                // fixed-size game at its column's top-left for the length of
+                // every park. Deriving at read time also survives a park that
+                // did not land where it was requested, which a precomputed
+                // translation cannot — see ScrollVisualPlacement. For an
                 // unconstrained window the committed rect IS the park rect and
-                // the two forms are identical.
+                // every form agrees.
                 bool visualDeltaChanged = false;
                 if (snap.hasVisualPos && !fullscreenBailSkippedCommit) {
                     // Bounded on the way in, for the same reason viewDelta is
@@ -1581,12 +1586,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the committed rect at draw time AND folds into the
                     // backdrop capture, so a garbled pair would draw the column
                     // and its sample arbitrarily far off until the next batch.
-                    // The subtraction itself runs in qint64, per axis. Both
-                    // operands are unvalidated ints off the wire, so a plain
-                    // QPoint difference can overflow BEFORE the qBound the
-                    // protocol layer explicitly leans on ever sees the value —
-                    // and signed overflow is undefined, not a wrapped number
-                    // the clamp could then rescue. Widen, clamp, then narrow.
+                    // The clamp runs in qint64, per axis. The value is an
+                    // unvalidated int off the wire, so widening before the
+                    // qBound the protocol layer explicitly leans on keeps a
+                    // garbled pair from overflowing on the way in — signed
+                    // overflow is undefined, not a wrapped number the clamp
+                    // could then rescue. Widen, clamp, then narrow.
+                    //
+                    // The bound is StripViewAnimator's per-leg DELTA budget,
+                    // reused here as a sanity bound on an absolute strip
+                    // coordinate. The two are not the same quantity: a strip is
+                    // endless by design, so a far enough column's position can
+                    // legitimately exceed a budget meant for one leg's travel,
+                    // and it would be clamped rather than rejected. Reused
+                    // deliberately, because the value is a wire-garbling guard
+                    // rather than a layout limit and the animator re-clamps
+                    // against the same constant downstream — but do NOT widen
+                    // the constant to "fix" this without following that
+                    // downstream use and the test that pins its value.
                     constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
                     ScrollVisualPlacement placement;
                     placement.stripPos =

@@ -29,12 +29,14 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // (retile, scheduleRetileForScreen and its queued callback) — but here
     // rather than only there, because applyLayout has direct callers too.
     // The guard matters beyond wasted work: setActiveScreens prunes a
-    // departing screen's CURRENT context and drops its per-output desktop
-    // entry (m_context.removeScreen), so a later call naming that screen
-    // resolves currentKeyForScreen against the GLOBAL desktop fallback. If
-    // that aliased key happens to match a surviving background state, an
-    // unguarded pass would emit a tile batch — and possibly a focus
-    // activation — for a screen this engine no longer owns.
+    // departing screen's CURRENT context and releases the engine's ownership
+    // of it (m_context.releaseScreenOwnership), which drops this engine's
+    // sticky pin. The per-output desktop entry deliberately SURVIVES — it is
+    // compositor truth the engine cannot re-derive — but the pin's removal can
+    // still move where currentKeyForScreen resolves for a pinned screen. If the
+    // resulting key happens to match a surviving background state, an unguarded
+    // pass would emit a tile batch — and possibly a focus activation — for a
+    // screen this engine no longer owns.
     if (!m_scrollingScreens.contains(screenId)) {
         return;
     }

@@ -906,28 +906,34 @@ private:
      * one honest visibility test for a parked column; the committed rect is
      * always off every output (that is what parking IS) and answers nothing.
      *
-     * "At rest" is the whole precision here: the WindowAnimator can be carrying
-     * the same window through a per-window leg, and that term is deliberately
-     * NOT folded in. For a parked column the batch path makes the leg
-     * degenerate (origin == the constrained committed rect, tiling.cpp), so
-     * there is no per-window motion to miss; for an unparked one the predicate
-     * has already answered false on the delta probe. Do not "complete" this by
-     * intersecting the animator's rect — the degenerate leg is what makes the
-     * simpler test correct, and the cull would then depend on animator state
-     * that changes under it mid-frame.
+     * The WindowAnimator's term IS folded in: a live per-window leg draws at
+     * the animator's current rect rather than the committed frame, so testing
+     * the committed band would judge the window at its destination for the
+     * whole leg — a column animating into or out of its park blinks at the
+     * cull, drops the TRANSFORMED flag early, and clocks the park reap off a
+     * rect nothing is drawn at yet. The band is relocated by the animator's
+     * frame, keeping the decoration margins the frame rect does not carry.
      *
-     * FIVE consumers, and they must stay in lockstep or a column blinks or
+     * The strip PLACEMENT, by contrast, is always resolved against the
+     * COMMITTED frame. That is not a contradiction, it is what makes the fold
+     * work: scrollVisualTranslationFor subtracts the rect it is handed, so
+     * resolving against the animator's rect would cancel the relocation applied
+     * just above and put the predicate right back at the destination.
+     *
+     * SEVEN consumers, and they must stay in lockstep or a column blinks or
      * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
      * culling is free to skip the window instead of being forced to paint
      * it), paintWindow skips the backdrop capture / decoration fold / draw,
      * the postPaintScreen repaint driver stops driving the window's
      * decoration (the ~30fps backdrop refold and the animated-pack pump),
      * prePaintScreen's tab-anchor election skips a parked column so an
-     * anchor that will never paint cannot win, and StripTransitionManager's
+     * anchor that will never paint cannot win, StripTransitionManager's
      * above-strip election skips one when picking the stacking boundary its
      * capture composites around (falling back to the topmost PARKED member
      * when every column on the output is parked, rather than capturing the
-     * whole scene). Note the anchor election runs BEFORE the strip view
+     * whole scene), the desktop-transition capture excludes one from the
+     * outgoing scene, and the tab-strip builder skips one when deciding which
+     * members still warrant a pill. Note the anchor election runs BEFORE the strip view
      * animator advances for the frame, so its answer is one advance behind
      * the paint-path sites mid-leg — the failure is the benign,
      * already-documented one (indicators fall back to their layer slot for a
@@ -942,6 +948,29 @@ private:
      * cull's treatment.
      */
     bool scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const;
+
+    /// Where a parked column's tile should be DRAWN: the translation to add to
+    /// @p frameRect's top-left to put it at its strip position.
+    ///
+    /// @p frameRect is the window's COMMITTED frame, always — never its
+    /// expanded band and never a rect that already carries a translation. The
+    /// centring term is derived from the rect handed in, so a band centres by
+    /// the band's size and lands the answer half the decoration asymmetry away
+    /// from the draw, and an already-relocated rect has its own relocation
+    /// subtracted straight back out. Callers that move something OTHER than the
+    /// frame (the park predicate moves the expanded band, the backdrop
+    /// predictor moves the animator's rect) resolve on the frame and apply the
+    /// result to whatever they are moving.
+    ///
+    /// The centring is what makes it general. A tile whose size matches its
+    /// column resolves to the plain strip-minus-park translation the stored
+    /// delta used to be, so unconstrained windows are unaffected; a tile
+    /// smaller than its column is placed centred within it, which is where both
+    /// constrain paths already put it on screen, and one LARGER is clamped to
+    /// the column's origin exactly as constrainTileGeometry clamps. Crucially
+    /// the answer does not depend on the park having LANDED — see
+    /// ScrollVisualPlacement for the case that forced this.
+    QPoint scrollVisualTranslationFor(const QString& windowId, const QRectF& frameRect) const;
 
     /**
      * @brief Blit this pass's compositor-drawn tab indicators at the stacking
@@ -2409,34 +2438,39 @@ private:
     /// Model lives in TilingHandler (it owns the scroll screens and the
     /// payload slot); this is the paint + hit-test half.
     std::unique_ptr<ScrollTabIndicatorPainter> m_scrollTabPainter;
-    /// How far a PARKED scrolling column's drawing must be translated from
-    /// its committed rect to sit at its strip position, by window id. Stored
-    /// as the strip-minus-park DELTA of the batch's rects rather than the
-    /// strip position itself: the committed frame is not always the park rect
-    /// (applyWindowGeometry's X11 constrain-and-centre pass offsets a
-    /// fixed-size client within it), and the delta rides on top of whatever
-    /// was committed, preserving that offset — an absolute position erased it
-    /// and drew such windows at the column's top-left. The committed rect is
-    /// the park below the union of all outputs — the only rect that cannot
-    /// stray onto a neighbouring monitor — so the paint path applies this
-    /// delta and then adds the view offset, which keeps the column travelling
-    /// with the rest of the strip instead of vanishing the moment it leaves
-    /// the viewport. Absent for every window drawn at its committed rect,
-    /// which is almost all of them.
+    /// Where a PARKED scrolling column's drawing belongs on the strip, by
+    /// window id. Stored as the column's strip POSITION and SIZE
+    /// (ScrollVisualPlacement), not as a precomputed delta from the committed
+    /// rect. The translation is derived per read by scrollVisualTranslationFor,
+    /// which centres the window's committed frame inside the stored column —
+    /// the committed frame is not always the column rect, because a client can
+    /// renegotiate its size and the X11 constrain-and-centre pass offsets a
+    /// fixed-size client within it, and deriving the centring at read time is
+    /// what keeps such a window drawn where it was actually committed rather
+    /// than at the column's corner. The committed rect is the park below the
+    /// union of all outputs — the only rect that cannot stray onto a
+    /// neighbouring monitor — so the paint path applies that translation and
+    /// then adds the view offset, which keeps the column travelling with the
+    /// rest of the strip instead of vanishing the moment it leaves the
+    /// viewport. Absent for every window drawn at its committed rect, which is
+    /// almost all of them.
     /// DAMAGE CONTRACT: adding, changing or removing an entry moves where
     /// the paint path draws the window, so every mutation site must either
     /// pair with addRepaint(Full) or sit on a path whose follow-up geometry
     /// apply (or membership clear that already stopped the relocation)
     /// provably damages — the batch writer change-gates and damages, and
     /// the removers each document which half covers them.
-    /// Note the drawn position has TWO inputs under the delta form, this
-    /// entry and the committed rect, where the absolute form it replaced had
-    /// only one. The contract above covers the entry half. The committed
-    /// half is NOT paired: a mover that changes the commit while the entry is
-    /// unchanged (the X11 counter-assert, the windowed-fullscreen ack
-    /// re-commit) damages the regions of the COMMIT, and for a column parked
-    /// below the union of all outputs those regions intersect no output — so
-    /// nothing damages where the window is actually drawn.
+    /// Note the drawn position is a function of TWO things: this entry, and the
+    /// window's committed frame RECT — its position AND its size, since the
+    /// resolver centres by the committed size. The contract above covers the
+    /// entry half. The committed half is NOT paired: a mover that changes the
+    /// commit while the entry is unchanged (the X11 counter-assert, the
+    /// windowed-fullscreen ack re-commit, and any size-only renegotiation)
+    /// damages the regions of the COMMIT, and for a column parked below the
+    /// union of all outputs those regions intersect no output — so nothing
+    /// damages where the window is actually drawn. Read this as the whole rect,
+    /// not just its origin: a commit that changes only the SIZE moves the drawn
+    /// position too, through the centring term.
     ///
     /// What makes that survivable is a condition, not a property of having an
     /// entry: it holds only while the drawn position (commit + entry + view
@@ -2450,23 +2484,6 @@ private:
     /// rather than inheriting this argument.
     QHash<QString, ScrollVisualPlacement> m_scrollVisualDelta;
 
-    /// Where a parked column's tile should be DRAWN, resolved against the rect
-    /// it is actually being painted at.
-    ///
-    /// Returns the translation to add to @p paintRect's top-left. Measured,
-    /// not predicted: the caller hands in the rect the paint path is really
-    /// using (the committed frame, or the animator's rect mid-leg) and this
-    /// answers where that rect has to move to sit at the column's strip
-    /// position, centred by its OWN size.
-    ///
-    /// The centring is what makes it general. A tile whose size matches its
-    /// column resolves to the plain strip-minus-park translation the stored
-    /// delta used to be, so unconstrained windows are unaffected; a tile
-    /// smaller (or larger) than its column is placed centred within it, which
-    /// is where both constrain paths already put it on screen. Crucially the
-    /// answer does not depend on the park having LANDED — see
-    /// ScrollVisualPlacement for the case that forced this.
-    QPoint scrollVisualTranslationFor(const QString& windowId, const QRectF& paintRect) const;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
     /// committed rect stays the column slot, stored here as the value. The
@@ -2536,7 +2553,18 @@ private:
     /// drag-time frame), and cleared wholesale on daemon loss and at bring-up
     /// (drainDeadSessionState).
     QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
-    /// Per strip window: the column SIZE its last placement offered.
+    /// Per strip window: the column RECT its last DELIVERED placement offered.
+    /// Only the size discriminates; the position is what the commit-time
+    /// centring needs, which is why the whole rect is stored.
+    ///
+    /// Written only where the batch actually sent the column — not when the
+    /// apply was skipped as redundant, deferred mid-gesture, or bailed on the
+    /// non-member fullscreen path. An entry means the client HAS been offered
+    /// this column, so recording one for a placement that never went out would
+    /// make the next batch read it as answered.
+    ///
+    /// Wayland only: the single writer sits behind isWaylandClient(), so the
+    /// map is empty for X11 and every consumer of it is inert there.
     ///
     /// The discriminator for size continuity (see the strip apply). A genuine
     /// column change is "this size differs from the one recorded here" — our

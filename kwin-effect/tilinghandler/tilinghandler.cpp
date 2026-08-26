@@ -1208,10 +1208,13 @@ void TilingHandler::clearPerSessionDaemonState()
     // than on what that edge left behind. A stale commanded rect
     // re-arms the counter-assert against the dead session's position the
     // moment the new daemon's batches re-open the gates (and before they
-    // overwrite the entry); a stale relocation delta paints a parked column at
-    // the dead session's strip position; the min-size cache says "already
-    // sent" about a daemon that never heard it (mildest — the re-announce
-    // re-seeds it, cleared for symmetry with the teardown). The relocation-delta
+    // overwrite the entry); a stale relocation entry paints a parked column at
+    // the dead session's strip position; a stale offered column is read as a
+    // column the client has already answered, so the first batch of the new
+    // session skips offering it and hands back whatever size the window is
+    // holding; the min-size cache says "already sent" about a daemon that never
+    // heard it (mildest — the re-announce re-seeds it, cleared for symmetry
+    // with the teardown). The relocation-entry
     // clear pairs with damage like its teardown twin: the removal changes
     // where the paint path draws those windows.
     if (!m_effect->m_scrollVisualDelta.isEmpty()) {

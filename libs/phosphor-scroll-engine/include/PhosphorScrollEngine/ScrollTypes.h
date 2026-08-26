@@ -312,6 +312,14 @@ struct TabIndicatorParams
     /// matches niri: it slides the indicator onto the window. Under
     /// @c placeWithinColumn a negative gap correspondingly reserves less than
     /// the thickness, and the reservation floors at zero.
+    ///
+    /// This seed is niri's own literal and is NOT the shipped default. The
+    /// shipped one is ConfigDefaults::scrollingTabIndicatorGap(), which derives
+    /// it from the inner gap and the bar thickness and currently comes out
+    /// smaller. That accessor lives in the app tree, which this library cannot
+    /// include, so the two cannot be single-sourced; the engine overwrites this
+    /// field from settings on every refresh, which is what makes the divergence
+    /// invisible outside direct constructions and test fixtures.
     int gap = 5;
     /// Indicator thickness (its short axis) in pixels, EXACT for every style.
     ///

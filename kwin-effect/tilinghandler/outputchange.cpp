@@ -148,7 +148,15 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // value, and the column would be drawn at its committed rect
                 // below the union of all outputs, i.e. invisible, until the
                 // user scrolled it. A stale commanded rect only disarms a
-                // counter-assert, which is invisible; a lost relocation is not.
+                // counter-assert, which is invisible. A lost relocation is not.
+                //
+                // The offered column IS dropped, on the opposite reasoning to
+                // the relocation hint: a stale one is read as a column the
+                // client has already answered, so the destination's first batch
+                // would skip offering it and hand the window whatever size it
+                // is holding. That mistake does not self-correct, because the
+                // offer looks settled. Re-offering the column costs one extra
+                // resize, which is the cheap direction here.
                 m_effect->m_scrollCommandedRects.remove(windowId);
                 m_effect->m_scrollOfferedColumn.remove(windowId);
                 // The autotile centring targets go too. This arm is a move

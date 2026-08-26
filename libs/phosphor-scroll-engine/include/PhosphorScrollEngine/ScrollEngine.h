@@ -1210,8 +1210,15 @@ private:
     /// updateStickyScreenPins stays unconditional, matching autotile.
     PhosphorEngine::StickyWindowHandling m_stickyWindowHandling = PhosphorEngine::StickyWindowHandling::TreatAsNormal;
     bool m_respectMinimumSize = true;
-    /// Shared Tiling.Gaps/SmartGaps value (IScrollSettings forward).
-    bool m_smartGaps = true;
+    /// Scrolling's OWN Scrolling.Behavior/SmartGaps value, not a forward of the
+    /// tiling one. Seeded to match ConfigDefaults::scrollingSmartGaps(), which
+    /// is false: tiling defaults this on because a sole window fills the screen
+    /// and gaps around it frame nothing, but a sole COLUMN sits at its own
+    /// width, so dropping the gaps only pins it to one edge with dead space
+    /// beside it. The seed matters for any engine that never receives an
+    /// IScrollSettings — refreshConfigFromSettings early-returns for those, so
+    /// the initializer governs for good.
+    bool m_smartGaps = false;
     /// Default height intent for fresh tiles (Auto = historical even split).
     WindowHeight m_defaultWindowHeight{};
     /// Where a fresh open's column enters the strip (config default; the
