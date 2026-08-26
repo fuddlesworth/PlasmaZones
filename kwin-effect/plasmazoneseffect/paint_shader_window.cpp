@@ -404,6 +404,41 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // is called per active transition (and per output), so
                 // re-reading KWin::effects->cursorPos() per call would
                 // multiply up across high-Hz multi-output setups.
+                //
+                // A HELD DRAG takes no sentinel. The sentinel answers "is
+                // the pointer hovering this surface", and for a hover pack
+                // the honest answer when it leaves is "nowhere". A held
+                // move leg is not a hover: the cursor IS the grab anchor,
+                // it is attached to the window for the whole leg, and a
+                // move pack that centres on it (phosphor-vortex) reads
+                // .zw directly. The pointer still leaves the frame
+                // routinely — KWin clamps the dragged window at the top of
+                // the screen while the pointer keeps travelling, which is
+                // precisely what happens when the user drags UP into the
+                // strip / zone-selector popup — and the sentinel then
+                // teleported the vortex from the cursor to the card centre
+                // and pinned it there until the pointer came back down.
+                // Clamp into the frame instead: the grip slides to the
+                // edge the pointer left through and tracks along it,
+                // which is continuous and is where the grab actually is.
+                //
+                // Gated on `heldMove &&`, the IDENTITY flag, exactly like the
+                // drag-start and release handlers in window_connections.cpp.
+                // `holdUntilRelease` alone is not that test: it is the flag
+                // the drag-start path historically set on whatever leg was
+                // live, most reachably the `window.focus` leg the click that
+                // began the drag installed (see ShaderTransition::heldMove).
+                // Gating on it alone would widen this exception past the
+                // `move` class the contract scopes it to.
+                //
+                // The INSIDE arm is left byte-for-byte as it was: it must
+                // stay the raw live position, because that is what the
+                // daemon's ShaderNodeRhi::setMousePosition publishes and
+                // this whole block exists to mirror the daemon's semantics.
+                // Clamping it too would shift the last logical pixel of the
+                // frame on every pack, held or not, for no reason — the
+                // clamp is only meaningful where the sentinel used to fire.
+                const bool held = transition.heldMove && transition.holdUntilRelease;
                 const QPointF cursorGlobal = m_shaderManager.m_cachedCursorGlobal;
                 float localX = -1.0f;
                 float localY = -1.0f;
@@ -412,6 +447,9 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 if (inside) {
                     localX = static_cast<float>(cursorGlobal.x() - geo.x());
                     localY = static_cast<float>(cursorGlobal.y() - geo.y());
+                } else if (held) {
+                    localX = static_cast<float>(qBound(0.0, cursorGlobal.x() - geo.x(), qMax(geo.width() - 1.0, 0.0)));
+                    localY = static_cast<float>(qBound(0.0, cursorGlobal.y() - geo.y(), qMax(geo.height() - 1.0, 0.0)));
                 }
                 QVector4D iMouseValue(localX, localY, 0.0f, 0.0f);
                 if (geo.width() > 0.0)
