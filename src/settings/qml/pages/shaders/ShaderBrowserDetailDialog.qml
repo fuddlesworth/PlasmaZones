@@ -150,9 +150,12 @@ Kirigami.Dialog {
         // tick — _shaderInfo is already set above, so the new item loads it.
         _rendererActive = false;
         Qt.callLater(function () {
-            // Guard on `opened` too: if the dialog was closed between the
-            // deferral and this call, don't re-arm the renderer.
-            root._rendererActive = root.opened && root._zonePreview;
+            // Guard on `visible`, not `opened`: this now runs from aboutToShow,
+            // where the enter transition has not started and `opened` is still
+            // false — arming on it would leave the zone renderer permanently
+            // inactive. `visible` says the same thing (the dialog is still
+            // being shown) and is already true by the time this deferral runs.
+            root._rendererActive = root.visible && root._zonePreview;
         });
     }
     function _recompute() {
@@ -171,18 +174,29 @@ Kirigami.Dialog {
         _recompute();
     }
 
-    onOpened: {
+    // BEFORE the panes are built, not after. `opened` does not fire until the
+    // enter transition has finished, but the preview Loaders activate on
+    // `visible`, which is set at the START of it — so resetting there handed the
+    // decoration pane the PREVIOUS pack's parameters, let it compose and show
+    // that, and then changed them out from under it. The chain recomposed, the
+    // placeholder came back, and the preview arrived a second time: the
+    // preview / unavailable / preview flicker on every open.
+    //
+    // aboutToShow runs before the popup becomes visible, so the panes are built
+    // once, with the right parameters, and compose once.
+    onAboutToShow: {
         // The dialog instance is reused per shader, so clear any preset error
         // left over from the previous shader's session before showing this one.
         _presetError = "";
-        if (_livePreview) {
+        if (_livePreview)
             _resetPreview();
-            // Gate on _appActive: opening the dialog while the settings app
-            // is backgrounded must not start CAVA — the on_AppActiveChanged
-            // handler starts it when the app comes to the front.
-            if (_appActive)
-                previewController.startAudioCapture();
-        }
+    }
+    onOpened: {
+        // Gate on _appActive: opening the dialog while the settings app
+        // is backgrounded must not start CAVA — the on_AppActiveChanged
+        // handler starts it when the app comes to the front.
+        if (_livePreview && _appActive)
+            previewController.startAudioCapture();
     }
     onClosed: {
         // Tear the renderer down on close so its (possibly Error) state can't
