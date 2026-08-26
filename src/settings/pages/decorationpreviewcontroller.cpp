@@ -8,6 +8,7 @@
 #include "core/types/cavaoptions.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/SurfaceChainCompose.h>
 #include <PhosphorSurface/SurfaceShaderEffect.h>
@@ -114,6 +115,20 @@ QVariantMap DecorationPreviewController::packInfo(const QString& packId) const
     }
     info.insert(QStringLiteral("parameters"), params);
     return info;
+}
+
+QString DecorationPreviewController::wallpaperPath() const
+{
+    // Same resolver the overlay preview uses for its wallpaper sampler, so both
+    // previews agree on what "the desktop" is.
+    return PhosphorShaders::ShaderRegistry::wallpaperPath();
+}
+
+QImage DecorationPreviewController::wallpaperImage() const
+{
+    // ShaderRegistry caches the decode, so the per-card calls behind the
+    // browser's thumbnails do not each re-read the file.
+    return PhosphorShaders::ShaderRegistry::loadWallpaperImage();
 }
 
 bool DecorationPreviewController::audioVisualizerEnabled() const

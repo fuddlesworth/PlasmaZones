@@ -112,16 +112,15 @@ Item {
             }
         }
 
-        // Honest note rather than a silently wrong preview: a needsBackdrop
-        // pack samples the scene BEHIND the window, and a settings-app card has
-        // no scene behind it. Such a pack takes its documented uHasBackdrop = 0
-        // fallback here — the same limit the daemon overlay path has, for the
-        // same reason.
+        // A needsBackdrop pack samples what is behind the window. The preview
+        // shows it your wallpaper, which is the same stand-in a daemon surface
+        // gets, so the note describes the approximation rather than claiming
+        // there is no backdrop at all.
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             visible: root._needsBackdrop
             type: Kirigami.MessageType.Information
-            text: i18nc("@info decoration preview limitation", "This pack blurs or samples whatever sits behind the window. The preview has no desktop behind it, so it shows the pack's fallback appearance instead.")
+            text: i18nc("@info decoration preview limitation", "This pack samples whatever sits behind the window. The preview shows your wallpaper, not the windows that will actually be behind it.")
         }
 
         Kirigami.InlineMessage {

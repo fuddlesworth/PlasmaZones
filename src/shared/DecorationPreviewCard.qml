@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+pragma ComponentBehavior: Bound
+
 import org.kde.kirigami as Kirigami
 import QtQuick
 
@@ -55,9 +57,26 @@ PopupFrame {
     implicitWidth: Kirigami.Units.gridUnit * 22
     implicitHeight: Kirigami.Units.gridUnit * 14
 
-    Column {
+    // Content is sized in PROPORTIONS of the card, not in Kirigami.Units.
+    //
+    // This is the one place in the settings QML where that is the right call.
+    // The same card is rendered at wildly different sizes — a browser thumbnail
+    // a few gridUnits tall and a detail-dialog pane several times that — and it
+    // is a picture OF a window rather than a real one, so it has to read
+    // identically at both. Fixed unit sizes do not: at thumbnail scale a
+    // gridUnit*2 title bar plus four rules plus an accent block cannot fit, the
+    // Column overflows, and the overflow spills outside the card (that is what
+    // put a stray accent block over the card's caption).
+    //
+    // Ratios are chosen to sum to less than 1 so the content always fits:
+    // 0.2 title bar, then within the remaining 0.8 a 0.06 margin, four 0.055
+    // rules, one 0.16 accent block, and 0.05 gaps.
+    Item {
         anchors.fill: parent
-        spacing: 0
+        // Belt and braces: a caller that sizes the card absurdly small (or a
+        // future ratio that stops summing correctly) must not be able to paint
+        // outside the card and into the surrounding page again.
+        clip: true
 
         // Title bar. Gives border and corner packs a strong horizontal edge to
         // sit against, and shifts with focus so focus-reactive packs are
@@ -66,55 +85,58 @@ PopupFrame {
             id: titleBar
 
             width: parent.width
-            height: Kirigami.Units.gridUnit * 2
+            height: Math.max(2, parent.height * 0.2)
             color: root.focusedLook ? Kirigami.Theme.highlightColor : Kirigami.Theme.alternateBackgroundColor
 
             Text {
                 anchors.left: parent.left
-                anchors.leftMargin: Kirigami.Units.largeSpacing
+                anchors.leftMargin: titleBar.height * 0.4
+                anchors.right: parent.right
+                anchors.rightMargin: titleBar.height * 0.4
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.title
                 elide: Text.ElideRight
-                width: parent.width - Kirigami.Units.largeSpacing * 2
+                // Scales with the bar so the caption stays proportionate. Below
+                // a few pixels the glyphs are noise, so the text drops out
+                // rather than smearing the title bar a pack is trying to show.
+                visible: titleBar.height >= 10
+                font.pixelSize: Math.max(4, titleBar.height * 0.5)
                 color: root.focusedLook ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
                 font.bold: true
             }
         }
 
-        Item {
-            width: parent.width
-            height: parent.height - titleBar.height
+        Column {
+            anchors.top: titleBar.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: parent.height * 0.06
+            spacing: parent.height * 0.05
 
-            Column {
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.largeSpacing
-                spacing: Kirigami.Units.largeSpacing
+            // Text rules: high-frequency detail. Blur and frosted packs are
+            // only distinguishable from a plain tint when there is something
+            // fine-grained to smear.
+            Repeater {
+                model: 4
 
-                // Text rules: high-frequency detail. Blur and frosted packs are
-                // only distinguishable from a plain tint when there is
-                // something fine-grained to smear.
-                Repeater {
-                    model: 4
-
-                    Rectangle {
-                        required property int index
-
-                        width: parent.width * (index % 2 === 0 ? 0.92 : 0.64)
-                        height: Kirigami.Units.gridUnit * 0.5
-                        radius: height / 2
-                        color: Kirigami.Theme.textColor
-                        opacity: 0.35
-                    }
-                }
-
-                // Saturated accent block: duotone and tint packs remap colour,
-                // which a grey card cannot show.
                 Rectangle {
-                    width: parent.width * 0.45
-                    height: Kirigami.Units.gridUnit * 2.5
-                    radius: Kirigami.Units.smallSpacing
-                    color: Kirigami.Theme.positiveTextColor
+                    required property int index
+
+                    width: parent.width * (index % 2 === 0 ? 0.92 : 0.64)
+                    height: Math.max(1, root.height * 0.055)
+                    radius: height / 2
+                    color: Kirigami.Theme.textColor
+                    opacity: 0.35
                 }
+            }
+
+            // Saturated accent block: duotone and tint packs remap colour,
+            // which a grey card cannot show.
+            Rectangle {
+                width: parent.width * 0.45
+                height: Math.max(2, root.height * 0.16)
+                radius: Math.max(1, height * 0.15)
+                color: Kirigami.Theme.positiveTextColor
             }
         }
     }

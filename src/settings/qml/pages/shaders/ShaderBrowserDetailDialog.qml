@@ -218,7 +218,14 @@ Kirigami.Dialog {
         // its left and Default anchors to its right edge — lining up under the
         // params/preview split and the per-row lock column above.
         Item {
-            visible: root._zonePreview && root._hasParameters
+            // Any live preview, not just the zone one: the Default button below
+            // resets the transient parameter edits and is meaningful for every
+            // previewable pack. Only the PRESET buttons are zone-only (see
+            // presetRow), because the decoration controller exposes no preset
+            // API — gating the whole footer on the zone kind took Default down
+            // with them and left the decoration dialog with no way back to the
+            // pack's defaults.
+            visible: root._livePreview && root._hasParameters
             // Width = the params content width: availableWidth already excludes
             // the scrollbar, and subtracting one largeSpacing matches the params
             // column's own right margin, so Default's right edge lines up with the
@@ -232,6 +239,11 @@ Kirigami.Dialog {
 
             RowLayout {
                 id: presetRow
+
+                // Zone-only: shaderPresetDirectory / saveShaderPreset /
+                // loadShaderPreset live on the zone preview controller, so
+                // these would be a hard "not a function" on the decoration one.
+                visible: root._zonePreview
 
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter

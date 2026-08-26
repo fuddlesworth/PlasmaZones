@@ -5,6 +5,7 @@
 
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
 
+#include <QImage>
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
@@ -81,6 +82,20 @@ public:
     /// id, name, type, default, min, max, step, plus the `audio` and
     /// `needsBackdrop` flags the preview pane surfaces. Empty map if unknown.
     Q_INVOKABLE QVariantMap packInfo(const QString& packId) const;
+
+    /// Absolute path to the user's current desktop wallpaper, or empty when it
+    /// cannot be resolved. The preview draws it behind the stand-in card so a
+    /// pack is judged against the surface it will actually sit on: a border or
+    /// glow reads completely differently over a photograph than over flat grey,
+    /// and the whole glass / blur family is about what shows THROUGH.
+    Q_INVOKABLE QString wallpaperPath() const;
+
+    /// The same wallpaper decoded, for feeding a needsBackdrop pack's backdrop
+    /// sampler (the glass / blur family). Null image when it cannot be
+    /// resolved, which leaves those packs on their fallback appearance.
+    /// Separate from wallpaperPath() because the QML background wants a URL to
+    /// display and the shader wants pixels to sample.
+    Q_INVOKABLE QImage wallpaperImage() const;
 
     /// Whether the user's audio visualizer setting is on. The pane starts
     /// capture only for an audio pack AND an enabled visualizer, so a plain
