@@ -567,6 +567,16 @@ inline constexpr const char* kUAudioSpectrum = "uAudioSpectrum";
 /// normalised to the frame size ([0, 1] inside the window, negative
 /// when the off-surface sentinel applies) — phosphor-vortex reads them;
 /// the daemon overlay contract reserves `.zw` for click state.
+///
+/// ONE EXCEPTION, the held-move leg (`move` class, kwin path): no
+/// sentinel is ever applied, and the position is clamped into the frame
+/// instead. The sentinel answers a HOVER question, and a drag is not a
+/// hover — the cursor is the grab anchor for the whole leg. The pointer
+/// leaves the frame routinely mid-drag (KWin clamps the window at the
+/// screen edge while the pointer travels on), and a move pack that
+/// centres on `.zw` would jump to its fallback and stay there. So a
+/// `move` pack may read `.xy` / `.zw` unconditionally: they stay inside
+/// `[0, size)` / `[0, 1)` for the whole hold.
 inline constexpr const char* kIMouse = "iMouse";
 
 /// `vec4 customParams[N]` — per-effect declared parameter slots.
