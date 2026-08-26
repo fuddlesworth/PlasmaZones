@@ -1,6 +1,18 @@
 {
     "releases": [
         {
+            "version": "3.4.1",
+            "date": "2026-08-26",
+            "highlights": [
+                "Added: decoration packs now have live previews. Every card in the decoration browser renders the pack over a stand-in window, and opening one gives a large preview with the pack's parameters beside it (#984)",
+                "Changed: the eight glass-family decoration packs start at 70% content opacity so the blur or refraction has something to show through. Set it back to 1.0 on the pack for the old look (#984)",
+                "Fixed: multi-pass decoration packs render as glass on the OSD and pop-ups instead of a flat tint, packs react to focus again, and effects with an outer margin are centred in it instead of clipped (#984)",
+                "Fixed: the glass-family packs clip the window to their rounded corners, so square corners no longer show past the pane (#988)",
+                "Fixed: Phosphor Vortex tracks the cursor for the whole drag instead of snapping to the window centre when the pointer leaves the frame (#986)",
+                "Fixed: zones hold still while Plasma's floating panels dock and undock mid-drag, and panel space is charged to the edge that actually reserves it (#985, #987)"
+            ]
+        },
+        {
             "version": "3.4.0",
             "date": "2026-08-25",
             "highlights": [
