@@ -89,6 +89,44 @@ Item {
     /// broken pack from a working one. Read this alongside it to say which.
     readonly property bool hasError: decoration.chainHasError
 
+    /// What a host's cover must actually gate on — NOT `ready`.
+    ///
+    /// `ready` is a statement about whatever this instance last composed. On
+    /// an instance that outlives a pack switch (a reused pane, a Loader whose
+    /// teardown a popup transition deferred, any lifecycle leak at all) it is
+    /// still TRUE for the OLD pack at the instant `packId` changes, so a cover
+    /// bound to it lifts over the previous pack's pixels and the flicker is
+    /// stale content, then the placeholder, then the preview. This dialog has
+    /// shipped that flicker repeatedly, each time through a different leak.
+    ///
+    /// `showable` closes the whole class instead of the leak of the week: the
+    /// latch behind it drops SYNCHRONOUSLY in onPackIdChanged — same frame,
+    /// before anything renders — and only returns once `ready` is observed
+    /// AFTER the switch. Whatever lifecycle bug lets an instance survive a
+    /// pack change, its old frame can no longer be revealed.
+    readonly property bool showable: ready && _packSettled
+
+    /// False from a pack switch until `ready` has been seen for the NEW pack.
+    property bool _packSettled: true
+    onPackIdChanged: {
+        _packSettled = false;
+        // A switch normally drops `ready` itself (the recompose takes the
+        // stages out of Ready), and the onReadyChanged below re-latches when
+        // the new chain settles. This deferral covers the one case where
+        // `ready` never moves: a switch that lands on an identical
+        // composition, where waiting for an edge would leave the cover up
+        // for ever. By the time it runs, whatever the switch did to the chain
+        // has been applied, so a still-true `ready` is the new pack's answer.
+        Qt.callLater(function () {
+            if (root.ready)
+                root._packSettled = true;
+        });
+    }
+    onReadyChanged: {
+        if (ready)
+            _packSettled = true;
+    }
+
     /// The ground has settled: either a wallpaper decoded, or there is no
     /// wallpaper to wait for. An unresolvable one must not hold the preview
     /// back for ever.

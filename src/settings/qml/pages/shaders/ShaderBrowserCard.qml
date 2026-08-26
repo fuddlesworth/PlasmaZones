@@ -289,7 +289,11 @@ ItemDelegate {
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 1
-                    visible: root._liveDecorationPreview && (!decorationPreviewLoader.item || !decorationPreviewLoader.item.ready || decorationPreviewLoader.item.hasError)
+                    // `showable`, not `ready`: on an instance surviving a pack
+                    // switch, `ready` is still the OLD pack's answer for a
+                    // frame and the cover would lift over stale pixels. See
+                    // DecorationChainPreview.showable.
+                    visible: root._liveDecorationPreview && (!decorationPreviewLoader.item || !decorationPreviewLoader.item.showable || decorationPreviewLoader.item.hasError)
                     color: Kirigami.Theme.alternateBackgroundColor
                     radius: Kirigami.Units.smallSpacing
                 }
