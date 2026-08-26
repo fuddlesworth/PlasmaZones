@@ -55,6 +55,14 @@ Item {
     property bool focused: false
     /// Master gate. False composes no chain and instantiates no shader item.
     property bool active: false
+    /// Freeze animated packs without tearing the chain down — forwarded to
+    /// SurfaceDecoration.animationsPaused. This is the RIGHT lever for "the
+    /// app is not frontmost": the preview stays composed and visible, exactly
+    /// like the zone/overlay preview whose clock merely stops. Folding the
+    /// same condition into `active` instead makes the preview VANISH on focus
+    /// loss (the window is still fully exposed under a Plasma applet) and
+    /// replay the whole placeholder cycle on refocus.
+    property bool animationsPaused: false
     /// Caption on the stand-in card. Exposed so the host supplies it already
     /// translated — this file stays free of user-facing copy.
     property string cardTitle: ""
@@ -270,6 +278,7 @@ Item {
         // true, so a focus-reactive pack could never show its inactive state
         // and the toggle appeared to do nothing but restyle the card.
         surfaceFocused: root.focused
+        animationsPaused: root.animationsPaused
         // Only decoded for a pack that actually samples it. Every other pack
         // ignores the backdrop, and handing one over regardless would upload a
         // wallpaper-sized texture per card for nothing.

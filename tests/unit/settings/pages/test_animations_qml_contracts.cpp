@@ -916,6 +916,26 @@ private Q_SLOTS:
         QVERIFY2(effectChangedBody.contains(QLatin1String("_resetPreview")),
                  "onEffectChanged must reset the preview while visible, or a fast pack switch keeps "
                  "the previous pack's pane alive under the new effect");
+
+        // Focus may FREEZE a preview, never tear it down. Focus loss is not
+        // occlusion — the window is fully exposed under a Plasma applet — and
+        // an `active:` gated on frontmost made every decoration preview
+        // vanish while the overlay previews carried on drawing. The frontmost
+        // check belongs only on pause-class properties (animating /
+        // previewAnimating / a clock's running).
+        QVERIFY2(!src.contains(QLatin1String("active: root.visible && root._appActive")),
+                 "the decoration pane's `active` must not fold in _appActive: focus loss tears the "
+                 "chain down instead of freezing it");
+        const QString browserDir = QStringLiteral(P_SOURCE_DIR "/src/settings/qml/pages/shaders");
+        for (const QString& browserFile :
+             {QStringLiteral("/ShaderBrowserPage.qml"), QStringLiteral("/ShaderBrowserCard.qml")}) {
+            const QString bsrc = readFile(browserDir + browserFile);
+            QVERIFY2(!bsrc.contains(QLatin1String("previewLive: groupCard.bodyLive && root._appActive"))
+                         && !bsrc.contains(QLatin1String("_inViewport && root._appActive")),
+                     qPrintable(browserFile
+                                + QStringLiteral(": previewLive/_inViewport must not fold in _appActive — "
+                                                 "teardown on focus loss, not a freeze")));
+        }
     }
 };
 

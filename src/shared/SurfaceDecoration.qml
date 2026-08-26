@@ -126,6 +126,22 @@ Item {
     /// pack on its documented fallback appearance.
     property var backdropTexture: null
 
+    /// Freeze animated stages without tearing anything down.
+    ///
+    /// The distinction is the whole point. A paused decoration keeps its
+    /// compiled shaders, its capture chain and its last composed frame — it
+    /// just stops subscribing to the per-frame iTime tick — so it looks like
+    /// what it is: a live preview holding still. Tearing the chain down
+    /// instead makes the decoration VANISH, and rebuilding it on resume
+    /// replays the whole placeholder-then-reveal cycle for no reason.
+    ///
+    /// False by default, which is what the daemon's overlay surfaces want:
+    /// they are only shown while they should be moving. The settings previews
+    /// set it while the application is unfocused, so a preview next to the
+    /// Plasma applet freezes instead of disappearing — the same behaviour the
+    /// zone/overlay preview has always had.
+    property bool animationsPaused: false
+
     /// Drives `uSurfaceFocused` on every stage. A pack that distinguishes an
     /// active from an inactive appearance keys on it — the border family mixes
     /// its two colours on it, and focus-fade washes the whole surface out when
@@ -452,19 +468,31 @@ Item {
                 // anchor lives deep inside the loaded content; mapToItem walks
                 // the transform chain so the decoration lands exactly over the
                 // card regardless of nesting. mapToItem registers no QML
-                // dependencies, so the anchor/host sizes are read explicitly
-                // first: a centerIn-driven move of the anchor is always
-                // accompanied by a size change (of the anchor or the host),
-                // and touching those values makes a resize-driven recenter
-                // re-resolve the mapped origin. The anchor's own x/y are read
-                // too so a pure move of the anchor itself re-resolves; ancestor
-                // pure-moves (position changes higher in the mapped chain)
-                // still require content re-instantiation, which the slots
-                // guarantee per show.
+                // dependencies, so every input to that walk is read explicitly
+                // first: the anchor's own geometry, the host's, and the x/y of
+                // EVERY item between them. The ancestor walk is what covers a
+                // pure move higher in the chain — a centerIn wrapper between
+                // the anchor and the host positions itself AFTER the anchor
+                // exists, and none of the anchor's or host's own values change
+                // when it does. This host used to lean on "the slots
+                // re-instantiate content per show" instead of covering that
+                // case; the settings browser broke that assumption the moment
+                // its viewport gating rebuilt a pane mid-scroll, and every
+                // stage stayed mapped to the wrapper's pre-centering origin —
+                // the card pinned to the slot's top-left corner for good.
                 readonly property point anchorOrigin: {
                     if (!root.decorationActive || !root.shaderAnchorItem)
                         return Qt.point(0, 0);
-                    void (root.shaderAnchorItem.x + root.shaderAnchorItem.y + root.shaderAnchorItem.width + root.shaderAnchorItem.height + root.width + root.height);
+                    void (root.shaderAnchorItem.width + root.shaderAnchorItem.height + root.width + root.height);
+                    // The whole chain, to the top: this host is a SIBLING of
+                    // the content it decorates (contentItem is never
+                    // reparented into it), so there is no cheap stopping
+                    // point. Ancestors ABOVE the common ancestor cancel out of
+                    // the mapping, so their moves re-run this to the same
+                    // point — a scroll costs a no-op remap per live card,
+                    // which is nothing next to the chains those cards run.
+                    for (let a = root.shaderAnchorItem; a; a = a.parent)
+                        void (a.x + a.y);
                     return root.shaderAnchorItem.mapToItem(root, 0, 0);
                 }
 
@@ -622,8 +650,10 @@ Item {
                 // iTime driver: only a stage whose pack declares "animated"
                 // subscribes to the per-frame tick — static packs (the border)
                 // leave iTime at its default and pay nothing. Gated on
-                // decorationActive so a cleared decoration stops ticking.
-                playing: stage.stageData.animated === true && root.decorationActive
+                // decorationActive so a cleared decoration stops ticking, and
+                // on animationsPaused so a host can freeze the motion without
+                // tearing the stage down (see that property).
+                playing: stage.stageData.animated === true && root.decorationActive && !root.animationsPaused
             }
 
             // The next stage's uTexture0: captures this stage's output. Same

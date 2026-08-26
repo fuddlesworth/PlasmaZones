@@ -90,6 +90,13 @@ ItemDelegate {
     /// shader item per stage, producing nothing at opacity 0.
     property bool previewLive: true
 
+    /// Whether animated packs may tick. The host drops this while the
+    /// application is not frontmost, and the preview FREEZES on its last
+    /// frame rather than being torn down — teardown is `previewLive`'s job,
+    /// and only for a pane that genuinely cannot be seen (collapsed section,
+    /// scrolled away). Focus loss is neither.
+    property bool previewAnimating: true
+
     /// Whether this card intersects the viewport, with one card-height of slack
     /// either side so a preview is warm by the time it is scrolled into view.
     ///
@@ -250,6 +257,12 @@ ItemDelegate {
                         // detail dialog's job.
                         params: ({})
                         active: true
+                        // Freeze, never tear down, while the app is not
+                        // frontmost. Focus loss is NOT occlusion — under a
+                        // Plasma applet the window is fully exposed — so a
+                        // torn-down chain reads as every decoration preview
+                        // blinking out while the overlay previews carry on.
+                        animationsPaused: !root.previewAnimating
                         cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
                     }
                 }

@@ -727,8 +727,12 @@ Kirigami.Dialog {
                         // Same `visible` rather than `opened`, and for the same
                         // reason: this gates the chain composition, not just the
                         // ticking, so deferring it to the end of the open
-                        // transition is what produced the pop.
-                        active: root.visible && root._appActive
+                        // transition is what produced the pop. _appActive is
+                        // deliberately NOT here — focus loss must freeze, not
+                        // tear down, the same split the zone pane gets from its
+                        // clock's `running` gate.
+                        active: root.visible
+                        animating: root._appActive
                     }
                 }
 

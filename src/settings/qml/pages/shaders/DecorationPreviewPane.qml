@@ -45,9 +45,16 @@ Item {
     required property string packId
     /// Live (transient) friendly parameter map from the dialog's editor.
     property var liveParams: ({})
-    /// Gated by the dialog: false while the app is backgrounded or the pane is
-    /// hidden, so a closed dialog leaves no animated pack ticking.
+    /// Gated by the dialog: false while the pane is hidden. Gates the chain's
+    /// EXISTENCE, so it must track visibility only — never focus, which is
+    /// what `animationsPaused` below is for.
     property bool active: false
+    /// Dropped-focus freeze, forwarded through to the chain host: the preview
+    /// keeps its composed frame and stops ticking, exactly what the zone
+    /// pane's clock does when the app is not frontmost. Folding focus into
+    /// `active` instead tore the whole chain down under a Plasma applet while
+    /// the window was still fully visible.
+    property bool animating: true
 
     /// Pack metadata, re-read only when the pack changes rather than per frame.
     readonly property var _info: (previewController && packId.length > 0) ? (previewController.packInfo(packId) || ({})) : ({})
@@ -89,6 +96,7 @@ Item {
                 packId: root.packId
                 params: root.liveParams
                 active: root.active
+                animationsPaused: !root.animating
                 focused: focusToggle.checked
                 audioSpectrum: root._audioSpectrum
                 cardTitle: i18nc("@title sample window in the decoration preview", "Sample Window")
